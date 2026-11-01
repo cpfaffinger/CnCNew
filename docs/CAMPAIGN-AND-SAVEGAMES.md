@@ -64,7 +64,7 @@ foreign mission is rejected. `ResumeCurrentMission(state)` continues a saved run
 
 ## 4. State formats
 
-### `MissionSnapshot` (Simulation, Version 2)
+### `MissionSnapshot` (Simulation, Version 4: the script state holds the computer players, `docs/SKIRMISH-AI-ORIGINAL.md` §10)
 
 *The heading names the version of Phase 10; the current one is version **3** (since Phase 22, fixed point Q39.24). Phase 23 did not raise any version.*
 

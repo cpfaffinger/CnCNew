@@ -4569,7 +4569,7 @@ The idle look is staggered by the object's id, not by the random `m_initialSleep
 - `SCRIPTING_OVERRIDE_HULK_LIFETIME`: world state. A `KINDOF_HULK` made under it lives exactly that long (the `LifetimeUpdate` constructor; a creation list's own range wins, as it redraws), and a hulk's slow death takes a second without a draw (`beginSlowDeath`).
 - `CHOOSE_VICTIM_ALWAYS_USES_NORMAL`: `AIAttackSquadState::chooseVictim` for `*_ATTACK_TEAM`: by the difficulty of the attacker's player a random unit, the closest, or the first of the team's list, which is the last that joined; a player's order counts as hard (no such order exists here). The attacker keeps its victim until it is dead and fires at it as at a named victim (before, it attack-moved at the nearest member and fired only at what it acquired by itself: a building was never hit).
 - `SET_CAVE_INDEX`: `findCave` finds nothing. No INI of the game, the original or the patch names `CaveContain`, and the module catalogue refuses what it does not know, so `doSetCaveIndex` returns as the original's does; the module itself is not built.
-- `SET_BASE_CONSTRUCTION_SPEED` and `PLAYER_SELECT_SKILLSET` reach the session of the original AI (`AiPlayer.TeamSeconds`, `SkillSet`). **They stay recorded in a mission: the original gives every computer player an `AIPlayer`, the port only the skirmish session** (F-91).
+- `SET_BASE_CONSTRUCTION_SPEED` and `PLAYER_SELECT_SKILLSET` reach the session of the original AI (`AiPlayer.TeamSeconds`, `SkillSet`). A mission's computer players read them too since F-91 (`docs/SKIRMISH-AI-ORIGINAL.md` §10).
 
 ### 69.4 The three missing actions no AI session needs (F-22)
 
@@ -4577,7 +4577,7 @@ The idle look is staggered by the object's id, not by the random `m_initialSleep
 - `SKIRMISH_ATTACK_NEAREST_GROUP_WITH_VALUE`: `PartitionManager::getNearestGroupWithValue` with the cash value of the partition cells (40 units), computed when asked instead of kept up to date, a plain disc instead of `DiscreteCircle`. `parms.greaterThan = valueRequired` makes the value 0 find nothing. Where the original then moves to an unset place, the group stays.
 - `SKIRMISH_PERFORM_COMMANDBUTTON_ON_MOST_VALUABLE_OBJECT`: the most expensive enemy within the range of the group's centre; `isValidToUseOn` is the world's answer for the first carrier on the eight most expensive, as for the `…ON_NEAREST_*` family.
 
-The six others (`SKIRMISH_BUILD_*`, `AI_PLAYER_BUILD_TYPE_NEAREST_TEAM`) work on the build list and base of an `AIPlayer`: executed for its players, missing and counted elsewhere (F-91).
+The six others (`SKIRMISH_BUILD_*`, `AI_PLAYER_BUILD_TYPE_NEAREST_TEAM`) work on the build list and base of an `AIPlayer`: the first five do nothing in a mission, as `AIPlayer`'s do, the last works there too (F-91, `docs/SKIRMISH-AI-ORIGINAL.md` §10).
 
 ### 69.5 A script's "idle" (F-21)
 
