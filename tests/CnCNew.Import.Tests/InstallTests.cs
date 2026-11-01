@@ -122,6 +122,9 @@ internal static class InstallTests
         Assert(same.Outcome == InstallOutcome.TargetRefused, "The game directory itself must be refused as target.");
         var around = await GameInstaller.InstallAsync(game, Path.Combine(root, "steam"), master);
         Assert(around.Outcome == InstallOutcome.TargetRefused && around.Message.Contains("contains the game directory", StringComparison.Ordinal), "A target containing the game directory must be refused.");
+        var library = Path.Combine(root, "library", "steamapps", "common", "Mine");
+        var beside = await GameInstaller.InstallAsync(game, library, master);
+        Assert(beside.Outcome == InstallOutcome.TargetRefused && beside.Message.Contains("Steam library", StringComparison.Ordinal) && !Directory.Exists(library), "A target in any Steam library must be refused.");
         Assert(Snapshot(game).SequenceEqual(before), "A refused target changed the game directory.");
 
         var foreign = Path.Combine(root, "foreign");

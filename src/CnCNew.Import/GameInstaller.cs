@@ -367,6 +367,9 @@ public static class GameInstaller
     {
         if (IsSameOrInside(target, game)) return $"The target '{target}' is the game directory or lies inside it. The game directory is never written to; choose a directory elsewhere.";
         if (IsSameOrInside(game, target)) return $"The target '{target}' contains the game directory. Choose a directory elsewhere.";
+        // The game is only ever read, and nothing of ours belongs beside it in a Steam library either.
+        if ((Path.GetFullPath(target) + Path.DirectorySeparatorChar).Contains($"{Path.DirectorySeparatorChar}steamapps{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            return $"The target '{target}' lies in a Steam library. Steam is only ever read; choose a directory elsewhere.";
         return null;
     }
 
