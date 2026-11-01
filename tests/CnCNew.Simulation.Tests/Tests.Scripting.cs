@@ -290,7 +290,9 @@ static partial class Tests
     /// </summary>
     private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null, IReadOnlyDictionary<string, string>? extraFiles = null, SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(rate ?? TestRate.Default, files: extraFiles is null ? ScriptFiles() : new Dictionary<string, string>(ScriptFiles()).Concat(extraFiles).ToDictionary(pair => pair.Key, pair => pair.Value));
+        var files = new Dictionary<string, string>(ScriptFiles());
+        foreach (var (path, text) in extraFiles ?? new Dictionary<string, string>()) files[path] = text;
+        var fixture = new SyntheticFixture(rate ?? TestRate.Default, files: files);
         var area = new MapPolygonTrigger("LeftArea", string.Empty, 7, false, false, 0, [new MapPoint(0, 0, 0), new MapPoint(200, 0, 0), new MapPoint(200, 400, 0), new MapPoint(0, 400, 0)]);
         var baseMap = SyntheticMaps.Build(60, 40, 1, triggers: [area], waypoints: [("Spawn", 100m, 200m, 0m), ("Far", 400m, 200m, 0m), ("Mid", 250m, 200m, 0m)]);
         // Waypoint paths: extra waypoints, the first labelled with the path name (waypointPathLabel1), linked in order by waypointID.

@@ -522,6 +522,7 @@ public sealed class TemplateCatalog
             Bridges = bridges,
             Rate = rate,
             Rules = rules ?? RuleProfile.Original,
+            DefaultStartingCash = ResolveDefaultStartingCash(graph),
         };
         foreach (var name in catalog.Geometry.Airfields.Keys)
             if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
@@ -593,6 +594,9 @@ public sealed class TemplateCatalog
     /// </summary>
     public RuleProfile Rules { get; private init; } = RuleProfile.Original;
 
+    /// <summary><c>GlobalData::m_defaultStartingCash</c>: what a player of a mission whose template holds no money starts with (<c>Player::init</c>); 0 without the key.</summary>
+    public int DefaultStartingCash { get; private init; }
+
     /// <summary>The conversions of <see cref="Rate"/>.</summary>
     public SimulationTime Time => Rate.Time;
 
@@ -663,6 +667,17 @@ public sealed class TemplateCatalog
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("ValuePerSupplyBox", StringComparison.OrdinalIgnoreCase))?.Value.Value;
         return value is long integer ? checked((int)integer) : 100;
+    }
+
+    /// <summary>
+    /// <c>Money::parseMoneyAmount</c> of <c>GameData.ini</c>'s <c>DefaultStartingCash</c>: the key stays a deferred field of the definitions (<c>baselines/compatibility.json</c>), so its text is read
+    /// here, strictly: a whole number or an error. Absent key: 0, as <c>GlobalData</c> starts.
+    /// </summary>
+    private static int ResolveDefaultStartingCash(CompiledDefinitionGraph graph)
+    {
+        if (graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields.LastOrDefault(field => field.Name.Equals("DefaultStartingCash", StringComparison.OrdinalIgnoreCase)) is not { } field) return 0;
+        return int.TryParse(field.Value.OriginalText.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var cash)
+            ? cash : throw new TemplateBuildException($"GameData: DefaultStartingCash = '{field.Value.OriginalText}' is not a whole number.");
     }
 
     /// <summary>Absent key: the reference default of <c>MultiplayerSettings::MultiplayerSettings</c> (<c>m_maxBeaconsPerPlayer = 3</c>).</summary>

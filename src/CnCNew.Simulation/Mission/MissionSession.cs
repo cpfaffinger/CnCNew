@@ -135,7 +135,11 @@ public sealed class MissionSession
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), catalog.Rate, options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
         ApplyRelations(world, program);
         var session = new MissionSession(options, world, program, map, [..notes]);
-        if (options.Ai is null) world.BeginSinglePlayer((int)options.Difficulty);
+        if (options.Ai is null)
+        {
+            world.BeginSinglePlayer((int)options.Difficulty);
+            session.CreditStartMoney(catalog);
+        }
         // Object::updateObjValuesFromMapProperties: a bridge's name is its first point's, or that of its object.
         foreach (var bridge in world.Bridges)
             if (bridge.ScriptName.Length > 0 && bridge.ObjectId.IsValid) session.Engine.RegisterNamed(bridge.ScriptName, bridge.ObjectId);
@@ -153,6 +157,20 @@ public sealed class MissionSession
         if (options.RankPoints != 0)
             foreach (var player in program.Players.Where(player => player.IsHuman)) world.AddSkillPoints(player.Id, options.RankPoints);
         return session;
+    }
+
+    /// <summary>
+    /// <c>Player::init</c>, <c>Player::initFromDict</c>: a player whose template holds no money starts with <c>DefaultStartingCash</c> (a campaign has no game info that says otherwise), and the
+    /// map's <c>playerStartMoney</c> comes on top. A side whose faction is no player template is initialised as the neutral player is: without money.
+    /// </summary>
+    private void CreditStartMoney(TemplateCatalog catalog)
+    {
+        foreach (var player in Program.Players)
+        {
+            if (player.Id.IsSystem || !World.HasPlayer(player.Id)) continue;
+            if (catalog.Factions.TryGet(player.Faction, out _) && World.MoneyOf(player.Id) == Fixed.Zero) World.SetMoney(player.Id, Fixed.FromInt(catalog.DefaultStartingCash));
+            if (player.SideIndex < Map.Sides.Length && Map.Sides[player.SideIndex].Properties.TryGetInt("playerStartMoney", out var deposit) && deposit > 0) World.AddMoney(player.Id, Fixed.FromInt(deposit));
+        }
     }
 
     private static ImmutableArray<PlayerConfiguration> ConfiguredPlayers(ScriptProgram program, TemplateCatalog catalog, ImmutableArray<string>.Builder notes)
