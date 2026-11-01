@@ -20,6 +20,17 @@ static partial class Tests
         Check.That(RuleProfile.Parse("flame-kill-credit,poison-kill-credit").Name == "poison-kill-credit+flame-kill-credit", "A profile's name lists its fixes in their numeric order, whatever order they were named in.");
         Check.That(RuleProfile.Parse(RuleProfile.AllFixes.Name).Equals(RuleProfile.AllFixes) && RuleProfile.Parse("original").Equals(RuleProfile.Original), "A profile's name parses back to the profile.");
         Check.Throws<ArgumentException>(() => RuleProfile.Parse("poison-kill-credit,no-such-fix"), "Unknown rule profile or fix 'no-such-fix'"); // never ignored
+
+        var quick = RuleProfile.Parse("product+quick-build");
+        Check.That(quick.Name == "product+quick-build" && RuleProfile.Parse(quick.Name).Equals(quick) && !quick.Equals(RuleProfile.Product) && !quick.IsProduct, "The acceptance's rule is named, parses back and is not the product.");
+        Check.That(quick.Combine(print) != RuleProfile.Product.Combine(print) && quick.Movement == MovementProfile.Budgeted && quick.Fixes.SetEquals(RuleProfile.AllFixes.Fixes), "It changes nothing but the build times, and it is in the fingerprint.");
+        Check.That(!RuleProfile.Parse("quick-build").IsOriginal && RuleProfile.Parse(RuleProfile.Parse("quick-build").Name).Equals(RuleProfile.Parse("quick-build")), "On the original's rules it is not the original.");
+        Check.That(RuleProfile.Product.BuildSeconds(12m) == 12m && quick.BuildSeconds(12m) == 3m, "The product keeps the data's build times.");
+        var slow = new SyntheticFixture(TestRate.Default);
+        var fast = new SyntheticFixture(TestRate.Default, rules: RuleProfile.Parse("quick-build"));
+        var built = slow.Templates.Templates.First(template => template.BuildTicks > TestRate.Default.Time.OriginalFrames(RuleProfile.QuickBuildDivisor));
+        fast.Templates.TryGet(built.Name, out var faster);
+        Check.That(faster.BuildTicks * RuleProfile.QuickBuildDivisor >= built.BuildTicks && faster.BuildTicks < built.BuildTicks, "An object is built in a quarter of its time, on the grid of the original's frames.");
         Check.That(RuleProfile.Catalogue.Select(info => (int)info.Fix).SequenceEqual(Enumerable.Range(1, RuleProfile.Catalogue.Length)), "The catalogue lists every fix once, by its number.");
         // The community source keeps the code of Zero Hour under GeneralsMD/ and the code both games share under Core/.
         Check.That(RuleProfile.Catalogue.All(info => (info.Source.StartsWith("GeneralsMD/", StringComparison.Ordinal) || info.Source.StartsWith("Core/", StringComparison.Ordinal))

@@ -123,8 +123,23 @@ public class RuleProfile : IEquatable<RuleProfile>
     /// </summary>
     private sealed class WithBudgetedMovement(ImmutableSortedSet<GameFix> fixes) : RuleProfile(fixes);
 
+    /// <summary>A profile with <see cref="QuickBuildName"/>; a type of its own for the same reason as <see cref="WithBudgetedMovement"/>.</summary>
+    private sealed class WithQuickBuild(ImmutableSortedSet<GameFix> fixes, MovementProfile movement) : RuleProfile(fixes)
+    {
+        internal MovementProfile Moves => movement;
+    }
+
     /// <summary>The name of <see cref="MovementProfile.Budgeted"/> in a profile's name and on the command line.</summary>
     public const string BudgetedMovementName = "movement-budget";
+
+    /// <summary>
+    /// A rule of the acceptance, no rule of the game: everything takes a quarter of its <c>BuildTime</c>, for every player, so a person who judges a match does not wait for it. It is in the
+    /// fingerprint like every rule, so its saves, replays and rooms stay among themselves.
+    /// </summary>
+    public const string QuickBuildName = "quick-build";
+
+    /// <summary>What <see cref="QuickBuildName"/> divides a build time by.</summary>
+    public const int QuickBuildDivisor = 4;
 
     /// <summary>The adopted fixes, with their source in the community code (<c>references/generals-game-code</c>, the file of Zero Hour).</summary>
     public static ImmutableArray<GameFixInfo> Catalogue { get; } =
@@ -220,17 +235,23 @@ public class RuleProfile : IEquatable<RuleProfile>
     public ImmutableSortedSet<GameFix> Fixes { get; }
 
     /// <summary>How ground units plan their paths; <see cref="MovementProfile.Original"/> in the original profile.</summary>
-    public MovementProfile Movement => this is WithBudgetedMovement ? MovementProfile.Budgeted : MovementProfile.Original;
+    public MovementProfile Movement => this is WithBudgetedMovement or WithQuickBuild { Moves: MovementProfile.Budgeted } ? MovementProfile.Budgeted : MovementProfile.Original;
 
-    public bool IsOriginal => Fixes.IsEmpty && Movement == MovementProfile.Original;
+    private bool QuickBuilds => this is WithQuickBuild;
+
+    public bool IsOriginal => Fixes.IsEmpty && Movement == MovementProfile.Original && !QuickBuilds;
 
     public bool IsProduct => Equals(Product);
 
     public bool Has(GameFix fix) => Fixes.Contains(fix);
 
+    /// <summary>The <c>BuildTime</c> of an object or an upgrade under these rules.</summary>
+    public decimal BuildSeconds(decimal seconds) => QuickBuilds ? seconds / QuickBuildDivisor : seconds;
+
     /// <summary><c>original</c>, <c>product</c>, or the names of the fixes in their numeric order joined by <c>+</c>, then <c>movement-budget</c> when the movement is budgeted.</summary>
     public string Name => IsOriginal ? "original" : IsProduct ? ProductName
-        : string.Join('+', Fixes.Select(fix => Info(fix).Name).Concat(Movement == MovementProfile.Budgeted ? [BudgetedMovementName] : []));
+        : QuickBuilds && Fixes.SetEquals(AllFixes.Fixes) && Movement == MovementProfile.Budgeted ? $"{ProductName}+{QuickBuildName}"
+        : string.Join('+', Fixes.Select(fix => Info(fix).Name).Concat(Movement == MovementProfile.Budgeted ? [BudgetedMovementName] : []).Concat(QuickBuilds ? [QuickBuildName] : []));
 
     /// <summary>
     /// The definition fingerprint a world with these rules carries. The original profile returns it unchanged; any other folds its name in - the same scheme as the
@@ -251,7 +272,7 @@ public class RuleProfile : IEquatable<RuleProfile>
 
     /// <summary>
     /// <c>original</c>, <c>product</c>, <c>fixes</c> (every adopted fix) or a list of fix names separated by <c>,</c> or <c>+</c>; <c>movement-budget</c> in the list selects
-    /// <see cref="MovementProfile.Budgeted"/>, and <c>fixes</c> may stand in the list for every fix. An unknown name is an error, never ignored.
+    /// <see cref="MovementProfile.Budgeted"/>, <c>quick-build</c> <see cref="QuickBuildName"/>, and <c>fixes</c> or <c>product</c> may stand in the list for every fix (<c>product</c> with the movement). An unknown name is an error, never ignored.
     /// </summary>
     public static RuleProfile Parse(string text)
     {
@@ -262,19 +283,23 @@ public class RuleProfile : IEquatable<RuleProfile>
         if (value.Equals("fixes", StringComparison.OrdinalIgnoreCase)) return AllFixes;
         var fixes = ImmutableSortedSet.CreateBuilder<GameFix>();
         var movement = MovementProfile.Original;
+        var quick = false;
         foreach (var part in value.Split([',', '+'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (part.Equals(BudgetedMovementName, StringComparison.OrdinalIgnoreCase)) { movement = MovementProfile.Budgeted; continue; }
+            if (part.Equals(QuickBuildName, StringComparison.OrdinalIgnoreCase)) { quick = true; continue; }
+            if (part.Equals(ProductName, StringComparison.OrdinalIgnoreCase)) { fixes.UnionWith(AllFixes.Fixes); movement = MovementProfile.Budgeted; continue; }
             if (part.Equals("fixes", StringComparison.OrdinalIgnoreCase)) { fixes.UnionWith(AllFixes.Fixes); continue; }
             var info = Catalogue.FirstOrDefault(entry => entry.Name.Equals(part, StringComparison.OrdinalIgnoreCase))
-                ?? throw new ArgumentException($"Unknown rule profile or fix '{part}'. Known: original, {ProductName}, fixes, {BudgetedMovementName}, {string.Join(", ", Catalogue.Select(entry => entry.Name))}.");
+                ?? throw new ArgumentException($"Unknown rule profile or fix '{part}'. Known: original, {ProductName}, fixes, {BudgetedMovementName}, {QuickBuildName}, {string.Join(", ", Catalogue.Select(entry => entry.Name))}.");
             fixes.Add(info.Fix);
         }
-        if (fixes.Count == 0 && movement == MovementProfile.Original) throw new ArgumentException("An empty rule profile; say 'original'.");
+        if (fixes.Count == 0 && movement == MovementProfile.Original && !quick) throw new ArgumentException("An empty rule profile; say 'original'.");
+        if (quick) return new WithQuickBuild(fixes.ToImmutable(), movement);
         return movement == MovementProfile.Budgeted ? new WithBudgetedMovement(fixes.ToImmutable()) : new RuleProfile(fixes.ToImmutable());
     }
 
-    public bool Equals(RuleProfile? other) => other is not null && Fixes.SequenceEqual(other.Fixes) && Movement == other.Movement;
+    public bool Equals(RuleProfile? other) => other is not null && Fixes.SequenceEqual(other.Fixes) && Movement == other.Movement && QuickBuilds == other.QuickBuilds;
 
     public override bool Equals(object? obj) => Equals(obj as RuleProfile);
 

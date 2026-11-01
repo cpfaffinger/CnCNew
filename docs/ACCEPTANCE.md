@@ -443,3 +443,7 @@ creates the object list and fires the weapon of the phase – at the beginning (
 - The run from an installation (`-InstallDir`, `-UseInstalledClient`) was not executed; only the developer checkout was.
 - Scenes without a staged scene: the cheering after a capture, the superweapon clock, Chinook at the supply dock, water, bridges, night.
 - The 30 Hz pictures of the page were compared with the 60 Hz ones by eye on the contact sheets only.
+
+## Quick building in the suite
+
+The owner's finding of 1 November 2026: a person who judges a match waits for its factories. Every match the suite opens (a skirmish, a mission, the menus) runs with the rules `product+quick-build` (`scripts/acceptance/catalogue.json`, `defaults.rules`): objects and upgrades take a quarter of their `BuildTime`, for every player (`RuleProfile.QuickBuildName`; the computer players as well, so a match stays a match). Staged scenes (`--scenario`) keep the real times, because their pages name times. It is a rule of the acceptance, not of the game: the client without `--rules` plays the product, no manifest measures it, and it is in the fingerprint, so a replay or a save of the suite does not load in a normal game, nor the other way round. The report says so in its head. A goal that is about how long something takes to build is judged with `--rules product`.

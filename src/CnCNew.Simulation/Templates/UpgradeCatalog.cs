@@ -3,6 +3,7 @@ using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Rules;
 using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Templates;
@@ -90,7 +91,7 @@ public sealed class UpgradeCatalog
         return mask;
     }
 
-    public static UpgradeCatalog Build(CompiledDefinitionGraph graph, SimulationTime timing)
+    public static UpgradeCatalog Build(CompiledDefinitionGraph graph, SimulationTime timing, RuleProfile? rules = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         var index = 0;
@@ -103,7 +104,7 @@ public sealed class UpgradeCatalog
             var cost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money money
                 ? Fixed.FromInt(money.Value) : Fixed.Zero;
             var buildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds
-                ? timing.SecondsToTicks(seconds) : 0;
+                ? timing.SecondsToTicks((rules ?? RuleProfile.Original).BuildSeconds(seconds)) : 0;
             upgrades.Add(new UpgradeInfo(index++, definition.OriginalName, scope, cost, buildTicks));
         }
         foreach (var name in VeterancyUpgradeNames)

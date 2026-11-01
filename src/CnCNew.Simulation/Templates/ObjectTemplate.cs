@@ -92,7 +92,7 @@ public sealed class ObjectTemplate
         ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules,
         ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, ImmutableArray<ArmorInfo?> veteranArmor,
         ImmutableArray<WeaponSetInfo> weaponSets, LocomotorInfo? locomotor,
-        ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets, SimulationTime timing)
+        ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets, SimulationTime timing, RuleProfile rules)
     {
         CommandSets = commandSets;
         Buildable = definition.Fields.LastOrDefault(field => field.Name.Equals("Buildable", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue buildable ? buildable.Name : "Yes";
@@ -119,7 +119,7 @@ public sealed class ObjectTemplate
         ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
-        BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? timing.SecondsToTicks(seconds) : 0;
+        BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? timing.SecondsToTicks(rules.BuildSeconds(seconds)) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
         EnergyBonus = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyBonus", StringComparison.OrdinalIgnoreCase))?.Value.Value is long bonus ? checked((int)bonus) : 0;
         MaxSimultaneousOfType = definition.Fields.LastOrDefault(field => field.Name.Equals("MaxSimultaneousOfType", StringComparison.OrdinalIgnoreCase))?.Value.Value is long maxType ? checked((int)maxType) : 0;
@@ -433,7 +433,7 @@ public sealed class TemplateCatalog
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(rate);
         var timing = rate.Time;
-        var upgrades = UpgradeCatalog.Build(graph, timing);
+        var upgrades = UpgradeCatalog.Build(graph, timing, rules);
         var weapons = WeaponCatalog.Build(graph, timing);
         var armors = ArmorCatalog.Build(graph);
         var locomotors = BuildLocomotors(graph, timing);
@@ -500,7 +500,7 @@ public sealed class TemplateCatalog
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable(), timing)
+                defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable(), timing, rules ?? RuleProfile.Original)
             {
                 LocomotorSets = ResolveLocomotorSets(definition, locomotors),
                 CrateUpgradeArmor = ResolveCrateUpgradeArmor(definition, armors),

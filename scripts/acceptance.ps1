@@ -253,6 +253,8 @@ if ($Report) {
     $lines.Add('')
     $lines.Add("**$($catalogue.items.Count) items: $($passed.Count) passed, $($failed.Count) failed, $($skipped.Count) skipped, $($open.Count) open.** The column 'pre-check' is the agent's reading of still pictures and numbers - not a human verdict.")
     $lines.Add('')
+    $lines.Add("Matches of the suite ran with the rules ``$($catalogue.defaults.rules)``: everything is built four times as fast. Staged scenes keep the real build times.")
+    $lines.Add('')
     $lines.Add('## Packages')
     $lines.Add('')
     $lines.Add('| Package | Reached | Not reached | Skipped | Open |')
@@ -620,6 +622,8 @@ function Start-SceneClient($Scene, $Live, [string]$Name, $Entries, [int]$UseRate
     $arguments += @(if ($Client) { $Client } else { $Live.client })
     # The suite accepts what ships, whatever skin the settings of this machine still name.
     if ($Plain -and $arguments -notcontains '--skin') { $arguments += @('--skin', $catalogue.defaults.skin) }
+    # A person who judges a match should not wait for its factories. A staged scene is short already, and its page names times.
+    if ($Plain -and $arguments -notcontains '--scenario' -and $arguments -notcontains '--rules') { $arguments += @('--rules', $catalogue.defaults.rules) }
     if ($Mute) { $arguments += '--mute' }
     $log = Join-Path $LogDir ("{0}-{1}hz-{2:HHmmssfff}.txt" -f $Name, $UseRate, (Get-Date))
     Write-Host "   dotnet <client> $(Format-Arguments $arguments)"

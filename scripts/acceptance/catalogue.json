@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "about": "Acceptance catalogue (docs/ACCEPTANCE.md). Our own text; game data is referred to by name only. Read by scripts/acceptance.ps1.",
-  "defaults": { "skin": "modern", "size": "1280x720", "rates": [60, 30], "map": "Maps/Alpine Assault/Alpine Assault.map" },
+  "defaults": { "skin": "modern", "rules": "product+quick-build", "size": "1280x720", "rates": [60, 30], "map": "Maps/Alpine Assault/Alpine Assault.map" },
   "groups": [
     { "id": "INST", "title": "Installation and start" },
     { "id": "SHELL", "title": "Shell and menus" },
