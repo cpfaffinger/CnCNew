@@ -195,7 +195,7 @@ public sealed class GameShell
         // The owner's folder of 370 maps took a minute one after the other: each map is read by itself, and the list keeps the folder's order.
         var files = scan.Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)).ToArray();
         var read = new (ShellMapEntry? Entry, string? Problem)[files.Length];
-        Parallel.For(0, files.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) }, index =>
+        Parallel.For(0, files.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, System.Environment.ProcessorCount - 1) }, index =>
         {
             var file = files[index];
             if (unchanged?.Contains(file) == true && entries!.TryGetValue(file.Entry.VirtualPath, out var entry))
