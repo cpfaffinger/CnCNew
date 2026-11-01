@@ -35,6 +35,9 @@ public sealed record WeaponInfo(
 
     public Fixed WeaponSpeed { get; init; } = InstantSpeed;
 
+    /// <summary><c>AcceptableAimDelta</c>: how far off its victim a unit without a turret may look and still fire, in radians (<c>WeaponTemplate</c> ctor: 0).</summary>
+    public Fixed AimDelta { get; init; }
+
     /// <summary><c>ShotsPerBarrel</c>: how many shots a barrel fires before the next one takes over (<c>WeaponTemplate</c> ctor: 1).</summary>
     public int ShotsPerBarrel { get; init; } = 1;
     public Fixed MinWeaponSpeed { get; init; } = InstantSpeed;
@@ -299,6 +302,7 @@ public sealed class WeaponCatalog
             {
                 WeaponSpeed = Speed("WeaponSpeed"),
                 ShotsPerBarrel = Field("ShotsPerBarrel")?.Value.Value is long shotsPerBarrel ? checked((int)shotsPerBarrel) : 1,
+                AimDelta = Field("AcceptableAimDelta")?.Value.Value is decimal aimDelta ? SimulationTiming.DegreesToRadians(aimDelta) : Fixed.Zero,
                 MinWeaponSpeed = Speed("MinWeaponSpeed"),
                 ScaleWeaponSpeed = Flag("ScaleWeaponSpeed"),
                 MinimumAttackRange = Length("MinimumAttackRange"),

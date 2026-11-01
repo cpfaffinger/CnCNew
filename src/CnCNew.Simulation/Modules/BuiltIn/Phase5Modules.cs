@@ -2234,6 +2234,42 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
     }
 
+    /// <summary><c>AIAttackAimAtTargetState::m_canTurnInPlace</c>: a locomotor without a minimum speed can face its victim standing (the others fly at it).</summary>
+    internal bool CanTurnInPlace => ActiveLocomotor is { MinSpeed.Raw: 0 };
+
+    /// <summary>The object is covering a frame's step or turn: what it looks at now is decided when that is done. Always false at 30 Hz, where the step is taken at once.</summary>
+    internal bool IsCoveringFrame => _frameTicksLeft > 0;
+
+    // The tick of the last turn on the spot; derived within a tick, not state: a unit turns one step per logic frame of the original, however many orders ask for it.
+    private long _spotTurnTick = -1;
+
+    /// <summary>
+    /// <c>Locomotor::locoUpdate_moveTowardsAngle</c> of a unit that stands (<c>setLocomotorGoalOrientation</c> of <c>AIAttackAimAtTargetState</c>): one step of its turn rate toward
+    /// <paramref name="desired"/> in the first tick of its own frame, covered in the frame's shares above 30 Hz.
+    /// </summary>
+    internal void TurnInPlace(IWorldServices world, Fixed desired)
+    {
+        if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick) return;
+        if (_stride == 0) ResolveBlockerTiming(world.Time);
+        if (_frameTicksLeft > 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+        _spotTurnTick = world.Tick;
+        FrameConstants(locomotor, out _, out _, out _, out var turnRate, out _);
+        var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
+        var end = turnRate > Fixed.Zero && difference.Abs() > turnRate ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate)) : desired;
+        world.MarkDirty(Entity);
+        if (_stride == 1)
+        {
+            Entity.Angle = end;
+            return;
+        }
+        (_frameStepX, _frameStepY) = (Fixed.Zero, Fixed.Zero);
+        _frameAngle = end;
+        _frameTicksLeft = _stride;
+        _frameArriving = true;
+        AdvanceFrame(world, locomotor);
+        world.WakeAt(Entity, this, world.Tick + TickOrder.Next);
+    }
+
     /// <summary>
     /// Above 30 Hz: puts the object where the frame it has begun ends and leaves nothing of that frame's step to cover - for whoever takes the object out of the world in the
     /// tick of its decision (it enters a container): at 30 Hz it has taken its whole step by then. Nothing to do at 30 Hz.

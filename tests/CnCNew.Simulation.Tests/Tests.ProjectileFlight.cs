@@ -26,6 +26,74 @@ static partial class Tests
           ShotsPerBarrel = 2
         End
 
+        Weapon LazyGun
+          PrimaryDamage = 1
+          PrimaryDamageRadius = 1.0
+          AttackRange = 400.0
+          WeaponSpeed = 300
+          ProjectileObject = TestShell
+          DelayBetweenShots = 0
+          AcceptableAimDelta = 180
+        End
+        Weapon NarrowGun
+          PrimaryDamage = 1
+          PrimaryDamageRadius = 1.0
+          AttackRange = 400.0
+          WeaponSpeed = 300
+          ProjectileObject = TestShell
+          DelayBetweenShots = 0
+          AcceptableAimDelta = 33
+        End
+        Locomotor AimerLoco
+          Speed = 30
+          Acceleration = 300
+          Braking = 300
+          TurnRate = 180
+        End
+
+        Object BodyAimer
+          KindOf = INFANTRY SELECTABLE
+          Locomotor = SET_NORMAL AimerLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY ShellGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object LazyAimer
+          KindOf = INFANTRY SELECTABLE
+          Locomotor = SET_NORMAL AimerLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY LazyGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object NarrowAimer
+          KindOf = INFANTRY SELECTABLE
+          Locomotor = SET_NORMAL AimerLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY NarrowGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+
         Object TurretLauncher
           KindOf = VEHICLE SELECTABLE
           Body = ActiveBody Body01
@@ -138,6 +206,50 @@ static partial class Tests
         Near(shell.X, 99m, "x of the launch");
         Near(shell.Y, 105m, "y of the launch");
         Near(shell.Z, 2m, "z of the launch");
+    }
+
+    /// <summary>The orders of an attack, one per tick, until the first shot; the frame of the shot after the first order.</summary>
+    private static long FramesToFirstShot(SimulationWorld world, Feeder feeder, Entity source, Entity victim)
+    {
+        var start = world.Tick;
+        for (var tick = 0; tick < world.Frames(120); tick++)
+        {
+            feeder.FireWeapon(1, source.Id.Value, victim.Id.Value);
+            if (world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired)) return world.InFrames(world.Tick - 1 - start);
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// <c>AIAttackAimAtTargetState::update</c>: a unit without a turret turns to its victim at its turn rate (180 degrees a second are 6 a frame) and fires when it looks at it: a quarter
+    /// turn takes 15 frames, within 2 degrees of the bearing. At every rate the same frames.
+    /// </summary>
+    public static void BodyAimTurnsTheUnitToItsVictim()
+    {
+        var world = LaunchWorld(out _, out var feeder);
+        feeder.Spawn(1, "BodyAimer", x: 0, y: 0);
+        feeder.Spawn(2, "Dummy", x: 0, y: 300);
+        world.Step();
+        var aimer = Get(world, "BodyAimer");
+        var frames = FramesToFirstShot(world, feeder, aimer, Get(world, "Dummy"));
+        Check.That(frames == 15, $"A quarter turn at 6 degrees a frame is 15 frames, got {frames}.");
+        Check.That(FixedTrig.AngleDifference(aimer.Angle, FixedTrig.PiFraction(1, 2)).Abs() <= Fixed.FromDecimal(0.035m), $"The unit looks at its victim, got {aimer.Angle}.");
+        Check.That(FixedTrig.AngleDifference(Get(world, "TestShell").Angle, FixedTrig.PiFraction(1, 2)).Abs() < Fixed.FromDecimal(0.04m), "The shot leaves that way.");
+    }
+
+    /// <summary><c>AcceptableAimDelta</c>: 180 degrees ask for no turn at all, 33 degrees let a unit stop within 33 degrees of its victim.</summary>
+    public static void BodyAimAcceptsTheWeaponsDelta()
+    {
+        var world = LaunchWorld(out _, out var feeder);
+        feeder.Spawn(1, "LazyAimer", x: 0, y: 0);
+        feeder.Spawn(1, "NarrowAimer", x: 0, y: 50);
+        feeder.Spawn(2, "Dummy", x: 0, y: 300);
+        world.Step();
+        var (lazy, narrow, dummy) = (Get(world, "LazyAimer"), Get(world, "NarrowAimer"), Get(world, "Dummy"));
+        Check.That(FramesToFirstShot(world, feeder, lazy, dummy) == 0, "A weapon that does not care fires at once.");
+        Check.That(lazy.Angle == Fixed.Zero, "And the unit has not turned.");
+        var frames = FramesToFirstShot(world, feeder, narrow, dummy);
+        Check.That(frames == 10, $"60 degrees of the quarter turn are 10 frames, got {frames}.");
     }
 
     /// <summary><c>Weapon::privateFireWeapon</c>: <c>ShotsPerBarrel</c> shots from a barrel, then the next one, and round again - across a snapshot.</summary>
