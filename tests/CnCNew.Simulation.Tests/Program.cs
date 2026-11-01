@@ -602,6 +602,7 @@ run.Test("Mission AI: it builds and rebuilds its base by the rebuild counts", Te
 run.Test("Mission AI: it orders a dozer with its unit production off", Tests.MissionAiOrdersADozerWithUnitsOff);
 run.Test("Mission AI: a team of a script needs an AI and its unit production", Tests.BuildTeamBelongsToTheAi);
 run.Test("Mission AI: it trains the teams of its production conditions by priority", Tests.MissionAiTrainsTheTeamsOfItsConditions);
+run.Test("Mission AI: it reads the priority a script changed", Tests.TheAiReadsTheChangedPriorityOfATeam);
 run.Test("Mission AI: a team takes the unit of its factory, not a like one a script made", Tests.ATeamTakesTheUnitOfItsFactory);
 run.Test("Mission AI: its team timer is the script's, without a cap", Tests.MissionAiTeamTimerIsTheScripts);
 run.Test("Mission AI: it recruits around the home of the team", Tests.MissionAiRecruitsAroundTheHomeOfTheTeam);

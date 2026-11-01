@@ -1251,13 +1251,13 @@ public sealed partial class ScriptEngine
         {
             if (prototype.Owner != owner.Name || !IsGoodIdeaToBuildTeam(state, prototype)) continue;
             (candidates ??= []).Add(prototype);
-            if (prototype.ProductionPriority > highest) highest = prototype.ProductionPriority;
+            if (ProductionPriorityOf(prototype) > highest) highest = ProductionPriorityOf(prototype);
         }
         // "if (selectTeamToReinforce(hiPri)) return true": a team in the field that wants a unit comes before a new team of lower or equal priority.
         DropExpiredReinforcements();
         if (SelectTeamToReinforce(state, owner, candidates is null ? NoTeamPriority : highest)) return true;
         if (candidates is null) return false;
-        candidates.RemoveAll(prototype => prototype.ProductionPriority != highest);
+        candidates.RemoveAll(prototype => ProductionPriorityOf(prototype) != highest);
         var pick = candidates[_world.LogicRandom.Range(0, candidates.Count - 1)];
         BuildTeam(pick.Name, idleOnly: true);
         state.ReadyTeam = false;

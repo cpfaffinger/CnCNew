@@ -24,7 +24,7 @@ public sealed partial class ScriptEngine
         var priority = minPriority;
         foreach (var prototype in _program.Teams)
         {
-            if (prototype.Owner != owner.Name || !prototype.AutoReinforce || prototype.ProductionPriority <= priority) continue;
+            if (prototype.Owner != owner.Name || !prototype.AutoReinforce || ProductionPriorityOf(prototype) <= priority) continue;
             var instances = _teams.InstancesOf(prototype.Name);
             if (IsBeingBuiltOrReinforced(instances)) continue;
             foreach (var team in instances)
@@ -40,7 +40,7 @@ public sealed partial class ScriptEngine
                     chosen = team;
                     chosenPrototype = prototype;
                     chosenType = unit.Type;
-                    priority = prototype.ProductionPriority;
+                    priority = ProductionPriorityOf(prototype);
                 }
             }
         }

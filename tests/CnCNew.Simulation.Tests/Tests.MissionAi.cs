@@ -242,6 +242,25 @@ static partial class Tests
         Check.That(CountOf(session, "BetaDozer") == 2, "A team at its limit is not built again.");
     }
 
+    /// <summary>
+    /// <c>TEAM_DECREASE_PRIORITY</c> changes <c>m_productionPriority</c> of the prototype, which is what <c>selectTeamToBuild</c> reads: the team that lost its priority waits behind the other one.
+    /// </summary>
+    public static void TheAiReadsTheChangedPriorityOfATeam()
+    {
+        var failed = new MapProperties([
+            Scr.Text("teamName", "Failed"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", false), IntProperty("teamMaxInstances", 1), Scr.Text("teamUnitType1", "BetaSoldier"), IntProperty("teamUnitMinCount1", 1), IntProperty("teamUnitMaxCount1", 1),
+            Scr.Text("teamProductionCondition", "Wanted"), IntProperty("teamProductionPriority", 5), IntProperty("teamProductionPriorityFailureDecrease", 4),
+        ]);
+        var session = StartAiMission(
+            [
+                Scr.Script("Wanted", [Scr.And(Scr.If("CONDITION_TRUE"))], [], subroutine: true),
+                AtStart(EnableUnits, Scr.Do("TEAM_DECREASE_PRIORITY", Scr.Team("Failed"))),
+            ],
+            objects: [Placed("BetaCenter", 300m, 100m, "teamB", "Hq")], teams: [failed, AiTeam("Next", "BetaDozer", 1, condition: "Wanted", priority: 3)], files: AiMissionFiles());
+        Run(session, session.Frames(60));
+        Check.That(CountOf(session, "BetaDozer") == 1 && CountOf(session, "BetaSoldier") == 0, $"The team with the priority left goes first ({CountOf(session, "BetaDozer")}, {CountOf(session, "BetaSoldier")}).");
+    }
+
     /// <summary><c>AIPlayer::onUnitProduced</c> matches an order by its factory: what a script creates while the unit is being trained fills no order, however alike the two are.</summary>
     public static void ATeamTakesTheUnitOfItsFactory()
     {
