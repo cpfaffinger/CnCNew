@@ -18,7 +18,7 @@
       },
       "results": {
         "chainHash": "68C84F86F7429CF4",
-        "commandStreamSha256": "2F6FF713D1B3E42FAE9EA9CB583344DDB97D8A2288C0DDFB1EBAB9B87A73CFA2",
+        "commandStreamSha256": "708599469D3BB0347BC9449B4B040680FF16344CCE04682BE686115F7716EB1E",
         "commands": 3599,
         "endTick": 90000,
         "finalHash": "F36427ECF7F85FBB",
@@ -27,7 +27,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 715,
         "snapshotBytes": 524172,
-        "snapshotSha256": "DE4B2DF82DA17D437B72E5272142364BD855FF3FDE513DDE1713B76AF3E9CC86",
+        "snapshotSha256": "DE55DB9E5AB348E16E7547892091D45E12B3A78F74E0AEC1AFBF078738D1C0D5",
         "snapshotTick": 45000
       },
       "set": "full"
@@ -49,7 +49,7 @@
       },
       "results": {
         "chainHash": "0DBE67C3A72FC973",
-        "commandStreamSha256": "AC107E5BC0641A8A89B2FCA06F9E756870F887D8D410072512C08C35E1078F65",
+        "commandStreamSha256": "54B34AF922C7569893D89B9EFD1B8C3B03247E352503837013113F31C048BD2C",
         "commands": 1096,
         "endTick": 31561,
         "finalHash": "54BFC5227DBECEA0",
@@ -58,7 +58,7 @@
         "outcome": "winner",
         "rejectedCommands": 247,
         "snapshotBytes": 391519,
-        "snapshotSha256": "0B103BFA3905923029FA854A0EA953E14785721C7D51CD5E1E5B816F08756534",
+        "snapshotSha256": "D6082CCEF9D90B77ABC4A00ADADB1508D23DAB9DFE0F97DB0C82EF3B3C0026B7",
         "snapshotTick": 15780,
         "victoryTick": 30960,
         "winner": "FactionChina"
@@ -82,7 +82,7 @@
       },
       "results": {
         "chainHash": "3698497A1AAF068B",
-        "commandStreamSha256": "E573F5F02DC39D5CCDD7500A903064FC01201A939CD4FEAA18B0AA190CE6B6A0",
+        "commandStreamSha256": "B964CEECF731D673A2D174DCA0F315DDDB29D363EDB04373AAD76735D3320141",
         "commands": 2160,
         "endTick": 51361,
         "finalHash": "AE2A91A742223DD2",
@@ -91,7 +91,7 @@
         "outcome": "winner",
         "rejectedCommands": 435,
         "snapshotBytes": 378950,
-        "snapshotSha256": "2C370AB0045F94FC9B8FF946D13A84F1D96635115B005D6E338F0778B7EF3F95",
+        "snapshotSha256": "C9F172C98CD7BF8CDE7BEE7546549FB2827D4F76EC48ED7BF08FA1F2DBAA3F74",
         "snapshotTick": 25680,
         "victoryTick": 50760,
         "winner": "FactionChinaTankGeneral"
@@ -115,7 +115,7 @@
       },
       "results": {
         "chainHash": "719E8A2B4A9BA01E",
-        "commandStreamSha256": "13453F4D0BB8E45E67F61451AC45DB4D8CE1A9525D2A4953F640E5C21A40C12D",
+        "commandStreamSha256": "2998F227B2DB28AFBE6C245E7AFB0798E524ADEF06B46E15B8CFFFBD9EC574A8",
         "commands": 2352,
         "endTick": 57511,
         "finalHash": "9E758DB2CEC41010",
@@ -124,7 +124,7 @@
         "outcome": "winner",
         "rejectedCommands": 309,
         "snapshotBytes": 393691,
-        "snapshotSha256": "EA8FDE7614B417FD57E1A44D9D0B21DBB50372ED3C76AF846C13ADF70A143ED3",
+        "snapshotSha256": "1D1AE92E7BD3FC7C1D2F998D0F60F7CC54AA3EF801EE7E84FA2F87504F79C069",
         "snapshotTick": 28755,
         "victoryTick": 56910,
         "winner": "FactionAmerica"
@@ -148,7 +148,7 @@
       },
       "results": {
         "chainHash": "68D194F1CCA93271",
-        "commandStreamSha256": "8A25941A27A406F2438A2EDDF10A102C80DEBE952D4DEE31D2A4BC8A7B2FEA95",
+        "commandStreamSha256": "43A8C1BB38EE4D25493BBC543F993CE187E3DB70441D408E88ABCC8C1231AD1D",
         "commands": 914,
         "endTick": 20641,
         "finalHash": "C2996B5E622A6A26",
@@ -157,7 +157,7 @@
         "outcome": "winner",
         "rejectedCommands": 129,
         "snapshotBytes": 698682,
-        "snapshotSha256": "06C64658D337CAC713257ECF3D57C56C76476D649269CB2863D4CB192D183D5F",
+        "snapshotSha256": "ABC11310D26BD7C29E4513B7B72F7239BC11469200E7A3F91B40297E64B34672",
         "snapshotTick": 10320,
         "victoryTick": 20040,
         "winner": "FactionChina"
@@ -181,7 +181,7 @@
       },
       "results": {
         "chainHash": "93D3A6C409D98174",
-        "commandStreamSha256": "F1B16206009C52D408C96D6A250D2B934FB4949B1AA21CD5080D5B052224163E",
+        "commandStreamSha256": "C080F3E68FC7A63FBE29E413882303A891BA17131E9120B334E220B510D2B271",
         "commands": 712,
         "endTick": 23191,
         "finalHash": "B61B6A31E03F50FB",
@@ -190,7 +190,7 @@
         "outcome": "winner",
         "rejectedCommands": 128,
         "snapshotBytes": 656415,
-        "snapshotSha256": "D4E71FEC4CCFEABD577D68516F9C0EDA20A0DC9C2829C3A9A6C3B3500345B907",
+        "snapshotSha256": "55953EFDE97A7D4119A5BCB361F3BE3EE9DEDCB449A62486D4C90B397177806D",
         "snapshotTick": 11595,
         "victoryTick": 22590,
         "winner": "FactionChina"
@@ -214,7 +214,7 @@
       },
       "results": {
         "chainHash": "FE4A3CAD7075C2B9",
-        "commandStreamSha256": "F02FD37A94FF2B7D1E3CBA7DA44A83A8D8B31512247F45C1EC5C29D80BDC223A",
+        "commandStreamSha256": "41FBDD111EE50A396CF24D23A299E75E6EBF7A4A3BE127AC25F0B043BCE481DF",
         "commands": 3631,
         "endTick": 43201,
         "finalHash": "602F65C6778B4EFA",
@@ -223,7 +223,7 @@
         "outcome": "winner",
         "rejectedCommands": 625,
         "snapshotBytes": 709937,
-        "snapshotSha256": "7475D9C89EC4BBC765D7987934DB2765AF0532879D181CD143A4069084164173",
+        "snapshotSha256": "544E324ABE6A402FFDC8248BBCFFCB82339E4C96CEF9A83E2F8FFDB030A8DA48",
         "snapshotTick": 21600,
         "victoryTick": 42600,
         "winner": "FactionChinaTankGeneral"
@@ -247,7 +247,7 @@
       },
       "results": {
         "chainHash": "7FF2C5BEE301DF16",
-        "commandStreamSha256": "0DEC02A732CA27B3B630B47CF799651F29B32DC19922DC753CFA1249B89945D9",
+        "commandStreamSha256": "F27945E2ACE78CACC1F800DAA50961099E3F65254591BF50253B791B92D8A3E7",
         "commands": 4325,
         "endTick": 90000,
         "finalHash": "B1A60D0A988001EC",
@@ -256,7 +256,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 611,
         "snapshotBytes": 694716,
-        "snapshotSha256": "9776C7315C4AA3F682C835C26E267B2E5412A75ECF571F266D28E5D18667D9A6",
+        "snapshotSha256": "4C2DB43501257C704A191B00D9456DB93C93582441A9269E097221613E9C81B4",
         "snapshotTick": 45000
       },
       "set": "full"
@@ -278,7 +278,7 @@
       },
       "results": {
         "chainHash": "CF3BDE064CF4C1AD",
-        "commandStreamSha256": "651340ECA99DD6F3505F71FFE48FF6E130A068825B0D428D3F371A0FD158839C",
+        "commandStreamSha256": "F605DC0BD5F02306D85D2947B0D2F10B1E166055CB9F2845582842FBEBD286BD",
         "commands": 2665,
         "endTick": 40651,
         "finalHash": "AAF969CA30615609",
@@ -287,7 +287,7 @@
         "outcome": "winner",
         "rejectedCommands": 180,
         "snapshotBytes": 512584,
-        "snapshotSha256": "B9C924D7FE513A22E0889FBED4D91B613889E34BA2BDF39F09820D0354A705CF",
+        "snapshotSha256": "E7650EF53BEA2C706E0E2FA2358ABD3ABA9A1FC02FAF283749AF48B23B5E3212",
         "snapshotTick": 20325,
         "victoryTick": 40050,
         "winner": "FactionAmerica"
@@ -311,7 +311,7 @@
       },
       "results": {
         "chainHash": "390D88034425108D",
-        "commandStreamSha256": "52F33BF71B580CEFD3B25D12823970F78D0FAEC62C4DEE2788BB909D47721CA6",
+        "commandStreamSha256": "1A8BFFFBFCD9E6E30F8B77A3CCE87C2537D94A78DAB49751580DBC21FC26D646",
         "commands": 3584,
         "endTick": 90000,
         "finalHash": "B57279C276E01A93",
@@ -320,7 +320,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 665,
         "snapshotBytes": 472717,
-        "snapshotSha256": "49AC70B5D3F19235639DF84D90E5E89EA30F6FC9FD9C5ABC930D99593780C4CD",
+        "snapshotSha256": "EA4D9232842A72312A767D411DB7B4086C4BEA4EB31F3A99B9FDAF1002C1F942",
         "snapshotTick": 45000
       },
       "set": "full"
@@ -342,7 +342,7 @@
       },
       "results": {
         "chainHash": "E2592FAB0DFF96DA",
-        "commandStreamSha256": "69986EB5F818F0DD5BA81D83C9BD1F0F3FE4E235E8ED83E52560C8A92AD90660",
+        "commandStreamSha256": "70C39A20313F1AC20D27584D8742EB4E3268E824A9D2E91B62D671CF6275E738",
         "commands": 974,
         "endTick": 22171,
         "finalHash": "5741879C5CFE9C17",
@@ -351,7 +351,7 @@
         "outcome": "winner",
         "rejectedCommands": 159,
         "snapshotBytes": 467931,
-        "snapshotSha256": "976275AF6CB2C5B95D074525A794DDEA3B000D0C2C9D92D0A96FADC3A3F93CC6",
+        "snapshotSha256": "249E77E2454242C712F7E98387C3AFC539DAFFA14EF19CB305EBB15FEF1FF21B",
         "snapshotTick": 11085,
         "victoryTick": 21570,
         "winner": "FactionChinaTankGeneral"
@@ -375,7 +375,7 @@
       },
       "results": {
         "chainHash": "4FE74E24DCE4CAEA",
-        "commandStreamSha256": "3E1F2EE50789A17820FE146AEB8A5444A8253ACA295115B69C592DDCB113ACE7",
+        "commandStreamSha256": "867F56BC8CF1F356EC0047449EC112B4AA3E05E7AAC33910E1D9397E32F5894A",
         "commands": 704,
         "endTick": 21061,
         "finalHash": "D7ECB8C3CE092C02",
@@ -384,7 +384,7 @@
         "outcome": "winner",
         "rejectedCommands": 170,
         "snapshotBytes": 454454,
-        "snapshotSha256": "96844A65C04FB38A809AA92F11DA93FBFBBA8541E4582F8E624768BC622AAC2A",
+        "snapshotSha256": "2692A4C976FCECD4E58FD77F8F7F0D9E5722D020767F06DD54A8FEF9C5DE45DD",
         "snapshotTick": 10530,
         "victoryTick": 20460,
         "winner": "FactionAmerica"
@@ -408,7 +408,7 @@
       },
       "results": {
         "chainHash": "628039FAF12DB703",
-        "commandStreamSha256": "8F7FA0EDD2C762CDB3FDC1E08D5E4CC5B1DBC12C9F27802506E54D549BDA83F0",
+        "commandStreamSha256": "96D39F36ABC2B56AB4294EEE20B21557626DEC1390AF2E475F9C487DFC65A748",
         "commands": 2937,
         "endTick": 49381,
         "finalHash": "425D90C65B9B5F6F",
@@ -417,7 +417,7 @@
         "outcome": "winner",
         "rejectedCommands": 245,
         "snapshotBytes": 1103676,
-        "snapshotSha256": "6E914590CE3578C56F75518A64B1E3376B7EEAE27957F7086829840ACAC57FE0",
+        "snapshotSha256": "64714DE026CDCBE49FDAD9EC08B4A869B16E2A11B355C576954150137CB4F21E",
         "snapshotTick": 24690,
         "victoryTick": 48780,
         "winner": "FactionAmerica"
@@ -441,7 +441,7 @@
       },
       "results": {
         "chainHash": "1DD06F028D565D94",
-        "commandStreamSha256": "8CFD78F0201F8478622DC13FACF7D46B6CCD739AD0D82CFFF79347DB4B838062",
+        "commandStreamSha256": "704D31623C8C50D9E0A7E6F0A0EB463B52B4258919C7E137213CA30A36A09D0B",
         "commands": 2708,
         "endTick": 90000,
         "finalHash": "71E170BDAA868455",
@@ -450,7 +450,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 475,
         "snapshotBytes": 1105442,
-        "snapshotSha256": "0E93A85FE253D73A965D4306A6B3B5821D5A22CEC1A97E7103FE9E20C57DAF96",
+        "snapshotSha256": "07372626A05FFCF58590C151EA36F5EEB1766D65B408754C4E4264F654C53C99",
         "snapshotTick": 45000
       },
       "set": "quick"
@@ -472,7 +472,7 @@
       },
       "results": {
         "chainHash": "737D42B6695588FB",
-        "commandStreamSha256": "B4B00F8CCCDF6ED2C035EB0BD11A5ABA8B2870643F3B42B33D5D4FC8CF750D6A",
+        "commandStreamSha256": "45B70E74363A2D4B796A37E30C94431EDD541EBAEE1C64559244AED78FEC0B00",
         "commands": 2057,
         "endTick": 39271,
         "finalHash": "CB6DD0CCFAEAE6D6",
@@ -481,7 +481,7 @@
         "outcome": "winner",
         "rejectedCommands": 317,
         "snapshotBytes": 1084377,
-        "snapshotSha256": "E7A3A47658EAC7032A271FB5E6A2D1D125DF0FE0E229A83CD0C8CC00D2D2BA1F",
+        "snapshotSha256": "5F7692DFFAD98724D25BBB9636D53FB8397BE9C25BB2F57631E2CA7F4C60FB84",
         "snapshotTick": 19635,
         "victoryTick": 38670,
         "winner": "FactionChinaTankGeneral"
@@ -505,7 +505,7 @@
       },
       "results": {
         "chainHash": "1890CAB7598047E6",
-        "commandStreamSha256": "3A2BD724572D1C05D4FB774853F8D2874E5E45374352AF5EE215BB5154EEF857",
+        "commandStreamSha256": "5B250AA5FE1EA34E8F4E0067972C6149834760142EEF6932B6EAEF929CABBEC4",
         "commands": 322,
         "endTick": 16711,
         "finalHash": "A5BEDE99785270CF",
@@ -514,7 +514,7 @@
         "outcome": "winner",
         "rejectedCommands": 88,
         "snapshotBytes": 1004484,
-        "snapshotSha256": "6A6AB89152A678193B27AF191EFABB4FC31EFC89D952B4555EA57FB39A5709DD",
+        "snapshotSha256": "760C6B2AC8BDCEEB0337D7D5B7ED0E0D4041E242ACFD4A8D63B8832F8D6C5EA3",
         "snapshotTick": 8355,
         "victoryTick": 16110,
         "winner": "FactionAmerica"
@@ -538,7 +538,7 @@
       },
       "results": {
         "chainHash": "2DF7A10505299ACF",
-        "commandStreamSha256": "2CCF6DA11C2DD59F12DA1DFC1C1550BB58C3CB284D1FA6384D673C3ED6CB60D3",
+        "commandStreamSha256": "D17C0A1FF4620EA429B3472833A24326A149F1826506F5697BAD7DFB7999CD2C",
         "commands": 2653,
         "endTick": 18000,
         "finalHash": "4378E000953A8C61",
@@ -547,7 +547,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 512,
         "snapshotBytes": 2647492,
-        "snapshotSha256": "6A7DFE2C5B6F22735D2733EA58FE7312C59142E248884860A6983EFB31A3277D",
+        "snapshotSha256": "B90C95ACCA37176E741F0479BB57C2DE8AC1E2FFB4201B6F30C4E2F57DD4C271",
         "snapshotTick": 9000
       },
       "set": "full"
@@ -569,7 +569,7 @@
       },
       "results": {
         "chainHash": "A7BBF2D070815219",
-        "commandStreamSha256": "41F08585A5791535B6FAFE89E83597914B31E88818891587E2FE551F01862970",
+        "commandStreamSha256": "A033AEA3A27CBBC1DB5E3951EB7147EE60F918571A658512C945CDFFFB894D80",
         "commands": 3391,
         "endTick": 18000,
         "finalHash": "54411DA6839CF62C",
@@ -578,7 +578,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 587,
         "snapshotBytes": 2376199,
-        "snapshotSha256": "642AD4E044B3F846E3CF2C711FE2F463990048966AFF75588DEE5FDE486B5BD8",
+        "snapshotSha256": "E23B43CAAB2A65CB5B6B6766F60197EFDC1CAAB6BA9E3D99EDAE625F68B6466C",
         "snapshotTick": 9000
       },
       "set": "full"
@@ -600,7 +600,7 @@
       },
       "results": {
         "chainHash": "57477B7EEFE92515",
-        "commandStreamSha256": "B44ADD741D6590A3CB59B57D63842866FE45C478390D5603051424C128A725AB",
+        "commandStreamSha256": "FC133635B048A4F6A2C5846C8A273B607298D32352782A063383A6E6634EE378",
         "commands": 3006,
         "endTick": 18000,
         "finalHash": "5020ABDBE874D500",
@@ -609,7 +609,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 540,
         "snapshotBytes": 3354640,
-        "snapshotSha256": "F8EB1799B82F0131CC72008C84D0F9E9DC87DD1539C2227B4038957134C71967",
+        "snapshotSha256": "9C27ADDC719087E8C698DA3FD890BE149F4F7CCEE2849B6E54912F868FF8E8FE",
         "snapshotTick": 9000
       },
       "set": "full"
@@ -631,7 +631,7 @@
       },
       "results": {
         "chainHash": "4B49BE47E0AF91CD",
-        "commandStreamSha256": "897C7F7B040896C4E0026AB947D6E27CA6EF97E48CCA5CCF43E4C78B54D39768",
+        "commandStreamSha256": "52892B766921BEAF2A84EA31DB3A6D71B38308E5218F40CAE1BCBF6286CE53A8",
         "commands": 388,
         "endTick": 6000,
         "finalHash": "7979D985DB055579",
@@ -640,7 +640,7 @@
         "outcome": "stalemate",
         "rejectedCommands": 56,
         "snapshotBytes": 2906019,
-        "snapshotSha256": "4D0E79CAC9227B352AC71CBB4AC41D919DCC65E1AE65E81AA3A4A4D86F8BB5C7",
+        "snapshotSha256": "1EC7F186768668E8C80C6F68FA10366A0F36E97F904FBD581B08EBD4266A12E0",
         "snapshotTick": 3000
       },
       "set": "quick"
@@ -684,7 +684,7 @@
         "shots": 0,
         "skippedObjects": 64,
         "snapshotBytes": 1685751,
-        "snapshotSha256": "DA284B099238EF07C77062832D43231AFD9BA74E50F4B4B2F1920970B4D51A26"
+        "snapshotSha256": "C9D27687226EDCF2E58B80D97C35E265B2CBD1EB9469AF1FCFC5306BE1F7B921"
       },
       "set": "full"
     },
@@ -727,7 +727,7 @@
         "shots": 0,
         "skippedObjects": 64,
         "snapshotBytes": 1685972,
-        "snapshotSha256": "77C4458133269B4E3D670F250C7CC99B32B5E4C8B476CE4B6CAF6F844B908DDE"
+        "snapshotSha256": "57F6ED0D5E212F2BD59FBD6262FF4F66A1C7FC40DE593AB8EC30F34039328F19"
       },
       "set": "full"
     },
@@ -770,7 +770,7 @@
         "shots": 0,
         "skippedObjects": 64,
         "snapshotBytes": 1688487,
-        "snapshotSha256": "AC723740656094AAA55FCB8C46CF007AA79008EAF4F39AA79FD2A1C5AE3E4975"
+        "snapshotSha256": "E6CBC2836F87B75D2B09F6A6B6759A9B04AD0CD44AE56FB115F406E7FDC2FF66"
       },
       "set": "full"
     },
@@ -813,7 +813,7 @@
         "shots": 0,
         "skippedObjects": 262,
         "snapshotBytes": 1534971,
-        "snapshotSha256": "FE42771CEDBBA0C3F7FD33DB0D0F0BCF0E13154E3E928A11A14D61853C4E25E1"
+        "snapshotSha256": "27B49F6ACB32A676A9F1D0CF218DF5F5EFE86E1595A833CE0B409EF91F2D4D93"
       },
       "set": "full"
     },
@@ -856,7 +856,7 @@
         "shots": 0,
         "skippedObjects": 262,
         "snapshotBytes": 1534752,
-        "snapshotSha256": "0E7BBEED11F8695ACEDB415193AFBD7A821C0B02B106ABF2EA0179F51B7527EB"
+        "snapshotSha256": "4B9AD1B0200E48A4AC23A3AACD3A4CF45AFC38163E2D6E3D6D99BAAE3110B445"
       },
       "set": "full"
     },
@@ -874,14 +874,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "38D5F330B6FE29AD",
+        "chainHash": "C0A1696EBC4BEDAF",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "7053F2FA48691F46",
-        "hashAfterRestore": "944691D43C81A408",
-        "hashAtSave": "944691D43C81A408",
+        "finalHash": "1EC1585E3AADC68E",
+        "hashAfterRestore": "8FCA3386444606B1",
+        "hashAtSave": "8FCA3386444606B1",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -893,13 +893,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "38D5F330B6FE29AD",
-        "restoredFinalHash": "7053F2FA48691F46",
+        "restoredChainHash": "C0A1696EBC4BEDAF",
+        "restoredFinalHash": "1EC1585E3AADC68E",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2994108,
-        "snapshotSha256": "22D67EF63BB8A3933A333A60BC24543517370BE1DB420952E1008A03B5EBAF1C"
+        "snapshotSha256": "56BC695A7EC836567A1333D96107B478C03CC258C0651779E017EF62C1E0BAAA"
       },
       "set": "full"
     },
@@ -917,14 +917,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "CD3F4026B266C8D4",
+        "chainHash": "86B1659A42B34983",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "8B563F3FCA36CE33",
-        "hashAfterRestore": "D4A1176AD43052E5",
-        "hashAtSave": "D4A1176AD43052E5",
+        "finalHash": "7ABCB58E4CE6B319",
+        "hashAfterRestore": "5A3920B5BEBE197D",
+        "hashAtSave": "5A3920B5BEBE197D",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -936,13 +936,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "CD3F4026B266C8D4",
-        "restoredFinalHash": "8B563F3FCA36CE33",
+        "restoredChainHash": "86B1659A42B34983",
+        "restoredFinalHash": "7ABCB58E4CE6B319",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2993925,
-        "snapshotSha256": "49C0D15316CE23C5E0F4A027773042FAF15A7A59BC12E59539F802818394F1FB"
+        "snapshotSha256": "158F362AFCF8D6758AC454B38BFBEC25877264E038922D6E69925CFBD3D7EEFF"
       },
       "set": "full"
     },
@@ -960,14 +960,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "61900A7015AEA840",
+        "chainHash": "341D871AD1FC75BC",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "50EF711928BAF218",
-        "hashAfterRestore": "E9661D259557A98C",
-        "hashAtSave": "E9661D259557A98C",
+        "finalHash": "F03E8B25C1B6DB02",
+        "hashAfterRestore": "6A2DE77C6261D525",
+        "hashAtSave": "6A2DE77C6261D525",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -979,13 +979,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "61900A7015AEA840",
-        "restoredFinalHash": "50EF711928BAF218",
+        "restoredChainHash": "341D871AD1FC75BC",
+        "restoredFinalHash": "F03E8B25C1B6DB02",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2994114,
-        "snapshotSha256": "977D2DCB6F985A2C96157AA4A98AA7DA343E0E531D5E142F44928EC965042465"
+        "snapshotSha256": "513681D6B82ABB7C319683F4717AC67796A2A522BA95C38613E8D79D20707EBC"
       },
       "set": "full"
     },
@@ -1003,14 +1003,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "BDB1519E38792595",
+        "chainHash": "841ACB554F17E572",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "AD2B756CD5C62918",
-        "hashAfterRestore": "FE02111BC3B13019",
-        "hashAtSave": "FE02111BC3B13019",
+        "finalHash": "6F2DF1758A70AECA",
+        "hashAfterRestore": "267B6E135BA9AC49",
+        "hashAtSave": "267B6E135BA9AC49",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1022,13 +1022,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "BDB1519E38792595",
-        "restoredFinalHash": "AD2B756CD5C62918",
+        "restoredChainHash": "841ACB554F17E572",
+        "restoredFinalHash": "6F2DF1758A70AECA",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2987665,
-        "snapshotSha256": "ED50D63C66C3DAD1598859EF3C63D3F632C1D1177A46378967E37B851069559F"
+        "snapshotSha256": "742D843A8F271F89109FA43B40A1B7874D44C6584C0B92ACAAEA79B99970770A"
       },
       "set": "full"
     },
@@ -1046,14 +1046,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "65DC3A4FF2156C97",
+        "chainHash": "4078128C78A937E5",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "D9C463D4C7E374D2",
-        "hashAfterRestore": "271EE570D73B0250",
-        "hashAtSave": "271EE570D73B0250",
+        "finalHash": "EF12C1353C363BB6",
+        "hashAfterRestore": "CC99E74AE6AB67E9",
+        "hashAtSave": "CC99E74AE6AB67E9",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1065,13 +1065,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "65DC3A4FF2156C97",
-        "restoredFinalHash": "D9C463D4C7E374D2",
+        "restoredChainHash": "4078128C78A937E5",
+        "restoredFinalHash": "EF12C1353C363BB6",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2987438,
-        "snapshotSha256": "8EA5112098363CC17CC12256A438F9A8449D83FCA6C9E553DC41F6493FC610AE"
+        "snapshotSha256": "16EA066A2A9FE99B37FA592B23DDC3C3712415136097A9114161441284529C8C"
       },
       "set": "full"
     },
@@ -1089,14 +1089,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "5906C4152F819254",
+        "chainHash": "F8AFE7DC95C97A40",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "791E0765C3A4211C",
-        "hashAfterRestore": "DE867690110B84E5",
-        "hashAtSave": "DE867690110B84E5",
+        "finalHash": "CBC5B8D46EF4DBEF",
+        "hashAfterRestore": "9BE50B61124F0E85",
+        "hashAtSave": "9BE50B61124F0E85",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1108,13 +1108,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "5906C4152F819254",
-        "restoredFinalHash": "791E0765C3A4211C",
+        "restoredChainHash": "F8AFE7DC95C97A40",
+        "restoredFinalHash": "CBC5B8D46EF4DBEF",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2987600,
-        "snapshotSha256": "7C35D16FDB84A0ED405F0219C3279AA1E8E761017B1E7781E34E0B45EE3010F8"
+        "snapshotSha256": "2E8B2F3CD23BDFA3F4A290925F8E57FAF3BD4177014A1CA66216D2638C242C2F"
       },
       "set": "full"
     },
@@ -1132,14 +1132,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "50D8FE15C185BD5F",
+        "chainHash": "F1791D41D225A8E1",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "DB9D22CFB33332A2",
-        "hashAfterRestore": "3C97DAB9A3E4D28E",
-        "hashAtSave": "3C97DAB9A3E4D28E",
+        "finalHash": "53060413E1C304AD",
+        "hashAfterRestore": "BCD813DF4625D378",
+        "hashAtSave": "BCD813DF4625D378",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1151,13 +1151,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "50D8FE15C185BD5F",
-        "restoredFinalHash": "DB9D22CFB33332A2",
+        "restoredChainHash": "F1791D41D225A8E1",
+        "restoredFinalHash": "53060413E1C304AD",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2990569,
-        "snapshotSha256": "3E046F5684756AE3F9C3C1901C49717CF01920E7340ACB59FBBA99050D70644E"
+        "snapshotSha256": "E7BB9AB33BEEBFD01DB7525094FC3DF08F7B2ACA42C4785CC9250708B7D7A616"
       },
       "set": "full"
     },
@@ -1175,14 +1175,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "AE7A014CF3B1C6F2",
+        "chainHash": "1DBE57A419F7C7DC",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "3F0F45894CCFEFE2",
-        "hashAfterRestore": "EBB3403B4CF0C6FF",
-        "hashAtSave": "EBB3403B4CF0C6FF",
+        "finalHash": "A10F246A3F4DCC21",
+        "hashAfterRestore": "EABEBB8D7DCC7E6E",
+        "hashAtSave": "EABEBB8D7DCC7E6E",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1194,13 +1194,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "AE7A014CF3B1C6F2",
-        "restoredFinalHash": "3F0F45894CCFEFE2",
+        "restoredChainHash": "1DBE57A419F7C7DC",
+        "restoredFinalHash": "A10F246A3F4DCC21",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2990122,
-        "snapshotSha256": "3A089A1BD154F381B35D08E2BF541A8ACE6183C1B3ED0FEC77BD6545720A5B76"
+        "snapshotSha256": "5B6008F9835C61CD000083A767A6BB16B95B20975F837DB6D862D73EC49D968D"
       },
       "set": "full"
     },
@@ -1218,14 +1218,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "955CF91E4AD7ABE4",
+        "chainHash": "EBCCCA716FCF8399",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "021B17E87DE908CB",
-        "hashAfterRestore": "B83A0C4436278B52",
-        "hashAtSave": "B83A0C4436278B52",
+        "finalHash": "A247D57A04F9FCC5",
+        "hashAfterRestore": "359C1564BA413C3E",
+        "hashAtSave": "359C1564BA413C3E",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1237,13 +1237,13 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "955CF91E4AD7ABE4",
-        "restoredFinalHash": "021B17E87DE908CB",
+        "restoredChainHash": "EBCCCA716FCF8399",
+        "restoredFinalHash": "A247D57A04F9FCC5",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
         "snapshotBytes": 2989965,
-        "snapshotSha256": "9645ADA12C9F8F87406487B7B13A632D06131C1E39CE79624B4D7F51D0B938A0"
+        "snapshotSha256": "1CB15A6F6D5E8EA4A3F4499F3B611DCE81E95498A2FFA0DB03168549806A921A"
       },
       "set": "full"
     },
@@ -1286,7 +1286,7 @@
         "shots": 0,
         "skippedObjects": 2584,
         "snapshotBytes": 4613476,
-        "snapshotSha256": "30F60F8C047D79B2FA318299100DA6F4D678AF5A69B325E1DF5B3EFCFA6C520C"
+        "snapshotSha256": "D2F7DEFD99B151A397336E6D79FA54C87C595681A698B9BCFCD657F82972BE73"
       },
       "set": "full"
     },
@@ -1329,7 +1329,7 @@
         "shots": 0,
         "skippedObjects": 22,
         "snapshotBytes": 1571023,
-        "snapshotSha256": "C332A41D9E3B5F825FD94C87594A85B5D3321698B10618D20C29927C6EDA2CD1"
+        "snapshotSha256": "E9C987E74903E24078D7A17C6E58D9FA31F61A1B5458B8B673464A246CC8DA59"
       },
       "set": "full"
     },
@@ -1372,7 +1372,7 @@
         "shots": 108,
         "skippedObjects": 0,
         "snapshotBytes": 2736527,
-        "snapshotSha256": "07488485BC6C8D4DDBA954E4059AE1CF290F51259C467AE57D9E85E7D3C799A0"
+        "snapshotSha256": "E1B39B10AC74C3E025122F354CA75EAB2F3A399C14DA20985ED248A9E4983F71"
       },
       "set": "full"
     },
@@ -1415,7 +1415,7 @@
         "shots": 108,
         "skippedObjects": 0,
         "snapshotBytes": 2738922,
-        "snapshotSha256": "5031836A409C9A9C628FCD8F9508892ED1C66F27D4681062E561DE38D1E7EA23"
+        "snapshotSha256": "54E3480A5B1B23ACB9DB0980EDA8E4BD19CDA1B5AD5EC014B42A6090283910F0"
       },
       "set": "full"
     },
@@ -1438,7 +1438,7 @@
         "ended": false,
         "executedActions": 3363,
         "executedScripts": 65,
-        "finalHash": "9B48C4569018E979",
+        "finalHash": "3654F0551D51651F",
         "hashAfterRestore": "984EF63400D5B2E7",
         "hashAtSave": "984EF63400D5B2E7",
         "humanSide": "",
@@ -1453,12 +1453,12 @@
         "placedObjects": 3168,
         "players": 9,
         "restoredChainHash": "719990AE2A3CC152",
-        "restoredFinalHash": "9B48C4569018E979",
+        "restoredFinalHash": "3654F0551D51651F",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 1943,
         "snapshotBytes": 3550216,
-        "snapshotSha256": "277419293E045D44C2253C84AE613227FBB8585A030955DDD7104EFC9C9F86E5"
+        "snapshotSha256": "327F9FBE2483E8B57E85284D2A8601125754215054B0C8AE5BC03558E766883E"
       },
       "set": "full"
     },
@@ -1501,7 +1501,7 @@
         "shots": 2926,
         "skippedObjects": 785,
         "snapshotBytes": 5392820,
-        "snapshotSha256": "A06F7D6CB7FD816FAAF8AFE67728010456CB2A63AAF6DE300F117F6A1A2E07CD"
+        "snapshotSha256": "A87878D1A10CA1E433585DD8EB01A309C20F8E1F0A5C087ADFE2E6E1DF2DC187"
       },
       "set": "full"
     },
@@ -1544,7 +1544,7 @@
         "shots": 1358,
         "skippedObjects": 363,
         "snapshotBytes": 4488113,
-        "snapshotSha256": "0630DFB2ED8C66C46990C8547E0D26292A71FF5581A9EDB322BCE8E3A1036268"
+        "snapshotSha256": "68CDA315D66794681AF37FE3F02EE4218AC093B85981CE34F53C9242E3009401"
       },
       "set": "full"
     },
@@ -1562,14 +1562,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "47F6EEBEBBC09F48",
+        "chainHash": "9350E534A8DC1BD1",
         "endTick": 6000,
         "ended": false,
         "executedActions": 492,
         "executedScripts": 102,
-        "finalHash": "BACB43DD1A1B80C7",
-        "hashAfterRestore": "E968187C3D5DF179",
-        "hashAtSave": "E968187C3D5DF179",
+        "finalHash": "FB0BDAF108F85963",
+        "hashAfterRestore": "DC0F8BB9BEEA28F4",
+        "hashAtSave": "DC0F8BB9BEEA28F4",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1581,13 +1581,13 @@
         "outcomeTick": -1,
         "placedObjects": 1753,
         "players": 10,
-        "restoredChainHash": "47F6EEBEBBC09F48",
-        "restoredFinalHash": "BACB43DD1A1B80C7",
+        "restoredChainHash": "9350E534A8DC1BD1",
+        "restoredFinalHash": "FB0BDAF108F85963",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 458,
-        "snapshotBytes": 4129557,
-        "snapshotSha256": "B71F752710D10C51F2154DEFA3EAFA71361B0E6066EEEC7D750E3791261D1897"
+        "snapshotBytes": 4129563,
+        "snapshotSha256": "F17F437B7AAF94027769A0BD96EF050B65965209760F6C8B45F5D801ACF8BD99"
       },
       "set": "full"
     },
@@ -1605,14 +1605,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "2472F37D4D32C1A2",
+        "chainHash": "907392166072B240",
         "endTick": 6000,
         "ended": false,
         "executedActions": 392,
         "executedScripts": 104,
-        "finalHash": "CFE4172CA27D6FB2",
-        "hashAfterRestore": "B3AA5BB12908AB2A",
-        "hashAtSave": "B3AA5BB12908AB2A",
+        "finalHash": "93FB0AE9A378F58F",
+        "hashAfterRestore": "1DC064AD0103F4B5",
+        "hashAtSave": "1DC064AD0103F4B5",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1624,13 +1624,13 @@
         "outcomeTick": -1,
         "placedObjects": 5813,
         "players": 12,
-        "restoredChainHash": "2472F37D4D32C1A2",
-        "restoredFinalHash": "CFE4172CA27D6FB2",
+        "restoredChainHash": "907392166072B240",
+        "restoredFinalHash": "93FB0AE9A378F58F",
         "saveTick": 3000,
         "shots": 735,
         "skippedObjects": 3569,
-        "snapshotBytes": 9165331,
-        "snapshotSha256": "3783EE1BB8D8ADA65355DA3E0FE4CF904E37274C4A92EA200B283805CF909EF9"
+        "snapshotBytes": 9165333,
+        "snapshotSha256": "7CCB84C92ABBE5CD6CB39D7788831EA9ABCB78872CFE1892B6CCEF287C51DF61"
       },
       "set": "quick"
     },
@@ -1673,7 +1673,7 @@
         "shots": 793,
         "skippedObjects": 784,
         "snapshotBytes": 7832017,
-        "snapshotSha256": "15083F47BE5C7D3A6647105BEACD109A183724E61101D54CC4644C845054C34F"
+        "snapshotSha256": "CE7901871E3AF6673CD17FD8C9C5A64E93A9362087BE787B7232B2EE903E01A2"
       },
       "set": "full"
     },
@@ -1716,7 +1716,7 @@
         "shots": 71,
         "skippedObjects": 1388,
         "snapshotBytes": 5061816,
-        "snapshotSha256": "2B8B6865CFC9918ACD6F29584C4E69F85379C5AFC3E69D0B8D43A1A99E9AE2E2"
+        "snapshotSha256": "9816B7C159D4B48FD86DA6AE709AA58087351AF9223DBFEF733B676093E2293F"
       },
       "set": "full"
     },
@@ -1759,7 +1759,7 @@
         "shots": 0,
         "skippedObjects": 956,
         "snapshotBytes": 6633772,
-        "snapshotSha256": "6E86BB34B1AB68A79A02A7D4013A331584D88F31A4B474F2150F1F3A5461A30B"
+        "snapshotSha256": "CC33055BD15AEF2ABF49C38D25CEAC45C371D447D83CE7DB647240AF32F3B73D"
       },
       "set": "quick"
     },
@@ -1802,7 +1802,7 @@
         "shots": 53,
         "skippedObjects": 146,
         "snapshotBytes": 3629060,
-        "snapshotSha256": "A6082765D904498797410AFF03383F6081681FBB7D029A6D9574F81DF1E10F13"
+        "snapshotSha256": "648FAD3241BC00A386F43829FC8E991AFE0A90E5A935A66269B7654F6735A92D"
       },
       "set": "full"
     },
@@ -1822,7 +1822,7 @@
       },
       "results": {
         "chainHash": "79AF22AB1CF269A1",
-        "commandStreamSha256": "6F465094F8628F68F5DE99A25AC57B0F6DE8C8770D1F6DCAD41B3ABD404D27DB",
+        "commandStreamSha256": "49BCF6E4716D8A71BE63700EC49748C5B79AF4AF25993900C5CA5F0EB92D4BDB",
         "commands": 413274,
         "endTick": 108000,
         "finalHash": "556023EBE5E461C2",
@@ -1833,7 +1833,7 @@
         "players": 13,
         "rejectedCommands": 0,
         "snapshotBytes": 544103,
-        "snapshotSha256": "F768FEEC7643CB676C057DA6364B6C3C6BA7C972FDE2E61DDE8731E0505827E1",
+        "snapshotSha256": "A3B9EA381FBDB6AB648811829122578E5B1ED2B4391B38C1A6740F82A83AB471",
         "snapshotTick": 54000
       },
       "set": "quick"
@@ -2327,7 +2327,7 @@
       },
       "results": {
         "chainHash": "5611A72EDB7D52F2",
-        "commandStreamSha256": "CDF032FD61BEE4EB3C6E410B77765BB902FE7C0F292F2F9691D6485C60033D61",
+        "commandStreamSha256": "64046550C0D49757428DC0AC84358F8F5F43BEB2D6A47D486AC192D8F371D8EA",
         "commands": 914403,
         "endTick": 216000,
         "finalHash": "9EE9F730D124C3BD",
@@ -2345,9 +2345,9 @@
   },
   "schema": 2,
   "simulation": {
-    "commandTableVersion": 21,
+    "commandTableVersion": 22,
     "missionSnapshotVersion": 3,
-    "replayFormatVersion": 20,
+    "replayFormatVersion": 21,
     "tickRate": 60,
     "worldSnapshotVersion": 11
   },
