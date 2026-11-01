@@ -528,6 +528,9 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
     public override string ModuleName => "NeutronMissileUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public EntityId Launcher => _launcher;
+
+    /// <summary>The elevation of the missile's nose, radians above the horizon.</summary>
+    public Fixed FlightPitch => FixedTrig.Atan2(_direction.Z, Fixed.Sqrt(_direction.X * _direction.X + _direction.Y * _direction.Y));
     public bool IsArmed => _armed;
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;

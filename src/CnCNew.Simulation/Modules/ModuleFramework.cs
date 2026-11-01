@@ -42,6 +42,9 @@ public interface IWorldServices
     /// <summary>Terrain height at (x, y); 0 without terrain.</summary>
     Fixed GroundHeightAt(Fixed x, Fixed y);
 
+    /// <summary><c>Locomotor::getSurfaceHtAtPt</c>: the water's level where there is water over the terrain, else the terrain's height.</summary>
+    Fixed SurfaceHeightAt(Fixed x, Fixed y);
+
     /// <summary><c>W3DTerrainLogic::getLayerHeight</c>: the height of a layer at (x, y): the deck on the bridge of that layer, the ground off it or where the deck would be in the ground.</summary>
     Fixed LayerHeightAt(Fixed x, Fixed y, int layer);
 
@@ -579,9 +582,10 @@ public interface IWorldServices
 /// What a projectile object is told when it is launched (<c>ProjectileUpdateInterface::projectileLaunchAtObjectOrPosition</c>): the firing
 /// weapon (its detonation weapon), the launcher, the victim it may follow (invalid for a position shot or a scattered one), the aim point and
 /// the launcher's weapon bonus conditions (<c>m_extraBonusFlags</c>). The forward vector is the x axis of the matrix <c>Weapon::positionProjectileForLaunch</c> gives the projectile, a unit
-/// vector: the launch bone turned with the turret and the launcher (docs/SIMULATION-CORE.md §75).
+/// vector: the launch bone turned with the turret and the launcher (docs/SIMULATION-CORE.md §75). The velocity is the launcher's, per logic frame of the original (<c>transferVelocityTo</c>).
 /// </summary>
-public readonly record struct ProjectileLaunch(int Weapon, EntityId Launcher, EntityId Victim, Fixed X, Fixed Y, Fixed Z, uint Conditions, Fixed ForwardX, Fixed ForwardY, Fixed ForwardZ);
+public readonly record struct ProjectileLaunch(int Weapon, EntityId Launcher, EntityId Victim, Fixed X, Fixed Y, Fixed Z, uint Conditions, Fixed ForwardX, Fixed ForwardY, Fixed ForwardZ,
+    Fixed VelocityX = default, Fixed VelocityY = default, Fixed VelocityZ = default);
 
 /// <summary><c>ProjectileUpdateInterface</c>: <c>DumbProjectileBehavior</c> and <c>MissileAIUpdate</c>.</summary>
 public interface IProjectileModule
@@ -591,6 +595,9 @@ public interface IProjectileModule
 
     /// <summary><c>projectileGetLauncherID</c>.</summary>
     EntityId Launcher { get; }
+
+    /// <summary>How far the projectile's nose points above the horizon, in radians (the matrix the original gives it): the presentation draws it so.</summary>
+    Fixed FlightPitch { get; }
 }
 
 /// <summary><c>ContainModuleInterface::onSelling</c>: called when a sale of the entity starts (<c>BuildAssistant::sellObject</c>).</summary>

@@ -46,6 +46,7 @@ static partial class Tests
           SpeedLimitZ = 8.0
         End
         Locomotor FlightMissileLoco
+          MaxThrustAngle = 60
           Surfaces = AIR
           Speed = 300
           Acceleration = 9000

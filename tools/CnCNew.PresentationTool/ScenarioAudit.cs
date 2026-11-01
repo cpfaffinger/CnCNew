@@ -30,7 +30,7 @@ internal static class ScenarioAudit
             var (dx, dy, dz) = known ? (x - last.X, y - last.Y, z - last.Z) : (0f, 0f, 0f);
             var along = MathF.Sqrt(dx * dx + dy * dy);
             var step = MathF.Sqrt(along * along + dz * dz);
-            Console.WriteLine(FormattableString.Invariant($"       f{live.Clock.OriginalFrames,5} #{entity.Id.Value,-5} {entity.Template.Name,-28} at ({x - anchor.X,7:F1},{y - anchor.Y,7:F1}) z {z,6:F1} h {height,6:F1} step {step,5:F2} heading {MathF.Atan2(dy, dx) * 180f / MathF.PI,7:F1} climb {MathF.Atan2(dz, along) * 180f / MathF.PI,6:F1} model heading {ToFloat(entity.Angle) * 180f / MathF.PI,7:F1}"));
+            Console.WriteLine(FormattableString.Invariant($"       f{live.Clock.OriginalFrames,5} #{entity.Id.Value,-5} {entity.Template.Name,-28} at ({x - anchor.X,7:F1},{y - anchor.Y,7:F1}) z {z,6:F1} h {height,6:F1} step {step,5:F2} heading {MathF.Atan2(dy, dx) * 180f / MathF.PI,7:F1} climb {MathF.Atan2(dz, along) * 180f / MathF.PI,6:F1} model heading {ToFloat(entity.Angle) * 180f / MathF.PI,7:F1} nose {-(live.Frame.Drawables.FirstOrDefault(value => value.Entity == entity.Id)?.Chassis.Pitch ?? 0f) * 180f / MathF.PI,6:F1}"));
         }
     }
 

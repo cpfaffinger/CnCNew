@@ -71,6 +71,8 @@ public static class LocomotorSchema
             Real("AccelerationDamaged"),
             Real("Braking"),
             Real("PreferredHeight"),
+            Real("PreferredHeightDamping"),
+            Real("MaxThrustAngle"),
             Real("SpeedLimitZ"),
             Real("CloseEnoughDist"),
             Real("WanderWidthFactor"),

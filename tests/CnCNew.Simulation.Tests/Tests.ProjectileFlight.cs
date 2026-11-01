@@ -8,6 +8,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>Where a projectile starts and how it flies (docs/SIMULATION-CORE.md §75): the launch bone turned with the turret and the launcher, the barrels in turn.</summary>
@@ -94,6 +95,114 @@ static partial class Tests
           End
         End
 
+        Locomotor CruiseLoco
+          Surfaces = AIR
+          Speed = 200
+          MinSpeed = 100
+          Acceleration = 675
+          Braking = 0
+          TurnRate = 540
+          MaxThrustAngle = 45
+          PreferredHeight = 120
+          PreferredHeightDamping = 0.7
+        End
+        Locomotor LimitedLoco
+          Surfaces = AIR
+          Speed = 225
+          MinSpeed = 120
+          Acceleration = 675
+          Braking = 0
+          TurnRate = 100
+          MaxThrustAngle = 45
+        End
+        Weapon CruiseGun
+          PrimaryDamage = 150
+          PrimaryDamageRadius = 10.0
+          SecondaryDamage = 50
+          SecondaryDamageRadius = 25.0
+          AttackRange = 400.0
+          ProjectileObject = CruiseMissile
+          DelayBetweenShots = 0
+        End
+        Weapon LimitedGun
+          PrimaryDamage = 60
+          PrimaryDamageRadius = 5.0
+          AttackRange = 400.0
+          ProjectileObject = LimitedMissile
+          DelayBetweenShots = 0
+        End
+        Object CruiseMissile
+          KindOf = PROJECTILE SMALL_MISSILE
+          Geometry = CYLINDER
+          GeometryMajorRadius = 8.0
+          GeometryHeight = 4.0
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Locomotor = SET_NORMAL CruiseLoco
+          Behavior = MissileAIUpdate Missile01
+            TryToFollowTarget = Yes
+            FuelLifetime = 8000
+            IgnitionDelay = 0
+            InitialVelocity = 50
+            DistanceToTravelBeforeTurning = 80
+            DistanceToTargetBeforeDiving = 100
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object LimitedMissile
+          KindOf = PROJECTILE SMALL_MISSILE
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Locomotor = SET_NORMAL LimitedLoco
+          Behavior = MissileAIUpdate Missile01
+            TryToFollowTarget = Yes
+            FuelLifetime = 8000
+            IgnitionDelay = 0
+            InitialVelocity = 150
+            DistanceToTravelBeforeTurning = 3
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object CruiseLauncher
+          KindOf = VEHICLE SELECTABLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY CruiseGun
+          End
+        End
+        Object LimitedLauncher
+          KindOf = VEHICLE SELECTABLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY LimitedGun
+          End
+        End
+        Object WideBuilding
+          KindOf = STRUCTURE SELECTABLE
+          Geometry = BOX
+          GeometryMajorRadius = 40.0
+          GeometryMinorRadius = 40.0
+          GeometryHeight = 30.0
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+        End
+
         Object TurretLauncher
           KindOf = VEHICLE SELECTABLE
           Body = ActiveBody Body01
@@ -147,11 +256,16 @@ static partial class Tests
         var turret = new LaunchSlot([new LaunchBarrel(F(10), F(0), F(4), F(1), F(0), F(0))], [new LaunchTurret(F(2), F(0), F(3), F(4), F(0), F(3), F(0), F(0)), default]);
         var twin = new LaunchSlot([new LaunchBarrel(F(5), F(3), F(2), F(1), F(0), F(0)), new LaunchBarrel(F(5), F(-3), F(2), F(1), F(0), F(0))], []);
         var hull = new LaunchSlot([new LaunchBarrel(F(5), F(1), F(2), F(1), F(0), F(0))], []);
+        // The rack of a cruise missile launcher: 16 units up, 70 degrees to the sky.
+        var rack = new LaunchSlot([new LaunchBarrel(F(0), F(0), F(16), F(0.34202m), F(0), F(0.93969m))], []);
+        var tube = new LaunchSlot([new LaunchBarrel(F(0), F(0), F(10), F(1), F(0), F(0))], []);
         return new ModelGeometry([], [], [], null,
         [
             new KeyValuePair<string, WeaponLaunchPoints>("TurretLauncher", new WeaponLaunchPoints([turret, NoLaunch, NoLaunch])),
             new KeyValuePair<string, WeaponLaunchPoints>("TwinLauncher", new WeaponLaunchPoints([twin, NoLaunch, NoLaunch])),
             new KeyValuePair<string, WeaponLaunchPoints>("HullLauncher", new WeaponLaunchPoints([hull, NoLaunch, NoLaunch])),
+            new KeyValuePair<string, WeaponLaunchPoints>("CruiseLauncher", new WeaponLaunchPoints([rack, NoLaunch, NoLaunch])),
+            new KeyValuePair<string, WeaponLaunchPoints>("LimitedLauncher", new WeaponLaunchPoints([tube, NoLaunch, NoLaunch])),
         ]);
     }
 
@@ -163,8 +277,8 @@ static partial class Tests
         return world;
     }
 
-    private static void Near(Fixed value, decimal expected, string what)
-        => Check.That((value - Fixed.FromDecimal(expected)).Abs() < Fixed.FromDecimal(0.01m), $"{what}: expected {expected}, got {value}.");
+    private static void Near(Fixed value, decimal expected, string what, decimal within = 0.01m)
+        => Check.That((value - Fixed.FromDecimal(expected)).Abs() < Fixed.FromDecimal(within), $"{what}: expected {expected}, got {value}.");
 
     /// <summary>
     /// A turret turned a quarter round and pitched 60 degrees: the bone (10, 0, 4) goes about the pitch bone (4, 0, 3) to (6.134, 0, 8.696), then about the angle bone (2, 0, 3) to
@@ -206,6 +320,107 @@ static partial class Tests
         Near(shell.X, 99m, "x of the launch");
         Near(shell.Y, 105m, "y of the launch");
         Near(shell.Z, 2m, "z of the launch");
+    }
+
+    private static readonly (SimulationRate Rate, int Factor)[] MissileRates = [(SimulationRate.Hz30, 1), (SimulationRate.Hz60, 2), (SimulationRate.Hz120, 4)];
+
+    /// <summary>One flight, read where each logic frame of the original ends: the missile's place and its nose, and the place and frame of its impact.</summary>
+    private sealed record MissileFlight(List<(Fixed X, Fixed Y, Fixed Z, Fixed Pitch, Fixed Angle)> Frames, (Fixed X, Fixed Y, Fixed Z) Impact, long ImpactFrame, Fixed Health);
+
+    private static MissileFlight FlyMissile(SimulationRate rate, int factor, string launcher, string missile, string victim, int x, int y)
+    {
+        var fixture = new SyntheticFixture(rate, files: LaunchFiles(), geometry: LaunchGeometry());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, launcher, x: 0, y: 0);
+        feeder.Spawn(2, victim, x: x, y: y);
+        world.Step();
+        var target = Get(world, victim);
+        var fire = world.Tick;
+        Check.That(feeder.FireWeapon(1, Get(world, launcher).Id.Value, target.Id.Value).Accepted, "The launcher fires.");
+        var frames = new List<(Fixed, Fixed, Fixed, Fixed, Fixed)>();
+        (Fixed, Fixed, Fixed) impact = default;
+        long impactFrame = -1;
+        for (var step = 1; step <= 200 * factor && impactFrame < 0; step++)
+        {
+            var result = world.Step();
+            if (result.Events.FirstOrDefault(value => value.Kind == SimEventKind.WeaponImpact) is { HasPosition: true } hit)
+            {
+                impact = (hit.X, hit.Y, hit.Z);
+                impactFrame = (result.Tick - fire) / factor;
+            }
+            if (step % factor == 0 && world.Entities.FirstOrDefault(value => value.Template.Name == missile) is { } flying)
+                frames.Add((flying.X, flying.Y, flying.Z, flying.Modules.OfType<MissileAIUpdate>().Single().FlightPitch, flying.Angle));
+        }
+        return new MissileFlight(frames, impact, impactFrame, target.Body!.Health);
+    }
+
+    private static decimal Degrees(Fixed radians) => radians.Raw * 180m / FixedTrig.Pi.Raw;
+
+    /// <summary>
+    /// A cruise missile (<c>Locomotor::moveTowardsPositionThrust</c>, <c>MissileAIUpdate::doAttackState</c>, the numbers of the Tomahawk): it leaves its rack 70 degrees up and keeps that nose for
+    /// the 80 units of <c>DistanceToTravelBeforeTurning</c>, climbs to about its <c>PreferredHeight</c> of 120 and holds it, and within <c>DistanceToTargetBeforeDiving</c> of its victim it
+    /// noses down and comes down on it. The port's kinematic missile turned at will after 80 units and flew a straight line at the target's feet. Bit for bit the same flight at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void MissileCruisesAtItsPreferredHeightAndDives()
+    {
+        MissileFlight? reference = null;
+        foreach (var (rate, factor) in MissileRates)
+        {
+            var flight = FlyMissile(rate, factor, "CruiseLauncher", "CruiseMissile", "Dummy", 330, 0);
+            Check.That(flight.ImpactFrame > 0, $"{rate}: the missile arrives.");
+            reference ??= flight;
+            // The loop ends with the impact, which above 30 Hz falls on a frame's first tick: that frame has not ended there.
+            Check.That(Math.Abs(flight.Frames.Count - reference.Frames.Count) <= 1, $"{rate}: followed for as many frames as at 30 Hz ({flight.Frames.Count} against {reference.Frames.Count}).");
+            for (var frame = 0; frame < Math.Min(flight.Frames.Count, reference.Frames.Count); frame++)
+                Check.That(flight.Frames[frame] == reference.Frames[frame], $"{rate}: frame {frame} is that of 30 Hz bit for bit ({flight.Frames[frame]} against {reference.Frames[frame]}).");
+            Check.That(flight.ImpactFrame == reference.ImpactFrame && flight.Health == reference.Health, $"{rate}: the same impact as at 30 Hz.");
+        }
+        var path = reference!.Frames;
+        for (var frame = 0; frame < 12; frame++) Near(Fixed.FromDecimal(Degrees(path[frame].Pitch)), 70m, $"The nose stays on the launch line in frame {frame}", 0.5m);
+        var highest = path.Max(value => value.Z);
+        Check.That(highest > Fixed.FromInt(115) && highest < Fixed.FromInt(150), $"The missile climbs to about its preferred height (highest {highest}).");
+        var midway = path.First(value => value.X >= Fixed.FromInt(165));
+        Check.That(midway.Z > Fixed.FromInt(110), $"Halfway it cruises high above the ground ({midway.Z}).");
+        Check.That(Math.Abs(Degrees(midway.Pitch)) < 10m, $"Level ({Degrees(midway.Pitch)} degrees).");
+        var last = path[^1];
+        Check.That(Degrees(last.Pitch) < -40m, $"At the end it comes down on its victim, nose first ({Degrees(last.Pitch)} degrees).");
+        Check.That((reference.Impact.X - Fixed.FromInt(330)).Abs() < Fixed.One && reference.Health < Fixed.FromInt(1000), $"It hits the victim at {reference.Impact}.");
+    }
+
+    /// <summary>The locomotor's <c>TurnRate</c> limits the nose (100 degrees a second are 3.33 a frame; the port's missile turned at will), so a victim behind the launcher takes a turn of a wide radius.</summary>
+    public static void MissileTurnsAtItsLocomotorsRate()
+    {
+        var flight = FlyMissile(SimulationRate.Hz30, 1, "LimitedLauncher", "LimitedMissile", "Dummy", -250, 40);
+        var path = flight.Frames;
+        Check.That(flight.ImpactFrame > 0, "The missile comes round and arrives.");
+        var fastest = 0m;
+        for (var frame = 1; frame < path.Count; frame++) fastest = Math.Max(fastest, Math.Abs(Degrees(FixedTrig.AngleDifference(path[frame - 1].Angle, path[frame].Angle))));
+        Check.That(fastest <= 3.34m, $"The nose never turns faster than the locomotor ({fastest} degrees a frame).");
+        Check.That(path.Max(value => value.X) > Fixed.FromInt(50), $"It overshoots away from its victim before it comes round ({path.Max(value => value.X)}).");
+    }
+
+    /// <summary>The stand-in for the collision: a missile blows up where it meets the box of the object it was fired at, not at the object's feet in the middle of it.</summary>
+    public static void MissileDetonatesOnTheVictimsGeometry()
+    {
+        var flight = FlyMissile(SimulationRate.Hz30, 1, "CruiseLauncher", "CruiseMissile", "WideBuilding", 330, 0);
+        Check.That(flight.ImpactFrame > 0, "The missile hits.");
+        Check.That(flight.Impact.Z > Fixed.Zero && flight.Impact.Z <= Fixed.FromInt(30), $"It meets the building above the ground and below its top ({flight.Impact}).");
+        Check.That((flight.Impact.X - Fixed.FromInt(330)).Abs() <= Fixed.FromInt(48) && (flight.Impact.X - Fixed.FromInt(330)).Abs() > Fixed.FromInt(10), $"At its wall or roof, not at its middle ({flight.Impact}).");
+        Check.That(flight.Health < Fixed.FromInt(1000), "And hurts it.");
+    }
+
+    /// <summary><c>m_orientToFlightPath</c>: a shell's nose follows its arc, up at the start, down at the end.</summary>
+    public static void ShellPitchFollowsItsArc()
+    {
+        var world = LaunchWorld(out _, out var feeder);
+        var fire = FireAtDummy(world, feeder, "ArcLauncher", 120, out _);
+        CsRun(world, 2);
+        var shell = world.Entities.Single(value => value.Template.Name == "ArcShell");
+        var dumb = shell.Modules.OfType<DumbProjectileBehavior>().Single();
+        Check.That(Degrees(dumb.FlightPitch) > 20m, $"Up at the start ({Degrees(dumb.FlightPitch)}).");
+        while (world.Tick < fire + world.Frames(13)) world.Step();
+        Check.That(Degrees(dumb.FlightPitch) < -20m, $"Down at the end ({Degrees(dumb.FlightPitch)}).");
     }
 
     /// <summary>The orders of an attack, one per tick, until the first shot; the frame of the shot after the first order.</summary>

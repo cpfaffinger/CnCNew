@@ -69,6 +69,26 @@ internal static class ProjectileModules
         return new Point3(x, y, z);
     }
 
+    /// <summary>
+    /// The stand-in for <c>PhysicsBehavior</c>'s collision of a projectile with the object it was fired at (<c>projectileHandleCollision</c>; the port has no collision system): a point
+    /// with the projectile's radius meets the victim's box or cylinder, from its feet to its top, where the frame it has begun ends.
+    /// </summary>
+    internal static bool Touches(Entity victim, long tick, Point3 point, Fixed radius)
+    {
+        var (x, y, z) = victim.FrameEnd(tick);
+        var template = victim.Template;
+        var height = template.Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase) ? template.GeometryMajorRadius : template.GeometryHeight;
+        if (point.Z < z || point.Z > z + height) return false;
+        var (dx, dy) = (point.X - x, point.Y - y);
+        if (template.IsBox)
+        {
+            var angle = victim.FrameEndAngle(tick);
+            var (cos, sin) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
+            return (dx * cos + dy * sin).Abs() <= template.GeometryMajorRadius + radius && (dy * cos - dx * sin).Abs() <= template.GeometryMinorRadius + radius;
+        }
+        return SquaredReach.Of(template.GeometryMajorRadius + radius).Contains(dx * dx + dy * dy);
+    }
+
     /// <summary>The shared end of both projectiles: detonate (radius damage, effect, creation list), then kill with <c>DEATH_DETONATED</c> or destroy.</summary>
     internal static void KillDetonated(IWorldServices world, Entity projectile)
     {
@@ -160,6 +180,22 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 
     /// <summary>The number of path points (<c>m_flightPathSegments</c>), one per logic frame of the original; detonation is one frame after the last point.</summary>
     public int Segments => _segments;
+
+    /// <summary>
+    /// <c>m_orientToFlightPath</c>: the shell's nose along the step it flies, the step to the second point before the first has been taken, "as if it were on frame 1". A tumbling shell has
+    /// no such pitch (<c>TumbleRandomly</c>).
+    /// </summary>
+    public Fixed FlightPitch
+    {
+        get
+        {
+            if (_segments < 2 || data.TumbleRandomly) return Fixed.Zero;
+            var last = Math.Clamp(_step - 1, 1, _segments - 1);
+            var (from, to) = (PathPoint(last - 1), PathPoint(last));
+            var (dx, dy) = (to.X - from.X, to.Y - from.Y);
+            return FixedTrig.Atan2(to.Z - from.Z, Fixed.Sqrt(dx * dx + dy * dy));
+        }
+    }
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
@@ -454,13 +490,16 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 
 /// <summary>
 /// <c>MissileAIUpdateModuleData</c> in simulation units: velocities per tick, durations in ticks, the lock distance defaults to 75, the kill-self
-/// delay to 3 ticks (the reference constructor). <c>DistanceToTargetBeforeDiving</c> steers the preferred-height flight of cruise missiles and
-/// <c>DistanceScatterWhenJammed</c> the reaction to ECM jamming; neither exists here (typed, not applied). <c>GarrisonHitKill*</c> act as a shell's do
+/// delay to 3 ticks (the reference constructor). <c>DistanceToTargetBeforeDiving</c> ends the preferred height of a cruise missile (<see cref="MissileData.DiveDistance"/>);
+/// <c>DistanceScatterWhenJammed</c>, the reaction to ECM jamming, does not exist here (typed, not applied). <c>GarrisonHitKill*</c> act as a shell's do
 /// (<see cref="DumbProjectileData"/>, <c>MissileAIUpdate::projectileHandleCollision</c>): when an armed missile reaches its victim and that is a garrisoned building.
 /// </summary>
 public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks, long IgnitionDelayTicks, Fixed InitialVelocity, Fixed DistanceToTravelBeforeTurning,
     Fixed LockDistance, string IgnitionFx, bool UseWeaponSpeed, bool DetonateOnNoFuel, bool DetonateCallsKill, long KillSelfDelayTicks) : ModuleData
 {
+    /// <summary><c>DistanceToTargetBeforeDiving</c>: this close to its goal a missile gives up its locomotor's preferred height (<c>setUsePreciseZPos</c>).</summary>
+    public Fixed DiveDistance { get; init; }
+
     public int GarrisonHitKillCount { get; init; }
     public ImmutableArray<string> GarrisonHitKillRequiredKindOf { get; init; } = [];
     public ImmutableArray<string> GarrisonHitKillForbiddenKindOf { get; init; } = [];
@@ -482,6 +521,7 @@ public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks,
             ModuleConfigReader.Bool(configuration, "DetonateCallsKill", false),
             ModuleConfigReader.Ticks(configuration, "KillSelfDelay", 3))
         {
+            DiveDistance = ModuleConfigReader.Real(configuration, "DistanceToTargetBeforeDiving", Fixed.Zero),
             GarrisonHitKillCount = checked((int)ModuleConfigReader.Int(configuration, "GarrisonHitKillCount", 0)),
             GarrisonHitKillRequiredKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillRequiredKindOf")?.Names ?? [],
             GarrisonHitKillForbiddenKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillForbiddenKindOf")?.Names ?? [],
@@ -520,31 +560,33 @@ public static class MissileFrames
 }
 
 /// <summary>
-/// <c>MissileAIUpdate.cpp</c> as a kinematic state machine (the reference drives a THRUST locomotor through <c>PhysicsBehavior</c>):
+/// <c>MissileAIUpdate.cpp</c> with the part of its <c>AIUpdateInterface</c>, its <c>Locomotor</c> and its <c>PhysicsBehavior</c> a missile uses (docs/SIMULATION-CORE.md §75):
 /// <list type="number">
-/// <item><description><b>Launch</b> (<c>doLaunchState</c>): the missile coasts along its launch direction — the launcher's heading, raised by
-/// <c>2 · max(0, dz) / max(1, xy distance)</c> and normalised — at <c>InitialVelocity</c> (with <c>UseWeaponSpeed</c> the weapon speed, which then
-/// also caps speed and acceleration) until <c>IgnitionDelay</c> ticks have passed since the launch.</description></item>
-/// <item><description><b>Ignition</b>: the warhead arms, <c>IgnitionFX</c> is requested, fuel lasts <c>FuelLifetime</c> ticks (0: forever).</description></item>
-/// <item><description><b>Attack without turning</b> until <c>DistanceToTravelBeforeTurning</c> is flown (measured from the previous tick's position,
-/// as the reference does before moving), then <b>Attack</b>: with fuel the missile accelerates by the locomotor's acceleration up to its speed and
-/// turns at will (<c>setMaxTurnRate(BIGNUM)</c>) towards its goal — the victim's position while it follows one
-/// (<c>TryToFollowTarget</c>), otherwise the aim point 10 above the ground (<c>APPROACH_HEIGHT</c>, only with a lock distance).</description></item>
-/// <item><description>Within the <b>lock distance</b> (2D; halved for a position shot, which then aims at the ground point again) it switches to
-/// <b>Kill</b> and flies straight at the goal (the braking "cheat" of the reference); arriving there detonates it.</description></item>
-/// <item><description>Out of fuel: detonate (<c>DetonateOnNoFuel</c>) or coast without acceleration or turning under gravity (<c>GameData.ini</c>).
+/// <item><description><b>Launch</b> (<c>projectileFireAtObjectOrPosition</c>): the missile looks along the x axis of the launch matrix, raised by <c>2 · max(0, dz) / max(1, xy distance)</c>, and
+/// takes the launcher's velocity and <c>InitialVelocity</c> along that line. It coasts until <c>IgnitionDelay</c> is over.</description></item>
+/// <item><description><b>Ignition</b>: the warhead arms, <c>IgnitionFX</c> is requested, fuel lasts <c>FuelLifetime</c> (0: forever).</description></item>
+/// <item><description><b>Attack without turning</b> until <c>DistanceToTravelBeforeTurning</c> is flown (measured from the previous frame's position, as the reference does before moving):
+/// the locomotor's turn rate is held at 0, so the thrust stays on the nose. A Tomahawk leaves its rack 70 degrees up and goes that way for 80 units.</description></item>
+/// <item><description><b>Attack</b>: <c>Locomotor::moveTowardsPositionThrust</c>. The thrust points where the velocity will meet the goal, at most <c>MaxThrustAngle</c> off the nose, the nose
+/// follows the velocity at the locomotor's turn rate, and the velocity relaxes to the top speed by the acceleration (<c>accelVec = thrustDir * maxAccel - curVel * damping</c>). With a
+/// <c>PreferredHeight</c> the goal's height is a share (<c>PreferredHeightDamping</c>) of the way from where the missile is to that height above the surface, until it is within
+/// <c>DistanceToTargetBeforeDiving</c> of its goal: a cruise missile climbs, holds its height, and comes down on the target.</description></item>
+/// <item><description>Within the <b>lock distance</b> (2D; halved for a position shot, which then aims at the ground point again) it switches to <b>Kill</b>: the braking "cheat" of the reference,
+/// straight at the goal at its speed, its nose turning three times as fast; arriving there detonates it.</description></item>
+/// <item><description>Out of fuel: detonate (<c>DetonateOnNoFuel</c>) or coast without thrust or turning. Gravity acts all the time.
 /// A followed victim that is gone makes it run out of fuel at once and remove itself without damage (<c>airborneTargetGone</c>).</description></item>
 /// <item><description>After detonating it waits <c>KillSelfDelay</c> ticks, then dies (<c>DetonateCallsKill</c>) or is destroyed.</description></item>
 /// </list>
-/// Collision stand-ins (no collision system): an armed missile that reaches its goal point in any attack state, or the ground, detonates there;
-/// an unarmed one reaching the ground is destroyed; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). A missile marked by a plane's <c>CountermeasuresBehavior</c> gives up its victim for the closest flare after the decoy delay and then does no damage. Not modeled:
-/// jamming, preferred-height cruise flight. All vectors are <see cref="Fixed"/>; directions are normalised with the
-/// fixed-point square root.
+/// Collision stand-ins (no collision system): an armed missile detonates when it meets the object it was fired at (<see cref="ProjectileModules.Touches"/>) - only that object - or when it
+/// reaches its goal point; on the ground it detonates unless it came down more than a cell above its goal and more than three cells from it (<c>projectileHandleCollision(NULL)</c>); an
+/// unarmed one slides along the ground; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). A missile marked by a plane's <c>CountermeasuresBehavior</c> gives up its victim for the
+/// closest flare after the decoy delay and then does no damage. Not modeled: jamming, the frames a missile waits for its path before the locomotor acts, a damaged locomotor. All
+/// vectors are <see cref="Fixed"/>; directions are normalised with the fixed-point square root; a rotation toward a direction is the sum of the two axes, not a matrix.
 /// <para>
-/// The state machine runs on the frame grid of the original, on the missile's own phase (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): speed, top speed and acceleration are kept per logic
-/// frame (and per frame²) at every tick rate; the first step is decided one frame after the launch and every further one a frame later, from the same state as at 30 Hz — speed,
-/// heading, distance flown, lock, arrival ("no more than one frame of flight away"), fuel and ground are judged once per frame. The step a frame decides is flown in equal shares
-/// over the ticks of that frame; an arrival or a hit on the ground ends the flight in the tick that decides it, as at 30 Hz. At 30 Hz a frame is a tick and nothing differs.
+/// The state machine runs on the frame grid of the original, on the missile's own phase (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): velocity, top speed and acceleration are kept per
+/// logic frame (and per frame²) at every tick rate; the first step is decided one frame after the launch and every further one a frame later, from the same state as at 30 Hz. The step a
+/// frame decides is flown in equal shares over the ticks of that frame; an arrival or a hit on the ground ends the flight in the tick that decides it, as at 30 Hz. At 30 Hz a frame is a
+/// tick and nothing differs.
 /// </para>
 /// </summary>
 public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule, IProjectileModule
@@ -553,6 +595,18 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
 
     private static readonly Fixed ApproachHeight = Fixed.FromInt(10);
+
+    // isNearlyZero of Locomotor.cpp, and the speed below which PhysicsBehavior::update clamps a component to zero.
+    private static readonly Fixed Nearly = Fixed.FromDecimal(0.001m);
+
+    // MIN_VEL of locoUpdate_moveTowardsPosition: a cell per second, per frame.
+    private static readonly Fixed BrakingMinimum = Fixed.FromInt(TerrainMap.CellSize) / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond);
+
+    // MAX_FRICTION of PhysicsUpdate.cpp.
+    private static readonly Fixed MostFriction = Fixed.FromDecimal(0.99m);
+
+    // calcSlowDownDist: "use a little fudge so that things can stop 'on a dime' more easily".
+    private static readonly Fixed SlowDownFudge = Fixed.FromDecimal(1.05m);
 
     internal enum MissileState : byte { PreLaunch, Launch, Ignition, AttackNoTurn, Attack, Kill, KillSelf, Dead }
 
@@ -570,11 +624,20 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     private Point3 _previous;
     private Point3 _goal;
     private Point3 _originalTarget;
-    private Point3 _direction;
-    private Fixed _speed;
+    // The x axis of the missile's matrix, a unit vector, and PhysicsBehavior::m_vel per logic frame of the original.
+    private Point3 _forward;
+    private Point3 _velocity;
     private Fixed _maxSpeed;
+    private Fixed _minSpeed;
     private Fixed _acceleration;
-    private Fixed _verticalSpeed;
+    private Fixed _braking;
+    private Fixed _turnRate;
+    // What the missile was fired at: it collides with that, also when it does not follow it (TryToFollowTarget = No).
+    private EntityId _firedAt;
+    // Locomotor::setUsePreciseZPos: the missile has given up its preferred height for good.
+    private bool _preciseHeight;
+    // WAS_AIRBORNE_LAST_FRAME: only coming down from the air is a hit on the ground.
+    private bool _airborne;
     private long _decoyTick;
     private bool _noDamage;
     // The step of the current frame and the ticks of it already flown (0: this tick decides a step). Always 0 at 30 Hz (and then not written).
@@ -615,6 +678,9 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     /// <summary>The missile is in its kill-self wait after detonating (<c>OBJECT_STATUS_MISSILE_KILLING_SELF</c>).</summary>
     internal bool IsKillingSelf => _state == MissileState.KillSelf;
 
+    /// <summary>The elevation of the missile's nose, radians above the horizon: the x axis of its matrix.</summary>
+    public Fixed FlightPitch => FixedTrig.Atan2(_forward.Z, Fixed.Sqrt(_forward.X * _forward.X + _forward.Y * _forward.Y));
+
     public override void OnSpawn(IWorldServices world)
     {
         _noTurnDistanceLeft = data.DistanceToTravelBeforeTurning;
@@ -639,16 +705,19 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         // stream projectile was two raw steps off (2.4 per frame²: raw 40265318 at 30 Hz, 40265320 from 60 Hz), and the stream flew a few raw steps beside the 30 Hz stream.
         var frame = locomotor is null || perFrame == 1 ? null : LocomotorFrames.Of(locomotor, perFrame);
         _maxSpeed = locomotor is null ? initial : frame?.Speed ?? locomotor.Speed;
+        _minSpeed = locomotor is null ? Fixed.Zero : frame?.MinSpeed ?? locomotor.MinSpeed;
         _acceleration = locomotor is null ? Fixed.Zero : frame?.Acceleration ?? locomotor.Acceleration;
+        _turnRate = locomotor is null ? Fixed.Zero : frame?.TurnRate ?? locomotor.TurnRatePerTick;
+        // The catalog gives a locomotor without Braking its acceleration; every THRUST locomotor states it, and 0 means none (moveTowardsPositionThrust).
+        _braking = locomotor is { BrakesByData: true } ? frame?.Braking ?? locomotor.Braking : Fixed.Zero;
         if (data.UseWeaponSpeed || _maxSpeed <= Fixed.Zero)
         {
-            // UseWeaponSpeed: m_maxAccel = weaponSpeed, setMaxSpeed(weaponSpeed) — the reference takes the speed per frame as the acceleration per frame², so the missile is at full
-            // speed after one frame. A missile without any speed (no locomotor, no initial velocity) would hang in the air forever here; it flies at the weapon speed instead
-            // (documented stand-in).
+            // UseWeaponSpeed: m_maxAccel = weaponSpeed, setMaxSpeed(weaponSpeed), both caps on the locomotor's own values. A missile without any speed (no locomotor, no initial
+            // velocity) would hang in the air forever here; it flies at the weapon speed instead (documented stand-in).
             var weaponSpeed = ProjectileModules.FrameSpeed(time, weapon.WeaponSpeed);
             if (data.UseWeaponSpeed) initial = weaponSpeed;
-            _maxSpeed = weaponSpeed;
-            _acceleration = weaponSpeed;
+            _maxSpeed = _maxSpeed > Fixed.Zero ? Fixed.Min(_maxSpeed, weaponSpeed) : weaponSpeed;
+            _acceleration = _acceleration > Fixed.Zero ? Fixed.Min(_acceleration, weaponSpeed) : weaponSpeed;
         }
 
         var dz = launch.Z - Entity.Z;
@@ -657,11 +726,15 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         var xyDistance = Fixed.Max(Fixed.Sqrt(dx * dx + dy * dy), Fixed.One);
         var zFactor = dz > Fixed.Zero ? dz / xyDistance : Fixed.Zero;
         // The x axis of the matrix the launch gave the missile, raised for a victim above it (projectileFireAtObjectOrPosition).
-        _direction = Normalize(new Point3(launch.ForwardX, launch.ForwardY, launch.ForwardZ + zFactor * Fixed.FromInt(2)));
-        _speed = initial > Fixed.Zero ? initial : Fixed.Zero;
+        _forward = Normalize(new Point3(launch.ForwardX, launch.ForwardY, launch.ForwardZ + zFactor * Fixed.FromInt(2)));
+        // transferVelocityTo, then the force of the launch.
+        var push = initial > Fixed.Zero ? initial : Fixed.Zero;
+        _velocity = new Point3(launch.VelocityX + _forward.X * push, launch.VelocityY + _forward.Y * push, launch.VelocityZ + _forward.Z * push);
         SwitchTo(world, MissileState.Launch);
+        Face();
 
         var victim = launch.Victim.IsValid ? world.FindEntity(launch.Victim) : null;
+        _firedAt = victim?.Id ?? EntityId.Invalid;
         if (victim is not null && data.TryToFollowTarget)
         {
             _tracking = true;
@@ -676,6 +749,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             _victim = EntityId.Invalid;
         }
         _previous = new Point3(Entity.X, Entity.Y, Entity.Z);
+        _airborne = Entity.Z > world.GroundHeightAt(Entity.X, Entity.Y);
         _subStep = 0;
         // The first step is decided one logic frame after the launch (the next tick at 30 Hz).
         world.WakeAt(Entity, this, world.Tick + time.OriginalFrames(SimulationTiming.SleepNone));
@@ -696,6 +770,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             FlyShare(world);
             return SimulationTiming.SleepNone;
         }
+        var killing = _state == MissileState.Kill;
         var position = new Point3(Entity.X, Entity.Y, Entity.Z);
         if (_noTurnDistanceLeft > Fixed.Zero && _state >= MissileState.Ignition)
         {
@@ -710,23 +785,23 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             return SimulationTiming.SleepForever;
         }
 
-        var accelerate = false;
-        var steer = false;
+        var thrust = false;
+        var turn = false;
         switch (_state)
         {
             case MissileState.Launch:
                 if (world.Tick - _stateTick < data.IgnitionDelayTicks) break;
                 SwitchTo(world, MissileState.Ignition);
                 Ignite(world);
-                accelerate = true;
+                thrust = true;
                 break;
             case MissileState.Ignition:
                 Ignite(world);
-                accelerate = true;
+                thrust = true;
                 break;
             case MissileState.AttackNoTurn:
             case MissileState.Attack:
-                if (!Attack(world, _state == MissileState.Attack, out accelerate, out steer)) return Finish(world);
+                if (!Attack(world, _state == MissileState.Attack, out thrust, out turn)) return Finish(world);
                 break;
             case MissileState.Kill:
                 if (world.Tick >= _fuelExpiration)
@@ -736,8 +811,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
                     return Finish(world);
                 }
                 if (_tracking && FollowedVictim(world) is null) { TargetGone(world); return Finish(world); }
-                accelerate = true;
-                steer = true;
+                thrust = true;
+                turn = true;
                 break;
             case MissileState.KillSelf:
                 if (world.Tick - _stateTick < data.KillSelfDelayTicks) return SimulationTiming.SleepNone;
@@ -750,7 +825,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
                 return SimulationTiming.SleepForever;
         }
         if (_state is MissileState.KillSelf or MissileState.Dead) return Finish(world);
-        Move(world, accelerate, steer);
+        // The status OBJECT_STATUS_BRAKING is set by doKillState: the frame of the lock is flown as any other.
+        Move(world, thrust, turn, killing);
         return Finish(world);
     }
 
@@ -773,6 +849,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         var flare = world.FindEntity(counter.CalculateCountermeasureToDivertTo(world, victim));
         if (flare is null) return;
         _victim = flare.Id;
+        _firedAt = flare.Id;
         _tracking = true;
         _goal = new Point3(flare.X, flare.Y, flare.Z);
         _originalTarget = _goal;
@@ -788,10 +865,10 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     }
 
     /// <summary><c>doAttackState</c>; false when the missile left the attack (detonated or gave up).</summary>
-    private bool Attack(IWorldServices world, bool turnOk, out bool accelerate, out bool steer)
+    private bool Attack(IWorldServices world, bool turnOk, out bool thrust, out bool turn)
     {
-        accelerate = false;
-        steer = false;
+        thrust = false;
+        turn = false;
         var fueled = world.Tick < _fuelExpiration;
         if (!fueled && data.DetonateOnNoFuel)
         {
@@ -803,23 +880,24 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             TargetGone(world);
             return false;
         }
+        thrust = fueled;
+        turn = fueled && turnOk;
+        var dx = _goal.X - Entity.X;
+        var dy = _goal.Y - Entity.Y;
         if (data.LockDistance > Fixed.Zero)
         {
             var lockDistance = _tracking ? data.LockDistance : data.LockDistance / Fixed.FromInt(2);
-            var dx = _goal.X - Entity.X;
-            var dy = _goal.Y - Entity.Y;
             if (SquaredReach.Of(lockDistance).ContainsStrictly(dx * dx + dy * dy))
             {
                 if (!_tracking) _goal = _originalTarget;
                 SwitchTo(world, MissileState.Kill);
-                accelerate = fueled;
-                steer = true;
                 return true;
             }
         }
+        // "Am I close enough to the target to ignore my preferred height setting?" Once only: the locomotor keeps the flag.
+        if (!_preciseHeight && Entity.Template.Locomotor is { PreferredHeight: var preferred } && preferred > Fixed.Zero && _route.Count <= 1
+            && SquaredReach.Of(data.DiveDistance).ContainsStrictly(dx * dx + dy * dy)) _preciseHeight = true;
         if (_noTurnDistanceLeft <= Fixed.Zero) SwitchTo(world, MissileState.Attack);
-        accelerate = fueled;
-        steer = fueled && turnOk;
         return true;
     }
 
@@ -838,40 +916,47 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         SwitchTo(world, MissileState.KillSelf);
     }
 
-    private void Move(IWorldServices world, bool accelerate, bool steer)
+    /// <summary>
+    /// One frame of <c>AIUpdateInterface::doLocomotor</c> and <c>PhysicsBehavior::update</c>. <paramref name="thrust"/>: the locomotor may accelerate; <paramref name="turn"/>: it may turn;
+    /// <paramref name="killing"/>: <c>OBJECT_STATUS_BRAKING</c>, the missile goes straight at its goal at its speed instead of along its velocity.
+    /// </summary>
+    private void Move(IWorldServices world, bool thrust, bool turn, bool killing)
     {
-        if (accelerate) _speed = Fixed.Min(_maxSpeed, _speed + _acceleration);
         var position = new Point3(Entity.X, Entity.Y, Entity.Z);
-        var fueled = world.Tick < _fuelExpiration;
-        if (steer && _state is MissileState.Attack or MissileState.Kill)
+        var speed = Norm(_velocity);
+        if (turn && _state is MissileState.Attack or MissileState.Kill)
         {
-            var toGoal = new Point3(_goal.X - position.X, _goal.Y - position.Y, _goal.Z - position.Z);
+            var toGoal = Between(position, _goal);
             var remaining = Norm(toGoal);
-            if (remaining <= _speed && _route.Count > 1)
+            if (remaining <= speed && _route.Count > 1)
             {
                 // AIFollowWaypointPathState: on to the next waypoint.
                 _route.RemoveAt(0);
                 GoToWaypoint(world);
-                toGoal = new Point3(_goal.X - position.X, _goal.Y - position.Y, _goal.Z - position.Z);
-                remaining = Fixed.Max(Norm(toGoal), Fixed.One);
+                remaining = Fixed.Max(Norm(Between(position, _goal)), Fixed.One);
             }
-            if (remaining <= _speed)
+            if (remaining <= speed)
             {
                 Place(world, _goal);
                 // projectileHandleCollision with its victim: a garrisoned building loses riders instead of taking the explosion.
-                if (_armed && (!_victim.IsValid || !ProjectileModules.ClearGarrison(world, Entity, _launcher, _victim, data.GarrisonHitKillCount, data.GarrisonHitKillRequiredKindOf,
-                        data.GarrisonHitKillForbiddenKindOf, data.GarrisonHitKillFx))) Detonate(world);
+                if (_armed && (!_victim.IsValid || !ClearGarrison(world, _victim))) Detonate(world);
                 return;
             }
-            _direction = new Point3(toGoal.X / remaining, toGoal.Y / remaining, toGoal.Z / remaining);
-            _verticalSpeed = Fixed.Zero;
         }
-        var next = new Point3(position.X + _direction.X * _speed, position.Y + _direction.Y * _speed, position.Z + _direction.Z * _speed);
-        if (!fueled && _armed)
+
+        var push = Thrust(world, position, speed, thrust, turn, killing);
+        var friction = Fixed.Min(Entity.ModuleArray.OfType<PhysicsBehavior>().FirstOrDefault()?.AerodynamicFriction ?? Fixed.Zero, MostFriction);
+        var gravity = ProjectileModules.GravityPerFrameSquared(world);
+        _velocity = new Point3(
+            Settled(_velocity.X + push.X - _velocity.X * friction),
+            Settled(_velocity.Y + push.Y - _velocity.Y * friction),
+            Settled(_velocity.Z + push.Z + gravity - _velocity.Z * friction));
+        var next = killing ? Cheat(position, speed) : new Point3(position.X + _velocity.X, position.Y + _velocity.Y, position.Z + _velocity.Z);
+        if (_armed && world.FindEntity(_firedAt) is { DestroyRequested: false } struck && ProjectileModules.Touches(struck, world.Tick, next, Entity.Template.GeometryMajorRadius))
         {
-            // Coasting after the fuel is gone: gravity takes over (PhysicsBehavior), no thrust and no turning.
-            _verticalSpeed += ProjectileModules.GravityPerFrameSquared(world);
-            next = next with { Z = next.Z + _verticalSpeed };
+            Place(world, next);
+            if (!ClearGarrison(world, _firedAt)) Detonate(world);
+            return;
         }
         if (world.ProjectileHitsDeck(next.X, next.Y, position.Z, next.Z, out var deckZ))
         {
@@ -885,21 +970,165 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             }
         }
         var ground = world.GroundHeightAt(next.X, next.Y);
-        if (next.Z < ground)
+        if (next.Z <= ground)
         {
-            // projectileHandleCollision(NULL): an armed warhead detonates on the ground; an unarmed missile is inert and slides along it.
+            // "do not allow object to pass through the ground": the z velocity loses the excess, a missile never bounces up.
+            var excess = ground - next.Z;
+            _velocity = _velocity with { Z = Fixed.Min(_velocity.Z + excess, Fixed.Zero) };
             next = next with { Z = ground };
-            if (_armed)
+            var cameDown = _airborne;
+            _airborne = false;
+            // projectileHandleCollision(NULL): an armed warhead detonates on the ground; an unarmed missile is inert and slides along it.
+            if (cameDown && _armed && !HitTheGroundElsewhere(next))
             {
                 Place(world, next);
                 Detonate(world);
                 return;
             }
         }
+        else _airborne = true;
         Fly(world, position, next);
     }
 
-    /// <summary>The step of this frame: taken at once at 30 Hz, otherwise flown in equal shares over the ticks of the frame, with the heading of the whole step.</summary>
+    /// <summary>"We're above our target goal... we're somewhere else": a ground hit more than a cell above the goal and more than three cells from it is no hit.</summary>
+    private bool HitTheGroundElsewhere(Point3 point)
+    {
+        var offset = Between(_goal, point);
+        return offset.Z > Fixed.FromInt(TerrainMap.CellSize) && Norm(offset) > Fixed.FromInt(3 * TerrainMap.CellSize);
+    }
+
+    private bool ClearGarrison(IWorldServices world, EntityId victim)
+        => ProjectileModules.ClearGarrison(world, Entity, _launcher, victim, data.GarrisonHitKillCount, data.GarrisonHitKillRequiredKindOf, data.GarrisonHitKillForbiddenKindOf, data.GarrisonHitKillFx);
+
+    /// <summary><c>locoUpdate_moveTowardsPosition</c>, "Projectiles cheat in 3 dimensions": straight at the goal at the speed the missile has, at least a cell a second, never past it.</summary>
+    private Point3 Cheat(Point3 position, Fixed speed)
+    {
+        var way = Between(position, _goal);
+        var distance = Norm(way);
+        if (distance <= Nearly) return position;
+        var step = Fixed.Min(Fixed.Max(speed, BrakingMinimum), distance);
+        return new Point3(position.X + way.X / distance * step, position.Y + way.Y / distance * step, position.Z + way.Z / distance * step);
+    }
+
+    /// <summary>
+    /// <c>Locomotor::moveTowardsPositionThrust</c>: turns the nose and gives what the thrust does to the velocity this frame (the motive force of a missile of any mass, per frame²). The
+    /// locomotor's <c>m_maxAccel</c> is the acceleration when <paramref name="thrust"/>, else 0, and <c>m_maxTurnRate</c> the turn rate when <paramref name="turn"/>, else 0
+    /// (<c>doLaunchState</c>, <c>doIgnitionState</c>, <c>doAttackState</c>, <c>doKillState</c>).
+    /// </summary>
+    private Point3 Thrust(IWorldServices world, Point3 position, Fixed speed, bool thrust, bool turn, bool killing)
+    {
+        var locomotor = Entity.Template.Locomotor;
+        var acceleration = thrust ? _acceleration : Fixed.Zero;
+        var turnRate = turn ? _turnRate : Fixed.Zero;
+        var forwardSpeed = ForwardSpeed();
+        var desired = _maxSpeed;
+        if (_braking > Fixed.Zero)
+        {
+            var (dx, dy) = (_goal.X - position.X, _goal.Y - position.Y);
+            if (Fixed.Sqrt(dx * dx + dy * dy) < SlowDownDistance(forwardSpeed, _minSpeed, _braking)) desired = _minSpeed;
+        }
+
+        // "If we have a preferred flight height, and we haven't been told explicitly to ignore it"
+        var goal = _goal;
+        if (locomotor is { PreferredHeight: var preferred } && preferred != Fixed.Zero && !_preciseHeight)
+            goal = goal with { Z = position.Z + (preferred + world.SurfaceHeightAt(position.X, position.Y) - position.Z) * locomotor.PreferredHeightDamping };
+
+        var speedDelta = desired - forwardSpeed;
+        var push = speedDelta > Fixed.Zero || _braking == Fixed.Zero ? acceleration : -_braking;
+        var wanted = DirectionToApplyThrust(position, goal, push, ProjectileModules.GravityPerFrameSquared(world));
+        // A missile without a locomotor is the stand-in of Launch: it thrusts where it wants to go.
+        var thrustLimit = turn || locomotor is null ? locomotor?.MaxThrustAngle ?? FixedTrig.Pi : Fixed.Zero;
+        var thrustDirection = RotateToward(_forward, wanted, thrustLimit, out var thrustTurned);
+        if (speed.Abs() >= Nearly)
+        {
+            // "note that we are trying to orient in the direction of our vel, not the dir of our thrust." Braking: "align to target, cause that's where we're going anyway."
+            var look = killing ? Between(position, _goal) : _velocity;
+            if (!killing || Dot(look, look).Abs() >= Nearly) _forward = RotateToward(_forward, look, killing ? turnRate * 3 : turnRate, out _);
+        }
+
+        if (speedDelta == Fixed.Zero && !thrustTurned) return default;
+        var top = _maxSpeed > Fixed.Zero ? _maxSpeed : Fixed.FromDecimal(0.01m);
+        var damping = Fixed.Min(Fixed.Max(push / top, Fixed.Zero), Fixed.One);
+        return new Point3(thrustDirection.X * push - _velocity.X * damping, thrustDirection.Y * push - _velocity.Y * damping, thrustDirection.Z * push - _velocity.Z * damping);
+    }
+
+    /// <summary><c>calcSlowDownDist</c>.</summary>
+    private static Fixed SlowDownDistance(Fixed speed, Fixed goal, Fixed braking)
+    {
+        var delta = speed - goal;
+        return delta <= Fixed.Zero ? Fixed.Zero : Fixed.MultiplyDivide(delta, delta, braking.Abs()) / Fixed.FromInt(2) * SlowDownFudge;
+    }
+
+    /// <summary><c>PhysicsBehavior::getForwardSpeed3D</c>, which is what it is: the root of the summed squares of the products of velocity and nose, signed by their sum.</summary>
+    private Fixed ForwardSpeed()
+    {
+        var (x, y, z) = (_velocity.X * _forward.X, _velocity.Y * _forward.Y, _velocity.Z * _forward.Z);
+        var speed = Fixed.Sqrt(x * x + y * y + z * z);
+        return (x + y + z).IsNegative ? -speed : speed;
+    }
+
+    /// <summary><c>calcDirectionToApplyThrust</c>: the direction that brings the velocity (with this frame's gravity) closest to the way to the goal; straight at the goal without a useful solution.</summary>
+    private Point3 DirectionToApplyThrust(Point3 position, Point3 goal, Fixed push, Fixed gravity)
+    {
+        var toGoal = Between(position, goal);
+        var lengthSquared = Dot(toGoal, toGoal);
+        if (lengthSquared.Abs() < Nearly) return _forward;
+        var velocity = _velocity with { Z = _velocity.Z + gravity };
+        var distance = Fixed.Sqrt(lengthSquared);
+        var speed = Norm(velocity);
+        var denominator = (speed - push) * (speed + push);
+        if (denominator.Abs() >= Nearly)
+        {
+            var time = Fixed.MultiplyDivide(distance, speed + push, denominator);
+            var other = Fixed.MultiplyDivide(distance, speed - push, denominator);
+            if (time >= Fixed.Zero || other >= Fixed.Zero)
+            {
+                // "choose the smallest positive t."
+                if (time < Fixed.Zero || (other >= Fixed.Zero && other < time)) time = other;
+                if (time.Abs() >= Nearly)
+                {
+                    var wanted = new Point3(toGoal.X / time - velocity.X, toGoal.Y / time - velocity.Y, toGoal.Z / time - velocity.Z);
+                    if (Norm(wanted) > Fixed.Zero) return Normalize(wanted);
+                }
+            }
+        }
+        return Normalize(toGoal);
+    }
+
+    /// <summary>
+    /// <c>tryToRotateVector3D</c>: <paramref name="current"/> turned toward <paramref name="goal"/> by at most <paramref name="limit"/> radians; <paramref name="turned"/> says the two differ.
+    /// A limit near zero leaves it as it is. Two opposite directions have no plane to turn in, and stay.
+    /// </summary>
+    private static Point3 RotateToward(Point3 current, Point3 goal, Fixed limit, out bool turned)
+    {
+        turned = false;
+        if (limit.Abs() < Nearly || Norm(goal) <= Fixed.Zero) return current;
+        var from = Normalize(current);
+        var to = Normalize(goal);
+        var cosine = Fixed.Max(-Fixed.One, Fixed.Min(Dot(from, to), Fixed.One));
+        turned = cosine < Fixed.One;
+        if (limit >= FixedTrig.Pi || cosine >= FixedTrig.Cos(limit)) return to;
+        var across = new Point3(to.X - from.X * cosine, to.Y - from.Y * cosine, to.Z - from.Z * cosine);
+        var length = Norm(across);
+        if (length <= Fixed.Zero) return current;
+        var (cos, sin) = (FixedTrig.Cos(limit), FixedTrig.Sin(limit));
+        return Normalize(new Point3(from.X * cos + across.X / length * sin, from.Y * cos + across.Y / length * sin, from.Z * cos + across.Z / length * sin));
+    }
+
+    /// <summary>"when vel gets tiny, just clamp to zero"</summary>
+    private static Fixed Settled(Fixed value) => value.Abs() < Nearly ? Fixed.Zero : value;
+
+    private static Point3 Between(Point3 from, Point3 to) => new(to.X - from.X, to.Y - from.Y, to.Z - from.Z);
+
+    private static Fixed Dot(Point3 a, Point3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    /// <summary>The object's heading follows its matrix; straight up or down it keeps the last one.</summary>
+    private void Face()
+    {
+        if (_forward.X != Fixed.Zero || _forward.Y != Fixed.Zero) Entity.Angle = FixedTrig.Atan2(_forward.Y, _forward.X);
+    }
+
+    /// <summary>The step of this frame: taken at once at 30 Hz, otherwise flown in equal shares over the ticks of the frame, with the heading of the frame.</summary>
     private void Fly(IWorldServices world, Point3 from, Point3 to)
     {
         if (world.Time.TicksPerOriginalFrame == 1)
@@ -907,7 +1136,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             Place(world, to);
             return;
         }
-        if (to.X != from.X || to.Y != from.Y) Entity.Angle = FixedTrig.Atan2(to.Y - from.Y, to.X - from.X);
+        Face();
         _frameStep = new Point3(to.X - from.X, to.Y - from.Y, to.Z - from.Z);
         // The rest of the frame stays readable on the object (Entity.FrameEndX …): who looks at the missile in this tick sees it where this frame ends, as at 30 Hz.
         Entity.SetAhead(world.Tick, _frameStep.X, _frameStep.Y, _frameStep.Z);
@@ -926,7 +1155,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
 
     private void Place(IWorldServices world, Point3 point)
     {
-        if (point.X != Entity.X || point.Y != Entity.Y) Entity.Angle = FixedTrig.Atan2(point.Y - Entity.Y, point.X - Entity.X);
+        Face();
         Entity.X = point.X;
         Entity.Y = point.Y;
         Entity.Z = point.Z;
@@ -991,11 +1220,16 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             writer.EndArray();
         }
         DumbProjectileBehavior.WritePoint(writer, "original", _originalTarget);
-        DumbProjectileBehavior.WritePoint(writer, "direction", _direction);
-        writer.Fixed("speed", _speed);
+        DumbProjectileBehavior.WritePoint(writer, "forward", _forward);
+        DumbProjectileBehavior.WritePoint(writer, "velocity", _velocity);
         writer.Fixed("maxSpeed", _maxSpeed);
+        writer.Fixed("minSpeed", _minSpeed);
         writer.Fixed("acceleration", _acceleration);
-        writer.Fixed("verticalSpeed", _verticalSpeed);
+        writer.Fixed("braking", _braking);
+        writer.Fixed("turnRate", _turnRate);
+        writer.UInt("firedAt", _firedAt.Value);
+        writer.Bool("airborne", _airborne);
+        if (_preciseHeight) writer.Bool("preciseHeight", true);
         if (_decoyTick != 0) writer.Int("decoyTick", _decoyTick);
         if (_noDamage) writer.Bool("noDamage", true);
         if (_subStep != 0)
@@ -1026,11 +1260,16 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _route.Clear();
         if (reader.Has("route")) foreach (var item in reader.Array("route")) _route.Add((item.Fixed("x"), item.Fixed("y")));
         _originalTarget = DumbProjectileBehavior.ReadPoint(reader, "original");
-        _direction = DumbProjectileBehavior.ReadPoint(reader, "direction");
-        _speed = reader.Fixed("speed");
+        _forward = DumbProjectileBehavior.ReadPoint(reader, "forward");
+        _velocity = DumbProjectileBehavior.ReadPoint(reader, "velocity");
         _maxSpeed = reader.Fixed("maxSpeed");
+        _minSpeed = reader.Fixed("minSpeed");
         _acceleration = reader.Fixed("acceleration");
-        _verticalSpeed = reader.Fixed("verticalSpeed");
+        _braking = reader.Fixed("braking");
+        _turnRate = reader.Fixed("turnRate");
+        _firedAt = new EntityId(checked((uint)reader.UInt("firedAt")));
+        _airborne = reader.Bool("airborne");
+        _preciseHeight = reader.Has("preciseHeight") && reader.Bool("preciseHeight");
         _decoyTick = reader.Has("decoyTick") ? reader.Int("decoyTick") : 0;
         _noDamage = reader.Has("noDamage") && reader.Bool("noDamage");
         _subStep = reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;

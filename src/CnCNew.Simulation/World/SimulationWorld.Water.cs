@@ -41,6 +41,9 @@ public sealed partial class SimulationWorld
     /// <summary><c>TerrainLogic::isUnderwater</c>: water at the point and the terrain below its level.</summary>
     public bool IsUnderwater(Fixed x, Fixed y) => Terrain is not null && TryWaterLevel(x, y, out var level) && Terrain.HeightAt(x, y) < level;
 
+    /// <inheritdoc cref="Modules.IWorldServices.SurfaceHeightAt"/>
+    public Fixed SurfaceHeightAt(Fixed x, Fixed y) => TryWaterLevel(x, y, out var level) && Terrain!.HeightAt(x, y) < level ? level : GroundHeightAt(x, y);
+
     /// <summary>The level of an area of <see cref="TerrainMap.WaterAreas"/> now.</summary>
     public Fixed WaterLevelOf(int area) => _waterLevels?[area] ?? Terrain!.WaterAreas[area].Level;
 

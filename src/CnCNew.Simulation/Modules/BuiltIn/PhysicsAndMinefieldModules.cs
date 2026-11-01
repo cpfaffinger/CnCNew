@@ -123,6 +123,9 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <summary>The pitch and roll a shock gave the object, in radians (0 for an upright object).</summary>
     public (Fixed Pitch, Fixed Roll) Tilt => (_pitch, _roll);
 
+    /// <summary><c>getAerodynamicFriction</c> without the extra friction of a locomotor (no missile's has any): what the air takes of a flyer's velocity per logic frame of the original.</summary>
+    public Fixed AerodynamicFriction => data.AerodynamicFriction;
+
     /// <summary>
     /// <c>Object::attemptDamage</c>'s shock wave on this object: <c>applyShock</c> (the force less the <c>ShockResistance</c> share, divided by the mass, waits for the next step as an
     /// acceleration) and <c>applyRandomRotation</c> (unless the object sticks to the ground: bouncing allowed, and the yaw, pitch and roll rates each gain their <c>ShockMax</c> times

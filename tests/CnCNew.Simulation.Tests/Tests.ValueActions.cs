@@ -21,6 +21,7 @@ static partial class Tests
           CapableOfFollowingWaypoints = Yes
         End
         Locomotor PathMissileLoco
+          MaxThrustAngle = 60
           Surfaces = AIR
           Speed = 300
           MinSpeed = 0

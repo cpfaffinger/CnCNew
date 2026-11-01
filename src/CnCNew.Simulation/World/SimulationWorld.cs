@@ -2572,6 +2572,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 writer.Fixed("launchForwardX", launch.ForwardX);
                 writer.Fixed("launchForwardY", launch.ForwardY);
                 writer.Fixed("launchForwardZ", launch.ForwardZ);
+                writer.Fixed("launchVelocityX", launch.VelocityX);
+                writer.Fixed("launchVelocityY", launch.VelocityY);
+                writer.Fixed("launchVelocityZ", launch.VelocityZ);
             }
             if (setup.Delivery is { } delivery)
             {

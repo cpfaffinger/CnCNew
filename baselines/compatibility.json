@@ -2974,15 +2974,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Locomotor/MaxThrustAngle",
-      "count": 27,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Locomotor/MaximumWheelCompression",
       "count": 49,
       "owners": [
@@ -3021,15 +3012,6 @@
       "category": "deferred-field",
       "name": "Locomotor/PitchStiffness",
       "count": 145,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "Locomotor/PreferredHeightDamping",
-      "count": 5,
       "owners": [
         "Locomotor"
       ],

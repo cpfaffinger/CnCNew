@@ -239,7 +239,8 @@ internal sealed class AcceptanceAudit
         var firstHurt = _frames.FindIndex(rows => rows["target"].Health < 0.999f) + 1;
         Console.WriteLine($"  target: health {target.Health * 100:F0} % at the end, first damage in frame {firstHurt}; highest flying object {_highestStranger:F1} above the ground");
         if (target.Health > 0.97f) failures.Add($"the target was hardly hit (health {target.Health * 100:F0} %)");
-        if (_highestStranger < 15f) failures.Add($"no projectile was drawn higher than {_highestStranger:F1} above the ground (no arc)");
+        // The Tomahawk's locomotor wants a height of 120: a cruise missile climbs and comes down, it does not drive along the ground (UNIT-12, FX-04).
+        if (_highestStranger < 100f) failures.Add($"no projectile was drawn higher than {_highestStranger:F1} above the ground (no climb)");
         CheckDrawn(failures);
     }
 

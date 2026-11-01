@@ -47,6 +47,15 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
     /// <summary><c>Locomotor::m_preferredHeight</c>: the flight height above the terrain of an aircraft (0 for ground locomotors).</summary>
     public Fixed PreferredHeight { get; init; }
 
+    /// <summary><c>PreferredHeightDamping</c>: the share of the way to the preferred height a thrust locomotor asks for per frame, 1 by default.</summary>
+    public Fixed PreferredHeightDamping { get; init; } = Fixed.One;
+
+    /// <summary><c>MaxThrustAngle</c>: how far off its nose a thrust locomotor can push, in radians.</summary>
+    public Fixed MaxThrustAngle { get; init; }
+
+    /// <summary>The data state a <c>Braking</c>: <see cref="Braking"/> is that value, and not the acceleration a locomotor without one brakes with.</summary>
+    public bool BrakesByData { get; init; }
+
     /// <summary><c>Locomotor::m_speedLimitZ</c>: the fastest an airborne object descends under its own control, per tick (0 when the locomotor sets none).</summary>
     public Fixed SpeedLimitZ { get; init; }
 
@@ -851,6 +860,9 @@ public sealed class TemplateCatalog
                 WanderWidthFactor = Fixed.FromDecimal(Get("WanderWidthFactor")),
                 WanderAboutPointRadius = Fixed.FromDecimal(Get("WanderAboutPointRadius")),
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
+                PreferredHeightDamping = definition.Fields.Any(field => field.Name.Equals("PreferredHeightDamping", StringComparison.OrdinalIgnoreCase)) ? Fixed.FromDecimal(Get("PreferredHeightDamping")) : Fixed.One,
+                MaxThrustAngle = SimulationTiming.DegreesToRadians(Get("MaxThrustAngle")),
+                BrakesByData = braking > 0,
                 SpeedLimitZ = timing.PerSecondToPerTick(Get("SpeedLimitZ")),
                 Lift = timing.PerSecondSquaredToPerTickSquared(lift),
                 IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,

@@ -28,6 +28,7 @@ static partial class Tests
           TurnRate = 360.0
         End
         Locomotor AirMissileLoco
+          MaxThrustAngle = 60
           Surfaces = AIR
           Speed = 300.0
           Acceleration = 9000.0

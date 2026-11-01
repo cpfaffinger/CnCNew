@@ -21,12 +21,14 @@ static partial class Tests
         ["Data/INI/FXList.ini"] = "FXList FX_Test\nEnd\nFXList FX_Other\nEnd\nFXList FX_Boom\nEnd\nFXList FX_Ignite\nEnd\n",
         ["Data/INI/Object/ProjectileFixture.ini"] = """
         Locomotor FastMissileLoco
+          MaxThrustAngle = 60
           Surfaces = AIR
           Speed = 300
           Acceleration = 9000
           TurnRate = 360
         End
         Locomotor SlowMissileLoco
+          MaxThrustAngle = 60
           Surfaces = AIR
           Speed = 300
           Acceleration = 900
@@ -326,8 +328,8 @@ static partial class Tests
 
     /// <summary>
     /// Missile, hand-computed: ignition at once, InitialVelocity 0, acceleration 9000/s² (10 per frame²) up to 300/s (10 per frame), no lock distance.
-    /// Frame F+1 ignites and flies to x = 10; F+2 (attack without turning) to 20; from F+3 it steers at the dummy; at the start of F+10 it is 10 away,
-    /// no more than one step, so it lands exactly on the dummy and detonates in the first tick of frame F+10; frame F+13 (KillSelfDelay 3) removes it.
+    /// Frame F+1 ignites and flies to x = 10; F+2 (attack without turning) to 20; from F+3 it steers at the dummy with a little of its thrust against gravity, so its step is a little
+    /// short of 10; at the start of F+11 it is less than a step away, so it lands exactly on the dummy and detonates in the first tick of frame F+11; frame F+14 (KillSelfDelay 3) removes it.
     /// Written in logic frames of the original, so the same numbers hold at 60 and 120 Hz.
     /// </summary>
     public static void ProjectileMissileFlightTime()
@@ -345,33 +347,35 @@ static partial class Tests
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.WeaponImpact)) impactTick = result.Tick;
         }
-        Check.That(impactTick == fire + world.Frames(10), $"The missile detonates in frame F+10 (got tick F+{impactTick - fire}).");
+        Check.That(impactTick == fire + world.Frames(11), $"The missile detonates in frame F+11 (got tick F+{impactTick - fire}).");
         Check.That(missile.X == Fixed.FromInt(100) && dummy.Body!.Health == Fixed.FromInt(940), "It detonates on the dummy.");
-        while (world.Tick < fire + world.Frames(13)) world.Step();
+        while (world.Tick < fire + world.Frames(14)) world.Step();
         Check.That(world.Entities.Any(value => value.Template.Name == "FastMissile"), "The missile waits KillSelfDelay before it removes itself.");
         world.Step();
-        Check.That(!world.Entities.Any(value => value.Template.Name == "FastMissile"), "Frame F+13, KillSelfDelay (3) after the detonation, removes the missile.");
+        Check.That(!world.Entities.Any(value => value.Template.Name == "FastMissile"), "Frame F+14, KillSelfDelay (3) after the detonation, removes the missile.");
     }
 
     /// <summary>
-    /// Missile with ignition delay and acceleration: IgnitionDelay 100 ms = 3 frames, InitialVelocity 60/s = 2 per frame, acceleration 900/s² = 1 per frame².
-    /// Coast: x = 2, 4 (F+1, F+2); ignition at F+3 (speed 3, x = 7); then speed 4..10: x = 11, 16, 22, 29, 37, 46, 56, 66, 76, 86, 96 (F+4..F+14);
-    /// at F+15 the dummy (x = 100) is 4 away and the missile lands. Written in logic frames of the original, so the same table holds at 60 and 120 Hz.
+    /// Missile with ignition delay and acceleration: IgnitionDelay 100 ms = 3 frames, InitialVelocity 60/s = 2 per frame, acceleration 900/s² = 1 per frame², top speed 10 per frame.
+    /// The thrust relaxes the speed to the top speed (<c>accelVec = thrustDir * maxAccel - curVel * maxAccel / maxForwardSpeed</c>, here v' = 0.9 v + 1). Coast: x = 2, 4 (F+1, F+2);
+    /// ignition at F+3 (speed 2.8, x = 6.8); then 3.52, 4.168, ...; at F+18 the dummy (x = 100) is 3.18 away, less than the speed of 8.35, and the missile lands. The table is that
+    /// of the speed alone, within half a unit: a little of the thrust goes against gravity. Written in logic frames of the original, so the same table holds at 60 and 120 Hz.
     /// </summary>
+    public static readonly decimal[] SlowMissileTable = [2m, 4m, 6.8m, 10.32m, 14.488m, 19.2392m, 24.5153m, 30.2638m, 36.4374m, 42.9936m, 49.8943m, 57.1048m, 64.5944m, 72.3349m, 80.3014m, 88.4713m, 96.8242m];
+
     public static void ProjectileMissileAcceleration()
     {
         var world = ProjectileWorld(out _, out var feeder);
         var fire = FireAtDummy(world, feeder, "SlowMissileLauncher", 100, out _);
         CsRun(world, 1);
         var missile = world.Entities.Single(value => value.Template.Name == "SlowMissile");
-        int[] expected = [2, 4, 7, 11, 16, 22, 29, 37, 46, 56, 66, 76, 86, 96];
-        foreach (var x in expected)
+        foreach (var x in SlowMissileTable)
         {
             CsRun(world, 1);
-            Check.That(missile.X == Fixed.FromInt(x), $"Frame F+{world.InFrames(world.Tick - 1 - fire)}: expected x = {x}, got {missile.X}.");
+            Near(missile.X, x, $"Frame F+{world.InFrames(world.Tick - 1 - fire)}", 0.5m);
         }
         var landing = world.Step();
-        Check.That(landing.Tick == fire + world.Frames(15) && landing.Events.Any(value => value.Kind == SimEventKind.WeaponImpact), "The missile lands in frame F+15.");
+        Check.That(landing.Tick == fire + world.Frames(18) && landing.Events.Any(value => value.Kind == SimEventKind.WeaponImpact), "The missile lands in frame F+18.");
     }
 
     /// <summary>A weapon without a projectile: 150 units at 600/s (20 per tick) land ceil(7.5) = 8 ticks later; within one tick's travel the hit is immediate.</summary>
