@@ -62,7 +62,6 @@ static partial class Tests
         var plain = Delay(other);
         Check.That(scripted >= 0 && plain >= 0 && plain - scripted >= session.World.Frames(20), $"The team timer starts from the script's second, not from the data's two ({session.World.InFrames(scripted)} and {session.World.InFrames(plain)} frames).");
         Check.That(session.World.CanPurchaseScienceNow(alpha, "SCIENCE_One") && !session.World.CanPurchaseScienceNow(alpha, "SCIENCE_Three"), "The AI bought from the second skill set.");
-        Check.That(!session.Engine.Diagnostics.Keys.Any(key => key.Contains("recorded", StringComparison.Ordinal)) && session.Engine.RecordedActions == 0, "Nothing was only recorded.");
         var restored = session.Save();
         Check.That(System.Text.Encoding.UTF8.GetString(restored).Contains("\"teamSeconds\":1", StringComparison.Ordinal), "The setting is saved.");
     }

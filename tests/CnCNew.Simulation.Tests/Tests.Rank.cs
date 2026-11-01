@@ -110,7 +110,7 @@ static partial class Tests
         Check.That(restored.World.StateHash == easy.Session.World.StateHash && restored.World.SoloDifficulty == 0, "The bonus crosses a save.");
 
         var off = Start(ScriptDifficulty.Easy, [Scr.Script("Off", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true)]);
-        Check.That(Math.Abs(off.Human - normal.Human) < 0.00001m && !off.HumanBit && off.Session.Engine.RecordedActions == 0, $"A script takes the bonus back ({off.Human}).");
+        Check.That(Math.Abs(off.Human - normal.Human) < 0.00001m && !off.HumanBit, $"A script takes the bonus back ({off.Human}).");
 
         var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/GameData.ini"] = game });
         var skirmish = NewWorld(fixture);
@@ -220,7 +220,7 @@ static partial class Tests
         var owner = NamedIn(session, "Soldier")!.Owner;
         Check.That(session.World.RankLevelOf(owner) == 2, $"The script's limit of 2 holds the player's level ({session.World.RankLevelOf(owner)}).");
         Check.That(session.World.RankLevelLimit == 2 && session.World.SkillPointsModifierOf(owner) == Fixed.FromInt(2), "Limit and scale reach the world.");
-        Check.That(session.Engine.RecordedActions == 0 && session.Engine.MissingActionHits.Count == 0, "The actions are executed, not recorded.");
+        Check.That(session.Engine.MissingActionHits.Count == 0, "The actions are executed.");
 
         var carried = StartMission([], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Soldier")], options: MissionOptions.Standard with { HumanFaction = "RankedFaction", RankPoints = 900 },
             extraFiles: new Dictionary<string, string> { ["Data/INI/Object/RankFixture.ini"] = RankIni });

@@ -523,6 +523,7 @@ public sealed class TemplateCatalog
             Rate = rate,
             Rules = rules ?? RuleProfile.Original,
             DefaultStartingCash = ResolveDefaultStartingCash(graph),
+            AiData = Skirmish.Original.AiData.TryBuild(graph) ?? Skirmish.Original.AiData.Defaults,
         };
         foreach (var name in catalog.Geometry.Airfields.Keys)
             if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
@@ -596,6 +597,9 @@ public sealed class TemplateCatalog
 
     /// <summary><c>GlobalData::m_defaultStartingCash</c>: what a player of a mission whose template holds no money starts with (<c>Player::init</c>); 0 without the key.</summary>
     public int DefaultStartingCash { get; private init; }
+
+    /// <summary><c>TheAI->getAiData()</c>: <c>AIData.ini</c> as the computer players of a mission read it, the values of <c>TAiData::TAiData</c> when the definitions have none.</summary>
+    public Skirmish.Original.AiData AiData { get; private init; } = Skirmish.Original.AiData.Defaults;
 
     /// <summary>The conversions of <see cref="Rate"/>.</summary>
     public SimulationTime Time => Rate.Time;

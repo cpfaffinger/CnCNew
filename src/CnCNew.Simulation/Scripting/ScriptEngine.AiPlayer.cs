@@ -19,14 +19,19 @@ namespace CnCNew.Simulation.Scripting;
 /// <param name="StartIndex">Zero-based start position (<c>Player::getMpStartIndex</c>): names the perimeter areas and approach paths of this player.</param>
 public sealed record ScriptAiPlayerSetup(PlayerId Player, ScriptDifficulty Difficulty, string Side, int StartIndex, Fixed StartX, Fixed StartY);
 
-/// <summary>The original skirmish AI of a session: its data and the players it runs. Without it the engine behaves exactly as it does for a mission.</summary>
-public sealed record ScriptAiSetup(AiData Data, ImmutableArray<ScriptAiPlayerSetup> Players);
+/// <summary>The computer players of a session and the data they read.</summary>
+public sealed record ScriptAiSetup(AiData Data, ImmutableArray<ScriptAiPlayerSetup> Players)
+{
+    /// <summary><c>AISkirmishPlayer</c>, the original skirmish AI; <see langword="false"/>: the <c>AIPlayer</c> of a mission's computer player.</summary>
+    public bool Skirmish { get; init; } = true;
+}
 
 /// <summary>
-/// The C++ half of the original skirmish AI (<c>AISkirmishPlayer</c> on top of <c>AIPlayer</c>, GameLogic/AI/AISkirmishPlayer.cpp and AIPlayer.cpp), rewritten as part of the script engine so that
-/// its whole state is in <see cref="Describe"/>, <see cref="Load"/> and <see cref="StateHash"/> from the start (docs/SKIRMISH-AI-ORIGINAL.md). The scripts of <c>SkirmishScripts.scb</c> decide
-/// <em>what</em> is built and where teams go; this part does what they ask for: the build list of the side laid out around the start position, structures by dozer, rebuilding, power first,
-/// dozers and gatherers, which team to train next, skill points, the current enemy and the base defences on the approach paths.
+/// The computer players: <c>AIPlayer</c> and <c>AISkirmishPlayer</c> (GameLogic/AI/AIPlayer.cpp, AISkirmishPlayer.cpp), rewritten as part of the script engine so that their whole state is in
+/// <see cref="Describe"/>, <see cref="Load"/> and <see cref="StateHash"/> (docs/SKIRMISH-AI-ORIGINAL.md). Every side of a mission that is not human has an <c>AIPlayer</c>: the build list of the
+/// map, rebuilt from its rebuild counts, the team timer, the map's teams by their production conditions, dozers, gatherers and skill points, and what the scripts order. A skirmish of the
+/// original AI has an <c>AISkirmishPlayer</c> per computer slot (<see cref="ScriptAiSetup.Skirmish"/>): the scripts of <c>SkirmishScripts.scb</c> decide <em>what</em> is built and where teams
+/// go; the build list of the side is laid out around the start position, power comes first, and it has a current enemy and base defences on the approach paths.
 /// <para>
 /// Everything the AI does is a normal player command (<see cref="ScriptCommandIssuer"/>); its direct world writes are the command centre standing at the start (<c>buildStructureNow</c>), the
 /// dozer moved to a place it cannot reach, and the dock a gatherer remembers.
@@ -48,6 +53,8 @@ public sealed partial class ScriptEngine
 
     /// <summary><c>doBaseBuilding</c>/<c>doTeamBuilding</c>: "check again in 2 seconds".</summary>
     private const long AiRecheckFrames = 2 * SimulationRate.OriginalFramesPerSecond;
+    /// <summary><c>AIPlayer::doTeamBuilding</c>: "check again in 5 seconds"; <c>AISkirmishPlayer</c> looks every two.</summary>
+    private const long AiSoloTeamRecheckFrames = 5 * SimulationRate.OriginalFramesPerSecond;
     /// <summary>The two "ready" timers are capped at three seconds.</summary>
     private const long AiTimerCapFrames = 3 * SimulationRate.OriginalFramesPerSecond;
     /// <summary><c>AISkirmishPlayer::getAiEnemy</c>: the enemy is reconsidered every five seconds.</summary>
@@ -56,15 +63,22 @@ public sealed partial class ScriptEngine
     private const long AiSitePendingFrames = 2 * SimulationRate.OriginalFramesPerSecond;
     /// <summary><c>buildStructureWithDozer</c>: a skirmish AI looks for another place up to 120 pathfind cells away, in steps of four cells outwards and two cells along a side.</summary>
     private const int AiPlacementLimitCells = 120;
+    /// <summary><c>buildStructureWithDozer</c>: "Wiggle it a little": a mission's AI looks ten cells around the place of the entry.</summary>
+    private const int AiSoloPlacementLimitCells = 10;
     /// <summary><c>AIPlayer::MAX_STRUCTURES_TO_REPAIR</c>.</summary>
     private const int AiMaxStructuresToRepair = 2;
     /// <summary><c>doUpgradesAndSkills</c>: nothing is bought in the first two frames.</summary>
     private const long AiSkillStartFrames = 2;
     private const int AiNoSkillSet = -1;
+    /// <summary><c>NONE_STRING</c> of <c>ScriptEngine::runObjectScript</c>: what a build list entry without a script may say.</summary>
+    private const string NoScript = "<none>";
 
     private sealed class AiBuildEntry
     {
         public string Template = string.Empty;
+        /// <summary><c>BuildListInfo::m_buildingName</c> and <c>m_script</c>: what the finished object is called and the script it runs (<c>AIPlayer::onStructureProduced</c>); a skirmish list has neither.</summary>
+        public string BuildingName = string.Empty;
+        public string Script = string.Empty;
         public Fixed X;
         public Fixed Y;
         public Fixed Angle;
@@ -110,6 +124,12 @@ public sealed partial class ScriptEngine
         public Fixed BaseX;
         public Fixed BaseY;
         public Fixed BaseRadius;
+        /// <summary><c>AIPlayer::m_baseCenterSet</c>: the build list held anything to take the centre from.</summary>
+        public bool BaseSet = true;
+        /// <summary><c>AIPlayer::m_curWarehouseID</c>: the warehouse of the last <c>buildBySupplies</c>.</summary>
+        public uint CurrentWarehouse;
+        /// <summary><c>runObjectScript(info->getScript(), bldg)</c>: finished structures and the scripts they run, at the next think (a structure finishes at any tick of a frame).</summary>
+        public readonly List<(uint Object, string Script)> BuildingScripts = [];
         public int Enemy = -1;
         public long EnemyCheckTick;
         public int SkillSet = AiNoSkillSet;
@@ -147,13 +167,13 @@ public sealed partial class ScriptEngine
     private ImmutableArray<ObjectTemplate> _aiDozerTemplates;
     private ImmutableArray<ObjectTemplate> _aiHarvesterTemplates;
 
-    /// <summary>The session is a skirmish with the script library (<see cref="ScriptEngineOptions.Ai"/>), whoever plays its slots.</summary>
-    public bool IsSkirmish => _options.Ai is not null;
+    /// <summary>The session is a skirmish with the script library (<see cref="ScriptEngineOptions.Ai"/>), whoever plays its slots; a mission's computer players are no skirmish AI.</summary>
+    public bool IsSkirmish => _options.Ai is { Skirmish: true };
 
     /// <summary>The tick the team timer of an AI player ends (<c>m_teamTimer</c>); for tools and tests.</summary>
     public long AiTeamReadyTick(PlayerId player) => AiOfPlayer(player)?.TeamReadyTick ?? 0;
 
-    /// <summary>Whether this engine runs the original skirmish AI for any player.</summary>
+    /// <summary>Whether this engine runs an AI for any player.</summary>
     public bool HasAiPlayers => _ai.Count > 0;
 
     /// <summary>The player an AI currently treats as its enemy (<c>Player::getCurrentEnemy</c>), or <see langword="null"/>.</summary>
@@ -162,6 +182,12 @@ public sealed partial class ScriptEngine
     /// <summary>Build list of an AI player as (template, built object or 0, priority) in list order; for tools and tests.</summary>
     public ImmutableArray<(string Template, uint ObjectId, bool Priority, Fixed X, Fixed Y)> AiBuildListOf(PlayerId player)
         => AiOfPlayer(player) is { } state ? [..state.BuildList.Select(entry => (entry.Template, entry.ObjectId, entry.Priority, entry.X, entry.Y))] : [];
+
+    /// <summary>The rebuilds left per entry of an AI player's build list, in list order, -1 for unlimited; for tools and tests.</summary>
+    public ImmutableArray<int> AiRebuildsOf(PlayerId player) => AiOfPlayer(player) is { } state ? [..state.BuildList.Select(entry => entry.Rebuilds)] : [];
+
+    /// <summary><c>AIPlayer::m_baseCenter</c>; for tools and tests.</summary>
+    public (Fixed X, Fixed Y) AiBaseCentreOf(PlayerId player) => AiOfPlayer(player) is { } state ? (state.BaseX, state.BaseY) : (Fixed.Zero, Fixed.Zero);
 
     /// <summary>
     /// The priority entries of an AI player's build list that do not stand, each with what a construction order would be answered now; a diagnostic for tools (reads only).
@@ -210,7 +236,6 @@ public sealed partial class ScriptEngine
     /// <summary>The player a script runs for (<c>ScriptEngine::m_currentPlayer</c>): the AI that is thinking, else the owner of the team the script acts for, else the owner of the script list.</summary>
     private ScriptPlayer? CurrentScriptPlayer()
     {
-        if (_ai.Count == 0) return _currentList < _program.Players.Length ? _program.Players[_currentList] : null;
         if (_aiCurrent is { } thinking) return PlayerById(thinking.Setup.Player);
         // evaluateConditions / runScript: "if (thisTeam) player = thisTeam->getControllingPlayer()".
         if (ThisTeam is { } team && !team.Owner.IsSystem) return PlayerById(team.Owner);
@@ -219,7 +244,7 @@ public sealed partial class ScriptEngine
 
     private ScriptDifficulty DifficultyOfList(int list)
     {
-        if (_ai.Count > 0 && list < _program.Players.Length && AiOfPlayer(_program.Players[list].Id) is { } state) return state.Setup.Difficulty;
+        if (list < _program.Players.Length && AiOfPlayer(_program.Players[list].Id) is { } state) return state.Setup.Difficulty;
         return _options.Difficulty;
     }
 
@@ -232,11 +257,11 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// <c>ScriptEngine::getQualifiedTriggerAreaByName</c>: <c>[Skirmish]MyInnerPerimeter</c> and its three siblings name the perimeter areas of the current player's or of its enemy's start
-    /// position (<c>InnerPerimeter&lt;n&gt;</c>, <c>OuterPerimeter&lt;n&gt;</c>). Without an AI the name is looked up as it is, as before.
+    /// position (<c>InnerPerimeter&lt;n&gt;</c>, <c>OuterPerimeter&lt;n&gt;</c>).
     /// </summary>
     private ScriptArea? FindAreaQualified(string name)
     {
-        if (_ai.Count == 0 || name.Length == 0 || name[0] != '[') return _program.FindArea(name);
+        if (name.Length == 0 || name[0] != '[') return _program.FindArea(name);
         var mine = name is MyInnerPerimeter or MyOuterPerimeter;
         if (!mine && name is not (EnemyInnerPerimeter or EnemyOuterPerimeter)) return _program.FindArea(name);
         var inner = name is MyInnerPerimeter or EnemyInnerPerimeter;
@@ -253,12 +278,67 @@ public sealed partial class ScriptEngine
     // ------------------------------------------------------------------------------------------------ start
 
     /// <summary>
+    /// <c>Player::initFromDict</c>: the side's build list of the map goes to its player. An entry that is not built at the start consumes a rebuild when it is, so it gets one (<c>AIPlayer::newMap</c>:
+    /// "the initial build in the normal build list consumes a rebuild, so add one"; not an unlimited one, which is -1 here). <paramref name="built"/> is what <c>buildStructureNow</c> made.
+    /// </summary>
+    public void AddToBuildList(PlayerId player, MapBuildListEntry entry, EntityId built)
+    {
+        if (IsSkirmish || AiOfPlayer(player) is not { } state) return;
+        state.BuildList.Add(new AiBuildEntry
+        {
+            Template = entry.Template, BuildingName = entry.BuildingName, Script = entry.Script, X = Fixed.FromDecimal(entry.X), Y = Fixed.FromDecimal(entry.Y), Angle = Fixed.FromDecimal(entry.Angle),
+            Rebuilds = entry.InitiallyBuilt || entry.Rebuilds < 0 ? entry.Rebuilds : entry.Rebuilds + 1, Automatic = true, ObjectId = built.IsValid ? built.Value : 0,
+        });
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::AIPlayer</c> and <c>AIPlayer::newMap</c> for the computer players of a mission, once its objects stand. Unit production starts off ("turn off ai production by default": a script
+    /// turns it on). What <c>buildStructureNow</c> made counts as a structure of the list, a supply centre wants its gatherers, and its script runs. Then every production object of the player
+    /// joins the head of the list with no rebuilds: the list of objects runs newest first and each one is put in front, so the oldest comes first. Centre and radius of the base follow.
+    /// A restored session carries all of it in its state.
+    /// </summary>
+    public void StartMissionAiPlayers()
+    {
+        if (IsSkirmish) return;
+        foreach (var state in _ai)
+        {
+            state.Started = true;
+            var player = state.Setup.Player;
+            _world.SetCanBuild(player, structures: false, allowed: false);
+            _world.SetValidatesOwnSites(player);
+            // Player::setDefaultTeam: the default team is active, whoever is in it; recruits come from there.
+            if (PlayerById(player) is { } owner && FindTeamInstance("team" + owner.Name) is { } defaultTeam) defaultTeam.Created = true;
+            // m_teamTimer(2), m_structureTimer(2): "don't start building until frame 1".
+            state.TeamReadyTick = _world.Time.OriginalFrames(1);
+            state.StructureReadyTick = _world.Time.OriginalFrames(1);
+            var inList = new SortedSet<uint>();
+            foreach (var entry in state.BuildList)
+            {
+                if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is not { } building) continue;
+                inList.Add(entry.ObjectId);
+                entry.Timestamp = _tick + TickOrder.Next;
+                CheckForSupplyCenter(state, entry, building);
+                if (entry.Script.Length > 0) state.BuildingScripts.Add((building.Id.Value, entry.Script));
+            }
+            var factories = new List<AiBuildEntry>();
+            foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
+            {
+                if (ProductionOf(entity) is null || inList.Contains(entity.Id.Value)) continue;
+                factories.Add(new AiBuildEntry { Template = entity.Template.Name, X = entity.X, Y = entity.Y, Angle = entity.Angle, Automatic = true, ObjectId = entity.Id.Value });
+            }
+            factories.Sort((left, right) => left.ObjectId.CompareTo(right.ObjectId));
+            state.BuildList.InsertRange(0, factories);
+            ComputeBase(state);
+        }
+    }
+
+    /// <summary>
     /// <c>AISkirmishPlayer::newMap</c> for every AI player: the build list of its side, moved and turned to its start position (<c>adjustBuildList</c>), the centre and radius of that base, and
     /// the initially built entry - the command centre - standing. Called once by the session after the start objects are placed; a restored session carries the result in its state.
     /// </summary>
     public void StartAiPlayers(Fixed extentX, Fixed extentY)
     {
-        if (_options.Ai is not { } setup) return;
+        if (_options.Ai is not { Skirmish: true } setup) return;
         DrawFirstEvaluations();
         foreach (var state in _ai)
         {
@@ -354,6 +434,7 @@ public sealed partial class ScriptEngine
             sumY += entry.Y;
             count++;
         }
+        state.BaseSet = count > 0 || IsSkirmish;
         if (count == 0) { state.BaseX = state.Setup.StartX; state.BaseY = state.Setup.StartY; return; }
         state.BaseX = sumX / Fixed.FromInt(count);
         state.BaseY = sumY / Fixed.FromInt(count);
@@ -383,6 +464,7 @@ public sealed partial class ScriptEngine
             try
             {
                 SendProducedGatherers(state);
+                RunBuildingScripts(state);
                 if (Observer is { } observer) UpdateAiPlayerObserved(observer, state);
                 else
                 {
@@ -395,6 +477,29 @@ public sealed partial class ScriptEngine
             }
             finally { _aiCurrent = null; }
         }
+    }
+
+    /// <summary><c>ScriptEngine::runObjectScript</c>: a subroutine, with the object as <c>&lt;This Object&gt;</c>; <c>&lt;none&gt;</c> is no script, and a script that is no subroutine is reported.</summary>
+    private void RunBuildingScripts(AiPlayer state)
+    {
+        if (state.BuildingScripts.Count == 0) return;
+        var previous = _callingObject;
+        foreach (var (id, name) in state.BuildingScripts)
+        {
+            if (name == NoScript || _world.FindEntity(new EntityId(id)) is not { } building) continue;
+            _callingObject = building;
+            if (_program.FindGroup(name) is { } group)
+            {
+                if (!group.Group.IsSubroutine) Diagnose($"AI: object script '{name}' is not a subroutine");
+                else if (_groupActive[group.Index])
+                    foreach (var index in group.ScriptIndices) ExecuteScript(_program.Units[index]);
+            }
+            else if (_program.FindScript(name) is not { } unit) Diagnose($"AI: object script '{name}' is not defined");
+            else if (!unit.IsSubroutine) Diagnose($"AI: object script '{name}' is not a subroutine");
+            else ExecuteScript(unit);
+        }
+        _callingObject = previous;
+        state.BuildingScripts.Clear();
     }
 
     private void SendProducedGatherers(AiPlayer state)
@@ -425,10 +530,13 @@ public sealed partial class ScriptEngine
         observer.SectionStarted(ScriptSection.AiPlayers);
     }
 
-    /// <summary><c>AIPlayer::onStructureProduced</c>: a structure of an AI player is finished: the queues and the build list are looked at again at once, and a supply centre starts its count.</summary>
+    /// <summary>
+    /// <c>AIPlayer::onStructureProduced</c>: a structure of an AI player is finished: the queues and the build list are looked at again at once, the object takes the name of its entry and runs its
+    /// script, and a supply centre starts its count.
+    /// </summary>
     private void AiObserveStructureFinished(Entity building)
     {
-        if (_ai.Count == 0 || AiOfPlayer(building.Owner) is not { } state) return;
+        if (AiOfPlayer(building.Owner) is not { } state) return;
         state.TeamCheckTick = _tick;
         state.BuildCheckTick = _tick;
         BindSites(state);
@@ -436,6 +544,8 @@ public sealed partial class ScriptEngine
         {
             if (entry.ObjectId != building.Id.Value) continue;
             entry.UnderConstruction = false;
+            RegisterNamed(entry.BuildingName, building.Id);
+            if (entry.Script.Length > 0) state.BuildingScripts.Add((building.Id.Value, entry.Script));
             CheckForSupplyCenter(state, entry, building);
             return;
         }
@@ -452,7 +562,7 @@ public sealed partial class ScriptEngine
     /// <summary><c>AIPlayer::onUnitProduced</c> / <c>onStructureProduced</c>: something of an AI player came into the world, so its queues are looked at again at once.</summary>
     private void AiObserveSpawn(Entity entity)
     {
-        if (_ai.Count == 0 || AiOfPlayer(entity.Owner) is not { } state) return;
+        if (AiOfPlayer(entity.Owner) is not { } state) return;
         state.TeamCheckTick = _tick;
         if (entity.Template.IsKindOf("STRUCTURE")) return;
         // "factory could be null at the start of the game." Nor does the worker of a hole count as produced: it comes up where the hole lies, and no order waits for it.
@@ -520,8 +630,85 @@ public sealed partial class ScriptEngine
             state.BuildCheckTick = _tick;
         }
         if (_tick < state.BuildCheckTick) return;
-        if (state.ReadyStructure) ProcessBaseBuilding(state);
+        if (state.ReadyStructure)
+        {
+            if (IsSkirmish) ProcessBaseBuilding(state);
+            else ProcessSoloBaseBuilding(state);
+        }
         if (state.BuildCheckTick <= _tick) state.BuildCheckTick = _tick + _world.Time.OriginalFrames(AiRecheckFrames);
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::processBaseBuilding</c>: the build list in its order, and the first entry that has rebuilds left and no object and that a dozer takes is built; one structure per round. A
+    /// destroyed or captured structure waits <c>RebuildDelayTimeSeconds</c>, a hole of the GLA is waited for, and a site whose dozer is gone gets another. Nothing here asks whether the place is
+    /// safe, whether power is short or whether the entry is automatic: that is <c>AISkirmishPlayer</c>.
+    /// </summary>
+    private void ProcessSoloBaseBuilding(AiPlayer state)
+    {
+        var player = state.Setup.Player;
+        var data = _options.Ai!.Data;
+        BindSites(state);
+        foreach (var entry in state.BuildList)
+        {
+            if (!_world.Templates.TryGet(entry.Template, out var template) || !template.IsInstantiable) continue;
+            Entity? building = null;
+            if (entry.ObjectId != 0)
+            {
+                building = _world.FindEntity(new EntityId(entry.ObjectId));
+                if (building is null || building.DestroyRequested)
+                {
+                    building = ForgetDestroyed(entry);
+                }
+                else if (building.Owner != player)
+                {
+                    // "oops, got captured."
+                    building = null;
+                    entry.ObjectId = 0;
+                    entry.UnderConstruction = false;
+                    entry.Timestamp = _tick + TickOrder.Next;
+                }
+                else if (building.HasStatus(UnderConstructionBit))
+                {
+                    var builder = _world.FindEntity(building.BuilderId);
+                    if (builder is null || builder.EffectivelyDead) builder = FindDozer(state, building.X, building.Y);
+                    if (builder is null) continue;
+                    if (builder.Owner == player && AiOf(builder) is not { IsBuilding: true })
+                    {
+                        var site = building.Id;
+                        var helper = builder.Id;
+                        _issue(player, (sequence, tick) => new ResumeConstructCommand(player, sequence, tick, helper, site));
+                    }
+                }
+            }
+            if (entry.ObjectId == 0 && entry.Timestamp > 0)
+            {
+                if (entry.Timestamp + _world.Time.WholeSecondsToTicks(data.RebuildDelaySeconds) > _tick) continue;
+                entry.Timestamp = 0;
+            }
+            // isBuildable: rebuilds left, or unlimited.
+            if (entry.Rebuilds == 0 || building is not null || entry.PendingUntil > _tick || !BuildStructureWithDozer(state, entry)) continue;
+            if (entry.Rebuilds > 0) entry.Rebuilds--;
+            state.ReadyStructure = false;
+            state.StructureReadyTick = _tick + ScaledTimer(data.StructureSeconds, _world.MoneyOf(player), data, data.StructuresPoorRate, data.StructuresWealthyRate);
+            return;
+        }
+    }
+
+    /// <summary>The object of an entry is gone: the entry notes when, and a hole of the GLA that the structure left is what it holds from now on, which is returned.</summary>
+    private Entity? ForgetDestroyed(AiBuildEntry entry)
+    {
+        var prior = entry.ObjectId;
+        entry.ObjectId = 0;
+        entry.UnderConstruction = false;
+        entry.Timestamp = _tick + TickOrder.Next;
+        Entity? found = null;
+        foreach (var hole in _world.EntitiesOfKind("REBUILD_HOLE").AsSpan())
+        {
+            if (ModuleOf<RebuildHoleBehavior>(hole) is not { } behavior || behavior.Spawner.Value != prior) continue;
+            entry.ObjectId = hole.Id.Value;
+            found = hole;
+        }
+        return found;
     }
 
     /// <summary>
@@ -555,12 +742,7 @@ public sealed partial class ScriptEngine
                     // Destroyed. A hole of the GLA that this structure left is what the entry waits for from now on. In this round the entry still counts as missing (the reference
                     // asks the variable it filled before it looked for the hole), so a priority entry with a dozer at hand starts a second site beside the hole.
                     building = null;
-                    var prior = entry.ObjectId;
-                    entry.ObjectId = 0;
-                    entry.UnderConstruction = false;
-                    entry.Timestamp = _tick + TickOrder.Next;
-                    foreach (var hole in _world.EntitiesOfKind("REBUILD_HOLE").AsSpan())
-                        if (ModuleOf<RebuildHoleBehavior>(hole) is { } behavior && behavior.Spawner.Value == prior) entry.ObjectId = hole.Id.Value;
+                    ForgetDestroyed(entry);
                 }
                 else if (building.Owner != player)
                 {
@@ -613,15 +795,16 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// The timer of the next team or structure in ticks: the seconds of the data in frames, divided by the poor or wealthy rate when the cash is below <c>Poor</c> or above <c>Wealthy</c>,
-    /// and never more than three seconds (the reference caps the running timer).
+    /// The timer of the next team or structure in ticks: the seconds of the data in frames, divided by the poor or wealthy rate when the cash is below <c>Poor</c> or above <c>Wealthy</c>;
+    /// <c>AISkirmishPlayer</c> caps the running timer at three seconds, <c>AIPlayer</c> does not.
     /// </summary>
     private long ScaledTimer(Fixed seconds, Fixed money, AiData data, Fixed poorRate, Fixed wealthyRate)
     {
         var frames = seconds * Fixed.FromInt(SimulationRate.OriginalFramesPerSecond);
         if (money < Fixed.FromInt(data.Poor) && poorRate > Fixed.Zero) frames /= poorRate;
         else if (money > Fixed.FromInt(data.Wealthy) && wealthyRate > Fixed.Zero) frames /= wealthyRate;
-        return Math.Min(_world.Time.OriginalFrames(frames.Floor()), _world.Time.OriginalFrames(AiTimerCapFrames));
+        var timer = _world.Time.OriginalFrames(frames.Floor());
+        return IsSkirmish ? Math.Min(timer, _world.Time.OriginalFrames(AiTimerCapFrames)) : timer;
     }
 
     /// <summary>An accepted construction order creates its site in the world step; the entry takes the site that appeared at the ordered place.</summary>
@@ -660,8 +843,8 @@ public sealed partial class ScriptEngine
         if (_world.Navigation is { } navigation && _world.CheckDozerSite(dozer, template, x, y, angle) != LegalBuildCode.Ok)
         {
             var reach = navigation.ReachableCells(dozer.X, dozer.Y, dozer.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.Ground);
-            var limit = Fixed.FromInt(AiPlacementLimitCells * TerrainMap.CellSize);
-            if (!SearchSquares(limit, skirmish: true, (cx, cy) => _world.CheckDozerSite(dozer, template, cx, cy, angle, reach) == LegalBuildCode.Ok, ref x, ref y) && !navigation.Reaches(reach, x, y)) _world.Teleport(dozer, x, y);
+            var limit = Fixed.FromInt((IsSkirmish ? AiPlacementLimitCells : AiSoloPlacementLimitCells) * TerrainMap.CellSize);
+            if (!SearchSquares(limit, IsSkirmish, (cx, cy) => _world.CheckDozerSite(dozer, template, cx, cy, angle, reach) == LegalBuildCode.Ok, ref x, ref y) && !navigation.Reaches(reach, x, y)) _world.Teleport(dozer, x, y);
         }
         var builder = dozer.Id;
         var name = entry.Template;
@@ -763,12 +946,14 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::queueDozer</c>: unless a dozer is ordered already, the first dozer type with a factory goes to the head of the queue. (The reference also turns unit production on for this
-    /// one order when a script has switched it off; the world's command does not know that.)
+    /// <c>AIPlayer::queueDozer</c>: unless a dozer is ordered already, the first dozer type with a factory goes to the head of the queue. "If we need a dozer, turn on unit building for a moment."
     /// </summary>
     private void QueueDozer(AiPlayer state)
     {
         if (DozerInQueue(state)) return;
+        var player = state.Setup.Player;
+        var canBuildUnits = _world.CanBuildUnits(player);
+        _world.SetCanBuild(player, structures: false, allowed: true);
         foreach (var template in TemplatesOfKind(ref _aiDozerTemplates, "DOZER"))
         {
             if (FindFactory(state, template, busyOk: true) is null) continue;
@@ -776,8 +961,9 @@ public sealed partial class ScriptEngine
             state.UnitOrders.Insert(0, order);
             state.TeamCheckTick = _tick;
             StartTraining(state, order, busyOk: true);
-            return;
+            break;
         }
+        _world.SetCanBuild(player, structures: false, allowed: canBuildUnits);
     }
 
     /// <summary><c>AIPlayer::dozerInQueue</c>, <c>TeamInQueue::includesADozer</c>: GLA workers are gatherers too, and an order for a gatherer is no dozer.</summary>
@@ -1043,7 +1229,7 @@ public sealed partial class ScriptEngine
         if (_tick < state.TeamCheckTick) return;
         QueueUnits(state);
         if (state.ReadyTeam && SelectTeamToBuild(state)) QueueUnits(state);
-        state.TeamCheckTick = _tick + _world.Time.OriginalFrames(AiRecheckFrames);
+        state.TeamCheckTick = _tick + _world.Time.OriginalFrames(IsSkirmish ? AiRecheckFrames : AiSoloTeamRecheckFrames);
     }
 
     /// <summary>
@@ -1077,7 +1263,7 @@ public sealed partial class ScriptEngine
         return true;
     }
 
-    /// <summary><c>AISkirmishPlayer::isAGoodIdeaToBuildTeam</c>: the production condition holds, fewer instances than <c>teamMaxInstances</c> exist, none is being built, and it is possible.</summary>
+    /// <summary><c>isAGoodIdeaToBuildTeam</c>: the production condition holds, fewer instances than <c>teamMaxInstances</c> exist, none is being built, and it is possible.</summary>
     private bool IsGoodIdeaToBuildTeam(AiPlayer state, ScriptTeamPrototype prototype)
     {
         if (!EvaluateProductionCondition(state, prototype)) return false;
@@ -1222,13 +1408,16 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// <c>AIPlayer::queueUnits</c> for one work order of a team of an AI player: before anything is trained, units of that type are taken from the player's recruitable teams of lower
-    /// priority - above all its default team, where the units of disbanded teams wait - within <c>MaxRecruitRadius</c> of the base centre (<c>Team::tryToRecruit</c>; the library's teams
-    /// have no home position); a recruit walks to the base centre. An order trains one unit at a time (<c>WorkOrder::isWaitingToBuild</c>). Returns whether the order has nothing to train now.
+    /// priority - above all its default team, where the units of disbanded teams wait - within <c>MaxRecruitRadius</c> of the team's home, or of the base centre for a team without one
+    /// (<c>Team::tryToRecruit</c>; the library's teams have no home position); a recruit walks there, and stands where it is when there is neither. An order trains one unit at a time
+    /// (<c>WorkOrder::isWaitingToBuild</c>). Returns whether the order has nothing to train now.
     /// </summary>
     private bool AiRecruitsFor(TeamBuildOrder order, ScriptTeam team)
     {
-        if (_ai.Count == 0 || AiOfPlayer(team.Owner) is not { } state || _program.FindTeam(team.Prototype) is not { } prototype) return false;
-        var home = new ScriptWaypoint(string.Empty, state.BaseX, state.BaseY, Fixed.Zero);
+        if (AiOfPlayer(team.Owner) is not { } state || _program.FindTeam(team.Prototype) is not { } prototype) return false;
+        var teamHome = prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null;
+        var hasHome = teamHome is not null || state.BaseSet;
+        var home = teamHome ?? new ScriptWaypoint(string.Empty, state.BaseX, state.BaseY, Fixed.Zero);
         var reach = SquaredReach.Of(_options.Ai!.Data.MaxRecruitRadius);
         while (order.Queued < order.Total)
         {
@@ -1237,7 +1426,11 @@ public sealed partial class ScriptEngine
             team.Members.Add(recruit.Id.Value);
             _world.ClearOwnAttitude(recruit);
             if (team.AttackPriority.Length > 0) _prioritySetOf[recruit.Id.Value] = team.AttackPriority;
-            if (recruit.Template.Locomotor is not null) MoveTo(recruit, home.X, home.Y);
+            if (recruit.Template.Locomotor is not null)
+            {
+                if (hasHome) MoveTo(recruit, home.X, home.Y);
+                else Stop(recruit);
+            }
             order.Queued++;
             order.Joined++;
         }
@@ -1247,7 +1440,6 @@ public sealed partial class ScriptEngine
     /// <summary>A team of an AI player whose orders are all met (by recruits) has nothing left in the order list; the queue entry then moves it on.</summary>
     private void AiDropFinishedTeamBuilds()
     {
-        if (_ai.Count == 0) return;
         for (var index = 0; index < _teamBuilds.Count; index++)
         {
             var teamId = _teamBuilds[index].TeamId;
@@ -1264,7 +1456,6 @@ public sealed partial class ScriptEngine
     /// <summary>A team that is built again starts over: its create script runs again and its generic scripts are tried again (the reference makes a new <c>Team</c>).</summary>
     private void AiResetTeamForRebuild(ScriptTeam team)
     {
-        if (_ai.Count == 0) return;
         team.CreateHandled = false;
         team.CurUnits = 0;
         team.DestroyThreshold = -1;
@@ -1276,8 +1467,8 @@ public sealed partial class ScriptEngine
     // ------------------------------------------------------------------------------------------------ skills and the enemy
 
     /// <summary>
-    /// <c>AIPlayer::doUpgradesAndSkills</c>: with science purchase points to spend, the skill set is drawn once among the side's non-empty sets (<c>GameLogicRandomValue(0, limit)</c>) and
-    /// every science of it that can be bought is bought, in the order of the set.
+    /// <c>AIPlayer::doUpgradesAndSkills</c>: with science purchase points to spend, the skill set is drawn once among the side's non-empty sets (<c>GameLogicRandomValue(0, limit)</c>; a mission's
+    /// AI takes the first, "Non-skirmish default to 0") unless a script chose one, and every science of it that can be bought is bought, in the order of the set.
     /// </summary>
     private void DoUpgradesAndSkills(AiPlayer state)
     {
@@ -1287,7 +1478,7 @@ public sealed partial class ScriptEngine
         {
             var limit = 0;
             while (limit + 1 < side.SkillSets.Length && side.SkillSets[limit + 1].Length > 0) limit++;
-            state.SkillSet = _world.LogicRandom.Range(0, limit);
+            state.SkillSet = IsSkirmish ? _world.LogicRandom.Range(0, limit) : 0;
         }
         // "default: case 0": a selector no set answers to is the first set.
         foreach (var science in side.SkillSets[state.SkillSet >= 0 && state.SkillSet < side.SkillSets.Length ? state.SkillSet : 0])
@@ -1424,9 +1615,10 @@ public sealed partial class ScriptEngine
         }
     }
 
-    /// <summary><c>AISkirmishPlayer::getAiEnemy</c>: the current enemy, reconsidered every five seconds.</summary>
+    /// <summary><c>AISkirmishPlayer::getAiEnemy</c>: the current enemy, reconsidered every five seconds; <c>AIPlayer::getAiEnemy</c>: none ("Solo AI attacks based on scripting").</summary>
     private ScriptPlayer? AiEnemy(AiPlayer state)
     {
+        if (!IsSkirmish) return null;
         if (_tick >= state.EnemyCheckTick)
         {
             state.EnemyCheckTick = _tick + _world.Time.OriginalFrames(AiEnemyCheckFrames);
@@ -1488,11 +1680,14 @@ public sealed partial class ScriptEngine
 
     private bool TryExecuteAiAction(MapScriptAction action)
     {
-        if (_ai.Count == 0) return false;
         var p = action.Parameters;
         var type = action.TypeName;
         switch (type)
         {
+            // AIPlayer::buildSpecificAIBuilding, buildAIBaseDefense, buildAIBaseDefenseStructure: "Solo ai doesn't support" them, and a human has no AI.
+            case "SKIRMISH_BUILD_BUILDING" or "SKIRMISH_BUILD_BASE_DEFENSE_FRONT" or "SKIRMISH_BUILD_BASE_DEFENSE_FLANK" or "SKIRMISH_BUILD_STRUCTURE_FRONT" or "SKIRMISH_BUILD_STRUCTURE_FLANK" when !IsSkirmish:
+                Diagnose($"{type}: a mission's AI does not support it");
+                return true;
             // doBuildBuilding -> AISkirmishPlayer::buildSpecificAIBuilding.
             case "SKIRMISH_BUILD_BUILDING":
                 if (Has(type, p, 1) && CurrentAi(type) is { } building) BuildSpecificBuilding(building, Str(p, 0));
@@ -1515,7 +1710,7 @@ public sealed partial class ScriptEngine
             case "AI_PLAYER_BUILD_TYPE_NEAREST_TEAM":
                 if (Has(type, p, 3) && ResolvePlayer(Str(p, 0)) is { } owner)
                 {
-                    if (AiOfPlayer(owner.Id) is not { } near) Diagnose($"{type}: player '{owner.Name}' is not run by the skirmish AI");
+                    if (AiOfPlayer(owner.Id) is not { } near) Diagnose($"{type}: player '{owner.Name}' has no AI");
                     else if (FindTeam(Str(p, 2)) is { } team) BuildNearestTeam(near, Str(p, 1), team);
                 }
                 return true;
@@ -1689,7 +1884,11 @@ public sealed partial class ScriptEngine
 
     private void DescribeAi(IStateWriter writer)
     {
-        if (_ai.Count == 0) return;
+        if (_ai.Count == 0)
+        {
+            DescribeConditionMemory(writer);
+            return;
+        }
         writer.BeginArray("aiPlayers");
         foreach (var state in _ai)
         {
@@ -1706,6 +1905,20 @@ public sealed partial class ScriptEngine
             writer.Fixed("baseX", state.BaseX);
             writer.Fixed("baseY", state.BaseY);
             writer.Fixed("baseRadius", state.BaseRadius);
+            if (!state.BaseSet) writer.Bool("noBase", true);
+            if (state.CurrentWarehouse != 0) writer.UInt("currentWarehouse", state.CurrentWarehouse);
+            if (state.BuildingScripts.Count > 0)
+            {
+                writer.BeginArray("buildingScripts");
+                foreach (var (id, script) in state.BuildingScripts)
+                {
+                    writer.BeginObject(null);
+                    writer.UInt("object", id);
+                    writer.Text("script", script);
+                    writer.EndObject();
+                }
+                writer.EndArray();
+            }
             writer.Int("enemy", state.Enemy);
             writer.Int("enemyCheckTick", state.EnemyCheckTick);
             writer.Int("skillSet", state.SkillSet);
@@ -1760,6 +1973,8 @@ public sealed partial class ScriptEngine
             {
                 writer.BeginObject(null);
                 writer.Text("template", entry.Template);
+                if (entry.BuildingName.Length > 0) writer.Text("name", entry.BuildingName);
+                if (entry.Script.Length > 0) writer.Text("script", entry.Script);
                 writer.Fixed("x", entry.X);
                 writer.Fixed("y", entry.Y);
                 writer.Fixed("angle", entry.Angle);
@@ -1802,7 +2017,11 @@ public sealed partial class ScriptEngine
 
     private void LoadAi(IStateReader reader)
     {
-        if (_ai.Count == 0) return;
+        if (_ai.Count == 0)
+        {
+            LoadConditionMemory(reader);
+            return;
+        }
         foreach (var item in reader.Array("aiPlayers"))
         {
             var state = AiOfPlayer(new PlayerId(checked((int)item.Int("player")))) ?? throw new SnapshotFormatException("The state names an AI player the session does not have.");
@@ -1817,6 +2036,11 @@ public sealed partial class ScriptEngine
             state.BaseX = item.Fixed("baseX");
             state.BaseY = item.Fixed("baseY");
             state.BaseRadius = item.Fixed("baseRadius");
+            state.BaseSet = !item.Has("noBase");
+            state.CurrentWarehouse = item.Has("currentWarehouse") ? checked((uint)item.UInt("currentWarehouse")) : 0;
+            state.BuildingScripts.Clear();
+            if (item.Has("buildingScripts"))
+                foreach (var script in item.Array("buildingScripts")) state.BuildingScripts.Add((checked((uint)script.UInt("object")), script.Text("script")));
             state.Enemy = checked((int)item.Int("enemy"));
             state.EnemyCheckTick = item.Int("enemyCheckTick");
             state.SkillSet = checked((int)item.Int("skillSet"));
@@ -1844,7 +2068,8 @@ public sealed partial class ScriptEngine
             foreach (var entry in item.Array("buildList"))
                 state.BuildList.Add(new AiBuildEntry
                 {
-                    Template = entry.Text("template"), X = entry.Fixed("x"), Y = entry.Fixed("y"), Angle = entry.Fixed("angle"), Rebuilds = checked((int)entry.Int("rebuilds")),
+                    Template = entry.Text("template"), BuildingName = entry.Has("name") ? entry.Text("name") : string.Empty, Script = entry.Has("script") ? entry.Text("script") : string.Empty,
+                    X = entry.Fixed("x"), Y = entry.Fixed("y"), Angle = entry.Fixed("angle"), Rebuilds = checked((int)entry.Int("rebuilds")),
                     Automatic = entry.Bool("automatic"), Priority = entry.Bool("priority"), ObjectId = checked((uint)entry.UInt("object")), Timestamp = entry.Int("timestamp"),
                     UnderConstruction = entry.Bool("underConstruction"), PendingUntil = entry.Int("pendingUntil"), IsSupply = entry.Bool("supply"),
                     DesiredGatherers = checked((int)entry.Int("desiredGatherers")), CurrentGatherers = checked((int)entry.Int("currentGatherers")),

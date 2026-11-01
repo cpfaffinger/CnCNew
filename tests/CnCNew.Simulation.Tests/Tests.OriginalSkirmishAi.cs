@@ -526,7 +526,7 @@ static partial class Tests
         using (var stream = content.OpenRead("Data/Scripts/SkirmishScripts.scb")) library = SageMapDecoder.DecodeScriptLibrary(stream);
         Check.That(library.Players.Length == 14 && library.ScriptLists.Length == 14 && library.Teams.Length == 1340, $"SkirmishScripts.scb: 14 players, 14 lists, 1,340 teams ({library.Players.Length}, {library.ScriptLists.Length}, {library.Teams.Length}).");
         var used = library.ScriptLists.SelectMany(list => list.Scripts.Concat(list.Groups.SelectMany(group => group.Scripts))).SelectMany(script => script.Actions.Concat(script.FalseActions)).Select(action => action.TypeName).Distinct().ToArray();
-        var notExecuted = used.Where(name => ScriptCoverage.ActionSupportWithSkirmishAi(name) is not ScriptSupport.Executed).Order(StringComparer.Ordinal).ToArray();
+        var notExecuted = used.Where(name => ScriptCoverage.ActionSupport(name) is not ScriptSupport.Executed).Order(StringComparer.Ordinal).ToArray();
         Check.That(notExecuted.SequenceEqual(["MUSIC_SET_TRACK"]), $"With the skirmish AI every action type of the library is executed but the forwarded music ({string.Join(", ", notExecuted)}).");
 
         const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";

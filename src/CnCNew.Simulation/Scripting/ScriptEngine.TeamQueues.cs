@@ -7,8 +7,8 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Scripting;
 
 /// <summary>
-/// The team queues of the AI player (<c>AIPlayer::checkQueuedTeams</c>, <c>checkReadyTeams</c>, <c>TeamInQueue</c>) as far as scripted <c>BUILD_TEAM</c> and <c>RECRUIT_TEAM</c> use them: a team that is
-/// being built or recruited is inactive (<see cref="ScriptTeam.Created"/> is false) and so invisible to scripts until it has been through the queues.
+/// The team queues of the AI players (<c>AIPlayer::checkQueuedTeams</c>, <c>checkReadyTeams</c>, <c>TeamInQueue</c>): a team that is being built or recruited, by a script or by the AI's own choice,
+/// is inactive (<see cref="ScriptTeam.Created"/> is false) and so invisible to scripts until it has been through the queues.
 /// <list type="bullet">
 /// <item><description><b>Building</b>: a built unit joins the team and walks to the team's home (<c>aiFollowExitProductionPath</c>). When the team's <c>teamInitialIdleFrames</c> are over (0: never) it is disbanded — its units
 /// go back to the player's default team, i.e. leave the team — unless every required type is built or in production, in which case it goes on to the ready queue once nothing is in production any more.

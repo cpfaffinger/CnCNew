@@ -373,12 +373,6 @@ public sealed partial class ScriptEngine
                 break;
 
             default:
-                if (ScriptCoverage.RecordedActions.Contains(type))
-                {
-                    // Recorded, not executed: the value is kept but nothing reads it (ScriptSupport.Recorded), so it must not inflate the executed count.
-                    TryExecutePowerAction(action);
-                    return;
-                }
                 if (TryExecuteExtendedAction(action) || TryExecuteAiAction(action)) break;
                 _missingActions[type] = _missingActions.GetValueOrDefault(type) + 1;
                 return;
@@ -576,7 +570,7 @@ public sealed partial class ScriptEngine
             }
             // Object::doCommandButton, GUI_COMMAND_HACK_INTERNET: aiHackInternet. The library's script asks in every frame, and the retail hacker then packs and unpacks for ever: a hacker at
             // work stays at it (TheSuperHackers' fix in HackInternetAIUpdate::aiDoCommand). No player command says this; a script may write the world.
-            case "HACK_INTERNET" when _ai.Count > 0 && ModuleOf<Modules.BuiltIn.HackInternetAIUpdate>(carrier) is { } hacker:
+            case "HACK_INTERNET" when ModuleOf<Modules.BuiltIn.HackInternetAIUpdate>(carrier) is { } hacker:
                 if (!hacker.IsHackingPackingOrUnpacking) hacker.StartHacking(_world);
                 return true;
             default:

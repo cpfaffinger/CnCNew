@@ -26,7 +26,7 @@ public sealed partial class ScriptEngine
         public int Queued;
         public int Joined;
         public bool FactoryMissing;
-        /// <summary>A team the skirmish AI chose itself (<c>priorityBuild</c> false in the reference): its units are only started at a factory that is doing nothing (<c>AIPlayer::queueUnits</c>).</summary>
+        /// <summary>A team the AI chose itself (<c>priorityBuild</c> false in the reference): its units are only started at a factory that is doing nothing (<c>AIPlayer::queueUnits</c>).</summary>
         public bool IdleOnly;
         /// <summary>One unit for a team in the field (<c>TeamInQueue::m_reinforcement</c>, <c>AIPlayer::selectTeamToReinforce</c>) and the tick it was asked for; the team stays active meanwhile.</summary>
         public bool Reinforcement;
@@ -342,77 +342,35 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>doBuildTeam</c> -> <c>AIPlayer::buildSpecificAITeam</c>: the team is created inactive and its units (at least <c>MinCount</c>, up to <c>MaxCount</c> of
-    /// each type) are queued at the owner's factories one command at a time (<see cref="ProcessTeamBuilds"/>); produced units join the team, and it becomes created
-    /// once every minimum is met. Simplifications (docs/SCRIPT-ENGINE.md §8): any finished factory that can produce the unit serves (no build list), no rally gathering,
-    /// no <c>executeActions</c> start script, no priority queue.
+    /// <c>doBuildTeam</c> -> <c>Player::buildSpecificTeam</c> -> <c>AIPlayer::buildSpecificAITeam</c>: nothing while unit building is off, no second team of a singleton that has objects, no team
+    /// without a factory for every unit type (money it may still find). The team is then created inactive, with one work order per unit type for its required and one for its optional units; a
+    /// script's team goes to the head of the queue, one the AI chose to its end. <see cref="QueueUnits"/> trains them, the produced units join (<see cref="JoinProducedUnit"/>) and the queues
+    /// activate the team (<see cref="UpdateTeamQueues"/>). A human player has no <c>AIPlayer</c>: nothing happens.
     /// </summary>
     private void BuildTeam(string teamName, bool idleOnly = false)
     {
         var prototype = _program.FindTeam(teamName);
         if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
-        // buildSpecificAITeam: without a factory for every unit type there is no team; money it may still find.
-        if (_ai.Count > 0 && _program.FindPlayer(prototype.Owner) is { } owner && AiOfPlayer(owner.Id) is { } builder && !AiHasFactoriesFor(builder, prototype)) { Diagnose($"BUILD_TEAM '{teamName}': factories or tech missing"); return; }
-        var team = (prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
+        if (_program.FindPlayer(prototype.Owner) is not { } owner || !_world.HasPlayer(owner.Id)) { Diagnose($"BUILD_TEAM '{teamName}': team has no player"); return; }
+        if (AiOfPlayer(owner.Id) is not { } builder) { Diagnose($"BUILD_TEAM '{teamName}': a human player has no AI"); return; }
+        if (!_world.CanBuildUnits(owner.Id)) { Diagnose($"BUILD_TEAM '{teamName}': unit construction disabled"); return; }
+        var existing = prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeamInstance(teamName) : null;
+        if (!idleOnly && prototype.IsSingleton && existing is not null && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"BUILD_TEAM '{teamName}': singleton team already exists"); return; }
+        if (!AiHasFactoriesFor(builder, prototype)) { Diagnose($"BUILD_TEAM '{teamName}': factories or tech missing"); return; }
+        var team = existing ?? CreateTeam(teamName);
         if (team is null) return;
-        if (team.Owner.IsSystem || !_world.HasPlayer(team.Owner)) { Diagnose($"BUILD_TEAM '{teamName}': team has no player"); return; }
-        if (!_world.CanBuildUnits(team.Owner)) { Diagnose($"BUILD_TEAM '{teamName}': unit construction disabled"); return; }
-        if ((prototype.IsSingleton || prototype.MaxInstances < 2) && LiveMembers(team).Any(CountsAsObject)) { Diagnose($"BUILD_TEAM '{teamName}': singleton team already exists"); return; }
         if (_teamBuilds.Any(order => order.TeamId == team.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
         team.Created = false;
         AiResetTeamForRebuild(team);
-        if (_ai.Count > 0 && AiOfPlayer(team.Owner) is not null)
-        {
-            AiQueueTeamOrders(team, prototype, idleOnly);
-            return;
-        }
-        foreach (var unit in prototype.Units)
-        {
-            if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }
-            if (!template.IsInstantiable) { Diagnose($"not instantiable '{unit.Type}'"); continue; }
-            if (unit.MaxCount <= 0) continue;
-            _teamBuilds.Add(new TeamBuildOrder { TeamId = team.Id, Type = unit.Type, Min = Math.Min(unit.MinCount, unit.MaxCount), Total = unit.MaxCount, IdleOnly = idleOnly });
-        }
-        if (!_teamBuilds.Any(order => order.TeamId == team.Id)) Diagnose($"BUILD_TEAM '{teamName}': contains no buildable units");
-        else { _teamQueue.RemoveAll(entry => entry.TeamId == team.Id); _teamQueue.Add(new TeamQueueEntry { TeamId = team.Id, Started = _tick }); }
+        AiQueueTeamOrders(team, prototype, idleOnly);
     }
 
-    /// <summary>Queues one more unit per open order per tick at an idle (else any) factory that can produce it; a shortage of money simply retries next tick.</summary>
+    /// <summary>What the orders of the teams need between two looks of the AI at them: a trained reinforcement goes to its team, and a team whose orders are all met leaves the list.</summary>
     private void ProcessTeamBuilds()
     {
         if (_teamBuilds.Count == 0) return;
         SendTrainedReinforcements();
         AiDropFinishedTeamBuilds();
-        foreach (var order in _teamBuilds)
-        {
-            if (order.Queued >= order.Total || !_teams.TryGetValue(order.TeamId, out var team)) continue;
-            var owner = team.Owner;
-            // The orders of an AI player wait for queueUnits (AiPlayer: QueueUnits).
-            if (_ai.Count > 0 && AiOfPlayer(owner) is not null) continue;
-            Entity? best = null;
-            var bestBusy = true;
-            // Nothing in this walk changes the world (the order is issued after it), so the owner's list is read in place.
-            foreach (var entity in _world.EntitiesOwnedBy(owner).AsSpan())
-            {
-                if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { HasRoom: true } production) continue;
-                if (!_world.CanQueueProductionTemplate(owner, entity.Id, order.Type)) continue;
-                var busy = production.Queue.Length > 0;
-                if (best is not null && (busy || !bestBusy)) continue;
-                best = entity;
-                bestBusy = busy;
-                if (!busy) break;
-            }
-            if (best is not null && bestBusy && order.IdleOnly) continue;
-            if (best is null)
-            {
-                if (!order.FactoryMissing) { order.FactoryMissing = true; Diagnose($"BUILD_TEAM: no factory for '{order.Type}'"); }
-                continue;
-            }
-            order.FactoryMissing = false;
-            var producer = best.Id;
-            var template = order.Type;
-            if (_issue(owner, (sequence, tick) => new QueueProductionCommand(owner, sequence, tick, producer, template)).Accepted) order.Queued++;
-        }
     }
 
     /// <summary>The first <see cref="ProductionUpdate"/> of an object, if it has one.</summary>
@@ -427,9 +385,8 @@ public sealed partial class ScriptEngine
     private void JoinProducedUnit(Entity unit)
     {
         if (_teamBuilds.Count == 0) return;
-        // "factory could be NULL at the start of the game": what a session placed before its first tick came out of no factory and fills no order (asked for the skirmish AI only;
-        // a mission has no such objects when its first team is built).
-        if (_ai.Count > 0 && unit.SpawnTick <= 0) return;
+        // "factory could be NULL at the start of the game": what a session placed before its first tick came out of no factory and fills no order.
+        if (unit.SpawnTick <= 0) return;
         var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Type == unit.Template.Name
             && _teams.TryGetValue(candidate.TeamId, out var team) && team.Owner == unit.Owner);
         if (order is null || !_teams.TryGetValue(order.TeamId, out var joined)) return;

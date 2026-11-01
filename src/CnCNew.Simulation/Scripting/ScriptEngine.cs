@@ -25,7 +25,7 @@ public sealed record ScriptEngineOptions(ScriptDifficulty Difficulty, PlayerId L
 {
     public static ScriptEngineOptions Default { get; } = new(ScriptDifficulty.Normal, new PlayerId(1));
 
-    /// <summary>The original skirmish AI and the players it runs (<see cref="ScriptEngine.HasAiPlayers"/>); <see langword="null"/> for a mission.</summary>
+    /// <summary>The computer players of the session: a mission's <c>AIPlayer</c>s or the <c>AISkirmishPlayer</c>s of the original skirmish AI (<see cref="ScriptEngine.HasAiPlayers"/>).</summary>
     public ScriptAiSetup? Ai { get; init; }
 }
 
@@ -749,7 +749,7 @@ public sealed partial class ScriptEngine
     private ScriptPlayer? ResolvePlayer(string name)
     {
         if (name == ThisPlayerName) return CurrentScriptPlayer();
-        if (_ai.Count > 0 && name == ThisPlayerEnemyName) return SkirmishEnemy();
+        if (name == ThisPlayerEnemyName) return SkirmishEnemy();
         if (name == LocalPlayerName) return PlayerById(_options.LocalPlayer);
         var player = _program.FindPlayer(name);
         if (player is null) Diagnose(UnknownMessage(_unknownPlayerMessages, "player", name));

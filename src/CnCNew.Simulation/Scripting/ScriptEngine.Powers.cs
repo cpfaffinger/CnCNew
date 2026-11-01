@@ -22,10 +22,6 @@ public sealed partial class ScriptEngine
 
     private readonly SortedDictionary<string, NamedReveal> _namedReveals = new(StringComparer.Ordinal);
 
-    private long _recordedActions;
-
-    /// <summary>Executions of <see cref="ScriptSupport.Recorded"/> actions: stored, but no simulation rule reads them yet.</summary>
-    public long RecordedActions => _recordedActions;
 
     private bool TryExecutePowerAction(MapScriptAction action)
     {
@@ -74,22 +70,14 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 1) && _namedReveals.Remove(Str(p, 0), out var undone)) _world.RevealAreaPermanently(new PlayerId(undone.Player), undone.X, undone.Y, undone.Radius, false);
                 return true;
 
-            // ---- doBuildUpgrade -> AIPlayer::buildUpgrade: a player upgrade is ordered like a player's own purchase (funds, prerequisites and build time apply); the skirmish AI walks its
-            // build list, any other player gets the first of its buildings that can research it, in id order
+            // ---- doBuildUpgrade -> Player::buildUpgrade -> AIPlayer::buildUpgrade: at the first building of the build list that can research it; a human player has no AIPlayer, nothing happens
             case "AI_PLAYER_BUILD_UPGRADE":
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } upgrader && _world.HasPlayer(upgrader.Id))
                 {
                     if (!_world.Upgrades.TryGet(Str(p, 1), out var upgrade)) { Diagnose($"unknown upgrade '{Str(p, 1)}'"); return true; }
                     if (upgrade.Scope != Templates.UpgradeScope.Player) { Diagnose($"AI_PLAYER_BUILD_UPGRADE: '{upgrade.Name}' is an object upgrade"); return true; }
                     if (_world.PlayerUpgrades(upgrader.Id).Has(upgrade.Index) || _world.UpgradeInProduction(upgrader.Id, upgrade.Index)) return true;
-                    if (AiOfPlayer(upgrader.Id) is { } researcher)
-                    {
-                        AiBuildUpgrade(researcher, upgrade);
-                        return true;
-                    }
-                    var buyer = upgrader.Id;
-                    var name = upgrade.Name;
-                    if (!_issue(buyer, (sequence, tick) => new PurchaseUpgradeCommand(buyer, sequence, tick, name, null)).Accepted) Diagnose($"AI_PLAYER_BUILD_UPGRADE '{name}' rejected");
+                    if (AiOfPlayer(upgrader.Id) is { } researcher) AiBuildUpgrade(researcher, upgrade);
                 }
                 return true;
 
@@ -133,47 +121,20 @@ public sealed partial class ScriptEngine
         if (!_issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, source, info.Name, kind, target, x, y)).Accepted) Diagnose("special power use rejected");
     }
 
-    /// <summary>
-    /// <c>doSkirmishFireSpecialPowerAtMostCost</c> with <c>AIPlayer::computeSuperweaponTarget</c> simplified: the reference scans a (at most 10 x 10) grid over the
-    /// enemy's structure bounds in a random direction and picks the cell with the most enemy cash value; here the candidates are the enemies' own object positions and
-    /// the winner is the one with the highest summed build cost within the power's radius (at least 50), lowest id on a tie. The first ready holder fires.
-    /// </summary>
+    /// <summary><c>doSkirmishFireSpecialPowerAtMostCost</c>; the place is the AI's (<see cref="AiFireAtMostCost"/>), and a player without an AI has none (<c>Player::computeSuperweaponTarget</c>).</summary>
     private void FireAtMostCost(PlayerId player, string power)
     {
         if (!_world.SpecialPowers.TryGet(power, out var info)) { Diagnose($"unknown special power '{power}'"); return; }
-        if (_ai.Count > 0)
-        {
-            AiFireAtMostCost(player, info);
-            return;
-        }
-        var radius = info.RadiusCursorRadius > Fixed.FromInt(50) ? info.RadiusCursorRadius : Fixed.FromInt(50);
-        var limit = SquaredReach.Of(radius);
-        var enemies = _world.Entities.Where(entity => !entity.Owner.IsSystem && CountsAsObject(entity) && _world.AreEnemies(player, entity.Owner)).OrderBy(entity => entity.Id.Value).ToArray();
-        if (enemies.Length == 0) return;
-        foreach (var holder in PlayerEntities(player))
-        {
-            if (holder.HasStatus(UnderConstructionBit) || SpecialPowerRouting.FindModule(holder, info.Index) is not { } module || !module.IsReady(_world)) continue;
-            Entity? best = null;
-            var bestCost = Fixed.FromInt(-1);
-            foreach (var center in enemies)
-            {
-                var cost = Fixed.Zero;
-                foreach (var other in enemies)
-                    if (limit.Contains(DistanceSquared(other, center.X, center.Y))) cost += other.Template.BuildCost;
-                if (cost > bestCost) { best = center; bestCost = cost; }
-            }
-            if (best is not null) FireSpecialPower(holder, power, SpecialPowerTargetKind.Location, EntityId.Invalid, best.X, best.Y);
-            return;
-        }
+        AiFireAtMostCost(player, info);
     }
 
     // ------------------------------------------------------------------------------------------------ recruiting
 
     /// <summary>
-    /// <c>AIPlayer::recruitSpecificAITeam</c> / <c>Team::tryToRecruit</c>: for each unit type of the team (up to <c>MaxCount</c>) the nearest unit of the owner that sits in an
-    /// active, recruitable team of lower production priority (or in no team at all, the reference's default team) joins the new team and walks to the team's home waypoint.
-    /// A radius under 1 means unlimited. Simplifications (<c>docs/SCRIPT-ENGINE.md</c> §8): the team activates at once instead of after gathering at its home, "build variation"
-    /// equivalence is not modelled, held units are not excluded.
+    /// <c>Player::recruitSpecificTeam</c> -> <c>AIPlayer::recruitSpecificAITeam</c> / <c>Team::tryToRecruit</c>: for each unit type of the team (up to <c>MaxCount</c>) the nearest unit of the
+    /// owner that sits in an active, recruitable team of lower production priority (or in no team at all, the reference's default team) joins the new team and walks to the team's home
+    /// waypoint. A radius under 1 means unlimited. A human player has no <c>AIPlayer</c>: nothing happens. "Build variation" equivalence is not modelled, held units are not excluded
+    /// (<c>docs/SCRIPT-ENGINE.md</c> §8).
     /// </summary>
     private void RecruitTeam(string teamName, Fixed radius)
     {
@@ -181,12 +142,11 @@ public sealed partial class ScriptEngine
         if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
         var owner = _program.FindPlayer(prototype.Owner);
         if (owner is null || !_world.HasPlayer(owner.Id)) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no player"); return; }
+        if (AiOfPlayer(owner.Id) is null) { Diagnose($"RECRUIT_TEAM '{teamName}': a human player has no AI"); return; }
         var singleton = prototype.IsSingleton || prototype.MaxInstances < 2;
         if (singleton && FindTeamInstance(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
-        var home = prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null;
-        // AISkirmishPlayer::recruitSpecificAITeam reports a team without a home and goes on with m_homeLocation, which is the origin of the map.
-        if (home is null && _ai.Count > 0 && AiOfPlayer(owner.Id) is not null) home = new ScriptWaypoint(string.Empty, Fixed.Zero, Fixed.Zero, Fixed.Zero);
-        if (home is null) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no home position"); return; }
+        // recruitSpecificAITeam reports a team without a home and goes on with m_homeLocation, which is the origin of the map.
+        var home = (prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null) ?? new ScriptWaypoint(string.Empty, Fixed.Zero, Fixed.Zero, Fixed.Zero);
         var team = (singleton ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
         if (team is null) return;
         var maxDistanceSquared = radius < Fixed.One ? SquaredReach.OfSquare(Fixed.MaxValue) : SquaredReach.Of(radius);
@@ -260,7 +220,6 @@ public sealed partial class ScriptEngine
             }
             writer.EndArray();
         }
-        if (_recordedActions > 0) writer.Int("recordedActions", _recordedActions);
     }
 
     private void LoadPowerState(IStateReader reader)
@@ -269,6 +228,5 @@ public sealed partial class ScriptEngine
         if (reader.Has("namedReveals"))
             foreach (var item in reader.Array("namedReveals"))
                 _namedReveals[item.Text("name")] = new NamedReveal(checked((int)item.Int("player")), item.Fixed("x"), item.Fixed("y"), item.Fixed("radius"));
-        _recordedActions = reader.Has("recordedActions") ? reader.Int("recordedActions") : 0;
     }
 }

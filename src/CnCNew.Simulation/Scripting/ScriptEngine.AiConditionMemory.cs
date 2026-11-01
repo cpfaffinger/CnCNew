@@ -9,14 +9,13 @@ namespace CnCNew.Simulation.Scripting;
 
 /// <summary>
 /// What the reference remembers per condition <em>instance</em> to look at it less often (<c>Condition::m_customData</c>/<c>m_customFrame</c> and the integer of a parameter, ScriptConditions.cpp),
-/// as far as it changes when an answer is given, for a session of the original skirmish AI:
+/// as far as it changes when an answer is given:
 /// <list type="bullet">
 /// <item><c>evaluateSkirmishSpecialPowerIsReady</c>: a power that was not ready is not looked at again before the frame its nearest module becomes ready, at most ten seconds later
 /// (<c>pPower->friend_setInt(nextFrame)</c>).</item>
 /// <item><c>evaluateSkirmishSupplySourceSafe</c>: the answer is kept for two seconds (<c>setCustomFrame(frame + 2*LOGICFRAMES_PER_SECOND)</c>).</item>
 /// </list>
 /// The other caches of that file (<c>getFrameObjectCountChanged</c>) only avoid recounting while nothing changed and do not alter an answer; the engine counts every time.
-/// A mission keeps evaluating both conditions on every look, as it always did here: its reference values are fixed, and the memory would be new state in its snapshot.
 /// The memory is state of the engine (saved and hashed), keyed by the position of the condition in the program.
 /// </summary>
 public sealed partial class ScriptEngine
@@ -48,7 +47,7 @@ public sealed partial class ScriptEngine
     private bool SkirmishSpecialPowerReadyRemembered(PlayerId player, string powerName)
     {
         var ordinal = _conditionOrdinal;
-        if (_ai.Count == 0 || ordinal < 0) return SkirmishSpecialPowerReady(player, powerName);
+        if (ordinal < 0) return SkirmishSpecialPowerReady(player, powerName);
         if (_conditionMemory.TryGetValue(ordinal, out var memory) && memory.Tick > _tick) return false;
         if (!_world.SpecialPowers.TryGet(powerName, out var info))
         {
@@ -72,7 +71,7 @@ public sealed partial class ScriptEngine
     private bool SupplySourceSafeRemembered(PlayerId player, int minimumSupplies)
     {
         var ordinal = _conditionOrdinal;
-        if (_ai.Count == 0 || ordinal < 0) return SupplySourceSafe(player, minimumSupplies);
+        if (ordinal < 0) return SupplySourceSafe(player, minimumSupplies);
         // "anyChanges = frame > customFrame": the remembered answer holds up to and including that frame.
         if (_conditionMemory.TryGetValue(ordinal, out var memory) && memory.Answer != 0 && _tick <= memory.Tick) return memory.Answer > 0;
         var safe = SupplySourceSafe(player, minimumSupplies);

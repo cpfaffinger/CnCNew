@@ -42,8 +42,8 @@ public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty,
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
 
     /// <summary>
-    /// The original skirmish AI of the session (<see cref="ScriptEngineOptions.Ai"/>); <see langword="null"/> for a mission. Not part of <see cref="MissionSnapshot"/>: a session with it is
-    /// saved by its owner (<c>ScriptedSkirmishSession</c>), which knows how to build the setup again.
+    /// The original skirmish AI of the session (<see cref="ScriptEngineOptions.Ai"/>); <see langword="null"/> for a mission, whose computer players the session sets up from its map. Not part of
+    /// <see cref="MissionSnapshot"/>: a session with it is saved by its owner (<c>ScriptedSkirmishSession</c>), which knows how to build the setup again.
     /// </summary>
     public ScriptAiSetup? Ai { get; init; }
 }
@@ -86,7 +86,8 @@ public sealed class MissionSession
             var fallbackName = program.Players.FirstOrDefault(player => player.Id == localPlayer)?.Name ?? localPlayer.ToString();
             Notes = [..Notes, $"requested human side '{options.HumanSideName}' is not a human side of this map; falling back to '{fallbackName}'"];
         }
-        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts) { Ai = options.Ai }, Issue);
+        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts)
+            { Ai = options.Ai ?? ComputerPlayers(program, world, localPlayer, options.Difficulty) }, Issue);
         world.AcquisitionAdvisor = Engine;
         world.GuardAreas = Engine.FindGuardArea;
         world.SelfAcquisition = options.CombatIntervalTicks != 0;
@@ -138,6 +139,8 @@ public sealed class MissionSession
         if (options.Ai is null)
         {
             world.BeginSinglePlayer((int)options.Difficulty);
+            // RebuildHoleBehavior holds in every game; the computer players of a mission wait for their holes.
+            world.EnableHoleRebuilding();
             session.CreditStartMoney(catalog);
         }
         // Object::updateObjValuesFromMapProperties: a bridge's name is its first point's, or that of its object.
@@ -146,6 +149,7 @@ public sealed class MissionSession
         session.PlaceObjects(catalog, terrain);
         // The reference creates the map's objects synchronously while loading, so the first script evaluation already sees them.
         world.MaterializePendingSpawns();
+        session.Engine.StartMissionAiPlayers();
         // Object::updateObjValuesFromMapProperties: the map's objectAggressiveness replaces the attitude the object has from its team.
         foreach (var (id, mood) in session._placedMoods)
             if (world.FindEntity(id) is { } placed) world.SetAttitude(placed, mood);
@@ -171,6 +175,22 @@ public sealed class MissionSession
             if (catalog.Factions.TryGet(player.Faction, out _) && World.MoneyOf(player.Id) == Fixed.Zero) World.SetMoney(player.Id, Fixed.FromInt(catalog.DefaultStartingCash));
             if (player.SideIndex < Map.Sides.Length && Map.Sides[player.SideIndex].Properties.TryGetInt("playerStartMoney", out var deposit) && deposit > 0) World.AddMoney(player.Id, Fixed.FromInt(deposit));
         }
+    }
+
+    /// <summary>
+    /// <c>Player::setPlayerType</c>: every side of the map that is not human is a computer player with an <c>AIPlayer</c>, of the campaign's difficulty (<c>AIPlayer::AIPlayer</c>:
+    /// <c>getGlobalDifficulty</c>). The host's viewer has none, whatever the map says about the side.
+    /// </summary>
+    private static ScriptAiSetup ComputerPlayers(ScriptProgram program, SimulationWorld world, PlayerId viewer, ScriptDifficulty difficulty)
+    {
+        var players = ImmutableArray.CreateBuilder<ScriptAiPlayerSetup>();
+        foreach (var player in program.Players)
+        {
+            if (player.IsHuman || player.Id.IsSystem || player.Id == viewer || !world.HasPlayer(player.Id)) continue;
+            var side = world.Templates.Factions.TryGet(player.Faction, out var faction) ? faction.Side : string.Empty;
+            players.Add(new ScriptAiPlayerSetup(player.Id, difficulty, side, player.StartIndex, Fixed.Zero, Fixed.Zero));
+        }
+        return new ScriptAiSetup(world.Templates.AiData, players.ToImmutable()) { Skirmish = false };
     }
 
     private static ImmutableArray<PlayerConfiguration> ConfiguredPlayers(ScriptProgram program, TemplateCatalog catalog, ImmutableArray<string>.Builder notes)
@@ -235,7 +255,7 @@ public sealed class MissionSession
 
     /// <summary>
     /// <c>AIPlayer::newMap</c>: a computer player's build list entries flagged <c>InitiallyBuilt</c> stand finished at mission start (<c>buildStructureNow</c>),
-    /// named by the entry's <c>buildingName</c> and at its initial health.
+    /// named by the entry's <c>buildingName</c> and at its initial health; the whole list goes to the player's <c>AIPlayer</c> (<c>Player::initFromDict</c> hands the side's list over).
     /// </summary>
     private void PlaceBuildLists(TemplateCatalog catalog, SortedDictionary<string, int> skipped)
     {
@@ -245,14 +265,18 @@ public sealed class MissionSession
             if (player.IsHuman || player.Id.IsSystem || !World.HasPlayer(player.Id)) continue;
             foreach (var entry in Map.Sides[side].BuildList)
             {
-                if (!entry.InitiallyBuilt || entry.Template.Length == 0) continue;
-                if (!catalog.TryGet(entry.Template, out var template) || !template.IsInstantiable)
+                if (entry.Template.Length == 0) continue;
+                var built = EntityId.Invalid;
+                if (entry.InitiallyBuilt)
                 {
-                    skipped[entry.Template] = skipped.GetValueOrDefault(entry.Template) + 1;
-                    continue;
+                    if (catalog.TryGet(entry.Template, out var template) && template.IsInstantiable)
+                    {
+                        built = World.RequestSpawn(template.Index, player.Id, Fixed.FromDecimal(entry.X), Fixed.FromDecimal(entry.Y), Fixed.Zero, Fixed.FromDecimal(entry.Angle), entry.Health);
+                        if (entry.BuildingName.Length > 0) Engine.RegisterNamed(entry.BuildingName, built);
+                    }
+                    else skipped[entry.Template] = skipped.GetValueOrDefault(entry.Template) + 1;
                 }
-                var id = World.RequestSpawn(template.Index, player.Id, Fixed.FromDecimal(entry.X), Fixed.FromDecimal(entry.Y), Fixed.Zero, Fixed.FromDecimal(entry.Angle), entry.Health);
-                if (entry.BuildingName.Length > 0) Engine.RegisterNamed(entry.BuildingName, id);
+                Engine.AddToBuildList(player.Id, entry, built);
             }
         }
     }

@@ -159,7 +159,7 @@ public sealed partial class SimulationWorld
         if (!_players.TryGetValue(player.Value, out var owner)) return false;
         if (!_templates.TryGet(templateName, out var template) || !template.IsInstantiable) return false;
         if (FindEntity(producerId) is not { } producer || producer.Owner != player) return false;
-        if (!CanProduceTemplate(owner, producer, template)) return false;
+        if (!CanProduceTemplate(owner, producer, template) || !AllowedToBuild(player, template)) return false;
         if (!BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, template)) return false;
         return !ExceedsMaxSimultaneousOfType(owner, template);
     }
@@ -181,8 +181,9 @@ public sealed partial class SimulationWorld
     public bool HolesRebuild => _holesRebuild;
 
     /// <summary>
-    /// The rule of a world in which a rebuild hole sends out its worker, as <c>RebuildHoleBehavior</c> does in every game of the original. The session of the original skirmish AI switches it on,
-    /// whose AI waits for its holes; it is off in every other world, because a hole that rebuilds changes matches and manifests, and that is a step of its own. Written only when set.
+    /// The rule of a world in which a rebuild hole sends out its worker, as <c>RebuildHoleBehavior</c> does in every game of the original. A mission and the session of the original skirmish AI
+    /// switch it on, whose AI players wait for their holes; it is off in a skirmish of the built-in AI, because a hole that rebuilds changes matches and manifests, and that is a step of its own.
+    /// Written only when set.
     /// </summary>
     public void EnableHoleRebuilding() => _holesRebuild = true;
 

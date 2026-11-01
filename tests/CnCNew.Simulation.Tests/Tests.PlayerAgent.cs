@@ -88,9 +88,8 @@ static partial class Tests
         var walker = NamedIn(session, "Walker")!;
         Check.That((walker.Angle - Fixed.FromDecimal(1.5707963m)).Abs() < Fixed.FromDecimal(0.05m), $"TEAM_FACE_NAMED turns the team toward the object (heading {walker.Angle}).");
         Check.That(NamedIn(session, "Bunker") is { } bunker && bunker.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Sold), "PLAYER_SELL_EVERYTHING puts the player's structures up for sale.");
-        Check.That(session.Engine.RecordedSetting("SET_BASE_CONSTRUCTION_SPEED", walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 30, "The consumer-less settings are recorded.");
-        Check.That(session.Engine.RecordedActions >= 1 && session.Engine.MissingActionHits.Count == 0, "Recorded actions count apart; none is missing: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
+        Check.That(session.Engine.MissingActionHits.Count == 0, "None is missing: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
-        Check.That(restored.StateHash() == session.StateHash() && restored.Engine.RecordedSetting("SET_BASE_CONSTRUCTION_SPEED", walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 30, "A restored mission keeps the recorded settings.");
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission continues from the same state.");
     }
 }

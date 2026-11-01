@@ -25,7 +25,6 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<string, (long X, long Y)> _toppleDirections = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, int> _buildableOverrides = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, uint> _captureOrders = [];
-    private readonly SortedDictionary<string, (int Owner, long X, long Y)> _pendingStructures = new(StringComparer.Ordinal);
 
     private bool TryExecutePhase13Action(MapScriptAction action)
     {
@@ -50,17 +49,9 @@ public sealed partial class ScriptEngine
                     else Diagnose($"buildable status {Int(p, 1)} out of range");
                 }
                 return true;
-            // doAffectPlayerSkillset -> Player::friend_setSkillset -> AIPlayer::selectSkillset. Read by doUpgradesAndSkills of the original AI; a mission's computer player has no AIPlayer here, the value stays recorded.
+            // doAffectPlayerSkillset -> Player::friend_setSkillset -> AIPlayer::selectSkillset; a human player has no AIPlayer.
             case "PLAYER_SELECT_SKILLSET":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled)
-                {
-                    if (AiOfPlayer(skilled.Id) is { } skillAi) skillAi.SkillSet = Int(p, 1) - 1;
-                    else
-                    {
-                        _recordedSettings[type + "|" + skilled.Id.Value] = Int(p, 1) - 1;
-                        _recordedActions++;
-                    }
-                }
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled && AiOfPlayer(skilled.Id) is { } skillAi) skillAi.SkillSet = Int(p, 1) - 1;
                 return true;
             // doResumeSupplyTruckingForIdleUnits(empty): Player::setUnitsShouldIdleOrResume(false) for every human player: idle supply trucks are forced back to work.
             case "RESUME_SUPPLY_TRUCKING":
@@ -114,24 +105,9 @@ public sealed partial class ScriptEngine
                     else _world.CompleteUpgrade(upgraded.Owner, upgraded.Id, upgrade.Name);
                 }
                 return true;
-            // doPlayerRepairStructure -> Player::repairStructure: the skirmish AI queues it; for a mission's player the nearest builder gets the order.
+            // doPlayerRepairStructure -> Player::repairStructure -> AIPlayer::repairStructure: into the queue of the AI; a human player has no AIPlayer.
             case "PLAYER_REPAIR_NAMED_STRUCTURE":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } repairer && NamedEntity(Str(p, 1)) is { } damaged)
-                {
-                    if (AiOfPlayer(repairer.Id) is { } repairAi)
-                    {
-                        RepairStructure(repairAi, damaged.Id);
-                        return true;
-                    }
-                    var owner = repairer.Id;
-                    var target = damaged.Id;
-                    var dozer = _world.Entities.Where(entity => entity.Owner == owner && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.IsKindOf("DOZER")).OrderBy(entity => Distance2(entity, damaged.X, damaged.Y)).ThenBy(entity => entity.Id.Value).FirstOrDefault();
-                    if (dozer is not null)
-                    {
-                        var dozerId = dozer.Id;
-                        if (!_issue(owner, (sequence, tick) => new RepairCommand(owner, sequence, tick, dozerId, target)).Accepted) Diagnose("repair order rejected");
-                    }
-                }
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } repairer && NamedEntity(Str(p, 1)) is { } damaged && AiOfPlayer(repairer.Id) is { } repairAi) RepairStructure(repairAi, damaged.Id);
                 return true;
             // doCreateTeamFromCapturedUnits and doCollectNearbyForTeam have empty bodies / only a debug crash in the original: nothing happens.
             case "PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS":
@@ -342,13 +318,12 @@ public sealed partial class ScriptEngine
     // ------------------------------------------------------------------------------------------------ skirmish approach paths
 
     /// <summary>
-    /// <c>ScriptEngine::getSkirmishEnemyPlayer</c>: the AI's current enemy, else the first human player (the simulation's script AI has no "current enemy", so always the human viewer,
-    /// the reference's fallback).
+    /// <c>ScriptEngine::getSkirmishEnemyPlayer</c>: the enemy the current player's skirmish AI has acquired, else the first human player. A mission's <c>AIPlayer</c> acquires no enemy
+    /// (<c>AIPlayer::getAiEnemy</c>: "Solo AI attacks based on scripting"), so there it is always the human; of a challenge's two human sides that is the viewer, not the dummy.
     /// </summary>
     private ScriptPlayer? SkirmishEnemy()
     {
-        if (_ai.Count == 0) return _program.Players.FirstOrDefault(player => player.Id == _options.LocalPlayer) ?? _program.Players.FirstOrDefault(player => player.IsHuman);
-        // With the skirmish AI: the enemy the current player's AI has acquired, else the first human player (ScriptEngine::getSkirmishEnemyPlayer).
+        if (!IsSkirmish) return _program.Players.FirstOrDefault(player => player.Id == _options.LocalPlayer) ?? _program.Players.FirstOrDefault(player => player.IsHuman);
         if (CurrentScriptPlayer() is { } current && AiOfPlayer(current.Id) is { } state && AiEnemy(state) is { } enemy) return enemy;
         return _program.Players.FirstOrDefault(player => player.IsHuman && !player.Id.IsSystem);
     }
@@ -386,7 +361,7 @@ public sealed partial class ScriptEngine
             MoveGroup(members, path.Waypoints[closest].X, path.Waypoints[closest].Y);
             return;
         }
-        if (CurrentScriptPlayer() is { } walking && AiOfPlayer(walking.Id) is { } walkingAi) CheckBridges(walkingAi, members[0], path.Waypoints, closest);
+        if (IsSkirmish && CurrentScriptPlayer() is { } walking && AiOfPlayer(walking.Id) is { } walkingAi) CheckBridges(walkingAi, members[0], path.Waypoints, closest);
         foreach (var member in members)
         {
             _buttonHunts.Remove(member.Id.Value);
@@ -399,6 +374,7 @@ public sealed partial class ScriptEngine
 
     private (Fixed X, Fixed Y) BaseCentre(PlayerId player)
     {
+        if (AiOfPlayer(player) is { } ai) return ai.BaseSet ? (ai.BaseX, ai.BaseY) : (Fixed.Zero, Fixed.Zero);
         long sumX = 0, sumY = 0, count = 0;
         foreach (var entity in _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE") && CountsAsObject(entity)))
         {
@@ -430,7 +406,8 @@ public sealed partial class ScriptEngine
     private Entity? FindSupplyCenter(PlayerId player, int minimumCash)
     {
         var baseCentre = BaseCentre(player);
-        var enemy = SkirmishEnemy();
+        // getAiEnemy: only a skirmish AI has one to stay away from.
+        var enemy = IsSkirmish ? SkirmishEnemy() : null;
         var enemyCentre = enemy is not null && enemy.Id != player ? StructureBoundsCentre(enemy.Id) : null;
         var valuePerBox = _world.ValuePerSupplyBox;
         var closeDistance = Fixed.FromDecimal(SupplyCenterCloseDistance);
@@ -456,13 +433,16 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::guardSupplyCenter</c>: the team guards the warehouse's side facing the enemy's structures (<c>groupGuardPosition</c>, F-58). Not modelled: the original first takes a
-    /// warehouse that is under attack (<c>isSupplySourceAttacked</c>).
+    /// <c>AIPlayer::guardSupplyCenter</c>: the team guards the side facing the enemy's structures (<c>groupGuardPosition</c>, F-58) of what is under attack, else of the warehouse. The check
+    /// is forced (<c>m_supplySourceAttackCheckFrame = 0</c>); a player without an AI guards nothing.
     /// </summary>
     private void GuardSupplyCenter(ScriptTeam team, int minSupplies)
     {
         var owner = team.Owner;
-        var warehouse = FindSupplyCenter(owner, minSupplies);
+        if (AiOfPlayer(owner) is null) return;
+        _supplyAttackCheckFrames[owner.Value] = 0;
+        var warehouse = SupplySourceAttacked(owner, out var attacked) ? _world.FindEntity(attacked) : null;
+        warehouse ??= FindSupplyCenter(owner, minSupplies);
         if (warehouse is null) return;
         var location = (X: warehouse.X, Y: warehouse.Y);
         var enemy = SkirmishEnemy();
@@ -481,16 +461,18 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::buildBySupplies</c>: a warehouse is picked (<see cref="FindSupplyCenter"/>), the structure goes next to it — towards the base for a cash generator, towards the enemy for
-    /// anything else — and a legal spot is searched in growing rings; a dozer of the player builds it. Without funds the order waits (<see cref="_pendingStructures"/>) like the reference's
-    /// build queue.
+    /// <c>Player::buildBySupplies</c> -> <c>AIPlayer::buildBySupplies</c>: a warehouse is picked (<see cref="FindSupplyCenter"/>; what is no cash generator goes by the warehouse of the last order,
+    /// <c>m_curWarehouseID</c>), the structure goes next to it — towards the base for a cash generator, towards the enemy for anything else — and a legal spot on growing rings becomes a priority
+    /// entry of the build list. A player without an AI builds nothing.
     /// </summary>
     private void BuildBySupplies(PlayerId player, string templateName, int minimumCash)
     {
+        if (AiOfPlayer(player) is not { } aiState) return;
         if (!_world.Templates.TryGet(templateName, out var template) || !template.IsInstantiable) { Diagnose($"unknown template '{templateName}'"); return; }
-        var warehouse = FindSupplyCenter(player, minimumCash);
-        if (warehouse is null) return;
         var cashGenerator = template.IsKindOf("CASH_GENERATOR");
+        var warehouse = FindSupplyCenter(player, minimumCash);
+        if (!cashGenerator && _world.FindEntity(new EntityId(aiState.CurrentWarehouse)) is { } current) warehouse = current;
+        if (warehouse is null) return;
         var baseCentre = BaseCentre(player);
         var dx = warehouse.X - baseCentre.X;
         var dy = warehouse.Y - baseCentre.Y;
@@ -504,54 +486,8 @@ public sealed partial class ScriptEngine
         var length = Fixed.Sqrt(dx * dx + dy * dy);
         var x = length > Fixed.Zero ? warehouse.X - dx / length * radius : warehouse.X;
         var y = length > Fixed.Zero ? warehouse.Y - dy / length * radius : warehouse.Y;
-        // A player run by the skirmish AI gets a priority entry in its build list, as in the reference (Player::addToPriorityBuildList): built by a dozer when the rules allow, rebuilt if lost.
-        if (AiOfPlayer(player) is { } aiState)
-        {
-            AiBuildBySupplies(aiState, template, x, y);
-            return;
-        }
-        var builder = _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")).OrderBy(entity => entity.Id.Value)
-            .FirstOrDefault(entity => _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, entity.Id, template.Name, x, y, Fixed.Zero)) is not (CommandRejection.CannotConstruct or CommandRejection.UnknownEntity or CommandRejection.NotPermitted));
-        if (builder is null) { Diagnose($"no builder of player {player.Value} for '{templateName}'"); return; }
-        var cell = Fixed.FromDecimal(TerrainMap.CellSize);
-        var wanted = (X: x, Y: y);
-        var rejection = CommandRejection.InvalidPlacement;
-        var found = false;
-        for (var ring = 0; ring * 2 <= (int)(2m * SupplyCenterCloseDistance / TerrainMap.CellSize) && !found; ring++)
-        {
-            var offset = Fixed.FromInt(ring) * cell;
-            for (var step = -ring; step <= ring && !found; step++)
-                foreach (var (candidateX, candidateY) in new[] { (x + Fixed.FromInt(step) * cell, y - offset), (x + Fixed.FromInt(step) * cell, y + offset), (x - offset, y + Fixed.FromInt(step) * cell), (x + offset, y + Fixed.FromInt(step) * cell) })
-                {
-                    rejection = _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, builder.Id, template.Name, candidateX, candidateY, Fixed.Zero));
-                    if (rejection is 0 or CommandRejection.InsufficientFunds) { wanted = (candidateX, candidateY); found = true; break; }
-                }
-        }
-        if (!found) { Diagnose($"no legal place for '{templateName}' near the warehouse"); return; }
-        if (rejection == CommandRejection.InsufficientFunds) { _pendingStructures[player.Value + "|" + template.Name] = (player.Value, wanted.X.Raw, wanted.Y.Raw); return; }
-        var spot = wanted;
-        var id = builder.Id;
-        _issue(player, (sequence, tick) => new ConstructCommand(player, sequence, tick, id, template.Name, spot.X, spot.Y, Fixed.Zero));
-    }
-
-    /// <summary>Retries the structures that waited for money, at most once a second.</summary>
-    private void UpdatePendingStructures(long tick)
-    {
-        if (_pendingStructures.Count == 0 || tick % _world.Time.TicksPerSecond != 0) return;
-        foreach (var (key, order) in _pendingStructures.ToArray())
-        {
-            var player = new PlayerId(order.Owner);
-            var templateName = key[(key.IndexOf('|') + 1)..];
-            if (!_world.Templates.TryGet(templateName, out var template)) { _pendingStructures.Remove(key); continue; }
-            var builder = _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")).OrderBy(entity => entity.Id.Value)
-                .FirstOrDefault(entity => _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, entity.Id, template.Name, Fixed.FromRaw(order.X), Fixed.FromRaw(order.Y), Fixed.Zero)) == 0);
-            if (builder is null) continue;
-            var id = builder.Id;
-            var x = Fixed.FromRaw(order.X);
-            var y = Fixed.FromRaw(order.Y);
-            _issue(player, (sequence, at) => new ConstructCommand(player, sequence, at, id, template.Name, x, y, Fixed.Zero));
-            _pendingStructures.Remove(key);
-        }
+        AiBuildBySupplies(aiState, template, x, y);
+        aiState.CurrentWarehouse = warehouse.Id.Value;
     }
 
     // ------------------------------------------------------------------------------------------------ per tick and state
@@ -559,7 +495,6 @@ public sealed partial class ScriptEngine
     private void UpdatePhase13(long tick)
     {
         UpdateCaptureOrders(tick);
-        UpdatePendingStructures(tick);
         AttachPendingTraps();
     }
 
@@ -591,12 +526,6 @@ public sealed partial class ScriptEngine
             foreach (var (bomb, victim, offsetX, offsetY) in _pendingTraps) { writer.BeginObject(null); writer.UInt("bomb", bomb); writer.UInt("victim", victim); writer.Int("x", offsetX); writer.Int("y", offsetY); writer.EndObject(); }
             writer.EndArray();
         }
-        if (_pendingStructures.Count > 0)
-        {
-            writer.BeginArray("pendingStructures");
-            foreach (var (key, order) in _pendingStructures) { writer.BeginObject(null); writer.Text("key", key); writer.Int("owner", order.Owner); writer.Int("x", order.X); writer.Int("y", order.Y); writer.EndObject(); }
-            writer.EndArray();
-        }
     }
 
     private void LoadPhase13State(IStateReader reader)
@@ -613,8 +542,6 @@ public sealed partial class ScriptEngine
         if (reader.Has("captureOrders")) foreach (var item in reader.Array("captureOrders")) _captureOrders[checked((uint)item.UInt("member"))] = checked((uint)item.UInt("target"));
         _pendingTraps.Clear();
         if (reader.Has("pendingTraps")) foreach (var item in reader.Array("pendingTraps")) _pendingTraps.Add((checked((uint)item.UInt("bomb")), checked((uint)item.UInt("victim")), item.Int("x"), item.Int("y")));
-        _pendingStructures.Clear();
-        if (reader.Has("pendingStructures")) foreach (var item in reader.Array("pendingStructures")) _pendingStructures[item.Text("key")] = (checked((int)item.Int("owner")), item.Int("x"), item.Int("y"));
     }
 }
 
@@ -838,8 +765,12 @@ public sealed partial class ScriptEngine
     /// player was last attacked more than ten frames ago (<c>Player::getAttackedFrame</c>); a scan sets the next one ten frames ahead and asks whether a cash generator, dozer
     /// or harvester of the player has a damage record of the last ten frames. Frames are those of the original, at every rate.
     /// </summary>
-    private bool SupplySourceAttacked(PlayerId player)
+    private bool SupplySourceAttacked(PlayerId player) => SupplySourceAttacked(player, out _);
+
+    /// <param name="victim"><c>m_attackedSupplyCenter</c>: the object whose damage answered yes.</param>
+    private bool SupplySourceAttacked(PlayerId player, out EntityId victim)
     {
+        victim = EntityId.Invalid;
         var frame = _world.Time.FramesIn(_world.Tick);
         if (frame == 0)
         {
@@ -854,7 +785,9 @@ public sealed partial class ScriptEngine
         {
             if (entity.Owner != player || entity.DestroyRequested || entity.Body is null || entity.LastDamageTick < 0) continue;
             if (!entity.Template.IsKindOf("CASH_GENERATOR") && !entity.Template.IsKindOf("DOZER") && !entity.Template.IsKindOf("HARVESTER")) continue;
-            if (_world.Time.FramesIn(entity.LastDamageTick) + SupplyScanFrames > frame) return true;
+            if (_world.Time.FramesIn(entity.LastDamageTick) + SupplyScanFrames <= frame) continue;
+            victim = entity.Id;
+            return true;
         }
         return false;
     }

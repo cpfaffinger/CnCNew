@@ -8,17 +8,10 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Scripting;
 
 /// <summary>
-/// Actions added in Phase 13 (<c>docs/SCRIPT-ENGINE.md</c> §5): <c>TEAM_FACE_NAMED</c>, <c>PLAYER_SELL_EVERYTHING</c> and the settings; what a mission's computer player has no
-/// <c>AIPlayer</c> to read is <see cref="ScriptSupport.Recorded"/> (<c>SET_BASE_CONSTRUCTION_SPEED</c>, <c>PLAYER_SELECT_SKILLSET</c>), kept per subject in
-/// <see cref="_recordedSettings"/> (written to the state only when one was set, so existing hashes stay).
+/// Actions added in Phase 13 (<c>docs/SCRIPT-ENGINE.md</c> §5): <c>TEAM_FACE_NAMED</c>, <c>PLAYER_SELL_EVERYTHING</c> and the settings.
 /// </summary>
 public sealed partial class ScriptEngine
 {
-    private readonly SortedDictionary<string, long> _recordedSettings = new(StringComparer.Ordinal);
-
-    /// <summary>The value a recorded setting action stored for <paramref name="subject"/> (<c>ACTION|subject</c>), or <see langword="null"/>.</summary>
-    public long? RecordedSetting(string action, string subject) => _recordedSettings.TryGetValue(action + "|" + subject, out var value) ? value : null;
-
     private static readonly string[] FactionStructureKinds = ["FS_FACTORY", "FS_BASE_DEFENSE", "FS_TECHNOLOGY", "FS_SUPPLY_DROPZONE", "FS_SUPERWEAPON", "FS_BLACK_MARKET", "FS_SUPPLY_CENTER", "FS_STRATEGY_CENTER", "FS_FAKE", "FS_INTERNET_CENTER", "FS_ADVANCED_TECH", "FS_BARRACKS", "FS_WARFACTORY", "FS_AIRFIELD"];
 
     /// <summary><c>sellBuildings</c> (Player.cpp): faction structures (<c>KINDOFMASK_FS</c>), command centres and power plants.</summary>
@@ -63,17 +56,9 @@ public sealed partial class ScriptEngine
             case "NAMED_SET_REPULSOR":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } repulsive) _world.SetRepulsor(repulsive, Int(p, 1) != 0);
                 return true;
-            // updateBaseConstructionSpeed -> AIPlayer::setTeamDelaySeconds. Read by the original AI's team timer; a mission's computer player has no AIPlayer here, the value stays recorded.
+            // updateBaseConstructionSpeed -> Player::setTeamDelaySeconds -> AIPlayer::setTeamDelaySeconds: the seconds of the team timer; a human player has no AIPlayer.
             case "SET_BASE_CONSTRUCTION_SPEED":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } builder)
-                {
-                    if (AiOfPlayer(builder.Id) is { } teamTimer) teamTimer.TeamSeconds = Int(p, 1);
-                    else
-                    {
-                        _recordedSettings[type + "|" + builder.Id.Value] = Int(p, 1);
-                        _recordedActions++;
-                    }
-                }
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } builder && AiOfPlayer(builder.Id) is { } teamTimer) teamTimer.TeamSeconds = Int(p, 1);
                 return true;
             // doNamedFireWeaponFollowingWaypointPath: from the waypoint closest to the unit to the end of the path.
             case "NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH":
@@ -103,17 +88,11 @@ public sealed partial class ScriptEngine
     {
         DescribePhase13State(writer);
         if (_chooseVictimAlwaysNormal) writer.Bool("chooseVictimAlwaysNormal", true);
-        if (_recordedSettings.Count == 0) return;
-        writer.BeginArray("recordedSettings");
-        foreach (var (key, value) in _recordedSettings) { writer.BeginObject(null); writer.Text("key", key); writer.Int("value", value); writer.EndObject(); }
-        writer.EndArray();
     }
 
     private void LoadSettingState(IStateReader reader)
     {
         LoadPhase13State(reader);
-        _recordedSettings.Clear();
         _chooseVictimAlwaysNormal = reader.Has("chooseVictimAlwaysNormal") && reader.Bool("chooseVictimAlwaysNormal");
-        if (reader.Has("recordedSettings")) foreach (var item in reader.Array("recordedSettings")) _recordedSettings[item.Text("key")] = item.Int("value");
     }
 }

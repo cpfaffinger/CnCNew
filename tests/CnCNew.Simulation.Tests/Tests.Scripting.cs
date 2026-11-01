@@ -359,7 +359,7 @@ static partial class Tests
         var conditions = MapScriptCatalog.ConditionTypeNames.GroupBy(ScriptCoverage.ConditionSupport).ToDictionary(group => group.Key, group => group.Count());
         var actions = MapScriptCatalog.ScriptActionTypeNames.GroupBy(ScriptCoverage.ActionSupport).ToDictionary(group => group.Key, group => group.Count());
         Console.WriteLine($"       conditions: {conditions.GetValueOrDefault(ScriptSupport.Executed)} executed, {conditions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ConditionTypeNames.Length}; " +
-                          $"actions: {actions.GetValueOrDefault(ScriptSupport.Executed)} executed, {actions.GetValueOrDefault(ScriptSupport.Forwarded)} forwarded, {actions.GetValueOrDefault(ScriptSupport.Recorded)} recorded, {actions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ScriptActionTypeNames.Length}");
+                          $"actions: {actions.GetValueOrDefault(ScriptSupport.Executed)} executed, {actions.GetValueOrDefault(ScriptSupport.Forwarded)} forwarded, {actions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ScriptActionTypeNames.Length}");
         // The five condition types and the action types the retail usage table ranks first are all implemented.
         foreach (var name in new[] { "CONDITION_TRUE", "TIMER_EXPIRED", "FLAG", "COUNTER", "PLAYER_HAS_OBJECT_COMPARISON" })
             Check.That(ScriptCoverage.ConditionSupport(name) == ScriptSupport.Executed, $"{name} is implemented.");
@@ -638,7 +638,7 @@ static partial class Tests
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(text), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version");
         // Phase 22: a mission state of 16 fraction bits (version 2) is refused by its version, never read with the new scale.
         var sixteen = System.Text.Encoding.UTF8.GetString(bytes).Replace($"\"version\":{MissionSnapshot.Version},", "\"version\":2,");
-        Check.That(MissionSnapshot.Version == 3, "The mission state of 24 fraction bits is version 3.");
+        Check.That(MissionSnapshot.Version == 4, "The mission state with the computer players is version 4.");
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(sixteen), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version 2");
     }
 }

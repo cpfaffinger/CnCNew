@@ -597,6 +597,16 @@ run.Test("Skirmish AI: an army that stopped growing marches with what it has", T
 run.Test("Skirmish profiles: balanced is the AI as it was; profiles and strengths travel with description and savegame", Tests.SkirmishProfilesTravelWithTheMatch);
 run.Test("Mission AI: the players of a mission start with the default cash and the map's money", Tests.MissionPlayersStartWithTheDefaultCash);
 run.Test("Mission AI: a factory that may not build refunds its units, but keeps its dozers", Tests.ADisabledFactoryRefundsItsUnitsButNotItsDozers);
+run.Test("Mission AI: every side that is not human has an AI, with the list of the map and its factories", Tests.MissionComputerPlayersHaveAnAi);
+run.Test("Mission AI: it builds and rebuilds its base by the rebuild counts", Tests.MissionAiBuildsAndRebuildsItsBase);
+run.Test("Mission AI: it orders a dozer with its unit production off", Tests.MissionAiOrdersADozerWithUnitsOff);
+run.Test("Mission AI: a team of a script needs an AI and its unit production", Tests.BuildTeamBelongsToTheAi);
+run.Test("Mission AI: it trains the teams of its production conditions by priority", Tests.MissionAiTrainsTheTeamsOfItsConditions);
+run.Test("Mission AI: its team timer is the script's, without a cap", Tests.MissionAiTeamTimerIsTheScripts);
+run.Test("Mission AI: it recruits around the home of the team", Tests.MissionAiRecruitsAroundTheHomeOfTheTeam);
+run.Test("Mission AI: it buys the sciences of the first skill set or of the chosen one", Tests.MissionAiBuysTheSciencesOfItsSkillSet);
+run.Test("Mission AI: the build actions of the skirmish do nothing, the one of the AIPlayer works", Tests.MissionAiAndTheBuildActions);
+run.Test("Mission AI: saved at any tick, also inside a frame at 60 and 120 Hz, the mission continues identically", Tests.MissionAiContinuesFromAnyTick);
 run.Test("Original skirmish AI: AIData is read strictly", Tests.OriginalAiDataIsReadStrictly);
 run.Test("Original skirmish AI: the script library is attached to the slots like the reference does", Tests.OriginalAiScriptLibraryIsAttachedLikeTheReference);
 run.Test("Original skirmish AI: base, teams, difficulty per player, determinism and save/restore", Tests.OriginalAiPlaysASkirmishFromItsScripts);

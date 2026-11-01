@@ -206,11 +206,11 @@ static partial class Tests
     public static void ScriptBuildTeamProducesTheTeam()
     {
         var (map, fixture, terrain) = MissionMap([
-            Scr.Script("Build", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("PLAYER_GIVE_MONEY", Scr.Side(PlayerA), Scr.Int(1000)), Scr.Do("BUILD_TEAM", Scr.Team("Gang"))], oneShot: true),
+            Scr.Script("Build", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("PLAYER_GIVE_MONEY", Scr.Side(PlayerB), Scr.Int(1000)), Scr.Do("PLAYER_ENABLE_UNIT_CONSTRUCTION", Scr.Side(PlayerB)), Scr.Do("BUILD_TEAM", Scr.Team("Gang"))], oneShot: true),
             Scr.Script("Done", [Scr.And(Scr.If("TEAM_CREATED", Scr.Team("Gang")))], [Scr.Do("SET_FLAG", Scr.Flag("gangReady"), Scr.Bool(true))]),
-        ], objects: [Placed("AlphaCenter", 100m, 100m, "teamA", "Hq")]);
-        MapProperties Gang() => new([Scr.Text("teamName", "Gang"), Scr.Text("teamOwner", PlayerA), Scr.Flag("teamIsSingleton", true),
-            Scr.Text("teamUnitType1", "AlphaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 2, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 3, 0m, string.Empty)]);
+        ], objects: [Placed("BetaCenter", 100m, 100m, "teamB", "Hq")]);
+        MapProperties Gang() => new([Scr.Text("teamName", "Gang"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true),
+            Scr.Text("teamUnitType1", "BetaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 2, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 3, 0m, string.Empty)]);
         map = map with { Teams = [..map.Teams, Gang()] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Run(session, session.Frames(20));
@@ -312,10 +312,6 @@ static partial class Tests
         engine.SignalUiInteraction("unlook");
         Run(session, session.Frames(8));
         Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The named undo takes the reveal back.");
-        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_BASE_CONSTRUCTION_SPEED", Scr.Side(PlayerA), Scr.Int(30)), Scr.Do("PLAYER_SELECT_SKILLSET", Scr.Side(PlayerA), Scr.Int(2))], oneShot: true)]);
-        Run(recordOnly, recordOnly.Frames(2));
-        Check.That(recordOnly.Engine.ExecutedActions == 0 && recordOnly.Engine.RecordedActions == 2 && recordOnly.Engine.MissingActionHits.Count == 0, "Recorded actions are neither counted as executed nor as missing.");
-        Check.That(ScriptCoverage.ActionSupport("SET_BASE_CONSTRUCTION_SPEED") == ScriptSupport.Recorded && ScriptCoverage.ActionSupportWithSkirmishAi("SET_BASE_CONSTRUCTION_SPEED") == ScriptSupport.Executed, "The support table names them as recorded, and as executed by the original AI.");
     }
 
     private static CnCNew.Simulation.World.SimulationWorld world(MissionSession session) => session.World;
@@ -323,19 +319,20 @@ static partial class Tests
     public static void ScriptRecruitTeam()
     {
         var (map, fixture, terrain) = MissionMap([
-            Scr.Script("Recruit", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("RECRUIT_TEAM", Scr.Team("Strike"), Scr.Real(0m))], oneShot: true),
+            Scr.Script("Recruit", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("RECRUIT_TEAM", Scr.Team("Strike"), Scr.Real(0m)), Scr.Do("RECRUIT_TEAM", Scr.Team("Theirs"), Scr.Real(0m))], oneShot: true),
             Scr.Script("Ready", [Scr.And(Scr.If("TEAM_CREATED", Scr.Team("Strike")))], [Scr.Do("SET_FLAG", Scr.Flag("strike"), Scr.Bool(true))]),
-            Scr.Script("Hold", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_AVAILABLE_FOR_RECRUITMENT", Scr.Team("Squad"), Scr.Bool(false))], oneShot: true),
-        ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamPlayerA", "Free1"), Placed("AlphaSoldier", 120m, 200m, "teamPlayerA", "Free2"), Placed("AlphaSoldier", 140m, 200m, "teamPlayerA", "Free3"), Placed("AlphaSoldier", 100m, 100m, "Squad", "Squad1")]);
-        MapProperties Strike() => new([Scr.Text("teamName", "Strike"), Scr.Text("teamOwner", PlayerA), Scr.Flag("teamIsSingleton", true), Scr.Text("teamHome", "Far"),
+            Scr.Script("Hold", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_AVAILABLE_FOR_RECRUITMENT", Scr.Team("Held"), Scr.Bool(false))], oneShot: true),
+        ], objects: [Placed("BetaSoldier", 100m, 200m, "teamPlayerB", "Free1"), Placed("BetaSoldier", 120m, 200m, "teamPlayerB", "Free2"), Placed("BetaSoldier", 140m, 200m, "teamPlayerB", "Free3"), Placed("AlphaSoldier", 300m, 300m, "teamPlayerA", "Ours"), Placed("BetaSoldier", 100m, 100m, "Heldad", "Squad1")]);
+        MapProperties Strike(string name, string owner, string unit) => new([Scr.Text("teamName", name), Scr.Text("teamOwner", owner), Scr.Flag("teamIsSingleton", true), Scr.Text("teamHome", "Far"),
             new MapProperty("teamProductionPriority", MapPropertyType.Int, 5, 0m, string.Empty),
-            Scr.Text("teamUnitType1", "AlphaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
-        map = map with { Teams = [..map.Teams, Strike()] };
+            Scr.Text("teamUnitType1", unit), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
+        map = map with { Teams = [..map.Teams, Strike("Strike", PlayerB, "BetaSoldier"), Strike("Theirs", PlayerA, "AlphaSoldier"), new([Scr.Text("teamName", "teamPlayerB"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true)]), new([Scr.Text("teamName", "Held"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true)])] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Run(session, session.Frames(2400));
         var strike = session.Engine.TeamInstances.First(team => team.Prototype == "Strike");
         Check.That(strike.Created && strike.Members.Count == 2 && session.Engine.FlagValue("strike"), $"RECRUIT_TEAM took the two (MaxCount) free soldiers (members {strike.Members.Count}, diagnostics {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
         Check.That(!strike.Members.Contains(NamedIn(session, "Squad1")!.Id.Value), "A unit of another team that was not made recruitable stays where it is.");
+        Check.That(session.Engine.Diagnostics.ContainsKey("RECRUIT_TEAM 'Theirs': a human player has no AI"), "A human player recruits nothing: Player::recruitSpecificTeam asks its AIPlayer.");
         var recruit = session.World.FindEntity(new EntityId(strike.Members[0]))!;
         Check.That(recruit.X > Fixed.FromInt(300), $"The recruits walk to the team's home waypoint (x = {recruit.X}).");
         var (original, restored, _) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 300);

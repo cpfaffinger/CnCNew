@@ -13,8 +13,7 @@ namespace CnCNew.Simulation.Scripting;
 /// member. The victim is dropped as soon as it is dead, hidden by stealth, inside a container or an aircraft (<c>Team::getTeamTargetObject</c>).
 /// </para>
 /// <para>
-/// Only for the players the original skirmish AI runs: a mission's teams keep attacking as they did (their reference values are fixed). <c>AIAttackSquadState::chooseVictim</c>, the
-/// other place the difficulty of a player chooses a victim (easy: a random member of the attacked squad, normal: the nearest, hard: all the same), belongs to the attack-team orders
+/// <c>AIAttackSquadState::chooseVictim</c>, the other place the difficulty of a player chooses a victim (easy: a random member of the attacked squad, normal: the nearest, hard: all the same), belongs to the attack-team orders
 /// (<c>TEAM_ATTACK_TEAM</c>, <c>NAMED_ATTACK_TEAM</c>), which the skirmish library never gives.
 /// </para>
 /// </summary>
@@ -22,14 +21,14 @@ public sealed partial class ScriptEngine
 {
     public Entity? CommonTargetOf(Entity entity)
     {
-        if (_ai.Count == 0 || CommonTargetTeamOf(entity) is not { CommonTarget: not 0 } team) return null;
+        if (CommonTargetTeamOf(entity) is not { CommonTarget: not 0 } team) return null;
         // "if (teamVictim && getAttitude() >= AI_NORMAL) return teamVictim".
         return _world.AttitudeOf(entity) >= Attitude.Normal ? TeamTarget(team) : null;
     }
 
     public void NoteFiring(Entity attacker, Entity victim)
     {
-        if (_ai.Count == 0 || CommonTargetTeamOf(attacker) is not { } team) return;
+        if (CommonTargetTeamOf(attacker) is not { } team) return;
         if (TeamTarget(team) is null) SetTeamTarget(team, victim);
     }
 
@@ -66,7 +65,7 @@ public sealed partial class ScriptEngine
     /// </summary>
     private Entity? HuntVictim(Entity hunter)
     {
-        if (_ai.Count == 0 || CommonTargetTeamOf(hunter) is not { } team) return NearestEnemy(hunter);
+        if (CommonTargetTeamOf(hunter) is not { } team) return NearestEnemy(hunter);
         var teamVictim = TeamTarget(team);
         var hasPriorities = _prioritySetOf.TryGetValue(hunter.Id.Value, out var set) && _prioritySets.ContainsKey(set);
         if (teamVictim is not null && !hasPriorities) return teamVictim;

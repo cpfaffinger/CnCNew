@@ -18,7 +18,7 @@ public sealed record AiSideInfo(string Side, int GatherersEasy, int GatherersNor
 /// guard ranges, group pathfinding, retaliation) and a top-level key outside the reference's field table throws.
 /// <para>
 /// The definition compiler still carries <c>AIData</c> as a compatibility definition (<c>baselines/compatibility.json</c>, category <c>definition</c>); this catalogue reads the original text of
-/// its fields and is deliberately not part of <c>TemplateCatalog</c>, so the input manifest and every existing fingerprint stay as they are.
+/// its fields. <c>TemplateCatalog.AiData</c> holds it for the computer players of a mission, which read it as every <c>AIPlayer</c> does.
 /// </para>
 /// </summary>
 public sealed class AiData
@@ -41,6 +41,12 @@ public sealed class AiData
     ];
 
     private AiData() { }
+
+    /// <summary><c>TAiData::TAiData</c>: the values of a game whose definitions have no <c>AIData</c> block (synthetic fixtures); side data and build lists are empty.</summary>
+    public static AiData Defaults { get; } = new() { SupplyCenterSafeRadius = Fixed.FromInt(250), RebuildDelaySeconds = DefaultRebuildWait };
+
+    /// <summary><c>TAiData::TAiData</c>: <c>m_rebuildDelaySeconds(10)</c>.</summary>
+    private const int DefaultRebuildWait = 10;
 
     public Fixed StructureSeconds { get; private init; }
     public Fixed TeamSeconds { get; private init; }
