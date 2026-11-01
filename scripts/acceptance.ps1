@@ -321,7 +321,8 @@ function Resolve-Content {
     throw "No content directory found (looked at: $(($candidates | ForEach-Object { $_[0] }) -join '; ')).`nDevelopers: pwsh scripts\dev-content.ps1; otherwise pwsh scripts\install.ps1, or pass -ContentDir/-InstallDir."
 }
 $content = Resolve-Content
-$commit = (& git -C $repo rev-parse --short=10 HEAD 2>$null)
+$haveGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
+$commit = if ($haveGit) { (& git -C $repo rev-parse --short=10 HEAD 2>$null) } else { $null }
 if (-not $commit) { $commit = 'unknown' } elseif (& git -C $repo status --porcelain 2>$null) { $commit += '-dirty' }
 
 $script:clientDll = $null
