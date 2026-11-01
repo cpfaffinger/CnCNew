@@ -379,6 +379,7 @@ public sealed partial class ScriptEngine
     /// </summary>
     public void Observe(IReadOnlyList<CnCNew.Simulation.Events.SimEvent> events)
     {
+        _madeByFactories.Clear();
         foreach (var item in events)
         {
             ObserveExtended(item);

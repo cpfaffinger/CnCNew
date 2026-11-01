@@ -220,6 +220,9 @@ public sealed partial class ScriptEngine
                 foreach (var team in _teams.Values)
                     if (team.Members.Contains(item.Entity.Value) && _program.FindTeam(team.Prototype) is { OnUnitDestroyedScript.Length: > 0 } dying) _pendingTeamScripts.Add((team.Id, dying.OnUnitDestroyedScript));
                 break;
+            case CnCNew.Simulation.Events.SimEventKind.ProductionCompleted:
+                _madeByFactories.Add((checked((int)item.Value), item.Entity.Value));
+                break;
             case CnCNew.Simulation.Events.SimEventKind.EntitySpawned:
                 if (_world.FindEntity(item.Entity) is { } produced)
                 {

@@ -1,5 +1,6 @@
 using CnCNew.Data.World;
 using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
@@ -38,6 +39,9 @@ public sealed partial class ScriptEngine
     }
 
     private readonly List<TeamBuildOrder> _teamBuilds = [];
+
+    /// <summary>The units the factories finished in the world step being observed, until their objects appear (<see cref="SimEventKind.ProductionCompleted"/> comes before the spawn). Not state: empty between two steps.</summary>
+    private readonly List<(int Template, uint Factory)> _madeByFactories = [];
 
     private bool TryExecuteExtendedAction(MapScriptAction action)
     {
@@ -381,13 +385,20 @@ public sealed partial class ScriptEngine
         return null;
     }
 
-    /// <summary><c>AIPlayer::onUnitProduced</c>: a freshly produced unit of a building team's owner joins the team that still wants its type; the team activates (<c>setActive</c>) once every minimum is met.</summary>
+    /// <summary>
+    /// <c>AIPlayer::onUnitProduced</c>: a unit that came out of a factory joins the team whose order waits for that type at that factory (<c>m_factoryID</c>); the team activates (<c>setActive</c>) once
+    /// every minimum is met. What a script creates comes out of no factory and fills no order.
+    /// </summary>
     private void JoinProducedUnit(Entity unit)
     {
+        var made = _madeByFactories.FindIndex(entry => entry.Template == unit.Template.Index);
+        if (made < 0) return;
+        var factory = _madeByFactories[made].Factory;
+        _madeByFactories.RemoveAt(made);
         if (_teamBuilds.Count == 0) return;
         // "factory could be NULL at the start of the game": what a session placed before its first tick came out of no factory and fills no order.
         if (unit.SpawnTick <= 0) return;
-        var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Type == unit.Template.Name
+        var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Factory == factory && candidate.Type == unit.Template.Name
             && _teams.TryGetValue(candidate.TeamId, out var team) && team.Owner == unit.Owner);
         if (order is null || !_teams.TryGetValue(order.TeamId, out var joined)) return;
         order.Joined++;

@@ -242,6 +242,19 @@ static partial class Tests
         Check.That(CountOf(session, "BetaDozer") == 2, "A team at its limit is not built again.");
     }
 
+    /// <summary><c>AIPlayer::onUnitProduced</c> matches an order by its factory: what a script creates while the unit is being trained fills no order, however alike the two are.</summary>
+    public static void ATeamTakesTheUnitOfItsFactory()
+    {
+        var session = StartAiMission([AtStart(EnableUnits, Scr.Do("BUILD_TEAM", Scr.Team("Gang")))], objects: [Placed("BetaCenter", 300m, 100m, "teamB", "Hq")],
+            teams: [AiTeam("Gang", "BetaSoldier", 1, priority: 2)], files: AiMissionFiles());
+        Run(session, session.Frames(6));
+        Check.That(session.World.Templates.TryGet("BetaSoldier", out var soldier), "The fixture has the soldier.");
+        var stray = session.World.RequestSpawn(soldier.Index, ComputerOfAiMission, Fixed.FromInt(100), Fixed.FromInt(300), Fixed.Zero, Fixed.Zero);
+        Run(session, session.Frames(300));
+        var gang = session.Engine.TeamInstances.Single(team => team.Prototype == "Gang");
+        Check.That(gang.Created && gang.Members.Count == 1 && !gang.Members.Contains(stray.Value) && CountOf(session, "BetaSoldier") == 2, $"The team has the trained soldier, not the other one ({gang.Members.Count}, {CountOf(session, "BetaSoldier")}).");
+    }
+
     /// <summary>
     /// <c>doTeamBuilding</c> of <c>AIPlayer</c> looks at the queues every five seconds (<c>AISkirmishPlayer</c> every two) and its team timer has no cap of three seconds; <c>SET_BASE_CONSTRUCTION_SPEED</c> sets it.
     /// </summary>
