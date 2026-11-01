@@ -400,12 +400,6 @@ static partial class Tests
         // -- other numbers that happen to be two to the sixteenth or use these shifts
         new("Data/World/SingleBits.cs", RuleScaleLiteral, "((exponent * 19728) >> 16)", "log10(2) as 19728 / 2^16 in the exact decimal expansion of a single"),
         new("Presentation/Input/CommandButtons.cs", RuleScaleLiteral, "NotQueueable = 0x10000,", "a bit of the command button options"),
-        new("Client.Stride/Layers/Fx/FxBuilder.cs", RuleScaleLiteral, "value = unchecked((value ^ (value >> 16)) * 0x45D9F3Bu);", "a round of an integer hash of the client's particle seeds"),
-        new("Client.Stride/Layers/Fx/FxGeometry.cs", RuleScaleLiteral, "public const int DefaultMaxQuads = 65536;", "the capacity of a buffer"),
-        new("Images/DdsReader.cs", RuleScaleLiteral, "BinaryPrimitives.ReadUInt64LittleEndian(block) >> 16", "the 48 index bits of a DXT5 alpha block behind its two end points"),
-        new("Presentation/Fx/SnowField.cs", RuleScaleLiteral, "public const int MaxFlakes = 65536;", "the capacity of the snow field"),
-        new("Presentation/Fx/SnowField.cs", RuleScaleLiteral, "_startingHeights[index] = (state >> 8) / (float)(1 << 24) * settings.BoxDimensions;", "a 24-bit random fraction of a client-side generator"),
-        new("Presentation/Terrain/TerrainClouds.cs", RuleScaleLiteral, "target[at++] = (byte)((top * (256 - fractionY) + bottom * fractionY) >> 16);", "two blends of 8 fraction bits of a texel"),
         new("SimTool/PerfCommand.cs", RuleScaleLiteral, "private ulong[] _words = new ulong[65536];", "the first size of a buffer"),
         new("Data.Tests/Program.cs", RuleScaleLiteral, "9999999.5f, 16777216f, 16777217f,", "singles around the end of the exact integers (2^24), test values of the exact decimal expansion"),
         new("Game.Tests/DeterminismTests.cs", RuleScaleLiteral,"((int)((state >> 16) & 0xFFFF) - 0x8000) / 256f", "bits of a test random number"),
