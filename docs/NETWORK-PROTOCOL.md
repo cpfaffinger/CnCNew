@@ -1356,3 +1356,11 @@ are the match, which is what a lockstep without a simulating server can know.
 
 The diagnosis of `docs/NETWORK-DIAGNOSTICS.md` needs two packages to compare: a client dropped by the majority writes one, the others do not, so `NetTool desync-diff` is a tool for a
 desync of the match. `scripts/check-net-robustness.ps1` plays its corrupted match with two players for that reason.
+
+## 25. A room states the rules of its map (F-95) - protocol version 8
+
+A map may bring a `map.ini`, and the fingerprint of a match is then not the one of the handshake. The server has no game data and cannot work it out, so `RoomSettings` carries it: `MapRules`, at most
+`MaxIdBytes`, the last field of the settings, empty for "the handshake's". The host's client states `GameData.FingerprintFor(map)`, `ToDescription` takes it in place of the handshake's value, and every
+client compares the description with its own `FingerprintFor` when it builds the match: a member with another `map.ini` is refused by its own client (`Resolve`) instead of playing into a desync, and a
+host that states a wrong value makes every client refuse. The field makes the server keep nothing new: it is one string of the settings, under the bound the settings had. The handshake stays the
+comparison of the base data, so a member need not have compiled anything to enter a room.

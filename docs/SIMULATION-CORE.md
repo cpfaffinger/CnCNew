@@ -4648,3 +4648,19 @@ No run of the manifest places a beacon. **Expected in the manifests:** `replayFo
 Every side of a mission that is neither human nor the viewer has an `AIPlayer` now (`MissionSession`, `ScriptAiSetup.Skirmish` tells it from an `AISkirmishPlayer`): the base from the map's build list, teams trained at factories, gatherers, the skill set, `SET_BASE_CONSTRUCTION_SPEED`. There is one way to a team; the VM's own loop is gone. The source contradicted three assumptions of the port: `AIPlayer` starts with unit production off, `BUILD_TEAM` does nothing for a human, and a mission's players begin with `DefaultStartingCash` (10,000 credits, the port gave 0: F-93). `docs/SKIRMISH-AI-ORIGINAL.md` §10 has what still differs.
 
 **Measured:** `CampaignTool drive` victory 24/24 and defeat 24/24 (as before), `audit --ticks 900` 24 of 24 identical, end probes 13/24 and 15/24, `audit --ticks 7200` 24 of 24, reachability clean 24/24 and 24/24. In the reference manifest exactly the 27 mission runs move, in their hashes; no skirmish run and no outcome moves. `MissionSnapshot` version **4**. A mission costs what its armies cost: `MD_CHI02` 2.1 to 4.1 ms per tick. **Balance of a mission with its armies and 10,000 credits is not judged; no human has played one.**
+
+## 74. Every map brings its rules (F-95)
+
+`GameLogic::startNewGame` loads the `map.ini` beside a map over the base data (`INI_LOAD_CREATE_OVERRIDES`) before the world is built. The port did this for a user's map only and kept a shipped map on the base data; with the patch
+83 of the 150 maps carry one. Now there is one way for all of them and no list of maps: `MapRules` (`CnCNew.Game.Data`) finds the overlay beside the map, compiles the definitions with it on top and gives the fingerprint, which
+rests on the base fingerprint and the bytes of the file, so it is known without compiling and a machine with another `map.ini` refuses the match, the save and the replay. `GameData.ForMap` builds the data of a map (the last two are
+kept, because the shell map stays behind the menus; asked of a map's data it answers from the base, so the call is safe everywhere), and every way into a world goes through it: `LiveMatch.Create`, `Build` (a joined match),
+`Restore`, `LiveMission.Create`, `MissionContext.RulesOf` (a mission's load, restore and save check), `ReplayPlayback`. The tools measure what is played: `SimContext.ForMap`, `MapCatalogs` for `CampaignTool`, `ai-match` and `perf`, `MatchMap.Rules` for `HeadlessClient`.
+
+On a server the handshake stays the comparison of the base data; `RoomSettings.MapRules` (protocol 8, `docs/NETWORK-PROTOCOL.md` section 25) states the fingerprint of the match, which the server, having no game data, passes on.
+
+The input manifest records `rulesSha256` per map that has a `map.ini` (83 of 150 entries moved). `SimTool map-rules` compiles every overlay of the content (step `map-rules`, gate of `data`, tier 4): 83 of 83 without a note, 2.1 to 3.9 s each - the cleaning of `MapRulesText` is for strangers' files and touches nothing the game ships.
+
+**What moved** (reference manifest, one commit, one cause): 34 of the 50 runs. 22 of the 27 mission runs in their hashes, 4 of them in the number of objects and 3 in shots; every outcome and end tick kept. The ten skirmish runs on Armored Fury, Bitter Winter, Fortress Avalanche and Iron Dragon only by the fingerprint (`commandStreamSha256`, `snapshotSha256`): their end hashes stayed, because those `map.ini` hold weather and light, not rules. Reference match (no map) a stalemate at tick 108,000, `556023EBE5E461C2` / `79AF22AB1CF269A1`, stress test `9EE9F730D124C3BD` / `5611A72EDB7D52F2`, 12 of 16 pairings decided - unchanged.
+
+**Limit:** a match keeps the rules it began with; a `map.ini` changed on disk counts from the next match.
