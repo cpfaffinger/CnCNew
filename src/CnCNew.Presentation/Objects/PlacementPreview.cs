@@ -40,4 +40,17 @@ public static class PlacementPreview
             1f, 1f, ModelConditionSet.Empty, selections, null, null, false, false,
             FlashTint: ghost.IsValid ? Vector3.Zero : IllegalTint, Opacity: Opacity);
     }
+
+    /// <summary><c>ControlBar::showRallyPoint</c>: the object <c>RallyPointMarker</c> at the rally point of the selected factory, in the player's colour, blowing down wind.</summary>
+    public static DrawableInstance? RallyMarker(ObjectVisualCatalog catalog, Vector3 position, float downwindAngle, PlayerId owner, TeamColors? colors)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (!catalog.TryGet("RallyPointMarker", out var visual) || !visual.HasModel) return null;
+        return new DrawableInstance(
+            EntityId.Invalid, DrawableInstance.PlacementPreviewIndex, visual, position, downwindAngle, owner, colors?.Of(owner) ?? TeamColors.Neutral,
+            1f, 1f, ModelConditionSet.Empty, FrameProjector.Select(visual, ModelConditionSet.Empty), null, null, false, false);
+    }
+
+    /// <summary><c>DownwindAngle</c> of <c>GameData.ini</c>.</summary>
+    public static float DownwindAngle(CnCNew.Data.Definitions.CompiledDefinitionGraph graph) => Terrain.WorldDefinitionReader.Real(Terrain.WorldDefinitionReader.GameData(graph), "DownwindAngle");
 }

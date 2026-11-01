@@ -53,6 +53,9 @@ public sealed class GameInputController
     public CameraInputController Camera { get; }
     public CommandBarModel? CommandBar { get; }
 
+    /// <summary>A key pressed a button of the command bar, or found it disabled (<c>HotKeyManager::executeHotKey</c>: <c>GUIClick</c> or <c>GUIClickDisabled</c>).</summary>
+    public event Action<bool>? CommandHotkeyPressed;
+
     /// <summary>Metas for the UI layer (options menu, pause, chat, diplomacy, screenshots, control bar toggle, ...), in the order they fired.</summary>
     public event Action<MetaAction>? UiRequest;
 
@@ -181,7 +184,8 @@ public sealed class GameInputController
             var buttons = bar.Build(world, Selection);
             var lower = char.ToLowerInvariant(character);
             if (stopped && buttons.Slots.FirstOrDefault(button => button?.Hotkey == lower) is { Button.Kind: GuiCommandKind.Stop }) return;
-            bar.ActivateHotkey(world, buttons, character, Commands, out _);
+            var activation = bar.ActivateHotkey(world, buttons, character, Commands, out _);
+            if (activation != HotkeyActivation.None) CommandHotkeyPressed?.Invoke(activation == HotkeyActivation.Activated);
         }
     }
 

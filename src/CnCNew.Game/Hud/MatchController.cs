@@ -571,6 +571,7 @@ public sealed partial class MatchController
 
         var selected = ImmutableArray.CreateBuilder<UnitMarker>();
         var rally = ImmutableArray.CreateBuilder<RallyPointMarker>();
+        var rallyPlaces = ImmutableArray.CreateBuilder<Vector3>();
         foreach (var id in Input.Selection.Selected)
         {
             if (world.FindEntity(id) is not { } entity) continue;
@@ -585,9 +586,13 @@ public sealed partial class MatchController
                 if (state.Bool("hasRally") && state.Values.TryGetValue("rallyX", out var rawX) && rawX is Fixed rallyX
                     && state.Values.TryGetValue("rallyY", out var rawY) && rawY is Fixed rallyY
                     && view.TryWorldToScreen(OnGround(new Vector2((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal())), out var rallyScreen))
+                {
                     rally.Add(new RallyPointMarker(entity.Id, rallyScreen));
+                    rallyPlaces.Add(OnGround(new Vector2((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal())));
+                }
             }
         }
+        Match.RallyMarkers = rallyPlaces.ToImmutable();
 
         // Standing attack, attack-move and guard orders of the selected own units: a line to the goal (the original draws none; kept as an aid, for the selection only).
         var orderLines = ImmutableArray.CreateBuilder<OrderLine>();

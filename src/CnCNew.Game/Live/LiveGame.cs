@@ -96,12 +96,13 @@ public abstract class LiveGame
         _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
-        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed);
+        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed };
         Fx.ProjectileStreams = () => Attached.ProjectileStreams;
         // Bones and muzzles are those of the object's current model (the attached effects know which state every object shows).
         _fxView = new SimulationFxWorldView(world,
             (entity, bone) => _fxView!.GetPose(entity) is { } pose ? Attached.BonePosition(entity, bone, pose) : null,
-            (entity, _) => _fxView!.GetPose(entity) is { } pose ? Attached.MuzzlePosition(entity, world.FindEntity(entity)?.CurrentWeaponSlot ?? 0, pose) : null);
+            (entity, _) => _fxView!.GetPose(entity) is { } pose ? Attached.MuzzlePosition(entity, world.FindEntity(entity)?.CurrentWeaponSlot ?? 0, pose) : null,
+            (entity, _) => _fxView!.GetPose(entity) is { } pose ? Attached.MuzzleTransform(entity, world.FindEntity(entity)?.CurrentWeaponSlot ?? 0, pose) : null);
         Frame = RenderFrame.Empty;
         SyncAfterTick(default);
         Fog.Snap();
@@ -244,9 +245,23 @@ public abstract class LiveGame
     /// <see cref="PlacementGhost"/>, if there is one and its template has a model.
     /// </summary>
     public RenderFrame ObjectFrame
-        => PlacementGhost is { } ghost && PlacementPreview.Create(Data.Visuals, ghost, Human, Colors) is { } preview
-            ? Frame with { Drawables = Frame.Drawables.Add(preview) }
-            : Frame;
+    {
+        get
+        {
+            var frame = PlacementGhost is { } ghost && PlacementPreview.Create(Data.Visuals, ghost, Human, Colors) is { } preview
+                ? Frame with { Drawables = Frame.Drawables.Add(preview) }
+                : Frame;
+            if (RallyMarkers.IsDefaultOrEmpty) return frame;
+            _downwindAngle ??= PlacementPreview.DownwindAngle(Data.Graph);
+            var markers = RallyMarkers.Select(place => PlacementPreview.RallyMarker(Data.Visuals, place, _downwindAngle.Value, Human, Colors)).OfType<CnCNew.Presentation.Objects.DrawableInstance>();
+            return frame with { Drawables = frame.Drawables.AddRange(markers) };
+        }
+    }
+
+    /// <summary>The rally points of the selected factories (<c>ControlBar::showRallyPoint</c>), set by the HUD.</summary>
+    public ImmutableArray<Vector3> RallyMarkers { get; set; } = [];
+
+    private float? _downwindAngle;
     public long Tick => World.Tick;
 
     /// <summary>

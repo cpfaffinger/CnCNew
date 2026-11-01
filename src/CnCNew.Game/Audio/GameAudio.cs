@@ -86,6 +86,7 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
         hud.Input.Selection.SelectionChanged += OnSelectionChanged;
         hud.CommandFeedbackObserved += OnCommandFeedback;
         hud.ButtonClicked += OnButtonClicked;
+        hud.Input.CommandHotkeyPressed += OnCommandHotkey;
         hud.Messages.BeaconPlaced += OnBeaconPlaced;
         Director.StartMatchMusic(new LiveAudioView(live).HumanSide);
     }
@@ -98,6 +99,7 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
             hud.Input.Selection.SelectionChanged -= OnSelectionChanged;
             hud.CommandFeedbackObserved -= OnCommandFeedback;
             hud.ButtonClicked -= OnButtonClicked;
+            hud.Input.CommandHotkeyPressed -= OnCommandHotkey;
             hud.Messages.BeaconPlaced -= OnBeaconPlaced;
         }
         if (_live is not null) Director.StopMusic();
@@ -165,6 +167,12 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
     public void SetAmbientPaused(bool paused) => Director.SetAmbientPaused(paused);
 
     private void OnButtonClicked() => PlayHook("GUIClickSound");
+
+    private void OnCommandHotkey(bool enabled)
+    {
+        if (enabled) OnButtonClicked();
+        else PlayUi("GUIClickDisabled");
+    }
 
     /// <summary><c>GameLogic::onPlaceBeacon</c>: <c>BeaconPlaced</c> for the player and its allies, <c>EVA_BeaconDetected</c> for the allies.</summary>
     private void OnBeaconPlaced(bool fromAlly)

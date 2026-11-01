@@ -189,7 +189,8 @@ public sealed class CommandModeController
             if (armed.Any(SimulationQueries.CanMove) || armed.Any(world.PassesAttackToSlaves)) return Hint(ContextAction.AttackObjectAfterMoving, CursorKind.OutRange);
             return Hint(ContextAction.Invalid, CursorKind.GenericInvalid);
         }
-        if (target is null && ground is not null && own.All(entity => SimulationQueries.ProductionOf(entity) is not null))
+        // canSelectedObjectsDoAction(ACTIONTYPE_SET_RALLY_POINT): the kind of object, not its production queue. The patch gives many a unit a queue for its own upgrades, and those are to move.
+        if (target is null && ground is not null && own.All(entity => entity.Template.IsKindOf("AUTO_RALLYPOINT")))
             return Hint(ContextAction.SetRallyPoint, CursorKind.SetRallyPoint);
         if (target is not null) return Hint(ContextAction.Select, CursorKind.Select);
         if (ground is not null && movers.Count > 0) return Hint(ContextAction.Move, CursorKind.Move);
@@ -326,7 +327,7 @@ public sealed class CommandModeController
     {
         var (x, y) = (SimulationQueries.ToFixed(ground.X), SimulationQueries.ToFixed(ground.Y));
         var any = false;
-        foreach (var producer in producers.Where(entity => SimulationQueries.ProductionOf(entity) is not null))
+        foreach (var producer in producers.Where(entity => entity.Template.IsKindOf("AUTO_RALLYPOINT") && SimulationQueries.ProductionOf(entity) is not null))
             any |= Issue((sequence, tick) => new SetRallyPointCommand(Player, sequence, tick, producer.Id, x, y)).Accepted;
         if (any) Feedback(FeedbackKind.RallyMarker, world, ground, EntityId.Invalid, Settings.MarkerFrames);
         return any;

@@ -68,16 +68,6 @@ public static class HudOverlayRenderer
             foreach (var hint in overlay.OrderHints)
                 DrawOrderHint(commands, hint);
 
-        foreach (var rally in overlay.RallyPoints)
-        {
-            var x = rally.Screen.X;
-            var y = rally.Screen.Y;
-            commands.Add(new UiLineDraw(x, y, x, y - 22f, 2f, RallyColor));
-            commands.Add(new UiLineDraw(x, y - 22f, x + 14f, y - 17f, 2f, RallyColor));
-            commands.Add(new UiLineDraw(x + 14f, y - 17f, x, y - 12f, 2f, RallyColor));
-            Ring(commands, rally.Screen, 4f, 1.5f, RallyColor, 10);
-        }
-
         foreach (var marker in overlay.Selected)
         {
             var color = marker.IsOwn ? Own : marker.IsEnemy ? Enemy : Neutral;
