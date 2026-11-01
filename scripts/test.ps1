@@ -111,7 +111,7 @@ $stepsOfArea = @{
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
     game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins' }
-    scripts      = @{ affected = @();                                       gate = @() }
+    scripts      = @{ affected = 'setup';                                   gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'video', 'presentation', 'sim', 'net'
                       gate     = 'data-content', 'compat', 'verify', 'presentation-content', 'inputs', 'quick', 'game' }
@@ -236,6 +236,7 @@ $steps = @(
     New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
     New-Step 'client-package' 'The self-contained Windows package: layout, no original data, the packaged patcher and client run' (Script-Run 'check-client-package') -Content -Environment
     New-Step 'skins'        'The two interface skins: a person by script switches to the modern skin in the window and walks the shell; the readability of both skins with the GDI font' (Script-Run 'check-skins') -Content -Environment
+    New-Step 'setup'        'The setup assistant under Windows PowerShell 5.1 on an imitated empty machine: what it names as missing, the game through a Steam library' (Script-Run 'check-setup')
     New-Step 'patch-layer'  'The patched content: its compatibility baseline, a deterministic match, two clients on a server and a client of the game without the patch refused' (Script-Run 'check-patch-layer') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content

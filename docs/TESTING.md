@@ -267,6 +267,7 @@ never claimed by a test run.
 
 Since Phase 30 tier 4 has four more steps, and the gates of `client`, `game` and `net` one or two of them:
 
+- `setup` (`scripts/check-setup.ps1`, seconds, tier 2 of `scripts`): the launcher under Windows PowerShell 5.1 with a PATH of Windows alone and an empty profile: it stays plain ASCII, names .NET, PowerShell 7 and Git as missing and finds the game through a Steam library file. `-Full` walks the whole way from a clone in an empty profile with real downloads (about 11 minutes; not a step of a tier).
 - `diagnostics` (`scripts/check-diagnostics.ps1`, about half a minute, gate of `client`, `game` and `net`): the client and the server fail on purpose
   (`--crash-test`) and must leave a crash report and a log; their support bundles must hold the report, the log, the desync package and the configuration and
   never a key, a saved game, the ban file or a file of the game (every file compared with the 24,870 files of the master installation and its export).
