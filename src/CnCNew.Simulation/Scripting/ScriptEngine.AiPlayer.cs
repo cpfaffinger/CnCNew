@@ -1877,7 +1877,8 @@ public sealed partial class ScriptEngine
                 }
             }
         }
-        Diagnose($"AI: no legal place for '{template.Name}' near the supplies");
+        // "location" stays what it was without a legal place: the entry is made all the same, and the dozer's own search decides.
+        AddPriorityBuild(state, template.Name, x, y);
     }
 
     /// <summary><c>Player::addToPriorityBuildList</c>: a new entry at the head of the build list, to be built once.</summary>
