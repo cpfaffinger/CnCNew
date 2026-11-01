@@ -187,7 +187,7 @@ public sealed partial class SimulationWorld
         if (weaponIndex < 0) return true;
         var weapon = _templates.Weapons[weaponIndex];
         if (IsContactWeapon(weapon) || IsOnTurningTurret(source, slot)) return true;
-        if (ai.IsCoveringFrame) return false;
+        if (ai.IsCoveringTurn) return false;
         var (ownX, ownY, _) = source.FrameEnd(_tick);
         if (x == ownX && y == ownY) return true;
         var bearing = FixedTrig.Atan2(y - ownY, x - ownX);

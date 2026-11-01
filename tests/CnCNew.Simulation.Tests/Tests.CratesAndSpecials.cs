@@ -39,6 +39,7 @@ static partial class Tests
           BuildTime = 1
         End
         Weapon CarBombTestWeapon
+          AcceptableAimDelta = 180
           PrimaryDamage = 50
           AttackRange = 30.0
           DamageType = EXPLOSION

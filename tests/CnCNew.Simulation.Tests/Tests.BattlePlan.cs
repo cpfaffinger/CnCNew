@@ -25,6 +25,7 @@ static partial class Tests
         """,
         ["Data/INI/Object/BattlePlanFixture.ini"] = """
         Weapon PlanGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 20
           AttackRange = 100.0
           DamageType = EXPLOSION

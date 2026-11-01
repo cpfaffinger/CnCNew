@@ -39,6 +39,7 @@ static partial class Tests
           End
         End
         Weapon WindupGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 1
           AttackRange = 150.0
           DamageType = EXPLOSION
@@ -48,6 +49,7 @@ static partial class Tests
           PreAttackType = PER_SHOT
         End
         Weapon AttackWindupGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 1
           AttackRange = 150.0
           DamageType = EXPLOSION
@@ -57,6 +59,7 @@ static partial class Tests
           PreAttackType = PER_ATTACK
         End
         Weapon ClipWindupGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 1
           AttackRange = 150.0
           DamageType = EXPLOSION
