@@ -8,6 +8,7 @@
 
     -Suite                THE WAY TO DO THE ACCEPTANCE (Start-Acceptance.cmd): a window leads through the packages one after the other, starts the game itself for every scene and asks for every
                           named goal: reached, not reached (with a comment) or skip. Progress is saved after every scene; stop whenever you like and start it again. At the end the report lies on the desktop.
+    -Everything           asks every goal again, also what a person accepted before (scripts/acceptance/accepted.json).
     -Probe <scene,...|all> no human: starts the window of these scenes for -ProbeSeconds, says which ended by themselves and keeps a picture of each under -OutDir\probe.
     -List                 groups and items with id, minutes and totals; starts nothing.
     (no switch)           guided run through all open items that need motion or sound: one window per scene (60 Hz), then one key per item.
@@ -73,6 +74,7 @@ param(
     [switch]$SelfTest,
     [string[]]$Probe,
     [int]$ProbeSeconds = 40,
+    [switch]$Everything,
     [int]$TimeoutSeconds = 1500
 )
 
@@ -167,7 +169,7 @@ if ($SelfTest) {
     $self = $PSCommandPath
     $problems = @()
     function Invoke-Self([string[]]$Arguments) { $output = & pwsh -NoProfile -File $self @Arguments 2>&1; [pscustomobject]@{ Code = $LASTEXITCODE; Text = ($output | Out-String) } }
-    $common = @('-ResultsPath', $results, '-NoWindow', '-NoBuild', '-ContentDir', $work)
+    $common = @('-ResultsPath', $results, '-NoWindow', '-NoBuild', '-ContentDir', $work, '-Everything')
     # p, f with a note, s, r (asks the same item again), p, c (asks again), f, q
     $first = Invoke-Self (@('-Group', 'UNIT', '-Answers', 'p,f:too dark; and too fast,s,r,p,c,f:second note,q') + $common)
     if ($first.Code -ne 0) { $problems += "first run: exit code $($first.Code)`n$($first.Text)" }
@@ -234,6 +236,15 @@ function Save-Results($Data) {
     [IO.File]::WriteAllText($temporary, ($Data | ConvertTo-Json -Depth 8), $utf8)
     Move-Item -LiteralPath $temporary -Destination $ResultsPath -Force
 }
+# What a person accepted stays accepted (scripts/acceptance/accepted.json, scripts/acceptance-accept.py): the suite asks only what is open. -Everything asks all of it again.
+$settled = @{}
+$acceptedFile = Join-Path $PSScriptRoot 'acceptance\accepted.json'
+if (-not $Everything -and (Test-Path -LiteralPath $acceptedFile)) {
+    $accepted = Get-Content -LiteralPath $acceptedFile -Raw | ConvertFrom-Json
+    foreach ($id in $accepted.accepted) { $settled[$id] = 'accepted' }
+    foreach ($property in $accepted.byMachine.PSObject.Properties) { $settled[$property.Name] = 'proved by a program' }
+}
+
 function Get-Latest($Data) { $map = @{}; foreach ($entry in $Data.entries) { $map[$entry.id] = $entry }; $map }
 
 # ------------------------------------------------------------------------------------------------------------------ -Report
@@ -244,7 +255,7 @@ if ($Report) {
     $lines = [Collections.Generic.List[string]]::new()
     $by = { param($verdict) @($catalogue.items | Where-Object { $latest.ContainsKey($_.id) -and $latest[$_.id].verdict -eq $verdict }) }
     $passed = & $by 'pass'; $failed = & $by 'fail'; $skipped = & $by 'skip'
-    $open = @($catalogue.items | Where-Object { -not $latest.ContainsKey($_.id) })
+    $open = @($catalogue.items | Where-Object { -not $latest.ContainsKey($_.id) -and -not $settled.ContainsKey($_.id) })
     $commits = @($data.entries.commit | Sort-Object -Unique) -join ', '
     $lines.Add('# CnCNew - acceptance report')
     $lines.Add('')
@@ -253,6 +264,10 @@ if ($Report) {
     $lines.Add('')
     $lines.Add("**$($catalogue.items.Count) items: $($passed.Count) passed, $($failed.Count) failed, $($skipped.Count) skipped, $($open.Count) open.** The column 'pre-check' is the agent's reading of still pictures and numbers - not a human verdict.")
     $lines.Add('')
+    if ($settled.Count -gt 0) {
+        $lines.Add("Not asked: $(@($settled.Values | Where-Object { $_ -eq 'accepted' }).Count) goals a person accepted earlier, $(@($settled.Values | Where-Object { $_ -ne 'accepted' }).Count) proved by a program (``scripts/acceptance/accepted.json``). ``-Everything`` asks them again.")
+        $lines.Add('')
+    }
     $lines.Add("Matches of the suite ran with the rules ``$($catalogue.defaults.rules)``: everything is built four times as fast. Staged scenes keep the real build times.")
     $lines.Add('')
     $lines.Add('## Packages')
@@ -700,13 +715,22 @@ function Show-Scene([string]$Name, [int]$Rate, $Entries, [switch]$Both) {
 # ------------------------------------------------------------------------------------------------------------------ -Suite
 
 # The acceptance a person can simply start: packages one after the other, every scene started by itself, every named goal asked for. Results go into the same file as the guided run.
+# A goal failed on an older commit is open: what failed may be fixed. On this commit it was answered.
+function Test-Answered($Latest, [string]$Id) {
+    if (-not $Latest.ContainsKey($Id)) { return $false }
+    $verdict = $Latest[$Id]
+    if ($verdict.verdict -eq 'pass') { return $true }
+    if ($verdict.verdict -eq 'fail') { return $verdict.commit -eq $commit }
+    $verdict.verdict -eq 'skip' -and -not $IncludeSkipped
+}
+
 function Get-SuiteSteps($Latest) {
     $steps = [Collections.Generic.List[object]]::new()
     $numbers = @{}
     foreach ($package in $catalogue.packages) {
         $members = @($catalogue.items | Where-Object { ($package.groups -contains $_.group) -and ($IncludeOptional -or -not (Get-Prop $_ 'optional')) })
         $open = @($members | Where-Object {
-                -not ($Latest.ContainsKey($_.id) -and ($Latest[$_.id].verdict -in 'pass', 'fail' -or ($Latest[$_.id].verdict -eq 'skip' -and -not $IncludeSkipped)))
+                -not $settled.ContainsKey($_.id) -and -not (Test-Answered $Latest $_.id)
             })
         foreach ($sceneName in @($open | ForEach-Object { $_.scene } | Select-Object -Unique)) {
             $entries = @($open | Where-Object scene -eq $sceneName)
@@ -1018,7 +1042,7 @@ $data = Read-Results
 $latest = Get-Latest $data
 $selected = Select-Items
 $candidates = @($selected | Where-Object {
-        $done = $latest.ContainsKey($_.id) -and ($latest[$_.id].verdict -in 'pass', 'fail' -or ($latest[$_.id].verdict -eq 'skip' -and -not $IncludeSkipped))
+        $done = $settled.ContainsKey($_.id) -or (Test-Answered $latest $_.id)
         if ($Item) { $true } else { (-not $done) -and ((Test-Live $_) -ne [bool]$Stills) -and ($IncludeOptional -or -not (Get-Prop $_ 'optional')) }
     })
 if ($candidates.Count -eq 0) {
