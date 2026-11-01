@@ -104,8 +104,8 @@ public sealed partial class SimulationWorld
         var (minX, minY, maxX, maxY) = terrain.BoundsOf(area);
         var (centerX, centerY) = (Fixed.FromInt(minX + maxX) / Fixed.FromInt(2), Fixed.FromInt(minY + maxY) / Fixed.FromInt(2));
         // The largest distance is the diagonal of the bounding region.
-        var (width, depth) = ((long)(maxX - minX), (long)(maxY - minY));
-        var reach = SquaredReach.Of(Fixed.Sqrt(Fixed.FromInt(width * width + depth * depth)));
+        var (spanX, spanY) = ((long)(maxX - minX), (long)(maxY - minY));
+        var reach = SquaredReach.Of(Fixed.Sqrt(Fixed.FromInt(spanX * spanX + spanY * spanY)));
         foreach (var entity in _entities.Values.ToArray())
         {
             var (dx, dy) = (entity.X - centerX, entity.Y - centerY);
