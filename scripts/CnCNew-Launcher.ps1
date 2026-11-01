@@ -103,6 +103,7 @@ function Set-Row([string]$Id, [string]$State, [string]$Detail) {
         $row.Item.SubItems[2].Text = $Detail
         $row.Item.ForeColor = [Drawing.Color]::FromName($stateColors[$State])
         $row.Item.EnsureVisible()
+        [Windows.Forms.Application]::DoEvents()
     } elseif ($Unattended -or $CheckOnly) {
         Write-Host ('{0,-8} {1,-44} {2}' -f $State, $row.Title, $Detail)
     }
@@ -648,7 +649,7 @@ function Update-Buttons {
         $warning = (Get-Row 'sound').State -eq 'Warning'
         Say ("Ready. Everything is set up for version $(Get-Commit)." + $(if ($warning) { "`nThis PC has no sound device: skip the goals about sound." } else { '' }))
     } else {
-        $text = 'Everything else is automatic and takes about 20 minutes. You can stop and go on later.'
+        $text = 'Everything else is automatic and takes 15 to 30 minutes. You can stop and go on later.'
         if ($missing.Count -gt 0) { $text = "Set up will also install, each from its maker and under its own licence: $($missing -join ', '). Windows may ask for permission.`n$text" }
         Say $text
     }
