@@ -4640,3 +4640,5 @@ Two campaign maps use the action: `MD_CHI04` lowers `Fire Destruction Area` to 0
 - The world does not know whether a match has several humans: `isInMultiplayerGame` stands in the client (`docs/GAME-HUD.md` §23). A command from a scripted client of a local game would work; the relay does not care.
 
 No run of the manifest places a beacon. **Expected in the manifests:** `replayFormatVersion` and every `commandStreamSha256` (the versions stand in the stream's header), the input manifest in the catalogues (`FactionInfo`, `TemplateCatalog`), the fingerprints that follow the definition graph; no result quantity.
+
+**After the rest of the register (Phase 55):** the same results: reference match a stalemate at tick 108,000, `556023EBE5E461C2` / `79AF22AB1CF269A1`, stress test as above, 12 of 16 pairings decided, no outcome moved. World fingerprint `44AF2CD1B47BFA15`; compatibility baseline **662** entries; `CommandTypes.Version` **22**, replay **21** (`RemoveBeaconCommand` and the placing of a beacon).
