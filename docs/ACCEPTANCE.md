@@ -8,7 +8,8 @@ verdicts, a picture page that needs nobody at the keyboard, and the reading of a
 
 ## Start here: the guided acceptance
 
-Double-click `Start-Acceptance.cmd` in the repository (or `pwsh -STA scripts/acceptance.ps1 -Suite`). You need nothing else: no document, no list of commands.
+On a machine that is not set up, double-click `CnCNew-Launcher.cmd` (or clone and go straight to `Start-Acceptance.cmd`, which leads there): it makes the game and offers **Start the acceptance** ([INSTALLATION.md](INSTALLATION.md)).
+Afterwards double-click `Start-Acceptance.cmd` in the repository (or `pwsh -STA scripts/acceptance.ps1 -Suite`). You need nothing else: no document, no list of commands.
 
 - A first window opens at once and says how this works; behind it the client is built when this commit has not been built yet (it counts the seconds, a minute or two). A second start of the same commit goes straight on.
 - A window stands on the right of the screen. It leads through **11 packages** one after the other: menus, command bar and input, the world, units, sound, a skirmish, spectator mode, a campaign mission, 60 against 30 Hz, replay and analysis, the modern skin.
@@ -91,7 +92,7 @@ are only asked with `-IncludeOptional`. The PERF items cost nothing: they are ju
 | Id | Title | Min | Window or stills | Scene |
 | --- | --- | ---: | --- | --- |
 | INST-01 | The installer creates a game directory | 3.0 | window (motion), optional | `install` |
-| INST-02 | Start through Start-CnCNew.cmd | 1.0 | window (motion, sound), optional | `start-installed` |
+| INST-02 | The launcher made the game on this PC | 1.0 | window (motion, sound) | `shell` |
 | INST-03 | Uninstalling removes only our own directory | 1.0 | window (motion), optional | `uninstall` |
 | SHELL-01 | Main menu: looks | 0.5 | window (motion) | `shell` |
 | SHELL-02 | Sub-menus: single player, difficulty, challenge, briefing | 0.5 | window (motion) | `shell-sub` |

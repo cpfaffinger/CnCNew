@@ -32,10 +32,14 @@ $keep = @{}
 function Set-Environment([hashtable]$Values) {
     foreach ($key in $Values.Keys) {
         if (-not $keep.ContainsKey($key)) { $keep[$key] = [Environment]::GetEnvironmentVariable($key) }
-        [Environment]::SetEnvironmentVariable($key, $Values[$key])
+        Set-Variable-Of $key $Values[$key]
     }
 }
-function Reset-Environment { foreach ($key in @($keep.Keys)) { [Environment]::SetEnvironmentVariable($key, $keep[$key]) }; $keep.Clear() }
+# Not [Environment]::SetEnvironmentVariable($key, $null): PowerShell passes an empty string, .NET keeps it, and an empty DOTNET_CLI_HOME makes NuGet's package folder a relative path.
+function Set-Variable-Of([string]$Name, $Value) {
+    if ($null -eq $Value) { Remove-Item -LiteralPath "Env:$Name" -ErrorAction SilentlyContinue } else { Set-Item -LiteralPath "Env:$Name" -Value $Value }
+}
+function Reset-Environment { foreach ($key in @($keep.Keys)) { Set-Variable-Of $key $keep[$key] }; $keep.Clear() }
 
 function Get-EmptyMachine([string]$Root, [string[]]$MoreOnPath) {
     $home2 = Join-Path $Root 'home'

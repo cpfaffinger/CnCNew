@@ -134,6 +134,12 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
 
 ## Quick start for users
 
+For a machine that never saw this project: clone it (or download it) and double-click **`CnCNew-Launcher.cmd`**. It needs nothing but Windows and your Steam library: it checks
+what the game needs, installs what is missing, makes the game from your Steam installation and the patch, starts it once and then leads to the acceptance, to the game and to new versions.
+For now it builds from source; later a launcher will download finished binaries. Details: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+The same by hand:
+
 ```powershell
 pwsh scripts/install.ps1                 # optional: -GameDir <Steam installation> -Target <target directory>
 pwsh scripts/uninstall.ps1               # removes the created game directory again

@@ -10,6 +10,39 @@ new game directory in another place.
 Legal framework: the user provides their own game, purchased on Steam; this project
 distributes no game files and no files generated from them. Details are in `LICENSE` and `NOTICE`.
 
+## The launcher: from a fresh clone to the game
+
+The way for a machine that never saw this project. It needs nothing but Windows, a Steam library with the game, and the network once:
+
+```bat
+git clone https://github.com/cpfaffinger/CnCNew.git C:\Games\CnCNew
+C:\Games\CnCNew\CnCNew-Launcher.cmd
+```
+
+`CnCNew-Launcher.cmd` opens a window (`scripts/CnCNew-Launcher.ps1`). It runs under the Windows PowerShell 5.1 that comes with Windows, because PowerShell 7, which every other script needs, is one of
+the things a fresh machine lacks. **It lists what it finds and asks before it installs anything:**
+
+| Row | What it checks | When it is not there |
+|---|---|---|
+| Windows | 64-bit Windows 10 or 11 | refuses |
+| Folder | the path of the checkout | refuses above 100 characters (the deepest build path is 136 more), warns in a synchronised folder |
+| Disk | about 10 GB free | refuses |
+| Internet | `api.nuget.org`, `raw.githubusercontent.com` | warns: the first build and the patch need them |
+| Git | `git` | installs it; only new versions need it |
+| .NET SDK | the version of `global.json` or newer in its feature band | installs it with winget, else `dotnet-install.ps1` of Microsoft into the user's profile, no administrator needed |
+| PowerShell 7 | `pwsh` | installs it with winget, else the ZIP of its release into `%LOCALAPPDATA%\CnCNew\tools` |
+| Visual C++ runtime | `vcruntime140.dll` (Stride's native libraries need it) | installs it with winget, else Microsoft's redistributable |
+| Graphics, sound | what Windows reports | warns: without sound the goals about sound cannot be judged |
+| The game | the Steam libraries through the registry and `libraryfolders.vdf`, the app's manifest | offers to open Steam's install page or to choose the folder |
+
+Then, each step only if it is not done for this version: the game data (`scripts/dev-content.ps1 -SkipOriginal` into `game\`: the master check first, so a wrong language is refused within minutes, in plain words, before anything
+is built), the game program, the check of the data file by file, a first start of the game (it also prepares the shaders), and the **comparison with the reference values**: the input manifest and the quick set of the
+reference manifest on this machine's CPU. A difference there is no reason to stop, it is a finding: two machines that compute differently cannot play together. The window ends with a report on the desktop
+(`CnCNew-setup-report-<date>.md`: machine, versions, every step) and three buttons: **Start the acceptance**, **Play the game**, and **Get the new version** when GitHub has one.
+
+`Start-Acceptance.cmd` on a machine that is not set up goes to the launcher first. Without a window: `powershell -ExecutionPolicy Bypass -File scripts\CnCNew-Launcher.ps1 -CheckOnly` (changes nothing), `-Unattended`, `-GameDir`, `-NoWinget`, `-NoSimulationCheck`.
+`scripts/check-setup.ps1` checks the launcher itself; `-Full` walks the whole way in an empty profile. **This is the way of the development phase: it builds from source. A launcher that downloads finished binaries comes later.**
+
 ## What the patcher does – and what it never does
 
 It does:
