@@ -81,6 +81,8 @@ $areaOfPath = @(
     @('src/CnCNew.Client.Stride/', 'client'),
     @('scripts/shell/', 'game'),
     @('scripts/', 'scripts'),
+    @('CnCNew-Launcher.cmd', 'scripts'),
+    @('Start-Acceptance.cmd', 'scripts'),
     @('docs/', 'docs')
 )
 function Get-AreaOfPath([string]$path) {
