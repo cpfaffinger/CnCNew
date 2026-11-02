@@ -23,6 +23,7 @@ static partial class Tests
         Locomotor PathMissileLoco
           MaxThrustAngle = 60
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300
           MinSpeed = 0
           Acceleration = 3000

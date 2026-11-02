@@ -116,6 +116,7 @@ static partial class Tests
         End
         Locomotor DeckChuteLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 10.0
           SpeedDamaged = 10.0
           MinTurnSpeed = 0.0

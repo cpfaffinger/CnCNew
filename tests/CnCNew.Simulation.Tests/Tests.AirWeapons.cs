@@ -30,6 +30,7 @@ static partial class Tests
         Locomotor AirMissileLoco
           MaxThrustAngle = 60
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300.0
           Acceleration = 9000.0
           TurnRate = 360.0

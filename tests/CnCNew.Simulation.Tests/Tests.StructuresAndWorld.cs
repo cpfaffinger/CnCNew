@@ -483,6 +483,7 @@ static partial class Tests
         End
         Locomotor SwWaveLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 120.0
           Acceleration = 500.0
           Braking = 500.0

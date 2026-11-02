@@ -823,6 +823,7 @@ static partial class Tests
     private const string FcRocketIni = """
         Locomotor FcRocketLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300
           Acceleration = 9000
           TurnRate = 360

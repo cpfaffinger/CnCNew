@@ -134,7 +134,7 @@ public sealed partial class SimulationWorld
         if (_retaliations.Count == 0) return;
         foreach (var call in _retaliations)
         {
-            if (FindEntity(call.Damager) is not { DestroyRequested: false, EffectivelyDead: false } damager || IsSignificantlyAboveTerrainAtFrameEnd(damager)) continue;
+            if (FindEntity(call.Damager) is not { DestroyRequested: false, EffectivelyDead: false } damager || IsAirborneTargetAtFrameEnd(damager)) continue;
             var relation = FindEntity(call.Victim) is { } victim ? RelationshipBetween(damager, victim) : RelationshipOf(damager.Owner, call.Owner);
             if (relation != Relationship.Enemies) continue;
             var (dx0, dy0, _) = damager.FrameEnd(_tick);

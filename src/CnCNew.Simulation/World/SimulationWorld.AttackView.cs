@@ -28,7 +28,7 @@ public sealed partial class SimulationWorld
         // isDoingGroundMovement, IMMOBILE, "the brutal special case for stinger soldiers"; a rider of a structure or of a container that is no airborne target is on the ground (F-60).
         var container = FiringContainerOf(attacker);
         var onGround = container is not null
-            ? container.Template.IsKindOf("STRUCTURE") || !IsSignificantlyAboveTerrainAtFrameEnd(container)
+            ? container.Template.IsKindOf("STRUCTURE") || !IsAirborneTargetAtFrameEnd(container)
             : (attacker.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
               || attacker.Template.IsKindOf("IMMOBILE") || attacker.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS");
         if (!onGround || IsSignificantlyAboveTerrainAtFrameEnd(victim)) return false;

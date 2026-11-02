@@ -131,6 +131,22 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.SetBridgeUsable"/>
     public void SetBridgeUsable(TerrainBridge bridge, bool usable) => Navigation?.SetBridgeUsable(bridge.Layer, usable);
 
+    /// <inheritdoc cref="IWorldServices.BecomeRubble"/>
+    /// <remarks>
+    /// "here we make sure nobody collides with us, ever again". The original also lowers the geometry to <c>StructureRubbleHeight</c> or <c>DefaultStructureRubbleHeight</c>; nothing that
+    /// reads that height looks at a dead object or at one without collisions, so here the two keys stay unread on purpose.
+    /// </remarks>
+    public void BecomeRubble(Entity entity)
+    {
+        if (entity.IsRubble) return;
+        entity.IsRubble = true;
+        entity.Status |= 1UL << NoCollisionsBit;
+        MarkDirty(entity);
+        if (Navigation is not { } navigation || !BlocksGrid(entity)) return;
+        navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+        navigation.AddRubble(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+    }
+
     /// <summary><c>Pathfinder::classifyObjectFootprint</c>: a bridge's object that stands more than a cell over the ground is no obstacle ("Don't add bounds that are up in the air").</summary>
     private bool BlocksGrid(Entity entity)
         => NavigationGrid.Blocks(entity.Template) && !(entity.Template.IsKindOf("BRIDGE") && entity.Z - GroundHeightAt(entity.X, entity.Y) > TerrainBridge.LayerCloseEnough);

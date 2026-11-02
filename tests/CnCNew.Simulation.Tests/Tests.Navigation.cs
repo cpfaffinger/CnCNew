@@ -44,6 +44,7 @@ static partial class Tests
         End
         Locomotor AirLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 360.0
         {{NavigationLocomotorBody}}
         End

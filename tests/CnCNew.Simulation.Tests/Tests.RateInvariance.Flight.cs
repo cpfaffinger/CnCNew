@@ -398,6 +398,7 @@ static partial class Tests
         ["Data/INI/Object/RateFlightSpiral.ini"] = """
         Locomotor OddRotorLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 140
           Acceleration = 900
           Braking = 900

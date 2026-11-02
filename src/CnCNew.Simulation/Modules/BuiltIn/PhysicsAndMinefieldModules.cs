@@ -238,6 +238,12 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// </summary>
     public (Fixed X, Fixed Y, Fixed Z) Velocity => _flying || _falling ? (_velocityX, _velocityY, _velocityZ) : default;
 
+    /// <summary><c>PhysicsBehavior::setPitchRate</c>.</summary>
+    public void SetPitchRate(Fixed rate) => _pitchRate = rate;
+
+    /// <summary><c>PhysicsBehavior::getCenterOfMassOffset</c>.</summary>
+    public Fixed CenterOfMassOffset => data.CenterOfMassOffset;
+
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {
         _falling = true;

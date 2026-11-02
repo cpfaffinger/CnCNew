@@ -2776,15 +2776,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Locomotor/AirborneTargetingHeight",
-      "count": 46,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Locomotor/AllowAirborneMotiveForce",
       "count": 73,
       "owners": [
@@ -4630,15 +4621,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/DelayExitInAir",
-      "count": 6,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "TransportContain/DestroyRidersWhoAreNotFreeToExit",
       "count": 24,
       "owners": [
@@ -4675,35 +4657,8 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/ExitPitchRate",
-      "count": 24,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "TransportContain/ExitSound",
       "count": 5,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "TransportContain/KeepContainerVelocityOnExit",
-      "count": 24,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "TransportContain/OrientLikeContainerOnExit",
-      "count": 24,
       "owners": [
         "TransportContain"
       ],

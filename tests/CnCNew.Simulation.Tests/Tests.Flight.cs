@@ -20,6 +20,7 @@ static partial class Tests
     private const string FlightFixtureIni = """
         Locomotor PlaneLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 90.0
           Speed = 120.0
           Acceleration = 600.0
@@ -30,6 +31,7 @@ static partial class Tests
         End
         Locomotor ChuteLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 120.0
           Speed = 60.0
           Acceleration = 600.0
@@ -39,6 +41,7 @@ static partial class Tests
         End
         Locomotor FlareLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 120.0
           Speed = 60.0
           Acceleration = 600.0
@@ -48,6 +51,7 @@ static partial class Tests
         Locomotor FlightMissileLoco
           MaxThrustAngle = 60
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300
           Acceleration = 9000
           TurnRate = 360

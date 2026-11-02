@@ -369,7 +369,7 @@ public sealed partial class NavigationGrid
         while (pending.TryPop(out var cell))
         {
             // Walking out of a footprint, as a path search does.
-            var leaving = cell < _groundCells && _obstacles[cell] > 0;
+            var leaving = cell < _groundCells && IsCovered(cell);
             var count = LinkedCells(cell);
             for (var link = 0; link < count; link++)
             {

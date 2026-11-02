@@ -19,6 +19,7 @@ static partial class Tests
         ["Data/INI/Object/WingFixture.ini"] = """
         Locomotor WingLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 120.0
           Braking = 60.0
@@ -33,6 +34,7 @@ static partial class Tests
         End
         Locomotor WingLocoCcw
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 120.0
           Braking = 60.0
@@ -46,6 +48,7 @@ static partial class Tests
         End
         Locomotor WingLocoSmallest
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 120.0
           Braking = 60.0
@@ -59,6 +62,7 @@ static partial class Tests
         End
         Locomotor WingLocoWeakBrake
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 120.0
           Braking = 10.0
@@ -338,7 +342,7 @@ static partial class Tests
     private static readonly IReadOnlyDictionary<string, string> WingAirfieldFiles = new Dictionary<string, string>(AirFixtureFiles)
     {
         ["Data/INI/Object/AirFixture.ini"] = AirFixtureFiles["Data/INI/Object/AirFixture.ini"].Replace(
-            "Locomotor AirJetLoco\n  Surfaces = AIR\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 360.0",
-            "Locomotor AirJetLoco\n  Appearance = WINGS\n  CirclingRadius = 100.0\n  Surfaces = AIR\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 120.0"),
+            "Locomotor AirJetLoco\n  Surfaces = AIR\n  AirborneTargetingHeight = 30\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 360.0",
+            "Locomotor AirJetLoco\n  Appearance = WINGS\n  CirclingRadius = 100.0\n  Surfaces = AIR\n  AirborneTargetingHeight = 30\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 120.0"),
     };
 }

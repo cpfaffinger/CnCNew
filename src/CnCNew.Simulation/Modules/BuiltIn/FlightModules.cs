@@ -381,7 +381,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
         if (Entity.EffectivelyDead || !_mux.Executed) return SimulationTiming.SleepForever;
         var now = world.Tick;
         MoveFlares(world, now);
-        if (world.IsSignificantlyAboveTerrain(Entity) && _available > 0)
+        if (world.IsAirborneTarget(Entity) && _available > 0)
         {
             if (_reactionTick != 0 && now >= _reactionTick)
             {
@@ -1037,7 +1037,11 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         item.HasMoveTarget = false;
         if (run.ParachuteDirectly && item.Modules.OfType<IOverrideDestination>().FirstOrDefault() is { } parachute) parachute.SetOverrideDestination(_targetX, _targetY);
         // A bomb has no locomotor and falls: PhysicsBehavior takes over (the reference leaves it to the physics module, too).
-        if (item.Modules.OfType<PhysicsBehavior>().FirstOrDefault() is { } physics && item.Template.Locomotor is null) physics.StartFall(world, Fixed.Zero, Fixed.Zero);
+        if (item.Modules.OfType<PhysicsBehavior>().FirstOrDefault() is { } physics && item.Template.Locomotor is null)
+        {
+            physics.StartFall(world, Fixed.Zero, Fixed.Zero);
+            (contain as TransportContain)?.KeepVelocityOf(world, physics);
+        }
         // "smthu->SetTargetPosition(*ai->getMoveToPos())": a smart bomb (the MOAB) steers towards the point the plane was sent to.
         if (item.Modules.OfType<SmartBombTargetHomingUpdate>().FirstOrDefault() is { } homing)
             homing.SetTargetPosition(world, _moveToX, _moveToY, FlightModules.GroundOrDefault(world, _moveToX, _moveToY, Fixed.Zero));

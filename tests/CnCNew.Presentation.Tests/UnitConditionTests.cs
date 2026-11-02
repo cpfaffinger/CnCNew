@@ -84,6 +84,7 @@ internal static partial class UnitConditionTests
         End
         Locomotor UnitJetLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 450.0
           Braking = 60.0
@@ -102,6 +103,7 @@ internal static partial class UnitConditionTests
         End
         Locomotor UnitChuteLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 120.0
           Speed = 60.0
           Acceleration = 600.0

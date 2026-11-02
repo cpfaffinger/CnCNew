@@ -357,7 +357,7 @@ public sealed partial class SimulationWorld
         var intensity = cast.DispositionIntensity;
         SpawnThrow? thrown = null;
         // INHERIT_VELOCITY: the source's velocity becomes a force on the object, before anything else of the throw.
-        var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics ? SourceVelocity(source) : default;
+        var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics ? VelocityOf(source) : default;
         if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = sourceAngle;
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
@@ -456,7 +456,7 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>getPhysics()->getVelocity()</c> of the source, nothing without a physics module: its fall or flight, else what moves it - a wreck's way down before its AI's speed, which it keeps.
     /// </summary>
-    private (Fixed X, Fixed Y, Fixed Z) SourceVelocity(Entity source)
+    public (Fixed X, Fixed Y, Fixed Z) VelocityOf(Entity source)
     {
         Modules.BuiltIn.PhysicsBehavior? physics = null;
         (Fixed X, Fixed Y, Fixed Z)? moving = null;
@@ -488,6 +488,17 @@ public sealed partial class SimulationWorld
 
     /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall above the terrain height (flat 0 without terrain).</summary>
     public bool IsSignificantlyAboveTerrain(Entity entity) => IsSignificantlyAbove(entity.Z, SurfaceHeightUnder(entity));
+
+    public bool IsAirborneTarget(Entity entity)
+        => AiOf(entity)?.CurrentLocomotor is { } locomotor && locomotor.AirborneTargetingHeight < Fixed.MaxValue && entity.Z - SurfaceHeightUnder(entity) > locomotor.AirborneTargetingHeight;
+
+    public bool IsAirborneTargetAtFrameEnd(Entity entity)
+    {
+        if (_firstFrameTicks == TickOrder.Next) return IsAirborneTarget(entity);
+        if (AiOf(entity)?.CurrentLocomotor is not { } locomotor || locomotor.AirborneTargetingHeight == Fixed.MaxValue) return false;
+        var (x, y, z) = entity.FrameEnd(_tick);
+        return z - LayerHeightAt(x, y, entity.Layer) > locomotor.AirborneTargetingHeight;
+    }
 
     public bool IsSignificantlyAboveTerrainAtFrameEnd(Entity entity)
     {

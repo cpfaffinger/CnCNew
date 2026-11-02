@@ -256,6 +256,10 @@ run.Test("Phase 40: damage modules read the dealt amount before the health clips
 run.Test("Phase 40 (F-59): a power triggered at a place opens its view there (createViewObject)", Tests.PowerOpensItsViewAtTheTarget);
 run.Test("Phase 41 (F-55a): the terrain line of the attack view follows the original (isClearLineOfSight)", Tests.TerrainLineOfSightFollowsTheOriginal);
 run.Test("Phase 41 (F-55b): the obstacle walk of the attack view (isAttackViewBlockedByObstacle)", Tests.AttackLineBlockedByStructures);
+run.Test("Phase 57: rubble is only for a locomotor with its surface (CELL_RUBBLE)", Tests.RubbleIsOnlyForItsSurface);
+run.Test("Phase 57: a structure that dies and stays is rubble (setCorrectDamageState)", Tests.StructureThatDiesBecomesRubble);
+run.Test("Phase 57: an airborne target is the height of the locomotor (AIUpdateInterface::update)", Tests.AirborneTargetIsTheHeightOfTheLocomotor);
+run.Test("Phase 57: a bomb flies on from its plane (TransportContain::onRemoving)", Tests.BombFliesOnFromItsPlane);
 run.Test("Phase 41 (F-55c): a unit that needs a line of sight does not fire through a structure (outOfWeaponRangeObject)", Tests.AttackNeedsAClearView);
 run.Test("Phase 41 (F-55d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight)", Tests.AcquisitionPassesBlockedCandidates);
 run.Test("Phase 41 (F-55e): the approach of an attack goes where it can fire (findAttackPath)", Tests.ApproachGoesWhereItCanFire);

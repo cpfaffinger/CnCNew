@@ -787,6 +787,18 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
     /// </summary>
     public bool ArmedRidersUpgradeMyWeaponSet { get; init; }
 
+    /// <summary><c>OrientLikeContainerOnExit</c>: a rider that leaves faces as the transport does (the bomb of a bomber).</summary>
+    public bool OrientLikeContainerOnExit { get; init; }
+
+    /// <summary><c>KeepContainerVelocityOnExit</c>: a rider that leaves flies on as fast as the transport, and turns by <see cref="ExitPitchRate"/> times its <c>CenterOfMassOffset</c>.</summary>
+    public bool KeepContainerVelocityOnExit { get; init; }
+
+    /// <summary><c>ExitPitchRate</c>, radians per logic frame of the original.</summary>
+    public Fixed ExitPitchRate { get; init; }
+
+    /// <summary><c>DelayExitInAir</c>: nobody leaves while the transport is above the terrain (the dam's Chinook, the Demo General's vehicles that drop nothing).</summary>
+    public bool DelayExitInAir { get; init; }
+
     /// <summary><c>InitialPayload</c>: who sits in a new transport (the Troop Crawler's Red Guards, the Demo trap's rider).</summary>
     public string InitialPayload { get; init; } = string.Empty;
     public int InitialPayloadCount { get; init; }
@@ -805,6 +817,11 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
         WeaponBonusPassedToPassengers = ModuleConfigReader.Bool(configuration, "WeaponBonusPassedToPassengers", false),
         ArmedRidersUpgradeMyWeaponSet = ModuleConfigReader.Bool(configuration, "ArmedRidersUpgradeMyWeaponSet", false),
+        OrientLikeContainerOnExit = ModuleConfigReader.Bool(configuration, "OrientLikeContainerOnExit", false),
+        KeepContainerVelocityOnExit = ModuleConfigReader.Bool(configuration, "KeepContainerVelocityOnExit", false),
+        // INI::parseAngularVelocityReal: degrees a second, into radians a logic frame.
+        ExitPitchRate = SimulationTiming.DegreesToRadians(ModuleConfigReader.Real(configuration, "ExitPitchRate", Fixed.Zero).ToDecimal()) / Fixed.FromInt(Time.SimulationRate.OriginalFramesPerSecond),
+        DelayExitInAir = ModuleConfigReader.Bool(configuration, "DelayExitInAir", false),
         InitialPayload = (ModuleConfigReader.Find(configuration, "InitialPayload")?.Value.Value as CountedReference)?.Reference.Name ?? string.Empty,
         InitialPayloadCount = (ModuleConfigReader.Find(configuration, "InitialPayload")?.Value.Value as CountedReference)?.Count ?? 0,
     };
@@ -964,6 +981,16 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         if (positionAtContainer && Entity.EffectivelyDead) ScatterToNearbyPosition(world, candidate);
         if (data.ResetMoodCheckTimeOnExit) world.WakeUpAndAttemptToTarget(candidate);
         LetRidersUpgradeWeaponSet(world);
+        if (data.OrientLikeContainerOnExit) candidate.Angle = Entity.Angle;
+    }
+
+    /// <summary>The second half of <c>TransportContain::onRemoving</c>, for what falls out of a plane: it goes on as fast as the plane did, and tips over.</summary>
+    public void KeepVelocityOf(IWorldServices world, PhysicsBehavior physics)
+    {
+        if (!data.KeepContainerVelocityOnExit) return;
+        var (x, y, _) = world.VelocityOf(Entity);
+        physics.StartFall(world, x, y);
+        physics.SetPitchRate(physics.CenterOfMassOffset * data.ExitPitchRate);
     }
 
     // The riders that were told to leave and wait for the door (AIExitState of each of them), the tick from which the door is free again (TransportContain::m_frameExitNotBusy),
@@ -996,7 +1023,8 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     private bool ReleaseThroughDoor(IWorldServices world)
     {
         // AIExitState::update: "getAiFreeToExit(obj) == WAIT_TO_EXIT" - a Chinook in the air keeps its riders at the door until it has landed (F-62).
-        var wait = CrateModules.AiOf(Entity) is { } ai && ai.RidersWaitToExit(world);
+        // isExitBusy: "if( data->m_isDelayExitInAir && getObject()->isAboveTerrain() ) return TRUE".
+        var wait = (CrateModules.AiOf(Entity) is { } ai && ai.RidersWaitToExit(world)) || (data.DelayExitInAir && Entity.Z > world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer));
         while (!wait && _exitWanted.Count > 0 && world.Tick >= _exitNotBusyTick)
         {
             var next = _exitWanted[0];

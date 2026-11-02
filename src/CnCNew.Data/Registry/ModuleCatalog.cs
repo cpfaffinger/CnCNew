@@ -664,19 +664,19 @@ public static class ModuleCatalog
             // system this engine does not have, and are therefore Opaque.
             new("Slots", FieldType.Integer, Source: "TransportContain.h"),
             new("ScatterNearbyOnExit", FieldType.Bool, Source: "TransportContain.h"),
-            new("OrientLikeContainerOnExit", FieldType.Opaque, Source: "TransportContain.h"),
-            new("KeepContainerVelocityOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("OrientLikeContainerOnExit", FieldType.Bool, Source: "TransportContain.h"),
+            new("KeepContainerVelocityOnExit", FieldType.Bool, Source: "TransportContain.h"),
             new("GoAggressiveOnExit", FieldType.Bool, Source: "TransportContain.h"),
             new("ResetMoodCheckTimeOnExit", FieldType.Bool, Source: "TransportContain.h"),
             new("DestroyRidersWhoAreNotFreeToExit", FieldType.Opaque, Source: "TransportContain.h"),
             new("ExitBone", FieldType.Opaque, Source: "TransportContain.h"),
-            new("ExitPitchRate", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ExitPitchRate", FieldType.Real, Source: "TransportContain.h"),
             new("InitialPayload", FieldType.CountedReference, ReferenceKind: DefinitionKind.Object, Source: "TransportContain.h"),
             new("HealthRegen%PerSec", FieldType.Real, Source: "TransportContain.h"),
             new("ExitDelay", FieldType.DurationMs, Source: "TransportContain.h"),
             new("ArmedRidersUpgradeMyWeaponSet", FieldType.Bool, Source: "TransportContain.h"),
             // DemoGeneral.ini sets this key twice (identical values, a copy-paste artifact in the shipped data).
-            new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
+            new("DelayExitInAir", FieldType.Bool, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
         ]);
 
         // SpecialPower.cpp SpecialPowerModuleData (the base of every special-power module). InitiateSound is presentation.
@@ -804,18 +804,18 @@ public static class ModuleCatalog
         [
             new("Slots", FieldType.Integer, Source: "TransportContain.h"),
             new("ScatterNearbyOnExit", FieldType.Bool, Source: "TransportContain.h"),
-            new("OrientLikeContainerOnExit", FieldType.Opaque, Source: "TransportContain.h"),
-            new("KeepContainerVelocityOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("OrientLikeContainerOnExit", FieldType.Bool, Source: "TransportContain.h"),
+            new("KeepContainerVelocityOnExit", FieldType.Bool, Source: "TransportContain.h"),
             new("GoAggressiveOnExit", FieldType.Bool, Source: "TransportContain.h"),
             new("ResetMoodCheckTimeOnExit", FieldType.Bool, Source: "TransportContain.h"),
             new("DestroyRidersWhoAreNotFreeToExit", FieldType.Opaque, Source: "TransportContain.h"),
             new("ExitBone", FieldType.Opaque, Source: "TransportContain.h"),
-            new("ExitPitchRate", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ExitPitchRate", FieldType.Real, Source: "TransportContain.h"),
             new("InitialPayload", FieldType.CountedReference, ReferenceKind: DefinitionKind.Object, Source: "TransportContain.h"),
             new("HealthRegen%PerSec", FieldType.Real, Source: "TransportContain.h"),
             new("ExitDelay", FieldType.DurationMs, Source: "TransportContain.h"),
             new("ArmedRidersUpgradeMyWeaponSet", FieldType.Bool, Source: "TransportContain.h"),
-            new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
+            new("DelayExitInAir", FieldType.Bool, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
         ];
         // TunnelContainModuleData = OpenContainModuleData + TimeForFullHeal (parseDurationReal). ContainMax is parseable but unused: the
         // capacity is GlobalData::m_maxTunnelCapacity (TunnelTracker::getContainMax).

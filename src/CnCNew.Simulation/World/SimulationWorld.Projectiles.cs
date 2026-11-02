@@ -88,7 +88,7 @@ public sealed partial class SimulationWorld
             // Weapon::positionProjectileForLaunch: the launcher's weapon bone; without art, and for a rider in its container, the launcher's geometry centre along its heading.
             var pose = (contained ? null : LaunchPoseOf(source, weapon, sourceX, sourceY, sourceZ, sourceAngle))
                 ?? new LaunchPose(sourceX, sourceY, sourceZ + source.Template.CenterZDelta, FixedTrig.Cos(sourceAngle), FixedTrig.Sin(sourceAngle), Fixed.Zero);
-            var (velocityX, velocityY, velocityZ) = SourceVelocity(source);
+            var (velocityX, velocityY, velocityZ) = VelocityOf(source);
             var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, conditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ, velocityX, velocityY, velocityZ);
             var heading = pose.ForwardX != Fixed.Zero || pose.ForwardY != Fixed.Zero ? FixedTrig.Atan2(pose.ForwardY, pose.ForwardX) : sourceAngle;
             _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, pose.X, pose.Y, pose.Z, heading, default(SpawnSetup) with { Launch = launch }));

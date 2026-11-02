@@ -44,6 +44,9 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
     /// <summary><c>LocomotorTemplate::m_wanderAboutPointRadius</c>: how far around a point a unit wanders (<c>AIWanderInPlaceState</c>).</summary>
     public Fixed WanderAboutPointRadius { get; init; }
 
+    /// <summary><c>LocomotorTemplate::m_airborneTargetingHeight</c>: above this height over the terrain the object is an airborne target; a locomotor that does not name it never makes one.</summary>
+    public Fixed AirborneTargetingHeight { get; init; } = Fixed.MaxValue;
+
     /// <summary><c>Locomotor::m_preferredHeight</c>: the flight height above the terrain of an aircraft (0 for ground locomotors).</summary>
     public Fixed PreferredHeight { get; init; }
 
@@ -924,6 +927,7 @@ public sealed class TemplateCatalog
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
                 StickToGround = definition.Fields.LastOrDefault(field => field.Name.Equals("StickToGround", StringComparison.OrdinalIgnoreCase))?.Value.Value is true,
+                AirborneTargetingHeight = definition.Fields.Any(field => field.Name.Equals("AirborneTargetingHeight", StringComparison.OrdinalIgnoreCase)) ? Fixed.FromDecimal(Get("AirborneTargetingHeight")) : Fixed.MaxValue,
                 PenaltyDamageState = penaltyState,
             };
             if (speedDamaged != speed || turnRateDamaged != turnRate || accelerationDamaged != acceleration || liftDamaged != lift)

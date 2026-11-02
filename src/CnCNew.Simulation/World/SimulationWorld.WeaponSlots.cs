@@ -107,12 +107,12 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>getVictimAntiMask</c>: the <c>WeaponAntiMaskType</c> a weapon needs to hit <paramref name="victim"/> (missiles, projectiles, mines, airborne vehicles/infantry/
-    /// parachutes, else the ground). "Airborne" is <see cref="IsSignificantlyAboveTerrain"/>, standing in for <c>OBJECT_STATUS_AIRBORNE_TARGET</c>.
+    /// parachutes, else the ground).
     /// </summary>
     private int VictimAntiMask(Entity victim)
     {
         var template = victim.Template;
-        return template.AirborneTargetAntiMask == template.GroundTargetAntiMask || !IsSignificantlyAboveTerrainAtFrameEnd(victim) ? template.GroundTargetAntiMask : template.AirborneTargetAntiMask;
+        return template.AirborneTargetAntiMask == template.GroundTargetAntiMask || !IsAirborneTargetAtFrameEnd(victim) ? template.GroundTargetAntiMask : template.AirborneTargetAntiMask;
     }
 
     /// <summary>
@@ -134,7 +134,7 @@ public sealed partial class SimulationWorld
         // estimateWeaponDamage: a weapon with AllowAttackGarrisonedBldgs (or a surrender weapon) is worth 1 against riders it can clear, whatever else it would do.
         if ((weapon.AllowAttackGarrisonedBuildings || weapon.DamageType == SurrenderDamageType) && victim.Container is { CanBeCleared: true }) return Fixed.One;
         if (weapon.DamageType == DisarmDamageType) return template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP") ? Fixed.One : Fixed.Zero;
-        if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrainAtFrameEnd(victim)) return Fixed.One;
+        if (weapon.DamageType == DeployDamageType && !IsAirborneTargetAtFrameEnd(victim)) return Fixed.One;
         var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source), weapon.PrimaryDamage);
         return ActiveArmor(victim).Adjust(weapon.DamageType, amount);
     }

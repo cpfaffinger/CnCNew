@@ -25,6 +25,7 @@ static partial class Tests
         ["Data/INI/Object/AirFixture.ini"] = """
         Locomotor AirJetLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 450.0
           Braking = 60.0
@@ -36,6 +37,7 @@ static partial class Tests
         End
         Locomotor AirFastLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300.0
           Acceleration = 900.0
           Braking = 60.0
@@ -54,6 +56,7 @@ static partial class Tests
         End
         Locomotor AirHeliLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 120.0
           Acceleration = 300.0
           Braking = 300.0
@@ -64,6 +67,7 @@ static partial class Tests
         End
         Locomotor AirGunshipLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 120.0
           Acceleration = 900.0
           Braking = 900.0
@@ -72,6 +76,7 @@ static partial class Tests
         End
         Locomotor AirTransitLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 240.0
           Acceleration = 900.0
           Braking = 900.0

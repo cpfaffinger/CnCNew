@@ -55,7 +55,8 @@ public sealed partial class NavigationGrid
     private const byte EscapeBit = 8;
     private const byte TemporaryBit = 16;
     private const byte ImpassableBit = 32;
-    private const int CellStates = 64;
+    private const byte RubbleBit = 64;
+    private const int CellStates = 128;
 
     /// <summary>What one search knows about a cell; valid when <see cref="Stamp"/> is the number of the running search.</summary>
     private struct SearchCell
@@ -69,6 +70,7 @@ public sealed partial class NavigationGrid
     private readonly int _cellsX;
     private readonly int _cellsY;
     private readonly ushort[] _obstacles;
+    private readonly ushort[] _rubble;
     // For the attack's view (F-55): the sum of the ids of the footprints covering a cell - its owner when exactly one does, independent of the order they came in -
     // and how many of them cannot be seen through.
     private readonly ulong[] _obstacleIds;
@@ -123,6 +125,7 @@ public sealed partial class NavigationGrid
         _cellsY = terrain.CellsY;
         var cells = checked(_cellsX * _cellsY);
         _obstacles = new ushort[cells];
+        _rubble = new ushort[cells];
         _obstacleIds = new ulong[cells];
         _opaqueObstacles = new ushort[cells];
         _state = new byte[cells];
@@ -165,6 +168,22 @@ public sealed partial class NavigationGrid
     {
         Apply(template, x, y, angle, -1, entityId);
         ObstacleSum = unchecked(ObstacleSum - Mix(entityId));
+    }
+
+    /// <summary>
+    /// <c>PathfindCell::setTypeAsObstacle</c> for a body in the rubble state: the cells are <c>CELL_RUBBLE</c>, no obstacle. Only a locomotor with the surface <c>RUBBLE</c> enters them, and
+    /// they block no view (<c>attackBlockedByObstacleCallback</c> looks at <c>CELL_OBSTACLE</c>). A cell another footprint covers stays that footprint's.
+    /// </summary>
+    public void AddRubble(ulong entityId, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+    {
+        ApplyRubble(template, x, y, angle, 1);
+        ObstacleSum = unchecked(ObstacleSum + Mix(~entityId));
+    }
+
+    public void RemoveRubble(ulong entityId, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+    {
+        ApplyRubble(template, x, y, angle, -1);
+        ObstacleSum = unchecked(ObstacleSum - Mix(~entityId));
     }
 
     private static ulong Mix(ulong value)
@@ -247,7 +266,28 @@ public sealed partial class NavigationGrid
         _memoStale = true;
     }
 
+    private void ApplyRubble(ObjectTemplate template, Fixed x, Fixed y, Fixed angle, int delta)
+    {
+        var footprint = new Footprint(template, x, y, angle);
+        for (var cy = Math.Max(0, footprint.Y0); cy <= Math.Min(Terrain.CellsY - 1, footprint.Y1); cy++)
+            for (var cx = Math.Max(0, footprint.X0); cx <= Math.Min(Terrain.CellsX - 1, footprint.X1); cx++)
+            {
+                if (!footprint.Contains(cx, cy)) continue;
+                var index = cy * Terrain.CellsX + cx;
+                var count = checked((ushort)(_rubble[index] + delta));
+                _rubble[index] = count;
+                _state[index] = count > 0 ? (byte)(_state[index] | RubbleBit) : (byte)(_state[index] & ~RubbleBit);
+            }
+        _memoStale = true;
+    }
+
     public bool IsBlockedByObstacle(int cx, int cy) => Terrain.IsInside(cx, cy) && _obstacles[cy * Terrain.CellsX + cx] > 0;
+
+    /// <summary>A cell under a footprint, whole or in ruins: a mover that stands on one it could not enter walks out of it.</summary>
+    private bool IsCovered(int cell) => _obstacles[cell] > 0 || (_state[cell] & RubbleBit) != 0;
+
+    /// <summary>The rubble cell's surfaces (<c>validLocomotorSurfacesForCellType</c>). A cliff or water cell under the rubble keeps its own class (<c>setTypeAsObstacle</c>).</summary>
+    private static bool RubbleAllows(int state, LocomotorSurfaces surfaces) => (state & RubbleBit) == 0 || (state & TerrainBits) != 0 || (surfaces & LocomotorSurfaces.Rubble) != 0;
 
     /// <summary>
     /// The obstacle part of <c>Pathfinder::isAttackViewBlockedByObstacle</c> (<c>iterateCellsAlongLine</c> with <c>attackBlockedByObstacleCallback</c>): a 4-connected
@@ -303,7 +343,7 @@ public sealed partial class NavigationGrid
     {
         if (!Terrain.IsInside(cx, cy)) return false;
         var index = cy * Terrain.CellsX + cx;
-        if (_obstacles[index] > 0 || (_state[index] & ImpassableBit) != 0) return false;
+        if (_obstacles[index] > 0 || (_state[index] & ImpassableBit) != 0 || !RubbleAllows(_state[index], surfaces)) return false;
         return SurfaceAllows(Terrain.CellAt(cx, cy), surfaces);
     }
 
@@ -324,7 +364,7 @@ public sealed partial class NavigationGrid
         while (pending.TryPop(out var cell))
         {
             var (cx, cy) = (cell % _cellsX, cell / _cellsX);
-            var leaving = _obstacles[cell] > 0;
+            var leaving = IsCovered(cell);
             foreach (var (dx, dy) in steps)
             {
                 var (nx, ny) = (cx + dx, cy + dy);
@@ -414,7 +454,7 @@ public sealed partial class NavigationGrid
     {
         for (var state = 0; state < CellStates; state++)
         {
-            var passable = (state & (ObstacleBit | ImpassableBit)) == 0 && SurfaceAllows((CellFlags)(state & TerrainBits), surfaces);
+            var passable = (state & (ObstacleBit | ImpassableBit)) == 0 && SurfaceAllows((CellFlags)(state & TerrainBits), surfaces) && RubbleAllows(state, surfaces);
             _open[state] = (passable && (state & TemporaryBit) == 0) || (state & EscapeBit) != 0;
         }
     }
@@ -474,7 +514,7 @@ public sealed partial class NavigationGrid
     private void CollectEscapeCells(int startX, int startY, int radius, LocomotorSurfaces surfaces)
     {
         var cellsX = _cellsX;
-        if (!Terrain.IsInside(startX, startY) || _obstacles[startY * cellsX + startX] == 0) return;
+        if (!Terrain.IsInside(startX, startY) || !IsCovered(startY * cellsX + startX)) return;
         var head = 0;
         var tail = 0;
         var first = startY * cellsX + startX;
@@ -495,7 +535,7 @@ public sealed partial class NavigationGrid
                 var ny = y + StepY[direction];
                 if (Math.Abs(nx - startX) > radius || Math.Abs(ny - startY) > radius || !Terrain.IsInside(nx, ny)) continue;
                 var index = ny * cellsX + nx;
-                if (_obstacles[index] == 0 || !SurfaceAllows((CellFlags)(_state[index] & TerrainBits), surfaces) || (_state[index] & EscapeBit) != 0) continue;
+                if (!IsCovered(index) || !SurfaceAllows((CellFlags)(_state[index] & TerrainBits), surfaces) || (_state[index] & EscapeBit) != 0) continue;
                 Mark(index, EscapeBit);
                 _escapeCount++;
                 Enqueue(ref tail, index);

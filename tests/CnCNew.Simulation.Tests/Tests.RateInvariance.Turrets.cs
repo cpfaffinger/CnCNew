@@ -368,6 +368,7 @@ static partial class Tests
         ["Data/INI/Object/RateInvarianceSlaveFixture.ini"] = """
         Locomotor RiSlowLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 1.0
           Acceleration = 600.0
           Braking = 600.0

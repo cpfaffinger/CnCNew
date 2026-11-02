@@ -23,6 +23,7 @@ static partial class Tests
         Locomotor FastMissileLoco
           MaxThrustAngle = 60
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300
           Acceleration = 9000
           TurnRate = 360
@@ -30,6 +31,7 @@ static partial class Tests
         Locomotor SlowMissileLoco
           MaxThrustAngle = 60
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 300
           Acceleration = 900
           TurnRate = 360

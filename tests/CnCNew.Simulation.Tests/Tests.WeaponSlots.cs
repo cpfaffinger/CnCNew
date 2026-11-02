@@ -255,11 +255,25 @@ static partial class Tests
             InitialHealth = 100000.0
           End
         End
+        Locomotor HeliLoco
+          Surfaces = AIR
+          AirborneTargetingHeight = 30
+          Speed = 90.0
+          Acceleration = 300.0
+          Braking = 300.0
+          TurnRate = 360.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+        End
+
         Object Heli
           KindOf = SELECTABLE VEHICLE AIRCRAFT
+          Locomotor = SET_NORMAL HeliLoco
           Body = ActiveBody Body01
             MaxHealth = 100000.0
             InitialHealth = 100000.0
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
         """,

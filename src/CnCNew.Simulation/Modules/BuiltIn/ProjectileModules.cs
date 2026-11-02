@@ -1557,7 +1557,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             var dx = otherX - ownX;
             var dy = otherY - ownY;
             if (!scanSquared.Contains(dx * dx + dy * dy)) continue;
-            if (!world.IsSignificantlyAboveTerrainAtFrameEnd(other) && !weapon.AntiGround) continue;
+            if (!world.IsAirborneTargetAtFrameEnd(other) && !weapon.AntiGround) continue;
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies) continue;
             if (other.HasStatus(StealthedBit) && !other.HasStatus(DetectedBit)) continue;
             var distance = Distance2D(other);

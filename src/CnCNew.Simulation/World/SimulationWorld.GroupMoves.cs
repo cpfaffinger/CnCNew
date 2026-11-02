@@ -112,7 +112,7 @@ public sealed partial class SimulationWorld
         var (maxX, maxY) = (minX, minY);
         foreach (var (unit, standsX, standsY, _) in _groupMembers)
         {
-            if (unit.Template.IsKindOf("AIRCRAFT") && !unit.Template.IsKindOf("PRODUCED_AT_HELIPAD") && IsSignificantlyAboveTerrainAtFrameEnd(unit)) return false;
+            if (unit.Template.IsKindOf("AIRCRAFT") && !unit.Template.IsKindOf("PRODUCED_AT_HELIPAD") && IsAirborneTargetAtFrameEnd(unit)) return false;
             (minX, maxX) = (Fixed.Min(minX, standsX), Fixed.Max(maxX, standsX));
             (minY, maxY) = (Fixed.Min(minY, standsY), Fixed.Max(maxY, standsY));
         }

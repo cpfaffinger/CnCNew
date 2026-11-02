@@ -44,6 +44,7 @@ static partial class Tests
         End
         Locomotor LbPlaneLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 90.0
           Speed = 120.0
           Acceleration = 600.0

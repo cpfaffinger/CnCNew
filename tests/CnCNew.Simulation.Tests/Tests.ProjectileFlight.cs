@@ -114,6 +114,7 @@ static partial class Tests
 
         Locomotor CruiseLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 200
           MinSpeed = 100
           Acceleration = 675
@@ -125,6 +126,7 @@ static partial class Tests
         End
         Locomotor LimitedLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 225
           MinSpeed = 120
           Acceleration = 675

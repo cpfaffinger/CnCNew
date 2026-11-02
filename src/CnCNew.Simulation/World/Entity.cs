@@ -391,6 +391,9 @@ public sealed class Entity
 
     public bool HasStatus(int bit) => (Status & (1UL << bit)) != 0;
 
+    /// <summary>The footprint of this structure is rubble on the grid (<see cref="SimulationWorld.BecomeRubble"/>).</summary>
+    public bool IsRubble { get; set; }
+
     /// <summary>Written only while some turret is away from rest, so an object whose turrets never moved keeps its serialized form (and hash).</summary>
     private void DescribeTurrets(IStateWriter writer)
     {
@@ -453,6 +456,7 @@ public sealed class Entity
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);
         if (Subdued) writer.Bool("subdued", true);
+        if (IsRubble) writer.Bool("rubble", true);
         if (StatusDamageUntil != 0)
         {
             writer.Int("statusDamageBit", StatusDamageBit);

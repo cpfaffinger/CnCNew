@@ -140,7 +140,7 @@ public sealed partial class SimulationWorld
     private void ShockWave(Entity? source, Entity victim, WeaponInfo weapon, bool frameEnd)
     {
         if (victim.DestroyRequested || victim.Template.IsKindOf("PROJECTILE")) return;
-        if (victim.HasStatus(AirborneTargetBit) || (victim.Template.IsKindOf("AIRCRAFT") && IsSignificantlyAboveTerrain(victim))) return;
+        if (IsAirborneTargetAtFrameEnd(victim)) return;
         if (Array.Find(victim.ModuleArray, module => module is PhysicsBehavior) is not PhysicsBehavior physics) return;
         var (vx, vy, vz) = frameEnd ? victim.FrameEnd(_tick) : (victim.X, victim.Y, victim.Z);
         Fixed dx = Fixed.Zero, dy = Fixed.Zero, dz = Fixed.Zero;
@@ -157,5 +157,4 @@ public sealed partial class SimulationWorld
         physics.ApplyShock(this, dx / length * amount, dy / length * amount, amount, victim.Template.Locomotor is { StickToGround: true });
     }
 
-    private static readonly int AirborneTargetBit = ObjectStatusBits.Index("AIRBORNE_TARGET");
 }

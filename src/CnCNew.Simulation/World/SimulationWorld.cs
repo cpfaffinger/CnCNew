@@ -1907,7 +1907,10 @@ public sealed partial class SimulationWorld : IWorldServices
             if (entity.DisabledEdge) _disabledObjects.Remove(entity);
             if (entity.SellCompleteTick >= 0) _sales.Remove((entity.SellCompleteTick, entity.Id.Value));
             if (Navigation is { } navigation && BlocksGrid(entity))
-                navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+            {
+                if (entity.IsRubble) navigation.RemoveRubble(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+                else navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+            }
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             UnregisterStructureHooks(entity);
             _activeTurrets.Remove(entity.Id.Value);
@@ -2206,7 +2209,10 @@ public sealed partial class SimulationWorld : IWorldServices
         if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyObjectEnergy(entity, entity.Owner, true);
         if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
         if (Navigation is { } navigation && BlocksGrid(entity))
-            navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+        {
+            if (entity.IsRubble) navigation.AddRubble(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+            else navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+        }
         RegisterStructureHooks(entity);
         RegisterTurrets(entity);
         RegisterFiringTracker(entity);

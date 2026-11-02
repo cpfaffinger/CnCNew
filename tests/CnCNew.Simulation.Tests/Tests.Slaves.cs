@@ -20,6 +20,7 @@ static partial class Tests
         ["Data/INI/Object/SlaveFixture.ini"] = """
         Locomotor SvDroneLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 60.0
           Acceleration = 600.0
           Braking = 600.0

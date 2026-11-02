@@ -26,6 +26,7 @@ internal static class JetOrderTests
         ["Data/INI/Object/JetOrderFixture.ini"] = """
         Locomotor FighterLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150.0
           Acceleration = 120.0
           Braking = 60.0

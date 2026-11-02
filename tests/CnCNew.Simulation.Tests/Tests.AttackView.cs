@@ -173,12 +173,26 @@ static partial class Tests
           End
         End
 
+        Locomotor HoverLoco
+          Surfaces = AIR
+          AirborneTargetingHeight = 30
+          Speed = 90.0
+          Acceleration = 300.0
+          Braking = 300.0
+          TurnRate = 360.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+        End
+
         Object HoverCraft
           KindOf = SELECTABLE VEHICLE AIRCRAFT
           VisionRange = 400.0
+          Locomotor = SET_NORMAL HoverLoco
           Body = ActiveBody Body01
             MaxHealth = 1000.0
             InitialHealth = 1000.0
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
 

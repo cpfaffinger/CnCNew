@@ -35,6 +35,7 @@ static partial class Tests
         End
         Locomotor RotorLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 150
           Acceleration = 900
           Braking = 900

@@ -96,8 +96,14 @@ public interface IWorldServices
     /// <summary><c>TerrainLogic::updateBridgeDamageStates</c>.</summary>
     void UpdateBridgeDamageStates();
 
+    /// <summary><c>getPhysics()->getVelocity()</c>: units per logic frame of the original.</summary>
+    (Fixed X, Fixed Y, Fixed Z) VelocityOf(Entity entity);
+
     /// <summary>A bridge's <c>Pathfinder::changeBridgeState</c>.</summary>
     void SetBridgeUsable(TerrainBridge bridge, bool usable);
+
+    /// <summary><c>ActiveBody::setCorrectDamageState</c>: a structure whose body is rubble.</summary>
+    void BecomeRubble(Entity entity);
 
     /// <summary>The object is made now, in the middle of the tick, as <c>ThingFactory::newObject</c> makes it.</summary>
     Entity CreateNow(ObjectTemplate template, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
@@ -281,6 +287,15 @@ public interface IWorldServices
     /// has begun ends (<see cref="Entity.FrameEnd"/>, docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). 30 Hz: the same answer.
     /// </summary>
     bool IsSignificantlyAboveTerrainAtFrameEnd(Entity entity);
+
+    /// <summary>
+    /// <c>Object::isAirborneTarget</c>: <c>OBJECT_STATUS_AIRBORNE_TARGET</c>, which only <c>AIUpdateInterface::update</c> sets, after its movement, for an object higher above the terrain
+    /// than the <c>AirborneTargetingHeight</c> of the locomotor it moves with. So a thing thrown into the air is none, and a helicopter that comes down is one no longer at 30.
+    /// </summary>
+    bool IsAirborneTarget(Entity entity);
+
+    /// <inheritdoc cref="IsAirborneTarget"/>
+    bool IsAirborneTargetAtFrameEnd(Entity entity);
 
     /// <summary>
     /// <c>ObjectCreationList::create</c> with <paramref name="source"/> as primary object: queues the spawns the list describes and returns

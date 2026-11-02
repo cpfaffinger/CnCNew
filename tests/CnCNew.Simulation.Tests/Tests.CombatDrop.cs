@@ -19,6 +19,7 @@ static partial class Tests
     private const string CombatDropIni = """
         Locomotor DropWings
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 120.0
           SpeedDamaged = 120.0
           TurnRate = 360.0

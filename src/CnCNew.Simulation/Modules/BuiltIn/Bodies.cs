@@ -99,6 +99,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         Health = health;
         DamageState = CalcDamageState(world);
         Entity.EffectivelyDead = Health <= Fixed.Zero;
+        if (DamageState == BodyDamageStates.Rubble && Entity.Template.IsKindOf("STRUCTURE")) world.BecomeRubble(Entity);
     }
 
     /// <summary>

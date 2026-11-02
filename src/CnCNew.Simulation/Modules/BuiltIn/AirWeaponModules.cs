@@ -60,8 +60,8 @@ internal static class AirWeaponModules
         return SquaredReach.Of(radius).ContainsStrictly(shrunkSquared);
     }
 
-    /// <summary><c>Object::isAirborneTarget</c> as far as it can be known here: flying clearly above the terrain, or flagged so.</summary>
-    public static bool IsAirborne(IWorldServices world, Entity entity) => entity.HasStatus(ObjectStatusBits.Index("AIRBORNE_TARGET")) || world.IsSignificantlyAboveTerrain(entity);
+    /// <summary><c>Object::isAirborneTarget</c>.</summary>
+    public static bool IsAirborne(IWorldServices world, Entity entity) => world.IsAirborneTarget(entity);
 
     /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, ...)</c>, with <paramref name="hacked"/> <c>DISABLED_HACKED</c>: the object neither moves nor shoots until <paramref name="until"/>.</summary>
     public static void DisableUntil(IWorldServices world, Entity victim, long until, bool hacked = false)

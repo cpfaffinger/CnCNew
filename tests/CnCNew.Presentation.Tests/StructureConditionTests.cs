@@ -234,6 +234,7 @@ internal static class StructureConditionTests
 
         Locomotor PlaneLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           TurnRate = 90.0
           Speed = 120.0
           Acceleration = 600.0
@@ -244,6 +245,7 @@ internal static class StructureConditionTests
         End
         Locomotor DroneLoco
           Surfaces = AIR
+          AirborneTargetingHeight = 30
           Speed = 60.0
           Acceleration = 600.0
           Braking = 600.0
