@@ -438,7 +438,9 @@ public sealed partial class ScriptEngine
         var key = action.TypeName switch
         {
             "SPEECH_PLAY" or "SOUND_PLAY_NAMED" or "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR" or "MUSIC_SET_TRACK" when arguments.Length > 0 => arguments[0],
-            "MOVE_CAMERA_TO" or "MOVE_CAMERA_ALONG_WAYPOINT_PATH" or "ROTATE_CAMERA" or "RESET_CAMERA" or "MOVE_CAMERA_TO_SELECTION" or "CAMERA_MOVE_HOME" => "<camera>",
+            // W3DView::isCameraMovementFinished: every scripted movement of the view, a zoom and a pitch as well.
+            "MOVE_CAMERA_TO" or "MOVE_CAMERA_ALONG_WAYPOINT_PATH" or "ROTATE_CAMERA" or "RESET_CAMERA" or "MOVE_CAMERA_TO_SELECTION" or "CAMERA_MOVE_HOME"
+                or "ZOOM_CAMERA" or "PITCH_CAMERA" or "CAMERA_LOOK_TOWARD_WAYPOINT" or "CAMERA_LOOK_TOWARD_OBJECT" => "<camera>",
             _ => null,
         };
         if (key is not null) _pendingPresentation[key] = _tick + _world.Time.OriginalFrames(_options.PresentationLatencyTicks);

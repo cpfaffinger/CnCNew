@@ -100,7 +100,7 @@ public sealed class MissionPresentationDirector
     private bool _textProblemReported;
     private long _movieExpiresAtTick;
     private long _subtitleExpiresAtTick;
-    private long _cameraCompletesAtTick;
+    private long _moveEndsAtTick, _zoomEndsAtTick, _pitchEndsAtTick;
     private bool _cameraPending;
     private bool _countersVisible = true;
 
@@ -458,6 +458,13 @@ public sealed class MissionPresentationDirector
 
     private void CameraRequest(long tick, Action<ScriptedCamera> request) => _cameraRequests.Add((tick, request));
 
+    // isCameraMovementFinished: no move, turn, zoom or pitch is under way. A new move or turn replaces the old one, a zoom or a pitch runs on beside it.
+    private void CameraMoves(long tick, double seconds)
+    {
+        _cameraPending = true;
+        _moveEndsAtTick = tick + DurationTicks(seconds);
+    }
+
     // ------------------------------------------------------------------------------------------------ overlay
 
     /// <summary>
@@ -567,7 +574,7 @@ public sealed class MissionPresentationDirector
             _session.Engine.CompletePresentation(_completions[index].Key);
             _completions.RemoveAt(index);
         }
-        if (_cameraPending && tick >= _cameraCompletesAtTick)
+        if (_cameraPending && tick >= Math.Max(_moveEndsAtTick, Math.Max(_zoomEndsAtTick, _pitchEndsAtTick)))
         {
             _session.Engine.CompletePresentation(CameraKey);
             _cameraPending = false;
@@ -721,8 +728,7 @@ public sealed class MissionPresentationDirector
                 Number(output, 3, out var easeIn);
                 Number(output, 4, out var easeOut);
                 var chain = WaypointChain(output, 0);
-                _cameraPending = true;
-                _cameraCompletesAtTick = tick + DurationTicks(seconds);
+                CameraMoves(tick, seconds);
                 CameraTarget = chain.Length > 0 ? (chain[^1].X, chain[^1].Y) : null;
                 if (chain.Length == 0) return;
                 CameraRequest(tick, camera => camera.MoveAlong(chain, seconds, stutter, easeIn, easeOut));
@@ -747,8 +753,8 @@ public sealed class MissionPresentationDirector
                 Number(output, reset ? 2 : 3, out var easeIn);
                 Number(output, reset ? 3 : 4, out var easeOut);
                 CameraTarget = WaypointAt(output, 0);
-                _cameraPending = true;
-                _cameraCompletesAtTick = tick + DurationTicks(seconds);
+                CameraMoves(tick, seconds);
+                if (reset) _zoomEndsAtTick = _pitchEndsAtTick = _moveEndsAtTick;
                 if (CameraTarget is not { } target) return;
                 var place = new Vector2(target.X, target.Y);
                 if (reset) CameraRequest(tick, camera => camera.Reset(place, seconds, easeIn, easeOut));
@@ -780,8 +786,7 @@ public sealed class MissionPresentationDirector
                 Number(output, 2, out var easeIn);
                 Number(output, 3, out var easeOut);
                 CameraTarget = null;
-                _cameraPending = true;
-                _cameraCompletesAtTick = tick + DurationTicks(seconds);
+                CameraMoves(tick, seconds);
                 if (!Number(output, 0, out var turns)) { Problem(action, "rotation argument missing"); return; }
                 CameraRequest(tick, camera => camera.Rotate(turns, seconds, easeIn, easeOut));
                 Handled(action, Channel.Camera);
@@ -794,8 +799,17 @@ public sealed class MissionPresentationDirector
                 Number(output, 1, out var seconds);
                 Number(output, 2, out var easeIn);
                 Number(output, 3, out var easeOut);
-                if (action == "ZOOM_CAMERA") CameraRequest(tick, camera => camera.Zoom(value, seconds, easeIn, easeOut));
-                else CameraRequest(tick, camera => camera.Pitch(value, seconds, easeIn, easeOut));
+                _cameraPending = true;
+                if (action == "ZOOM_CAMERA")
+                {
+                    _zoomEndsAtTick = tick + DurationTicks(seconds);
+                    CameraRequest(tick, camera => camera.Zoom(value, seconds, easeIn, easeOut));
+                }
+                else
+                {
+                    _pitchEndsAtTick = tick + DurationTicks(seconds);
+                    CameraRequest(tick, camera => camera.Pitch(value, seconds, easeIn, easeOut));
+                }
                 Handled(action, Channel.Camera);
                 return;
             }
@@ -805,8 +819,16 @@ public sealed class MissionPresentationDirector
                 if (!Number(output, 0, out var value)) { Problem(action, "value argument missing"); return; }
                 Number(output, 1, out var easeIn);
                 Number(output, 2, out var easeOut);
-                if (action == "CAMERA_MOD_SET_FINAL_ZOOM") CameraRequest(tick, camera => camera.ModFinalZoom(value, easeIn, easeOut));
-                else CameraRequest(tick, camera => camera.ModFinalPitch(value, easeIn, easeOut));
+                if (action == "CAMERA_MOD_SET_FINAL_ZOOM")
+                {
+                    _zoomEndsAtTick = _moveEndsAtTick;
+                    CameraRequest(tick, camera => camera.ModFinalZoom(value, easeIn, easeOut));
+                }
+                else
+                {
+                    _pitchEndsAtTick = _moveEndsAtTick;
+                    CameraRequest(tick, camera => camera.ModFinalPitch(value, easeIn, easeOut));
+                }
                 Handled(action, Channel.Camera);
                 return;
             }
@@ -821,8 +843,7 @@ public sealed class MissionPresentationDirector
                     Number(output, 2, out var easeIn);
                     Number(output, 3, out var easeOut);
                     Number(output, 4, out var reverse);
-                    _cameraPending = true;
-                    _cameraCompletesAtTick = tick + DurationTicks(seconds);
+                    CameraMoves(tick, seconds);
                     CameraRequest(tick, camera => camera.RotateToward(place, seconds, easeIn, easeOut, reverse != 0f));
                 }
                 else if (action == "CAMERA_MOD_LOOK_TOWARD") CameraRequest(tick, camera => camera.ModLookToward(place));
@@ -847,8 +868,7 @@ public sealed class MissionPresentationDirector
             case "CAMERA_MOVE_HOME" or "MOVE_CAMERA_TO_SELECTION":
                 // Neither retail action takes a duration (doCameraMoveHome is empty in the reference); complete on the very next tick's BeforeStep().
                 CameraTarget = null;
-                _cameraPending = true;
-                _cameraCompletesAtTick = tick;
+                CameraMoves(tick, 0);
                 return;
             case "CAMERA_LETTERBOX_BEGIN":
                 SetLetterbox(true);
@@ -1157,8 +1177,7 @@ public sealed class MissionPresentationDirector
                 Number(output, 2, out var hold);
                 Number(output, 3, out var easeIn);
                 Number(output, 4, out var easeOut);
-                _cameraPending = true;
-                _cameraCompletesAtTick = tick + DurationTicks(seconds + Math.Max(0, hold));
+                CameraMoves(tick, seconds + Math.Max(0, hold));
                 CameraRequest(tick, camera => camera.RotateTowardObject(() => TryNamedPosition(name, out var x, out var y) ? new Vector2(x, y) : null, seconds, hold, easeIn, easeOut));
                 Handled(action, Channel.Camera);
                 return;

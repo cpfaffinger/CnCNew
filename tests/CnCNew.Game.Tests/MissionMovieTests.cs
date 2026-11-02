@@ -202,7 +202,10 @@ internal static class MissionMovieTests
         TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing, "Escape counts when it comes up");
         shell.HandleInput(new KeyEvent(0, KeyCode.Escape, false));
         shell.Update(0.01);
-        TestHarness.Assert(shell.Phase == ShellPhase.InMission && shell.DrainOutputs().OfType<StartMissionOutput>().Any(), "then the mission starts");
+        var started = shell.Phase == ShellPhase.InMission ? shell.DrainOutputs().OfType<StartMissionOutput>().SingleOrDefault() : null;
+        TestHarness.Assert(started is not null, "then the mission starts");
+        // Without a latency HAS_FINISHED_SPEECH and CAMERA_MOVEMENT_FINISHED are true at once, and a cut scene's scripts run ahead of what they wait for.
+        TestHarness.Assert(started!.Run.Session.Options.PresentationLatencyTicks == CnCNew.Game.Live.LiveMission.ClientPresentationLatencyFrames, "and it waits for its speech and its camera like one started by name");
 
         var ending = StartCampaign(data, Director(3, opened: _ => { }));
         ending.Movies!.Update(1);
