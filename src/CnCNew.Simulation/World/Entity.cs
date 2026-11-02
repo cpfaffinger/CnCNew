@@ -175,6 +175,9 @@ public sealed class Entity
     /// <summary>Per-slot weapon state of an object with more than one weapon (<see cref="Templates.ObjectTemplate.HasMultipleWeaponSlots"/>); null for a single-weapon object, whose only slot lives in <see cref="WeaponClip"/>/<see cref="WeaponReadyTick"/>.</summary>
     internal WeaponSlotState? WeaponSlots { get; set; }
 
+    /// <summary><c>Weapon::m_scatterTargetsUnused</c> per slot; null until the object fires a weapon with a scatter pattern.</summary>
+    internal List<int>[]? ScatterTargetsUnused { get; set; }
+
     /// <summary>Rounds left in <paramref name="slot"/>'s clip (-1: the slot holds no weapon, <see cref="int.MaxValue"/>: unlimited). Slot 0 is <see cref="WeaponClip"/>.</summary>
     public int ClipOf(int slot) => slot == 0 ? WeaponClip : WeaponSlots?.Clip[slot] ?? -1;
 
@@ -443,6 +446,17 @@ public sealed class Entity
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);
         if (Subdued) writer.Bool("subdued", true);
+        if (ScatterTargetsUnused is { } scatter)
+        {
+            writer.BeginArray("scatterUnused");
+            foreach (var slot in scatter)
+            {
+                writer.BeginObject(null);
+                writer.Text("indices", string.Join(',', slot));
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
         if (OwnAttitude is { } attitude) writer.Int("attitude", attitude);
         if (RepulsorUntil != 0) writer.Int("repulsorUntil", RepulsorUntil);

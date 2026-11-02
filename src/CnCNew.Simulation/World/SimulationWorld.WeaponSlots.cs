@@ -358,6 +358,7 @@ public sealed partial class SimulationWorld
         source.LastFireTick = _tick;
         if (clip != int.MaxValue) clip--;
         var emptied = clip == 0;
+        PickScatterTarget(source, slot, weapon, emptied);
         // A RETURN_TO_BASE weapon that ran dry waits for the airfield reload (JetAIUpdate refills the clip and sets the ready tick then).
         // A ClipReloadTime of 0 reloads at once; the next shot then comes with the next logic frame of the original, at every rate: the original's weapon is ready again in
         // the frame of its last shot, but its attack state fires once per frame, while here every fire command is a shot (F-07: a second command in the same tick fired again).

@@ -173,6 +173,7 @@ public sealed partial class SimulationWorld
         if (state.Int("pendingCommands") != _pendingCommandCount || state.Int("entities") != _entities.Count || state.Int("timers") != _timerById.Count)
             throw new InvalidDataException("Snapshot table sizes do not match their contents.");
         LoadBridges(state);
+        LoadHistoricDamage(state);
         LoadVision(state);
         RebuildDisabledEdges();
         ComputeFullHash();
@@ -255,6 +256,8 @@ public sealed partial class SimulationWorld
         // Weapon slot state exists exactly for objects whose weapon sets hold more than one weapon; any other shape is a snapshot of different data.
         if (reader.Has("weaponSlots") != template.HasMultipleWeaponSlots)
             throw new InvalidDataException($"Entity {entity.Id} ('{template.Name}') {(template.HasMultipleWeaponSlots ? "lacks" : "carries")} weapon slot state its template {(template.HasMultipleWeaponSlots ? "needs" : "does not have")}.");
+        if (reader.Has("scatterUnused"))
+            entity.ScatterTargetsUnused = [..reader.Array("scatterUnused").Select(slot => slot.Text("indices").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(index => int.Parse(index, System.Globalization.CultureInfo.InvariantCulture)).ToList())];
         if (template.HasMultipleWeaponSlots) entity.WeaponSlots = WeaponSlotState.Load(reader.Object("weaponSlots"), template);
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");
         AttachModules(entity, template);

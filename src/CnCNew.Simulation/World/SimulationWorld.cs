@@ -2442,6 +2442,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         writer.Int("tick", _tick);
         DescribeBridges(writer);
+        DescribeHistoricDamage(writer);
         DescribeWater(writer);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         if (HulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", HulkLifetimeOverrideTicks);

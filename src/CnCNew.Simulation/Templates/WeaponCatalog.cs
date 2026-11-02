@@ -34,6 +34,20 @@ public sealed record WeaponInfo(
     public const int CollideAllies = 1, CollideEnemies = 2, CollideStructures = 4, CollideShrubbery = 8, CollideProjectile = 16, CollideWalls = 32, CollideSmallMissiles = 64,
         CollideBallisticMissiles = 128, CollideControlledStructures = 256;
 
+    /// <summary><c>HistoricBonusCount</c>: this many hits of this weapon, anybody's, close enough in time and place set off <see cref="HistoricBonusWeapon"/> (the firestorm); 0 for none.</summary>
+    public int HistoricBonusCount { get; init; }
+
+    /// <summary><c>HistoricBonusTime</c> in logic frames of the original.</summary>
+    public long HistoricBonusFrames { get; init; }
+
+    public Fixed HistoricBonusRadius { get; init; }
+    public string HistoricBonusWeapon { get; init; } = string.Empty;
+
+    /// <summary><c>ScatterTarget</c>: the fixed pattern a clip is fired in, each offset used once per clip, times <see cref="ScatterTargetScalar"/>.</summary>
+    public ImmutableArray<(Fixed X, Fixed Y)> ScatterTargets { get; init; } = [];
+
+    public Fixed ScatterTargetScalar { get; init; }
+
     /// <summary><c>ProjectileCollidesWith</c>: what the projectile meets on its way, besides what it was fired at.</summary>
     public int ProjectileCollideMask { get; init; } = CollideStructures;
 
@@ -230,6 +244,17 @@ public sealed class WeaponCatalog
     public WeaponInfo this[int index] => Weapons[index];
     public bool TryGet(string name, out WeaponInfo info) => _byName.TryGetValue(name, out info!);
 
+    /// <summary><c>parseScatterTarget</c>: "X: 0.000 Y: 0.133".</summary>
+    private static (Fixed X, Fixed Y) ScatterOffset(string weapon, string text)
+    {
+        var parts = text.Split(';', 2)[0].Split([' ', '\t', ':'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 4 && parts[0].Equals("X", StringComparison.OrdinalIgnoreCase) && parts[2].Equals("Y", StringComparison.OrdinalIgnoreCase)
+            && decimal.TryParse(parts[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var x)
+            && decimal.TryParse(parts[3], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var y))
+            return (Fixed.FromDecimal(x), Fixed.FromDecimal(y));
+        throw new InvalidDataException($"{weapon}: ScatterTarget '{text}' is no pair of coordinates.");
+    }
+
     public static WeaponCatalog Build(CompiledDefinitionGraph graph, SimulationTime timing)
     {
         ArgumentNullException.ThrowIfNull(graph);
@@ -332,6 +357,12 @@ public sealed class WeaponCatalog
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
                 ProjectileCollideMask = collide,
+                HistoricBonusCount = Field("HistoricBonusCount")?.Value.Value is long historicCount ? checked((int)historicCount) : Field("HistoricBonusCount")?.Value.Value is decimal historicNumber ? (int)historicNumber : 0,
+                HistoricBonusFrames = decimal.TryParse(Name("HistoricBonusTime").Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var historicTime) ? (long)(historicTime * CnCNew.Data.OriginalFrame.PerSecond / 1000m) : 0,
+                HistoricBonusRadius = Field("HistoricBonusRadius") is null ? Fixed.Zero : Length("HistoricBonusRadius"),
+                HistoricBonusWeapon = Name("HistoricBonusWeapon"),
+                ScatterTargets = [..definition.Fields.Where(field => field.Name.Equals("ScatterTarget", StringComparison.OrdinalIgnoreCase)).Select(field => ScatterOffset(definition.OriginalName, field.Value.OriginalText))],
+                ScatterTargetScalar = Field("ScatterTargetScalar") is null ? Fixed.Zero : Length("ScatterTargetScalar"),
                 AllowAttackGarrisonedBuildings = Flag("AllowAttackGarrisonedBldgs"),
                 ShockWaveAmount = Length("ShockWaveAmount"),
                 ShockWaveRadius = Length("ShockWaveRadius"),

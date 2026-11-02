@@ -48,6 +48,7 @@ public sealed partial class SimulationWorld
             if (frameEnd) (x, y, z) = primaryVictim.FrameEnd(_tick);
         }
 
+        if (weapon.HistoricBonusCount > 0) NoteHistoricDamage(source, weapon, x, y, z);
         var primaryRadius = weapon.RadiusWith(bonuses, conditions, weapon.PrimaryRadius);
         var secondaryRadius = weapon.RadiusWith(bonuses, conditions, weapon.SecondaryRadius);
         var primaryDamage = weapon.DamageWith(bonuses, conditions, weapon.PrimaryDamage);

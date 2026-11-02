@@ -38,6 +38,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     public Fixed FireWeaponAt(Entity source, WeaponInfo weapon, Entity? victim, Fixed x, Fixed y, Fixed z)
     {
+        if (TakeScatterTarget(source, ref victim, ref x, ref y, ref z)) { }
         if (victim is not null) { x = victim.X; y = victim.Y; z = victim.Z; }
         var (sourceX, sourceY, sourceZ) = (source.X, source.Y, source.Z);
         var sourceAngle = source.Angle;
