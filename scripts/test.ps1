@@ -260,7 +260,8 @@ if ($From) {
     $selected = @($selected[$start..($selected.Length - 1)])
 }
 
-$haveContent = Test-Path -LiteralPath (Join-Path $repo (Join-Path $ContentDir 'content-manifest.json'))
+# Combine, not Join-Path: an absolute -ContentDir (a worktree has no game folder of its own) would be glued behind the repository.
+$haveContent = Test-Path -LiteralPath ([IO.Path]::Combine($repo, $ContentDir, 'content-manifest.json'))
 Write-Host "Tier: $Tier" -ForegroundColor Cyan
 if ($Tier -ne 'full') {
     Write-Host "Areas: $(if ($areas.Count) { $areas -join ', ' } else { '(no change)' })$(if ($Paths.Count) { "  ($($Paths.Count) path(s) against $Since)" })"
