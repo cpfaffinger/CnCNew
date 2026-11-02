@@ -373,6 +373,9 @@ public static class ReplayFormat
                 writer.Write(evacuate.X.Raw);
                 writer.Write(evacuate.Y.Raw);
                 break;
+            case HackInternetCommand hack:
+                writer.Write(hack.Unit.Value);
+                break;
             case OverchargeCommand overcharge:
                 writer.Write(overcharge.Target.Value);
                 break;
@@ -488,6 +491,7 @@ public static class ReplayFormat
             CommandTypes.MoveAndEnter => new MoveAndEnterCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadBoolean(), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
+            CommandTypes.HackInternet => new HackInternetCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),

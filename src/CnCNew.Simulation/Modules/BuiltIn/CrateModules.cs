@@ -135,6 +135,8 @@ public abstract class CrateCollideBase(CrateCollideData crate) : SimModule, ICol
 
     public bool WouldLikeToCollideWith(IWorldServices world, Entity other) => IsValidToExecute(world, other);
 
+    public virtual CollideEntry Entry => CollideEntry.None;
+
     protected virtual bool IsValidToExecute(IWorldServices world, Entity other)
     {
         if (other.Owner.IsSystem) return false;
@@ -265,6 +267,7 @@ public sealed class ConvertToCarBombCrateCollide(ConvertToCarBombData data) : Cr
     private static bool HasCarBombWeaponSet(ObjectTemplate template) => template.WeaponSets.Any(set => (set.Conditions & CarBombSetMask) != 0 && set.WeaponCount > 0);
 
     public override string ModuleName => "ConvertToCarBombCrateCollide";
+    public override CollideEntry Entry => CollideEntry.CarBomb;
 
     protected override bool IsValidToExecute(IWorldServices world, Entity other)
         => base.IsValidToExecute(world, other) && !other.EffectivelyDead && !other.Template.IsKindOf("AIRCRAFT") && !other.Template.IsKindOf("BOAT")
@@ -308,6 +311,7 @@ public sealed class ConvertToHijackedVehicleCrateCollide(CrateCollideData crate)
     private static readonly ulong HiddenMask = (1UL << ObjectStatusBits.Index("NO_COLLISIONS")) | (1UL << ObjectStatusBits.Index("MASKED")) | (1UL << ObjectStatusBits.Index("UNSELECTABLE"));
 
     public override string ModuleName => "ConvertToHijackedVehicleCrateCollide";
+    public override CollideEntry Entry => CollideEntry.Hijack;
 
     protected override bool IsValidToExecute(IWorldServices world, Entity other)
     {
@@ -474,6 +478,8 @@ public sealed record SabotageSupplyCenterData(CrateCollideData Crate, int StealC
 /// </summary>
 public abstract class SabotageCollideBase(CrateCollideData crate) : CrateCollideBase(crate)
 {
+    public override CollideEntry Entry => CollideEntry.Sabotage;
+
     protected abstract bool IsTargetKind(Entity building);
 
     protected override bool IsValidToExecute(IWorldServices world, Entity other)

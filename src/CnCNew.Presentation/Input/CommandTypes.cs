@@ -59,6 +59,8 @@ public enum ContextAction
     Dock,
     Repair,
     GetRepaired,
+    /// <summary>Hijack, car bomb, sabotage: <c>MSG_ENTER</c> at what the units' collide modules want (<c>ENTER_AGGRESSIVELY</c>).</summary>
+    EnterAggressively,
     Enter,
     SetRallyPoint,
     Invalid,

@@ -32,6 +32,17 @@ public sealed partial class SimulationWorld
         return module is null ? CommandRejection.CannotToggleOvercharge : 0;
     }
 
+    /// <summary><c>AIGroup::groupHackInternet</c>: an own hacker that stands free and is not at it already (<c>GUI_COMMAND_HACK_INTERNET</c> offers it to no other).</summary>
+    private CommandRejection CheckHackInternet(PlayerId issuer, HackInternetCommand command, out HackInternetAIUpdate? module)
+    {
+        module = null;
+        var unit = FindEntity(command.Unit);
+        if (unit is null || unit.DestroyRequested || unit.EffectivelyDead) return CommandRejection.UnknownEntity;
+        if (!MayCommand(issuer, unit)) return CommandRejection.NotPermitted;
+        module = unit.Modules.OfType<HackInternetAIUpdate>().FirstOrDefault();
+        return module is null || module.IsHackingPackingOrUnpacking || unit.ContainedBy.IsValid ? CommandRejection.NotPermitted : 0;
+    }
+
     /// <summary>Capture range: the same "close enough to work on it" margin <c>UpdateTask</c> (construction/repair) uses.</summary>
     private static readonly Fixed CaptureReachCells = Fixed.FromInt(2 * TerrainMap.CellSize);
 

@@ -504,6 +504,7 @@ static partial class Tests
             new MoveAndEnterCommand(new PlayerId(1), 1, 3, new EntityId(4), new EntityId(5)),
             new EvacuateCommand(new PlayerId(1), 2, 4, new EntityId(5), true, Fixed.FromInt(12), Fixed.FromDecimal(-3.5m)),
             new EvacuateCommand(new PlayerId(1), 3, 4, new EntityId(6), false, Fixed.Zero, Fixed.Zero),
+            new HackInternetCommand(new PlayerId(1), 4, 5, new EntityId(4)),
         ];
         var bytes = ReplayFormat.Write(new ReplayFile(header, commands, []));
         var read = ReplayFormat.Read(bytes);

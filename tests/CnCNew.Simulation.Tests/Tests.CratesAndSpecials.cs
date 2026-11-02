@@ -799,6 +799,25 @@ static partial class Tests
 
     // ============================================================================================================ hijacking
 
+    public static void AnOrderToEnterIsAskedOfTheCollideModules()
+    {
+        var world = CratesWorld(out var feeder);
+        var hijacker = CsSpawn(world, feeder, "FixtureHijacker", 1, 0);
+        var truck = CsSpawn(world, feeder, "EjectingTruck", 2, 80);
+        var friend = CsSpawn(world, feeder, "EjectingTruck", 1, 80, 120);
+        var bus = CsSpawn(world, feeder, "ImmuneBus", 2, 80, 60);
+        var plain = CsSpawn(world, feeder, "PlainInfantry", 1, 0, 200);
+        CsRun(world, 2);
+        Check.That(world.CollideEntryOf(new PlayerId(1), hijacker, truck) == CollideEntry.Hijack, "An enemy truck is the hijacker's.");
+        foreach (var refused in new[] { friend, bus, hijacker })
+            Check.That(world.CollideEntryOf(new PlayerId(1), hijacker, refused) == CollideEntry.None && !feeder.MoveAndEnter(1, hijacker.Id.Value, refused.Id.Value).Accepted, $"Not {refused.Template.Name} of {refused.Owner}.");
+        Check.That(world.CollideEntryOf(new PlayerId(1), plain, truck) == CollideEntry.None && !feeder.MoveAndEnter(1, plain.Id.Value, truck.Id.Value).Accepted, "A unit without the module has no such order.");
+        Check.That(!feeder.MoveAndEnter(2, hijacker.Id.Value, truck.Id.Value).Accepted, "Nor does the other player give it.");
+        Check.That(feeder.MoveAndEnter(1, hijacker.Id.Value, truck.Id.Value).Accepted, "The order is taken.");
+        CsRun(world, 120, () => truck.Owner == new PlayerId(1));
+        Check.That(truck.Owner == new PlayerId(1) && truck.HasStatus(ObjectStatusBits.Index("HIJACKED")), "And ends in the truck.");
+    }
+
     public static void SpecialsHijack()
     {
         var world = CratesWorld(out var feeder);

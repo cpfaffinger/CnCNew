@@ -8,8 +8,11 @@ using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Input;
+using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.World;
 using CnCNew.Ui.Settings;
 
 namespace CnCNew.Game.Tests;
@@ -61,6 +64,7 @@ internal static class HudTests
         harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
         harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
+        harness.Run("Hack, weapon switch, overcharge, hijack, car bomb, sabotage: a press does what the button says", () => ButtonsOfUnits(data));
         harness.Run("The sneak attack: a press puts the tunnel at the cursor and the power is used where it is put down", () => SneakAttack(data));
         harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
@@ -550,6 +554,99 @@ internal static class HudTests
         TestHarness.Assert(commands.Mode != CommandModeKind.Placement, $"it is put down ({string.Join(", ", reasons)})");
         Advance(match, controller, (int)match.World.Time.WholeSecondsToTicks(5));
         TestHarness.Assert(match.World.Entities.Any(entity => entity.Owner == match.Human && entity.Template.Name.Contains("SneakAttack", StringComparison.Ordinal)), $"and the tunnel comes up ({center.Template.Name})");
+    }
+
+    private static void ButtonsOfUnits(GameData data)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionGLA", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        var world = match.World;
+        var commands = controller.Input.Commands;
+        Advance(match, controller, (int)world.Time.OriginalFrames(4));
+        var center = world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var enemy = world.Entities.First(entity => entity.Owner != match.Human && entity.Template.IsKindOf("COMMANDCENTER")).Owner;
+        ulong sequence = 1_000_000;
+        Entity Spawn(string name, CnCNew.Simulation.Ids.PlayerId owner, int dx, int dy)
+        {
+            var known = world.Entities.Select(entity => entity.Id).ToHashSet();
+            var (x, y) = (center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(dy));
+            TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, name, owner, x, y, CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, $"{name} is spawned");
+            Advance(match, controller, (int)world.Time.OriginalFrames(2));
+            return world.Entities.First(entity => entity.Template.Name == name && !known.Contains(entity.Id));
+        }
+        CommandBarButton Press(Entity unit, string name)
+        {
+            controller.Input.Selection.Replace([unit.Id]);
+            Advance(match, controller, 1);
+            Refresh(controller);
+            var found = controller.CommandBar.Slots.FirstOrDefault(button => button?.Button.Name == name);
+            TestHarness.Assert(found is not null, $"{unit.Template.Name} shows {name} ({string.Join(", ", controller.CommandBar.Slots.Select(button => button?.Button.Name + ":" + button?.Availability + ":" + button?.Reason))})");
+            return found!;
+        }
+        void Until(Func<bool> done, string what)
+        {
+            for (var second = 0; second < 40 && !done(); second++) Advance(match, controller, (int)world.Time.WholeSecondsToTicks(1));
+            TestHarness.Assert(done(), what);
+        }
+
+        // Internet hack.
+        var hacker = Spawn("ChinaInfantryHacker", match.Human, 120, 0);
+        var hack = hacker.Modules.OfType<HackInternetAIUpdate>().Single();
+        var hackButton = Press(hacker, "Command_ChinaInfantryHackerInternetHack");
+        TestHarness.Assert(hackButton.IsEnabled && commands.Activate(world, hackButton.Button, [hacker]) == ActivationResult.Issued, "the hack is a press");
+        Until(() => hack.IsHackingPackingOrUnpacking, "and the hacker sets up");
+        TestHarness.Assert(Press(hacker, "Command_ChinaInfantryHackerInternetHack").Availability == ButtonAvailability.Restricted, "the button is out while it hacks");
+
+        // Weapon switch: checked is the weapon in hand.
+        var ranger = Spawn("AmericaInfantryRanger", match.Human, 120, 40);
+        TestHarness.Assert(Press(ranger, "Command_AmericaRangerSwitchToFlagBangGrenades").Reason == ButtonReason.MissingUpgrade, "the grenades need their upgrade");
+        world.CompleteUpgrade(match.Human, null, "Upgrade_AmericaRangerFlashBangGrenade");
+        var grenades = Press(ranger, "Command_AmericaRangerSwitchToFlagBangGrenades");
+        TestHarness.Assert(grenades.Availability == ButtonAvailability.Available && Press(ranger, "Command_AmericaRangerSwitchToMachineGun").Availability == ButtonAvailability.Active, "the machine gun is checked");
+        TestHarness.Assert(commands.Activate(world, grenades.Button, [ranger]) == ActivationResult.Issued, "a press takes the other weapon");
+        Until(() => ranger.CurrentWeaponSlot == grenades.Button.WeaponSlotIndex, "and the ranger holds the grenades");
+        var inHand = Press(ranger, "Command_AmericaRangerSwitchToFlagBangGrenades");
+        TestHarness.Assert(inHand.Availability == ButtonAvailability.Active, "which are checked now");
+        TestHarness.Assert(controller.Tree.FindByName($"ControlBar.wnd:ButtonCommand{inHand.Slot:00}") is { IsSelected: true }, "and shown as on");
+
+        // Overcharge.
+        var plant = Spawn("ChinaPowerPlant", match.Human, 180, 80);
+        var overcharge = plant.Modules.OfType<OverchargeBehavior>().Single();
+        var chargeButton = Press(plant, "Command_Overcharge");
+        TestHarness.Assert(commands.Activate(world, chargeButton.Button, [plant]) == ActivationResult.Issued, "overcharge is a press");
+        Until(() => overcharge.Active, "and the plant runs overcharged");
+        TestHarness.Assert(Press(plant, "Command_Overcharge").Availability == ButtonAvailability.Active, "the button is checked");
+
+        // Hijack: an enemy vehicle, by the button and by the right click.
+        var hijacker = Spawn("GLAInfantryHijacker", match.Human, 60, -120);
+        var truck = Spawn("ChinaVehicleSupplyTruck", enemy, 110, -120);
+        var own = Spawn("GLAVehicleTechnical", match.Human, 60, -160);
+        var hijack = Press(hijacker, "Command_GLAInfantryHijack");
+        TestHarness.Assert(commands.Activate(world, hijack.Button, [hijacker]) == ActivationResult.EnteredMode, "the hijack asks for its vehicle");
+        TestHarness.Assert(!commands.CompleteTarget(world, own, null), "an own vehicle is no target");
+        TestHarness.Assert(commands.Mode == CommandModeKind.ButtonTarget && commands.CompleteTarget(world, truck, null), "an enemy vehicle is");
+        Until(() => truck.Owner == match.Human, "the truck changes hands");
+        var second = Spawn("GLAInfantryHijacker", match.Human, 60, -200);
+        var next = Spawn("ChinaVehicleSupplyTruck", enemy, 110, -200);
+        controller.Input.Selection.Replace([second.Id]);
+        var hint = commands.Evaluate(world, next, null);
+        TestHarness.Assert(hint.Action == ContextAction.EnterAggressively && hint.Cursor == CursorKind.EnterAggressive, $"the right click at an enemy vehicle is the hijack ({hint.Action})");
+
+        // Car bomb: a car that stands about.
+        var terrorist = Spawn("GLAInfantryTerrorist", match.Human, -60, -120);
+        var car = Spawn("CarCamaro", match.Human, -110, -120);
+        var bomb = Press(terrorist, "Command_GLAInfantryTerroristMakeCarBomb");
+        TestHarness.Assert(commands.Activate(world, bomb.Button, [terrorist]) == ActivationResult.EnteredMode && commands.CompleteTarget(world, car, null), "the terrorist goes for the car");
+        Until(() => car.HasStatus(ObjectStatusBits.Index("IS_CARBOMB")), "and the car is a bomb");
+
+        // Sabotage: an enemy building.
+        var saboteur = Spawn("GLAInfantrySaboteur", match.Human, -60, 120);
+        var barracks = Spawn("ChinaBarracks", enemy, -130, 120);
+        var sabotage = Press(saboteur, "Command_SabotageBuilding");
+        TestHarness.Assert(commands.Activate(world, sabotage.Button, [saboteur]) == ActivationResult.EnteredMode && commands.CompleteTarget(world, barracks, null), "the saboteur goes for the barracks");
+        Until(() => !world.Entities.Contains(saboteur), "and is spent at it");
+        TestHarness.Assert(commands.UnsupportedCounts.Count == 0, $"no press was refused as unsupported ({string.Join(", ", commands.UnsupportedCounts.Keys)})");
     }
 
     private static void PowerBar(GameData data)

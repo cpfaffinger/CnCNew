@@ -1036,10 +1036,34 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckEvacuate(command.Player, evacuate, out _);
             case OverchargeCommand overcharge:
                 return CheckOvercharge(command.Player, overcharge, out _);
+            case HackInternetCommand hack:
+                return CheckHackInternet(command.Player, hack, out _);
             case CaptureCommand capture:
                 return CheckCapture(command.Player, capture, out _, out _);
         }
         return 0;
+    }
+
+    /// <summary>
+    /// <c>ActionManager::canHijackVehicle</c>, <c>canConvertObjectToCarBomb</c>, <c>canSabotageBuilding</c>: what <paramref name="actor"/> would do on reaching
+    /// <paramref name="target"/>, or <see cref="CollideEntry.None"/>. The target must be alive and seen; hijacking and sabotage are for enemies, and a hijacker leaves aircraft and drones alone.
+    /// </summary>
+    public CollideEntry CollideEntryOf(PlayerId player, Entity actor, Entity target)
+    {
+        if (actor == target || target.DestroyRequested || target.EffectivelyDead || !CanPlayerSee(player, target)) return CollideEntry.None;
+        var enemies = RelationshipOf(player, target.Owner) == Relationship.Enemies;
+        foreach (var module in actor.Modules)
+        {
+            if (module is not ICollideModule { Entry: not CollideEntry.None } collide || !collide.WouldLikeToCollideWith(this, target)) continue;
+            var allowed = collide.Entry switch
+            {
+                CollideEntry.Hijack => enemies && target.Template.IsKindOf("VEHICLE") && !target.Template.IsKindOf("AIRCRAFT") && !target.Template.IsKindOf("DRONE"),
+                CollideEntry.Sabotage => enemies,
+                _ => true,
+            };
+            if (allowed) return collide.Entry;
+        }
+        return CollideEntry.None;
     }
 
     /// <summary><c>ActionManager::canEnterObject</c>, reduced to what exists here: an own mobile object that is not inside anything, a container whose entry rules accept it (capacity is checked on arrival).</summary>
@@ -1052,6 +1076,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (!CanMove(actor) || actor.Template.Locomotor is null) return CommandRejection.CannotMove;
         if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
         container = FindEntity(order.Container);
+        if (container is not null && CollideEntryOf(issuer, actor, container) != CollideEntry.None) return 0;
         if (container is null || container.DestroyRequested || container.Container is null || container == actor) return CommandRejection.UnknownEntity;
         return MayEnterAsOwner(actor, container) && container.Container.IsValidContainerFor(this, actor, false) ? 0 : CommandRejection.CannotEnterContainer;
     }
@@ -1143,6 +1168,7 @@ public sealed partial class SimulationWorld : IWorldServices
             case EnterContainerCommand order: return Sleeps(order.Actor);
             case ExitContainerCommand order: return Sleeps(order.Actor);
             case MoveAndEnterCommand order: return Sleeps(order.Actor);
+            case HackInternetCommand order: return Sleeps(order.Unit);
             case CaptureCommand order: return Sleeps(order.Actor);
             case ConstructCommand order: return Sleeps(order.Builder);
             case ResumeConstructCommand order: return Sleeps(order.Builder);
@@ -1557,7 +1583,16 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 var reason = CheckMoveAndEnter(command.Player, moveAndEnter, out var actor, out var container);
                 if (reason != 0) { RecordRejection(command, reason); break; }
-                AiOf(actor!)!.OrderEnter(this, container!, true);
+                // MSG_ENTER reaches the object either way: an object that is no container ends in the actor's collide module.
+                if (CollideEntryOf(command.Player, actor!, container!) != CollideEntry.None) AiOf(actor!)!.OrderApproachGoal(this, container!, true);
+                else AiOf(actor!)!.OrderEnter(this, container!, true);
+                break;
+            }
+            case HackInternetCommand hack:
+            {
+                var reason = CheckHackInternet(command.Player, hack, out var module);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                module!.StartHacking(this);
                 break;
             }
             case EvacuateCommand evacuate:

@@ -178,6 +178,7 @@ public sealed class CommandModeController
             if (CanDockAll(own, target)) return Hint(ContextAction.Dock, CursorKind.Dock);
             if (RepairBuilders(own, target).Any()) return Hint(ContextAction.Repair, CursorKind.DoRepair);
             if (RepairPadCandidates(world, own, target).Any()) return Hint(ContextAction.GetRepaired, CursorKind.GetRepaired);
+            if (Infiltrators(world, own, target).Any()) return Hint(ContextAction.EnterAggressively, CursorKind.EnterAggressive);
             if (Entrants(world, own, target).Any()) return Hint(ContextAction.Enter, CursorKind.EnterFriendly);
         }
 
@@ -223,6 +224,21 @@ public sealed class CommandModeController
     }
 
     /// <summary><c>ContainModuleInterface::isValidContainerFor</c> through the simulation's own container module.</summary>
+    /// <summary>The units of <paramref name="own"/> that would hijack, convert or sabotage <paramref name="target"/>, or do the one <paramref name="only"/> names.</summary>
+    private IEnumerable<Entity> Infiltrators(SimulationWorld world, ImmutableArray<Entity> own, Entity target, CollideEntry only = CollideEntry.None)
+        => own.Where(unit => world.CollideEntryOf(Player, unit, target) is var entry && entry != CollideEntry.None && (only == CollideEntry.None || entry == only));
+
+    private static CollideEntry EntryOf(GuiCommandKind kind) => kind switch
+    {
+        GuiCommandKind.HijackVehicle => CollideEntry.Hijack,
+        GuiCommandKind.ConvertToCarbomb => CollideEntry.CarBomb,
+        GuiCommandKind.SabotageBuilding => CollideEntry.Sabotage,
+        _ => CollideEntry.None,
+    };
+
+    private bool Infiltrate(SimulationWorld world, IEnumerable<Entity> units, Entity target)
+        => ForEach(units.ToList(), unit => Issue((sequence, tick) => new MoveAndEnterCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
+
     private static IEnumerable<Entity> Entrants(SimulationWorld world, ImmutableArray<Entity> own, Entity target)
         => target.Container is { } container && !own.Contains(target) ? own.Where(entity => container.IsValidContainerFor(world, entity, true)) : [];
 
@@ -299,6 +315,8 @@ public sealed class CommandModeController
                 return ForEach(RepairPadCandidates(world, own, target), unit => Issue((sequence, tick) => new DockCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
             case ContextAction.Repair when target is not null:
                 return ForEach(RepairBuilders(own, target), unit => Issue((sequence, tick) => new RepairCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
+            case ContextAction.EnterAggressively when target is not null:
+                return Infiltrate(world, Infiltrators(world, own, target), target);
             case ContextAction.Enter when target is not null:
                 return ForEach(Entrants(world, own, target).ToList(), unit => Issue((sequence, tick) => new EnterContainerCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
             case ContextAction.SetRallyPoint:
@@ -533,6 +551,24 @@ public sealed class CommandModeController
                     .Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
             }
+            // MSG_SWITCH_WEAPONS (AIGroup::setWeaponLockForGroup): the slot, for good.
+            case GuiCommandKind.SwitchWeapon:
+                return ForAll(sources, unit => Issue((sequence, tick) => new SetWeaponLockCommand(Player, sequence, tick, unit.Id, button.WeaponSlotIndex, WeaponLockKind.Permanent)));
+            // MSG_TOGGLE_OVERCHARGE (AIGroup::groupToggleOvercharge).
+            case GuiCommandKind.ToggleOvercharge:
+                return ForAll(sources, unit => Issue((sequence, tick) => new OverchargeCommand(Player, sequence, tick, unit.Id)));
+            // MSG_INTERNET_HACK (AIGroup::groupHackInternet).
+            case GuiCommandKind.HackInternet:
+                return ForAll(sources, unit =>
+                {
+                    Orders.Clear(unit.Id);
+                    return Issue((sequence, tick) => new HackInternetCommand(Player, sequence, tick, unit.Id));
+                });
+            case GuiCommandKind.HijackVehicle or GuiCommandKind.ConvertToCarbomb or GuiCommandKind.SabotageBuilding:
+            {
+                var walkers = sources.Where(SimulationQueries.CanMove).Select(entity => entity.Id).ToImmutableArray();
+                return walkers.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, walkers);
+            }
             default:
                 UnsupportedCounts[button.Kind.ToString()] = UnsupportedCounts.GetValueOrDefault(button.Kind.ToString()) + 1;
                 _feedback.Add(new CommandFeedback(FeedbackKind.Unsupported, Vector3.Zero, EntityId.Invalid, world.Tick, Settings.MarkerFrames, Detail: button.Kind.ToString()));
@@ -589,6 +625,14 @@ public sealed class CommandModeController
         position = null;
         var button = _button;
         if (button is null) return false;
+        // GUICOMMANDMODE_HIJACK_VEHICLE and its neighbours: canSelectedObjectsDoAction, not the relationship options alone.
+        if (EntryOf(button.Kind) is var entry and not CollideEntry.None)
+        {
+            var units = _sources.Select(world.FindEntity).OfType<Entity>().ToImmutableArray();
+            if (target is null || !Infiltrators(world, units, target, entry).Any()) return false;
+            objectTarget = target;
+            return true;
+        }
         if (target is not null && (button.Options & CommandOptions.NeedObjectTarget) != 0)
         {
             var relation = target.Owner == Player ? Relationship.Allies : world.RelationshipOf(Player, target.Owner);
@@ -679,6 +723,8 @@ public sealed class CommandModeController
                         => ClearMines(sources, place, button.WeaponSlotIndex, button.MaxShotsToFire),
                     // MSG_DO_WEAPON_AT_LOCATION: the button's slot at the place for its shots.
                     GuiCommandKind.FireWeapon when position is { } place => AttackPlace(sources, place, own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
+                    GuiCommandKind.HijackVehicle or GuiCommandKind.ConvertToCarbomb or GuiCommandKind.SabotageBuilding when objectTarget is not null
+                        => Infiltrate(world, Infiltrators(world, sources, objectTarget, EntryOf(button.Kind)), objectTarget),
                     _ => Unsupported(world, $"{button.Kind}Target", position ?? Vector3.Zero),
                 };
                 Cancel();

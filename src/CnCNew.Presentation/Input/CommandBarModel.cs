@@ -309,7 +309,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             var states = owners.Select(unit => Evaluate(world, player, unit, button)).ToList();
             if (states.All(state => state.Availability == ButtonAvailability.Hidden)) continue;
             // updateContextMultiSelect: enabled when at least one unit can do it; otherwise the first unit's verdict.
-            var enabled = states.FindIndex(state => state.Availability is ButtonAvailability.Available or ButtonAvailability.Active);
+            // A check-like button stays unchecked while one unit has not done it yet (GUI_COMMAND_SWITCH_WEAPON looks at the whole selection).
+            var enabled = states.FindIndex(state => state.Availability == ButtonAvailability.Available);
+            if (enabled < 0) enabled = states.FindIndex(state => state.Availability == ButtonAvailability.Active);
             var chosen = enabled >= 0 ? states[enabled] : states[0];
             var sources = owners.Where((_, i) => states[i].Availability is ButtonAvailability.Available or ButtonAvailability.Active).Select(unit => unit.Id).ToImmutableArray();
             slots[index] = Make(index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(unit => unit.Id)] : sources, hotkeys);
@@ -429,6 +431,21 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (!module.IsReady(world)) return State(ButtonAvailability.NotReady, ButtonReason.Recharging, ReadyFraction(world, player, (SimModule)module, power));
                 return State(ButtonAvailability.Available, ButtonReason.None, 1f);
             }
+            // ControlBarCommand.cpp, GUI_COMMAND_SWITCH_WEAPON: the object has the slot, and the button is checked while that is its current weapon.
+            case GuiCommandKind.SwitchWeapon:
+                if (SimulationWorld.WeaponIndexIn(entity, button.WeaponSlotIndex) < 0) return State(ButtonAvailability.Restricted, ButtonReason.NoWeapon);
+                return State(entity.CurrentWeaponSlot == button.WeaponSlotIndex ? ButtonAvailability.Active : ButtonAvailability.Available, ButtonReason.None);
+            // GUI_COMMAND_HACK_INTERNET: not while it is at it.
+            case GuiCommandKind.HackInternet:
+                return entity.Modules.OfType<HackInternetAIUpdate>().FirstOrDefault() is { IsHackingPackingOrUnpacking: true }
+                    ? State(ButtonAvailability.Restricted, ButtonReason.ProducerBusy)
+                    : State(ButtonAvailability.Available, ButtonReason.None);
+            // GUI_COMMAND_TOGGLE_OVERCHARGE: checked while the plant runs overcharged.
+            case GuiCommandKind.ToggleOvercharge:
+                return State(entity.Modules.OfType<OverchargeBehavior>().FirstOrDefault() is { Active: true } ? ButtonAvailability.Active : ButtonAvailability.Available, ButtonReason.None);
+            // The target is what decides these (canHijackVehicle and its neighbours, in the mode the button enters).
+            case GuiCommandKind.HijackVehicle or GuiCommandKind.ConvertToCarbomb or GuiCommandKind.SabotageBuilding:
+                return State(ButtonAvailability.Available, ButtonReason.None);
             case GuiCommandKind.Sell:
                 return entity.Template.IsKindOf("STRUCTURE") ? State(ButtonAvailability.Available, ButtonReason.None) : State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
             case GuiCommandKind.Evacuate:

@@ -501,6 +501,7 @@ run.Test("Crates: veterancy crate, pilot with a goal object, effect range, no-AI
 run.Test("Crates: an AI pilot finds a healthy vehicle of its own player", Tests.SpecialsPilotFindsVehicle);
 run.Test("Crates: terrorist converts a car with a CARBOMB weapon set", Tests.SpecialsCarBomb);
 run.Test("Crates: hijacker takes a vehicle, rides in it and reappears", Tests.SpecialsHijack);
+run.Test("Crates: an order to enter is asked of the unit's collide modules", Tests.AnOrderToEnterIsAskedOfTheCollideModules);
 run.Test("Crates: the five saboteurs, disabled factory and power sabotage", Tests.SpecialsSabotage);
 run.Test("Specials: sticky bomb, booby trap with geometry-based damage", Tests.SpecialsStickyBombAndBoobyTrap);
 run.Test("Specials: GPS scrambler stealth grant and temporary grants", Tests.SpecialsGrantStealth);

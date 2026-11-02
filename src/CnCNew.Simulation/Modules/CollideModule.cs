@@ -2,6 +2,15 @@ using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Modules;
 
+/// <summary>The three orders to enter an object that end in its collide module instead of a container (<c>ActionManager::canHijackVehicle</c> and its two neighbours).</summary>
+public enum CollideEntry : byte
+{
+    None,
+    Hijack,
+    CarBomb,
+    Sabotage,
+}
+
 /// <summary>
 /// <c>CollideModuleInterface</c>: a collide module is told about the other object it touched (<c>onCollide</c>). The reference gets these calls from the
 /// physics partition manager (<c>PartitionManager::checkForCollisions</c> calls <c>obj->onCollide(other)</c> and then <c>other->onCollide(obj)</c>);
@@ -12,6 +21,9 @@ namespace CnCNew.Simulation.Modules;
 public interface ICollideModule
 {
     void OnCollide(IWorldServices world, Entity other);
+
+    /// <summary><c>isHijackedVehicleCrateCollide</c>, <c>isCarBombCrateCollide</c>, <c>isSabotageBuildingCrateCollide</c>: what an order to enter means to this module.</summary>
+    CollideEntry Entry => CollideEntry.None;
 
     /// <summary><c>CollideModuleInterface::wouldLikeToCollideWith</c>: whether touching <paramref name="other"/> would do something (the AI uses it to pick targets); false for modules that never ask for one.</summary>
     bool WouldLikeToCollideWith(IWorldServices world, Entity other) => false;

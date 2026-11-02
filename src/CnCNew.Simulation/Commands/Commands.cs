@@ -120,7 +120,10 @@ public static class CommandTypes
     /// <summary><c>MSG_COMBATDROP_AT_OBJECT</c> / <c>MSG_COMBATDROP_AT_LOCATION</c> to a group (<c>AIGroup::groupCombatDrop</c>).</summary>
     public const ushort CombatDrop = 41;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= CombatDrop;
+    /// <summary><c>MSG_INTERNET_HACK</c> to a group (<c>AIGroup::groupHackInternet</c>): the hackers set up and begin to earn.</summary>
+    public const ushort HackInternet = 42;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= HackInternet;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -198,6 +201,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.MoveAndEnter => new MoveAndEnterCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
             CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("container"))), reader.Bool("hasPosition"), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.HackInternet => new HackInternetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit")))),
             CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), checked((int)reader.Int("slot")),
@@ -536,6 +540,13 @@ public sealed record RepairCommand(PlayerId Player, ulong Sequence, long Tick, E
 // ------------------------------------------------------------------------------------------------------- build/rule limits (v10)
 
 /// <summary><c>TOGGLE_OVERCHARGE</c>: flips the <c>OverchargeBehavior</c> of <see cref="Target"/> (idempotent only in effect, never rejected by current state).</summary>
+public sealed record HackInternetCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Unit) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.HackInternet;
+
+    protected override void DescribeBody(IStateWriter writer) => writer.UInt("unit", Unit.Value);
+}
+
 public sealed record OverchargeCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target) : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.Overcharge;

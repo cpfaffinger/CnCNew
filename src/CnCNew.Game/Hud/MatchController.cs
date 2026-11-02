@@ -1072,6 +1072,8 @@ public sealed partial class MatchController
             var button = view[slot];
             window.SetHidden(button is null || button.Availability == ButtonAvailability.Hidden);
             if (button is not null) window.SetEnabled(button.IsEnabled);
+            // GadgetCheckLikeButtonSetVisualCheck: a check-like button shows what is on.
+            window.SetChecked(button is { Availability: ButtonAvailability.Active });
         }
 
         // ControlBar::populateBuildQueue: a place of the queue nothing stands in is a disabled button, which shows the scheme's QueueButtonImage; without a scheme image the
