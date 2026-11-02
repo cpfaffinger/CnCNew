@@ -534,6 +534,7 @@ run.Test("Bridges (F-20): a landmark bridge has towers; a terrain bridge cannot 
 run.Test("Bridges (F-20): a destroyed bridge closes its layer, kills what is on it, and comes back when healed", Tests.ADestroyedBridgeClosesItsLayer);
 run.Test("Bridges (F-20): behind the original's cut a dozer repairs a bridge under scaffolding", Tests.ScaffoldsRepairABridgeBehindTheCut);
 run.Test("Bridges (F-20): a deck stops a shell and a building, and takes a slave along", Tests.DecksStopShellsAndBuildings);
+run.Test("Bridges (F-20): what falls lands on a deck, what is under it stays on the ground", Tests.WhatFallsLandsOnADeck);
 run.Test("Structures: OCL updates, dynamic shroud, floating, checkpoints, enemy-near, firestorms", Tests.StructuresWorldEffects);
 run.Test("Structures: weapon bonus beacons and cost modifiers", Tests.StructuresWeaponBonusAndCostModifier);
 run.Test("Structures: a broken dam sends the flood wave", Tests.StructuresDamMakesTheWaveFlood);

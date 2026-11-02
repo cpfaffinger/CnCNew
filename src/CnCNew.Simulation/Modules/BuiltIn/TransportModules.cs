@@ -75,7 +75,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     }
 
     /// <summary>The Chinook stands on the ground.</summary>
-    public bool Landed(IWorldServices world) => Entity.Z <= world.GroundHeightAt(Entity.X, Entity.Y);
+    public bool Landed(IWorldServices world) => Entity.Z <= world.LayerHeightAt(Entity.X, Entity.Y, world.HighestLayerFor(Entity.X, Entity.Y, Entity.Z, onlyHealthyBridges: true));
 
     /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: landed (the combat drop, which lets a rider that can rappel out in the air, is not simulated).</summary>
     public override bool AiFreeToExit(IWorldServices world, Entity rider) => Landed(world);
@@ -140,7 +140,10 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         }
         var locomotor = Entity.Template.Locomotor;
         // The height is kept over the ground where the frame's movement ends: at 30 Hz the Chinook has made its whole step when it looks at the ground below it.
-        var ground = world.GroundHeightAt(Entity.X + moving.X, Entity.Y + moving.Y);
+        // Locomotor::moveTowardsPositionHover and ChinookAIUpdate's landing state: the surface below is the deck where one stands.
+        var (nextX, nextY) = (Entity.X + moving.X, Entity.Y + moving.Y);
+        var surface = world.HighestLayerFor(nextX, nextY, Entity.Z, onlyHealthyBridges: true);
+        var ground = world.LayerHeightAt(nextX, nextY, surface);
         // ChinookAIUpdate::update: an idle Chinook lands while somebody wants to enter it or get out of it and takes off again when nobody does (fidelity findings F-38: the boarders
         // wait for it; F-62: so do the riders at the door).
         // A landed Chinook that is not idle does not take off by itself either: in the frame of an evacuation the riders already wait at the door.
@@ -148,6 +151,8 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         var forBoarders = !_landing && !Entity.HasMoveTarget && !IsInsideDock
                           && ((SupplyIdle && (atTheDoor || HasBoarders(world))) || (atTheDoor && Landed(world)));
         var target = _landing || forBoarders ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
+        // "When takeoff is complete, always go back to layer-ground, rather than some bridge layer."
+        world.SetLayer(Entity, target == ground ? surface : SimulationWorld.GroundLayer);
         var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
         if (Entity.Z != target && climb > Fixed.Zero)
         {
@@ -368,7 +373,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         BladeCountdown(world);
         _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates) * data.FallHowFast;
         Entity.Z += _fallSpeed;
-        var ground = world.GroundHeightAt(Entity.X, Entity.Y);
+        // "If we haven't yet hit the ground, adjust our layer properly so we crash on bridges."
+        world.SetLayer(Entity, world.HighestLayerFor(Entity.X, Entity.Y, IWorldServices.HighAbove));
+        var ground = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
         if (Entity.Z <= ground + Fixed.One)
         {
             Entity.Z = Fixed.Max(Entity.Z, ground);

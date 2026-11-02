@@ -1,6 +1,8 @@
 using System.Numerics;
 using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Terrain;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Terrain;
 using static CnCNew.Presentation.Tests.TestHarness;
 
 namespace CnCNew.Presentation.Tests;
@@ -19,6 +21,7 @@ internal static class CameraTests
         t.Run("matrices and projection round trip", MatrixRoundTrip);
         t.Run("screen to ground to screen on flat and hilly terrain", PickingRoundTrip);
         t.Run("rays that miss the map", PickingMisses);
+        t.Run("the cursor stands on a deck", PickingDecks);
         t.Run("frustum culling of chunks", Culling);
         t.Run("map bounds constraints", Constraints);
         t.Run("scrolling directions and speeds", Scrolling);
@@ -100,6 +103,27 @@ internal static class CameraTests
         Assert(!RtsCamera.TryIntersectTerrain(terrain, new Vector3(100, 100, 50), Vector3.UnitZ, 1000, out _), "upwards ray above the terrain misses");
         Assert(!RtsCamera.TryIntersectTerrain(terrain, new Vector3(-500, 100, 50), Vector3.Normalize(new Vector3(-1, 0, -0.1f)), 5000, out _), "hit outside the height field is rejected");
         Assert(RtsCamera.TryIntersectTerrain(terrain, new Vector3(100, 100, 50), -Vector3.UnitZ, 1000, out var down) && down == new Vector3(100, 100, 0), "straight down");
+    }
+
+    /// <summary><c>W3DView::screenToTerrain</c>: the cursor stands on a deck when the ray meets it above the ground, and the point lies where the deck is drawn, not on the ground behind it.</summary>
+    private static void PickingDecks()
+    {
+        var height = Fixed.FromInt(40);
+        var (fromLeft, fromRight) = (new DeckPoint(Fixed.FromInt(100), Fixed.FromInt(900), height), new DeckPoint(Fixed.FromInt(100), Fixed.FromInt(1100), height));
+        var (toLeft, toRight) = (new DeckPoint(Fixed.FromInt(1900), Fixed.FromInt(900), height), new DeckPoint(Fixed.FromInt(1900), Fixed.FromInt(1100), height));
+        var bridge = new TerrainBridge("Span", "", 0, new DeckPoint(Fixed.FromInt(100), Fixed.FromInt(1000), height), new DeckPoint(Fixed.FromInt(1900), Fixed.FromInt(1000), height), Fixed.FromInt(200), fromLeft, fromRight, toLeft, toRight);
+        var down = Vector3.Normalize(new Vector3(0f, 1f, -1f));
+        var deck = BridgePick.Hit([bridge], new Vector3(1000, 900, 140), down);
+        Assert(deck is { } point && Vector3.Distance(point, new Vector3(1000, 1000, 40)) < 1e-2f, $"the ray meets the deck ({deck})");
+        Assert(BridgePick.Hit([bridge], new Vector3(1000, 200, 140), down) is null, "a ray beside the deck misses it");
+        Assert(BridgePick.Hit([bridge], new Vector3(1000, 1000, 10), down) is null, "a ray that starts under the deck and goes down misses it");
+
+        var camera = new RtsCamera(Settings, Flat(), Viewport);
+        camera.InitializeForMap(new Vector2(1000, 1000));
+        Assert(camera.TryScreenToGround(Viewport / 2, out var ground), "the ray meets the ground");
+        camera.Decks = [bridge];
+        Assert(camera.TryScreenToGround(Viewport / 2, out var picked), "the ray meets something");
+        Assert(picked.Z == 40f && picked.Y != ground.Y, $"with a deck the cursor stands on it, and not on the ground behind it ({picked} against {ground})");
     }
 
     private static void Culling()

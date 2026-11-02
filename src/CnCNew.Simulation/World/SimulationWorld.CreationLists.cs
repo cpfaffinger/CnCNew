@@ -362,7 +362,9 @@ public sealed partial class SimulationWorld
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
             angle = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
-            z = Fixed.Zero;
+            // On the top surface, slightly above a deck for the sake of sloppy art.
+            var layer = HighestLayerFor(x, y, Modules.IWorldServices.HighAbove);
+            z = layer == GroundLayer ? Fixed.Zero : LayerHeightAt(x, y, layer) + Fixed.One;
         }
         if (disposition.HasFlag(CreationDisposition.SendItOut))
         {

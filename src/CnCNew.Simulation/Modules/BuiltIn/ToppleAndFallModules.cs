@@ -487,8 +487,7 @@ public sealed record HeightDieData(Fixed TargetHeightAboveTerrain, bool TargetHe
 /// <c>HeightDieUpdate.cpp</c>: once <c>InitialDelay</c> has passed and the object is not inside a container, it dies as
 /// soon as it is below its target height (terrain height plus <c>TargetHeight</c>, or — with
 /// <c>TargetHeightIncludesStructures</c> — the tallest nearby structure's height if that is greater), unless
-/// <c>OnlyWhenMovingDown</c> is set and the object's Z did not just decrease. Not modelled: the bridge/tunnel layer height
-/// the reference adds on top of flat terrain (no pathfind layers exist here) and the attached-particle cleanup
+/// <c>OnlyWhenMovingDown</c> is set and the object's Z did not just decrease. Not modelled: the attached-particle cleanup
 /// (<c>DestroyAttachedParticlesAtHeight</c>, pure presentation).
 /// <para>The height is looked at once per logic frame of the original, in the first tick of each of the object's frames (counted from its appearance): "moving
 /// down" compares with the height one frame of the original ago, and the object dies at the height it has at the end of the frame it has begun, as at 30 Hz
@@ -536,6 +535,9 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
                     if (height > tallest) tallest = height;
                 }
                 if (tallest > data.TargetHeightAboveTerrain) targetHeight = tallest + terrainHeight;
+                // "If including structures, check for bridges": what dies at a height above the ground dies that far above a deck.
+                var deck = world.LayerHeightAt(x, y, world.HighestLayerFor(x, y, z));
+                if (deck > terrainHeight && deck + data.TargetHeightAboveTerrain > targetHeight) targetHeight = deck + data.TargetHeightAboveTerrain;
             }
             if (z < targetHeight && directionOk)
             {

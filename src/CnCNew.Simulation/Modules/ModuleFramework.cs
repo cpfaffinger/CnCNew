@@ -22,6 +22,9 @@ public abstract record ModuleData;
 /// </summary>
 public interface IWorldServices
 {
+    /// <summary>The 99999 the original writes into a height to ask for the top surface at a place.</summary>
+    static readonly Fixed HighAbove = Fixed.FromInt(99999);
+
     long Tick { get; }
 
     /// <summary>The time service of the world's tick rate: logic frames of the original, seconds and per-second values to ticks and per-tick values.</summary>
@@ -53,6 +56,12 @@ public interface IWorldServices
 
     /// <summary><c>Object::setLayer</c>.</summary>
     void SetLayer(Entity entity, int layer);
+
+    /// <summary><c>TerrainLogic::getLayerForDestination</c>: the layer whose surface lies closest to the height.</summary>
+    int LayerForDestination(Fixed x, Fixed y, Fixed z);
+
+    /// <summary><c>TerrainLogic::getHighestLayerForDestination</c>: the closest layer at or below the height, so that what falls lands on a deck and what is under it stays on the ground. <see cref="HighAbove"/> asks for the top surface.</summary>
+    int HighestLayerFor(Fixed x, Fixed y, Fixed z, bool onlyHealthyBridges = false);
 
     /// <summary>The layer of a place a ground unit is sent to (<see cref="World.SimulationWorld.LayerForGoal"/>).</summary>
     int LayerForGoal(Fixed x, Fixed y, LocomotorSurfaces surfaces);

@@ -1,6 +1,7 @@
 using System.Numerics;
 using CnCNew.Data;
 using CnCNew.Presentation.Terrain;
+using CnCNew.Simulation.Terrain;
 
 namespace CnCNew.Presentation.Camera;
 
@@ -563,6 +564,9 @@ public sealed class RtsCamera : IViewProjection
 
     // ------------------------------------------------------------------ IViewProjection
 
+    /// <summary>The bridges of the map, for the cursor's pick.</summary>
+    public IReadOnlyList<TerrainBridge>? Decks { get; set; }
+
     public void GetScreenRay(Vector2 screen, out Vector3 origin, out Vector3 direction)
         => (origin, direction) = Ray(InverseViewProjection, screen);
 
@@ -588,7 +592,11 @@ public sealed class RtsCamera : IViewProjection
     public bool TryScreenToGround(Vector2 screen, out Vector3 world)
     {
         GetScreenRay(screen, out var origin, out var direction);
-        return TryIntersectTerrain(_terrain, origin, direction, 2f * FarPlane, out world);
+        var hit = TryIntersectTerrain(_terrain, origin, direction, 2f * FarPlane, out world);
+        // W3DView::screenToTerrain: a deck above what the ray hits is what the cursor stands on.
+        if (Decks is not { Count: > 0 } decks || BridgePick.Hit(decks, origin, direction) is not { } deck || (hit && deck.Z <= world.Z)) return hit;
+        world = deck;
+        return true;
     }
 
     public static bool TryIntersectTerrain(TerrainHeightSampler terrain, Vector3 origin, Vector3 direction, float maxDistance, out Vector3 world)

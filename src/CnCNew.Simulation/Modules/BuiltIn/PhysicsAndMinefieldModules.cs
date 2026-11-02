@@ -5,6 +5,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -704,6 +705,14 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
 
     private void PlaceMineAt(IWorldServices world, ObjectTemplate mine, Fixed mineRadius, Fixed x, Fixed y)
     {
+        // placeMineAt: on the top surface of the place, and not under water or on a cliff.
+        var layer = world.HighestLayerFor(x, y, IWorldServices.HighAbove);
+        if (layer == SimulationWorld.GroundLayer && world.Terrain is { } terrain)
+        {
+            if (terrain.IsUnderwater(x, y)) return;
+            var (cellX, cellY) = (TerrainMap.CellOf(x), TerrainMap.CellOf(y));
+            if (terrain.IsInside(cellX, cellY) && (terrain.CellAt(cellX, cellY) & CellFlags.Cliff) != 0) return;
+        }
         var orientation = world.LogicRandom.Range(-FixedTrig.Pi, FixedTrig.Pi);
         var reach = mineRadius * data.SkipIfUnderStructure;
         foreach (var other in world.Entities)
@@ -714,7 +723,7 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
             if (SquaredReach.Of(limit).ContainsStrictly(dx * dx + dy * dy)) return;
         }
         // GenerateMinefieldBehavior.cpp: mine->setProducer(producer) — the mine stops regenerating when this object is gone.
-        var id = world.RequestSpawn(mine.Index, Entity.Owner, x, y, Entity.Z, orientation, new SpawnExtras(Fixed.Zero, Producer: Entity.Id));
+        var id = world.RequestSpawn(mine.Index, Entity.Owner, x, y, world.LayerHeightAt(x, y, layer), orientation, new SpawnExtras(Fixed.Zero, Producer: Entity.Id));
         if (data.Upgradable) _mines.Add(id);
     }
 

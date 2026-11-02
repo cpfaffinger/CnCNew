@@ -114,6 +114,36 @@ static partial class Tests
             Weapon = PRIMARY DeckGun
           End
         End
+        Locomotor DeckChuteLoco
+          Surfaces = AIR
+          Speed = 10.0
+          SpeedDamaged = 10.0
+          MinTurnSpeed = 0.0
+          TurnRate = 360.0
+          Acceleration = 100.0
+          Lift = 100.0
+          Braking = 100.0
+          MaxThrustAngle = 0
+          PreferredHeight = 0
+          SpeedLimitZ = 12.0
+          Appearance = THRUST
+        End
+        Object DeckChute
+          KindOf = PARACHUTE UNATTACKABLE
+          Locomotor = SET_NORMAL DeckChuteLoco
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = ParachuteContain Chute01
+            ParachuteOpenDist = 10.0
+            AllowInsideKindOf = VEHICLE PARACHUTABLE
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         Object DeckDrone
           KindOf = SELECTABLE VEHICLE
           Locomotor = SET_NORMAL BridgeWalk
@@ -567,6 +597,50 @@ static partial class Tests
         Check.That(world.ProjectileHitsDeck(Fixed.FromInt(300), Fixed.FromInt(BridgeY), Fixed.FromInt(20), Fixed.FromInt(5), out var deck) && deck == Fixed.FromDecimal(12.25m), $"A falling shell meets the deck ({deck}).");
         Check.That(!world.ProjectileHitsDeck(Fixed.FromInt(300), Fixed.FromInt(BridgeY), Fixed.FromInt(5), Fixed.FromInt(1), out _), "One below it does not.");
         Check.That(!world.ProjectileHitsDeck(Fixed.FromInt(300), Fixed.FromInt(100), Fixed.FromInt(20), Fixed.FromInt(5), out _), "Beside it neither.");
+    }
+
+    /// <summary>
+    /// <c>TerrainLogic::getHighestLayerForDestination</c> and <c>ParachuteContain::update</c>, "allow us to land on bridges!": what falls lands on the deck under it, what is below the deck stays on the
+    /// ground, and a dead bridge does not count where only healthy ones are asked for. Before, a chute went through the deck to the ground.
+    /// </summary>
+    public static void WhatFallsLandsOnADeck()
+    {
+        var (river, _, _, _) = BridgeWorld(TestRate.Default, RiverMap(SampleSpan()));
+        var (x, y) = (Fixed.FromInt(300), Fixed.FromInt(BridgeY));
+        var bridge = river.Bridges.Single();
+        var deck = bridge.HeightAt(x, y);
+        Check.That(river.HighestLayerFor(x, y, deck + Fixed.FromInt(50)) == bridge.Layer, "Above a deck: the deck.");
+        Check.That(river.HighestLayerFor(x, y, deck) == bridge.Layer, "On it: the deck.");
+        Check.That(river.HighestLayerFor(x, y, deck - Fixed.One) == 0, "Below it: the ground.");
+        Check.That(river.HighestLayerFor(Fixed.FromInt(300), Fixed.FromInt(20), IWorldServices.HighAbove) == 0, "Beside it: the ground.");
+
+        var landed = new List<long>();
+        foreach (var rate in BridgeRates)
+        {
+            var (valley, feeder, _, _) = BridgeWorld(rate, ValleyMap());
+            feeder.Spawn(1, "DeckChute", owner: 1, x: 300, y: 205, z: 200);
+            feeder.Spawn(1, "Crosser", owner: 1, x: 120, y: 120);
+            valley.Step();
+            var chute = valley.Entities.Single(value => value.Template.Name == "DeckChute");
+            var rider = valley.Entities.Single(value => value.Template.Name == "Crosser");
+            chute.Modules.OfType<ParachuteContain>().Single().Add(valley, rider);
+            var start = valley.Tick;
+            for (var step = 0; step < valley.Frames(1800) && !rider.Z.Equals(valley.Bridges.Single().HeightAt(rider.X, rider.Y)); step++) valley.Step();
+            var top = valley.Bridges.Single();
+            Check.That(rider.Layer == top.Layer && rider.Z == top.HeightAt(rider.X, rider.Y), $"{rate}: the rider stands on the deck (layer {rider.Layer}, height {rider.Z}).");
+            Check.That(!rider.EffectivelyDead, $"{rate}: and lives.");
+            landed.Add(valley.InFrames(valley.Tick - start));
+
+            feeder.Spawn(1, "DeckChute", owner: 1, x: 300, y: 195, z: 11);
+            feeder.Spawn(1, "Crosser", owner: 1, x: 120, y: 160);
+            valley.Step();
+            var low = valley.Entities.Where(value => value.Template.Name == "DeckChute").OrderBy(value => value.Id.Value).Last();
+            var under = valley.Entities.Where(value => value.Template.Name == "Crosser").OrderBy(value => value.Id.Value).Last();
+            low.Modules.OfType<ParachuteContain>().Single().Add(valley, under);
+            for (var step = 0; step < valley.Frames(600) && under.ContainedBy.IsValid; step++) valley.Step();
+            Check.That(under.Layer == 0 && under.Z == valley.GroundHeightAt(under.X, under.Y), $"{rate}: released under the deck it lands on the ground (layer {under.Layer}, height {under.Z}).");
+        }
+        Check.That(landed.Max() - landed.Min() <= 1, $"The chute lands within a frame at every rate ({string.Join(", ", landed)}).");
     }
 
     /// <summary>A real map: units cross the river of a shipped skirmish map on its bridge, a path over it is found, and with the bridge down there is none.</summary>

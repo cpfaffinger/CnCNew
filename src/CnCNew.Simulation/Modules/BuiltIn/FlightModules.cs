@@ -37,6 +37,10 @@ internal static class FlightModules
     /// <summary>The terrain height under a point, or the given fallback when the point is off the map.</summary>
     public static Fixed GroundOrDefault(IWorldServices world, Fixed x, Fixed y, Fixed fallback) => IsOffMap(world, x, y) ? fallback : world.GroundHeightAt(x, y);
 
+    /// <summary>The height of the surface of the object's layer, or the fallback off the map.</summary>
+    public static Fixed SurfaceOrDefault(IWorldServices world, Entity entity, Fixed fallback)
+        => entity.Layer == SimulationWorld.GroundLayer ? GroundOrDefault(world, entity.X, entity.Y, fallback) : world.LayerHeightAt(entity.X, entity.Y, entity.Layer);
+
     /// <summary>The corner of the map farthest from a point (<c>TerrainLogic::findFarthestEdgePoint</c>): the far side in both axes; the point itself without a terrain.</summary>
     public static (Fixed X, Fixed Y) FarthestEdgePoint(IWorldServices world, Fixed x, Fixed y)
     {
@@ -173,7 +177,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
                 Entity.Y += stepY;
                 _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates) * data.FallHowFast;
                 Entity.Z += _fallSpeed;
-                var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
+                var ground = FlightModules.SurfaceOrDefault(world, Entity, Fixed.Zero);
                 if (Entity.Z <= ground)
                 {
                     Entity.Z = ground;
@@ -181,7 +185,11 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
                     _groundTick = world.Tick;
                     Effects(world, data.FxHitGround, data.OclHitGround);
                 }
-                else _fall.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, Fixed.Zero);
+                else
+                {
+                    world.SetLayer(Entity, world.LayerForDestination(Entity.X, Entity.Y, Entity.Z));
+                    _fall.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, Fixed.Zero);
+                }
             }
             _fall.Publish(world.Time, world.Tick, Entity);
             world.MarkDirty(Entity);
@@ -600,7 +608,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             world.MarkDirty(Entity);
             return Carry(world, rider);
         }
-        var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
+        var ground = FlightModules.SurfaceOrDefault(world, Entity, Fixed.Zero);
         if (!_started)
         {
             _started = true;
@@ -636,7 +644,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
                 }
             }
         }
-        ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
+        ground = FlightModules.SurfaceOrDefault(world, Entity, Fixed.Zero);
         world.MarkDirty(Entity);
         if (Entity.Z <= ground)
         {
@@ -644,6 +652,10 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             Land(world, rider);
             return SimulationTiming.SleepForever;
         }
+        // "Allow us to land on bridges!" This comes after the look at the surface: the frame that passes a deck stops on it.
+        var layer = world.HighestLayerFor(Entity.X, Entity.Y, Entity.Z);
+        world.SetLayer(Entity, layer);
+        world.SetLayer(rider, layer);
         _descent.Begin(world.Time, Entity, Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, Fixed.Zero);
         _descent.Publish(world.Time, world.Tick, Entity);
         return Carry(world, rider);
@@ -677,7 +689,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
     private bool LandedBadly(IWorldServices world, Entity rider)
     {
         if (FlightModules.IsOffMap(world, rider.X, rider.Y)) return true;
-        if (world.Terrain is not { } terrain) return false;
+        if (world.Terrain is not { } terrain || rider.Layer != SimulationWorld.GroundLayer) return false;
         if (world.TryWaterLevel(rider.X, rider.Y, out var level) && rider.Z <= level + data.WaterSlop && terrain.IsUnderwater(rider.X, rider.Y)) return true;
         // Cliff, water and impassable terrain cells kill (a structure's footprint is an obstacle, not terrain, and does not).
         var cellX = TerrainMap.CellOf(rider.X);

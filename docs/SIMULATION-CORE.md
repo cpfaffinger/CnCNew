@@ -4532,9 +4532,9 @@ Behind the cut: a repair order to a bridge goes to its nearest tower (`DozerAIUp
 ### 68.7 What was not built
 
 - The sounds of a change of state (`TransitionToSound` is typed, the simulation has no event for it; the original's `BridgeDieFX` with a `Bone` plays at the object, the model's bones are not read).
-- What falls from the air lands on the ground under a deck: `getHighestLayerForDestination` of a parachute, a slow death, debris of a creation list, a minefield, a Chinook's landing are not ported. A deck is a surface for what walks.
+- **Built in Phase 56:** what falls lands on a deck (`HighestLayerFor`, `getHighestLayerForDestination`): a parachute ("allow us to land on bridges!"), a helicopter's and a jet's crash, a mine and a minefield, what a creation list puts on the ground, a Chinook's landing, and what dies at a height dies that far above a deck. A chute looks at the layer it had in the last frame before it looks again, so the frame that passes a deck stops on it.
 - `Bridge::Bridge(Object*)`'s `bridgeIndex = 0`, with which `drawBridges` would look at the first terrain bridge for a landmark: an accident of the original, not reproduced.
-- The cursor's pick does not hit a deck; the client picks the ground under it (§68.4).
+- **Built in Phase 56:** the cursor stands on a deck (`BridgePick`, `TerrainLogic::pickBridge`, `W3DView::screenToTerrain`). A command still names no height, so §68.4's difference stays: to send a unit under a deck, send it past it.
 
 ## 69. Script actions, a script's "idle", the approximations of Phase 14 (F-19, F-21, F-22)
 

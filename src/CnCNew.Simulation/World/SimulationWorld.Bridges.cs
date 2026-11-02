@@ -163,7 +163,7 @@ public sealed partial class SimulationWorld
     /// <summary>The height of the surface the entity stands on (<c>getLayerHeight(x, y, obj-&gt;getLayer())</c>).</summary>
     public Fixed SurfaceHeightUnder(Entity entity) => entity.Layer == GroundLayer ? GroundHeightAt(entity.X, entity.Y) : LayerHeightAt(entity.X, entity.Y, entity.Layer);
 
-    /// <summary><c>TerrainLogic::getLayerForDestination</c>: the layer whose surface lies closest to the height.</summary>
+    /// <inheritdoc cref="IWorldServices.LayerForDestination"/>
     public int LayerForDestination(Fixed x, Fixed y, Fixed z)
     {
         if (_bridges.Count == 0) return GroundLayer;
@@ -175,6 +175,27 @@ public sealed partial class SimulationWorld
             if (bridge.Layer == GroundLayer || !bridge.IsPointOnBridge(x, y)) continue;
             var delta = (z - bridge.HeightAt(x, y)).Abs();
             if (delta < distance)
+            {
+                best = bridge.Layer;
+                distance = delta;
+            }
+        }
+        return best;
+    }
+
+    /// <inheritdoc cref="IWorldServices.HighestLayerFor"/>
+    public int HighestLayerFor(Fixed x, Fixed y, Fixed z, bool onlyHealthyBridges = false)
+    {
+        if (_bridges.Count == 0) return GroundLayer;
+        var best = GroundLayer;
+        var distance = z - GroundHeightAt(x, y);
+        for (var index = _bridges.Count - 1; index >= 0; index--)
+        {
+            var bridge = _bridges[index];
+            if (bridge.Layer == GroundLayer || !bridge.IsPointOnBridge(x, y)) continue;
+            if (onlyHealthyBridges && bridge.DamageState == BodyDamageStates.Rubble) continue;
+            var delta = z - bridge.HeightAt(x, y);
+            if (delta >= Fixed.Zero && delta.Abs() < distance.Abs())
             {
                 best = bridge.Layer;
                 distance = delta;
