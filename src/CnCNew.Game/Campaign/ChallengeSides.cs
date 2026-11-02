@@ -20,8 +20,8 @@ public static class ChallengeSides
     }
 
     /// <summary>
-    /// Who plays a map that is started by its name (<c>--mission</c>), as the menus would have it: the map of a Generals' Challenge marks nobody as human, and without its side the viewer
-    /// was the map's first player, an enemy with the whole map uncovered. Empty for a map no challenge names.
+    /// Who plays a map that is started by its name (<c>--mission</c>), as the menus would have it: the side as <see cref="HumanSideFor"/> says, empty when the map marks its own, and
+    /// the faction of the challenge. Without them <c>GC_LaserGeneral</c>, which marks nobody, would make its first player the viewer, an enemy. Empty for a map no challenge names.
     /// </summary>
     public static (string Side, string Faction) OfDirectStart(CnCNew.Game.Data.GameData data, string mapPath)
     {

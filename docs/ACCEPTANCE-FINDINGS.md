@@ -18,7 +18,6 @@ The causes are worth reading together: most of them are places where the port wa
 
 | Goal | What the owner saw | Cause | Fix |
 |---|---|---|---|
-| MISS-04 | The map uncovered, GLA voices while playing USA | A `GC_*` map started by name had no human side: the viewer was an enemy with the map uncovered | `260a7438`: `ChallengeSides.OfDirectStart` |
 | MISS-02, SND-05 | Eva says "upgrade complete" when a building is ready | The patch grants an upgrade to every new building, and the cue took any upgrade for a research | `c280c5b6`: the event names its producer, and only a research is announced |
 | SND-06, MISS-02, MISS-01 | The intro movie of a mission is "way off", no camera travel | The camera clamped or lost most of `W3DView`'s script camera: the ground level, the zoom, the look, the ease times | `678e2ccd`: `ScriptedCamera`, checked against the original's formula and `PresentationTool camera-script` |
 | MISS-02 | The picture stays dark after a fade | A finished fade stayed at its minimum | `e5c6a5ec` |
@@ -64,7 +63,7 @@ The causes are worth reading together: most of them are places where the port wa
 |---|---|---|
 | UNIT-18, FX-06, SND-04, WORLD-11 | A scene needs too much work, or ends too early, or starts away from its subject | `e3b6ca92`: scenes that are ready at once |
 | Many | Waiting for buildings in the acceptance | `06a91598`: the rule `quick-build`, four times as fast, in the acceptance only |
-| WORLD-06 | Micro lags in a match | `19703f60`: a model read when its object first appeared stopped that frame for 15 to 40 ms. The models of the sides that play are read before the match, as `GameClient::preloadAssets` does. `--frame-report` says what a long frame did |
+| WORLD-06 | Micro lags in a match | `19703f60`: a model read when its object first appeared stopped that frame for 15 to 40 ms. The models of the sides that play are read before the match, as `GameClient::preloadAssets` does, and the connection of a match of a server is kept alive meanwhile. `--frame-report` says what a long frame did |
 | SKIRM-08 | Reading the folder of maps takes long | `bd50b6bb`: the maps are read side by side |
 
 ## Limits, not findings
@@ -73,4 +72,5 @@ The causes are worth reading together: most of them are places where the port wa
 - **WORLD-05**, the Crusader in the model viewer: a limit of the viewer, known since Phase 30. In a match the turret sits where it belongs.
 - **UNIT-06**, riders start in the middle of the vehicle: the bones `EXITSTART01` to `03` lie inside the hull, and `exitObjectViaDoor` sets the rider there. That is the original.
 - **SHELL-01**, the Chinook's door in the shell map: no draw module of a Chinook has a door state. The patch's `AVChinookAG` has a mesh `BUNKER01` beside the fuselage that nothing hides, and it reads as an open door. Judged from the source and the data, not against a picture of the original.
+- **MISS-04**, an uncovered map and GLA voices in `GC_ChemGeneral`: both are the map's. `CINE_Intro` says `MAP_REVEAL_ALL_PERM` for the player, `CINE_END` takes it back, and the map then stays explored and dark beyond what the units see, as `undoRevealMapForPlayerPermanently` leaves it. The voices are the enemy general's taunts (`Taunts_Toxin`) in the same scripts. `CampaignShellTests` holds the two states. `260a7438` was first written down as the fix of this goal, and it is not: this map marks its own side, and `ChallengeSides.OfDirectStart` matters on `GC_LaserGeneral`, which marks nobody. Tier 4 found that out, because the test written with it asserted the wrong thing.
 - **The briefing movie at 16:9** is stretched to the window, as `W3DGameWinDefaultDraw` does, so its globe is oval.

@@ -44,17 +44,56 @@ internal static class CampaignShellTests
             harness.Run("The Generals' Challenge: the menu, its load screen with movies, the win and loss, the record", () => ChallengeWay(contentDir));
             harness.Run("The skirmish setup shows the record, and a decided match counts", () => SkirmishRecord(contentDir));
             harness.Run("A challenge's map started by its name plays the challenge's side", () => DirectStart(contentDir));
+            harness.Run("A challenge's intro uncovers the map, and its end brings the fog back", () => IntroUncoversTheMap(contentDir));
         }
         return harness.Failures;
     }
 
-    /// <summary>The owner's MISS-04: <c>--mission</c> on a <c>GC_</c> map named nobody, and the viewer was an enemy with the map uncovered.</summary>
+    /// <summary><c>--mission</c> on a <c>GC_</c> map: the side the map marks, or one of its own on the map that marks none, and the challenge's general.</summary>
     private static void DirectStart(string contentDir)
     {
         var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
-        var (side, faction) = CnCNew.Game.Campaign.ChallengeSides.OfDirectStart(data, "Maps/GC_ChemGeneral/GC_ChemGeneral.map");
-        TestHarness.Assert(side.Length > 0 && faction.Length > 0, $"the challenge's side and faction: '{side}', '{faction}'");
-        TestHarness.Assert(CnCNew.Game.Campaign.ChallengeSides.OfDirectStart(data, "Maps/MD_USA01/MD_USA01.map") == (string.Empty, string.Empty), "a map of a campaign knows its own side");
+        var (marked, general) = ChallengeSides.OfDirectStart(data, "Maps/GC_ChemGeneral/GC_ChemGeneral.map");
+        TestHarness.Assert(marked.Length == 0 && general.Length > 0, $"GC_ChemGeneral marks its own side, the challenge names the general: '{marked}', '{general}'");
+        var (added, persona) = ChallengeSides.OfDirectStart(data, "Maps/GC_LaserGeneral/GC_LaserGeneral.map");
+        TestHarness.Assert(added == ChallengeSides.SyntheticHumanSide && persona.Length > 0, $"GC_LaserGeneral marks nobody and gets a side: '{added}', '{persona}'");
+        TestHarness.Assert(ChallengeSides.OfDirectStart(data, "Maps/MD_USA01/MD_USA01.map") == (string.Empty, string.Empty), "a map of a campaign knows its own side");
+    }
+
+    /// <summary>
+    /// The owner's MISS-04, "a fully uncovered map, no fog of war", is the map's own: <c>CINE_Intro</c> says <c>MAP_REVEAL_ALL_PERM</c> and <c>CINE_END</c> takes it back, and the map
+    /// stays explored, as <c>undoRevealMapForPlayerPermanently</c> leaves it. The voices the owner took for a wrong side are the enemy general's taunts in the same scripts.
+    /// </summary>
+    private static void IntroUncoversTheMap(string contentDir)
+    {
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
+        const string path = "Maps/GC_ChemGeneral/GC_ChemGeneral.map";
+        var (side, faction) = ChallengeSides.OfDirectStart(data, path);
+        var options = CnCNew.Simulation.Mission.MissionOptions.Standard with { HumanSideName = side, HumanFaction = faction, PresentationLatencyTicks = CnCNew.Game.Live.LiveMission.ClientPresentationLatencyFrames };
+        var run = MissionRun.Load(MissionContext.From(data), path, options);
+        var world = run.Session.World;
+        var viewer = CnCNew.Simulation.Mission.MissionSession.LocalPlayerOf(run.Session.Program, side);
+        var slot = world.VisionSlotOf(viewer);
+        (int Visible, int Explored) Shares()
+        {
+            var vision = world.Vision!;
+            var (visible, explored) = (0, 0);
+            for (var y = 0; y < vision.CellsY; y++)
+                for (var x = 0; x < vision.CellsX; x++)
+                {
+                    if (vision.IsVisible(slot, x, y)) visible++;
+                    if (vision.IsExplored(slot, x, y)) explored++;
+                }
+
+            var cells = vision.CellsX * vision.CellsY;
+            return (visible * 100 / cells, explored * 100 / cells);
+        }
+
+        run.Session.Step();
+        TestHarness.Assert(Shares() == (100, 100), $"the intro shows the whole map: {Shares()}");
+        for (var tick = world.Time.WholeSecondsToTicks(40); tick > 0; tick--) run.Session.Step();
+        var (seen, known) = Shares();
+        TestHarness.Assert(seen < 20 && known == 100, $"after the intro the fog is back over a map the viewer knows: visible {seen} %, explored {known} %");
     }
 
     private static string? ContentDir(string[] args)
