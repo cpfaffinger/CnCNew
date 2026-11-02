@@ -24,6 +24,22 @@ internal static class CaptureFlashTests
     private static readonly ColorValue Red = new(255, 0, 0);
     private static readonly ColorValue Blue = new(0, 0, 255);
 
+    /// <summary><c>Drawable::update</c>: DISABLED plays its colour over 30 frames and holds it; the release takes as long; subdual damage takes 150 frames; disabled goes first.</summary>
+    private static void StatusTint()
+    {
+        var tints = new StatusTintTracker();
+        for (var frame = 0; frame < 15; frame++) tints.Step(1, StatusTintTracker.Disabled);
+        Assert(Vector3.Distance(tints.TintAt(1), StatusTintTracker.Disabled * 0.5f) < 1e-4f, $"half way after 15 of 30 frames ({tints.TintAt(1)})");
+        for (var frame = 0; frame < 60; frame++) tints.Step(1, StatusTintTracker.Disabled);
+        Assert(tints.TintAt(1) == StatusTintTracker.Disabled, "it holds at the colour");
+        for (var frame = 0; frame < 29; frame++) tints.Step(1, Vector3.Zero);
+        Assert(tints.TintAt(1) != Vector3.Zero, "the release takes 30 frames");
+        tints.Step(1, Vector3.Zero);
+        Assert(tints.TintAt(1) == Vector3.Zero, "and then it is gone");
+        for (var frame = 0; frame < 75; frame++) tints.Step(2, StatusTintTracker.Subdual);
+        Assert(Vector3.Distance(tints.TintAt(2), StatusTintTracker.Subdual * 0.5f) < 1e-4f, "subdual damage takes 150 frames");
+    }
+
     private static IReadOnlyDictionary<string, string> Files() => new Dictionary<string, string>(SyntheticFixture.Files)
     {
         ["Data/INI/Object/CaptureFlashFixture.ini"] = """
@@ -80,6 +96,7 @@ internal static class CaptureFlashTests
     {
         var t = new TestHarness("CaptureFlash");
         t.Run("the envelope holds the peak for two ticks and decays in quarters", Envelope);
+        t.Run("a disabled object goes dark and comes back (TintEnvelope)", StatusTint);
         t.Run("the saturation is the reference's color * factor - factor / 2", Saturation);
         t.Run("every flash tints the building in the capturer's colour, decays to none and restarts; nothing else is tinted", () => Capture(true));
         t.Run("without selection flash settings no tint is projected", () => Capture(false));

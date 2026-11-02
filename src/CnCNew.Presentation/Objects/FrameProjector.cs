@@ -84,6 +84,7 @@ public sealed class FrameProjector
     private readonly UnitConditionTracker _units = new();
     private readonly StructureConditionTracker _structures = new();
     private readonly SelectionFlashTracker _flashes = new();
+    private readonly StatusTintTracker _tints = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _hiddenBeacons = [];
@@ -218,6 +219,7 @@ public sealed class FrameProjector
             if (!_catalog.TryGet(shown, out var visual)) { MissingVisuals++; continue; }
             var previous = _previous.GetValueOrDefault(entity.Id.Value);
             var capture = CaptureEntity(entity, world, visual, previous);
+            if (GameClock.BeginsOriginalFrame(Tick, time.TicksPerOriginalFrame)) _tints.Step(entity.Id.Value, StatusTintTracker.Wanted(world, entity));
             if (chute is not null) capture = capture with { Position = capture.Position + RiderOffset(chute, capture, entity) };
             if (disguise is not null && _options.Viewer is { } looking && world.RelationshipOf(entity.Owner, looking) != Relationship.Allies) capture = capture with { Owner = disguise.DisguisedPlayer };
             _current[entity.Id.Value] = capture;
@@ -234,6 +236,7 @@ public sealed class FrameProjector
             _units.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _structures.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _flashes.Prune(_frame, id => world.FindEntity(new EntityId(id)) is not null);
+            _tints.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             foreach (var id in _houseColors.Keys.Where(id => world.FindEntity(new EntityId(id)) is null).ToArray()) _houseColors.Remove(id);
         }
         if (_options.Viewer is { } fogViewer)
@@ -474,7 +477,7 @@ public sealed class FrameProjector
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), Mix(previous?.Travel, capture.Travel, alpha), capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= _healingIconTicks && capture.Health01 < 1f && Tick > _healingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame));
+        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id));
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
