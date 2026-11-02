@@ -17,6 +17,9 @@ public sealed partial class MatchController
     private string _powerSet = string.Empty;
     private ImmutableArray<CommandBarButton> _powers = [];
 
+    /// <summary>The buttons of the bar as it stands.</summary>
+    public ImmutableArray<CommandBarButton> Powers => _powers;
+
     private void AddPowerBar()
     {
         if (Match.World.FactionOf(Match.Human) is not { PowerShortcutLayout.Length: > 0 } faction) return;

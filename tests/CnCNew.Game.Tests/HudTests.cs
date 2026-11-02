@@ -60,6 +60,7 @@ internal static class HudTests
         harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
         harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
+        harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
         harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
         return harness.Failures;
@@ -519,6 +520,25 @@ internal static class HudTests
             Advance(match, controller, 60);
             TestHarness.Assert(moves == 1 && Vector2.Distance(SimulationQueries.GroundOf(dozer), start) > 1f, $"alternate {alternate}: the {order} button on open ground moves the dozer ({moves} moves)");
         }
+    }
+
+    private static void PowerBar(GameData data)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        Advance(match, controller, (int)match.World.Time.OriginalFrames(4));
+        var tree = controller.Tree;
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.Powers.Length == 1 && controller.Powers[0].Button.Name == "Command_SpySatelliteScanFromShortcut" && tree.FindByName("GenPowersShortcutBarUS.wnd:ButtonCommand2") is { IsHidden: true },
+            $"a new player has the command center's scan, and it recharges ({string.Join(", ", controller.Powers.Select(power => power.Button.Name))})");
+        match.World.GrantScience(match.Human, "SCIENCE_Paradrop1");
+        Advance(match, controller, 2);
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.Powers.Length == 2 && controller.Powers[0].Button.Name == "Command_ParadropFromShortcut" && tree.FindByName("GenPowersShortcutBarUS.wnd:ButtonCommand2") is { IsHidden: false },
+            "the paradrop shows once the player has its science, in the order of the set");
+        var list = controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(list.Commands.OfType<UiImageDraw>().Any(image => image.Image == "SACParatroopers"), "with its cameo");
     }
 
     private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport, GameSettings? settings = null, bool started = true)
