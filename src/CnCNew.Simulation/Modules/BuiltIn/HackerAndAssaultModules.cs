@@ -186,6 +186,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
                 break;
             }
         world.AddMoney(Entity.Owner, Fixed.FromInt(amount));
+        world.Emit(SimEventKind.SupplyDeposited, Entity.Id, Entity.Id, string.Empty, amount);
         if (data.XpPerCash > 0) world.AddExperiencePoints(Entity, data.XpPerCash);
     }
 

@@ -24,7 +24,11 @@ public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, f
 public sealed record UnitIcon(EntityId Entity, string Image, CnCNew.Ui.Layout.UiRect Place);
 
 /// <summary><c>Drawable::drawConstructPercent</c>: how far an object under construction is, over its centre.</summary>
-public sealed record UnitLabel(EntityId Entity, Vector2 At, string Text);
+public sealed record UnitLabel(EntityId Entity, Vector2 At, string Text)
+{
+    /// <summary>The text's colour; white without one.</summary>
+    public CnCNew.Ui.Wnd.WndColor? Color { get; init; }
+}
 
 /// <summary><c>Drawable::drawVeterancy</c>: the chevrons at the end of where the health bar would sit, for every object in view with a rank.</summary>
 public sealed record VeterancyMarker(EntityId Entity, Vector2 At, int Level);

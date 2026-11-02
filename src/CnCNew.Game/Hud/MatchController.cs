@@ -577,7 +577,11 @@ public sealed partial class MatchController
     private void OnTickStepped(TickResult result)
     {
         Stats.Observe(result, Match.World);
-        foreach (var ev in result.Events) Messages.Observe(ev, Match.World, Match.Human);
+        foreach (var ev in result.Events)
+        {
+            Messages.Observe(ev, Match.World, Match.Human);
+            if (ev.Kind == SimEventKind.SupplyDeposited && Match.World.FindEntity(ev.Entity) is { } earner && earner.Owner == Match.Human) AddFloatingMoney(earner, ev.Value);
+        }
         // InGameUI::update runs once per original frame: the lines fade on the game clock's 1/30 s grid, not per simulation tick.
         if (OwnsMessageList && Match.Clock.IsOriginalFrameBoundary) Messages.Log.Update(Match.Clock.OriginalFrames);
         if (Match.IsOver && !_matchEndedFired)
@@ -717,6 +721,7 @@ public sealed partial class MatchController
             if (unit.VeterancyLevel > 0) ranks.Add(new VeterancyMarker(unit.Id, new Vector2(projected.Center.X + bar / 2f, barTop), unit.VeterancyLevel));
         }
 
+        FloatingMoneyLabels(labels);
         var hint = DescribeHint(Input.Hint);
         return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, [..Messages.Log.Lines.Select(line => line.Text)], heals.ToImmutable(),
             waypointPaths.ToImmutable(), hints.ToImmutable(), ranks.ToImmutable(), icons.ToImmutable(), labels.ToImmutable());
@@ -986,6 +991,33 @@ public sealed partial class MatchController
     /// <summary>The disables <c>drawDisabled</c> shows the lightning for.</summary>
     private const CnCNew.Simulation.World.DisabledMask IconDisables = CnCNew.Simulation.World.DisabledMask.Hacked | CnCNew.Simulation.World.DisabledMask.Paralyzed | CnCNew.Simulation.World.DisabledMask.Emp
         | CnCNew.Simulation.World.DisabledMask.Subdued | CnCNew.Simulation.World.DisabledMask.Underpowered;
+
+    /// <summary><c>InGameUI::addFloatingText</c>: what a player earned, over the object that earned it. <c>FloatingTextTimeOut</c> is ten frames of the original, then it fades.</summary>
+    private readonly List<(Vector3 Place, string Text, WndColor Color, long Frame)> _floatingMoney = [];
+
+    private const long FloatingFrames = 10, FloatingFadeFrames = 30;
+
+    private void AddFloatingMoney(Entity earner, long value)
+    {
+        var house = Match.Colors.Of(earner.Owner);
+        var (x, y) = ((float)earner.X.ToDecimal(), (float)earner.Y.ToDecimal());
+        _floatingMoney.Add((new Vector3(x, y, Match.Heights.HeightAt(x, y)), _assets.Text.Format("GUI:AddCash", value), new WndColor(house.Red, house.Green, house.Blue, 230), Match.Clock.OriginalFrames));
+    }
+
+    private void FloatingMoneyLabels(ImmutableArray<UnitLabel>.Builder labels)
+    {
+        var view = Match.Camera;
+        var now = Match.Clock.OriginalFrames;
+        _floatingMoney.RemoveAll(entry => now - entry.Frame > FloatingFrames + FloatingFadeFrames);
+        foreach (var (place, text, color, frame) in _floatingMoney)
+        {
+            if (!view.TryWorldToScreen(place, out var screen)) continue;
+            var age = now - frame;
+            var alpha = age <= FloatingFrames ? color.A : (byte)(color.A * (FloatingFadeFrames - (age - FloatingFrames)) / FloatingFadeFrames);
+            // FloatingTextMoveUpSpeed: one pixel a frame of the original.
+            labels.Add(new UnitLabel(default, new Vector2(screen.X, screen.Y - age), text) { Color = color with { A = alpha } });
+        }
+    }
 
     private Anim2DTable? _animations;
 

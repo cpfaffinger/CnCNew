@@ -114,7 +114,7 @@ public static class HudOverlayRenderer
 
         if (!overlay.Labels.IsDefaultOrEmpty)
             foreach (var label in overlay.Labels)
-                commands.Add(new UiTextDraw(label.Text, null, LabelFont, WndColor.White, new WndColor(0, 0, 0, 255), (int)label.At.X, (int)label.At.Y, UiTextAlignment.Center, new UiRect((int)label.At.X - 120, (int)label.At.Y - 8, 240, 18)));
+                commands.Add(new UiTextDraw(label.Text, null, LabelFont, label.Color ?? WndColor.White, new WndColor(0, 0, 0, label.Color?.A ?? 255), (int)label.At.X, (int)label.At.Y, UiTextAlignment.Center, new UiRect((int)label.At.X - 120, (int)label.At.Y - 8, 240, 18)));
 
         if (!overlay.Ranks.IsDefaultOrEmpty)
             foreach (var rank in overlay.Ranks)
