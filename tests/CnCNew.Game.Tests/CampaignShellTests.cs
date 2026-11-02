@@ -45,6 +45,7 @@ internal static class CampaignShellTests
             harness.Run("The skirmish setup shows the record, and a decided match counts", () => SkirmishRecord(contentDir));
             harness.Run("A challenge's map started by its name plays the challenge's side", () => DirectStart(contentDir));
             harness.Run("A challenge's intro uncovers the map, and its end brings the fog back", () => IntroUncoversTheMap(contentDir));
+            harness.Run("A mission reads what stands on its map and the armies, not every prop of the data", () => MissionPreload(contentDir));
         }
         return harness.Failures;
     }
@@ -58,6 +59,21 @@ internal static class CampaignShellTests
         var (added, persona) = ChallengeSides.OfDirectStart(data, "Maps/GC_LaserGeneral/GC_LaserGeneral.map");
         TestHarness.Assert(added == ChallengeSides.SyntheticHumanSide && persona.Length > 0, $"GC_LaserGeneral marks nobody and gets a side: '{added}', '{persona}'");
         TestHarness.Assert(ChallengeSides.OfDirectStart(data, "Maps/MD_USA01/MD_USA01.map") == (string.Empty, string.Empty), "a map of a campaign knows its own side");
+    }
+
+    /// <summary>A mission's civilian player made the preload read 6,032 models in 23 s, and the window came after 46 s; a probe that took its picture after 40 s found it, no check had.</summary>
+    private static void MissionPreload(string contentDir)
+    {
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
+        var run = MissionRun.Load(MissionContext.From(data), "Maps/MD_GLA01/MD_GLA01.map", CnCNew.Simulation.Mission.MissionOptions.Standard);
+        var live = CnCNew.Game.Live.LiveMission.Create(data, run, new Vector2(1280, 720));
+        var models = CnCNew.Game.Live.PreloadedModels.Of(live);
+        TestHarness.Assert(models.Count < 3000, $"{models.Count} models");
+        var names = new HashSet<string>(models, StringComparer.OrdinalIgnoreCase);
+        foreach (var entity in live.World.Entities)
+            foreach (var draw in data.Visuals[entity.Template.Name].Draws)
+                foreach (var state in draw.States)
+                    if (state.Model is { Length: > 0 } model) TestHarness.Assert(names.Contains(model), $"{entity.Template.Name} stands on the map, {model} is read");
     }
 
     /// <summary>

@@ -10,8 +10,8 @@ The causes are worth reading together: most of them are places where the port wa
 | Goal | What the owner saw | Cause | Fix |
 |---|---|---|---|
 | UNIT-11, FX-03, FX-04, FX-05, SND-02, UNIT-12 | The muzzle flash and the flame keep to the hull, not the turret, and not to the barrel's height | `AttachedEffects` read a bone from the rest pose of the model and moved it by the object only | `b620c178`: `ModelBoneTable.FindPosed` with the turret's angles; the fire effect gets the bone's matrix |
-| UNIT-12, FX-04 | The Tomahawk drives on the ground | See `docs/SIMULATION-CORE.md` (F-96 to F-98) | A missile flies its thrust locomotor: it climbs, cruises and comes down |
-| FX-05 | The rocket trooper's rocket starts at 0 degrees and steers hard to the target | See F-96 to F-98 | A projectile starts at its launch bone with the turret's heading; a unit without a turret turns to its victim before it fires |
+| UNIT-12, FX-04 | The Tomahawk drives on the ground | See `docs/SIMULATION-CORE.md` (F-96 to F-98) | `0f1eb5f4`: a missile flies its thrust locomotor: it climbs, cruises and comes down |
+| FX-05 | The rocket trooper's rocket starts at 0 degrees and steers hard to the target | See F-96 to F-98 | `ef6a2f61`, `736c3808`: a projectile starts at its launch bone with the turret's heading; a unit without a turret turns to its victim before it fires |
 | FX-02 | Casings jump far too high | `VelOrthoZ = 7.00 2.00` in the data: the original returns the upper value without a draw when the range is inverted, the port drew between the two | `c2c5bcc5`; 377 ranges of `ParticleSystem.ini` have this shape |
 
 ## Missions
@@ -65,6 +65,8 @@ The causes are worth reading together: most of them are places where the port wa
 | Many | Waiting for buildings in the acceptance | `06a91598`: the rule `quick-build`, four times as fast, in the acceptance only |
 | WORLD-06 | Micro lags in a match | `19703f60`: a model read when its object first appeared stopped that frame for 15 to 40 ms. The models of the sides that play are read before the match, as `GameClient::preloadAssets` does, and the connection of a match of a server is kept alive meanwhile. `--frame-report` says what a long frame did |
 | SKIRM-08 | Reading the folder of maps takes long | `bd50b6bb`: the maps are read side by side |
+
+After the report, found by `-Probe` while its fixes were checked: a mission's window came after 46 s on this machine, because the preload of WORLD-06 took a mission's civilian player for an army and read every prop of the data. `PreloadedModels` reads what stands on the map and the armies of the sides that play, 2,285 instead of 6,032 models, and the window comes after 33 s. A probe that took its picture before the window existed wrote a black pixel and said "runs"; it waits for the window now.
 
 ## Limits, not findings
 

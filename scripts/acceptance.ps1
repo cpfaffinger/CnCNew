@@ -975,8 +975,16 @@ if ($Probe) {
         $deadline = (Get-Date).AddSeconds($ProbeSeconds)
         while ((Get-Date) -lt $deadline -and -not ($processes | Where-Object HasExited)) { Start-Sleep -Milliseconds 500 }
         $ended = @($processes | Where-Object HasExited)
-        if ($ended.Count -eq 0) {
-            $process = $processes[0]; $process.Refresh()
+        # A mission's window comes when its load is done, and a picture of no window is a black pixel that says nothing.
+        $process = $processes[0]
+        $patience = (Get-Date).AddSeconds(120)
+        while ($ended.Count -eq 0 -and (Get-Date) -lt $patience -and $process.MainWindowHandle -eq [IntPtr]::Zero) {
+            Start-Sleep -Milliseconds 500; $process.Refresh()
+            $ended = @($processes | Where-Object HasExited)
+        }
+
+        if ($ended.Count -eq 0 -and $process.MainWindowHandle -eq [IntPtr]::Zero) { $trouble++; Write-Host "$name : no window after $ProbeSeconds + 120 s" -ForegroundColor Yellow }
+        elseif ($ended.Count -eq 0) {
             $rect = [CnCNewAcceptance.Picture+RECT]::new()
             [void][CnCNewAcceptance.Picture]::GetClientRect($process.MainWindowHandle, [ref]$rect)
             $bitmap = [Drawing.Bitmap]::new([Math]::Max(1, $rect.Right), [Math]::Max(1, $rect.Bottom))
