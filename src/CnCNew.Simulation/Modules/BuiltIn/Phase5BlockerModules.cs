@@ -251,14 +251,15 @@ public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule,
 /// <summary>
 /// <c>SlowDeathBehavior.h</c>'s 13 keys. Mechanically modeled: the shared <c>DieMuxData</c> filter, the weighted
 /// sibling lottery (<c>ProbabilityModifier</c>) and the sink/destruction delay timers that end in an actual
-/// <c>RequestDestroy</c>, the sinking into the ground, the fling into the air and the per-phase <c>FX</c>/<c>OCL</c>/<c>Weapon</c> lists (<see cref="SlowDeathPhases"/>, <c>doPhaseStuff</c>). <c>ModifierBonusPerOverkillPercent</c> needs
-/// the actual damage dealt at the killing blow, which <see cref="IWorldServices.OnEntityDied"/> does not carry yet
-/// (phase 4's <c>IDieModule.OnDie</c> was never wired for it) — a further, explicitly deferred refinement.
+/// <c>RequestDestroy</c>, the sinking into the ground, the fling into the air and the per-phase <c>FX</c>/<c>OCL</c>/<c>Weapon</c> lists (<see cref="SlowDeathPhases"/>, <c>doPhaseStuff</c>), and <c>ModifierBonusPerOverkillPercent</c>.
 /// </summary>
 public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long SinkDelayTicks, long SinkDelayVarianceTicks, long DestructionDelayTicks, long DestructionDelayVarianceTicks) : DieData(Mux)
 {
     /// <summary>The effect lists, creation lists and weapons of the three phases (<c>m_fx</c>, <c>m_ocls</c>, <c>m_weapons</c>); empty when the module names none.</summary>
     public SlowDeathPhases Phases { get; init; } = SlowDeathPhases.None;
+
+    /// <summary><c>ModifierBonusPerOverkillPercent</c>.</summary>
+    public Fixed OverkillBonus { get; init; }
 
     /// <summary><c>SinkRate</c> (<c>parseVelocityReal</c>): units per logic frame of the original the object goes into the ground from its sink frame on.</summary>
     public Fixed SinkPerFrame { get; init; }
@@ -280,6 +281,7 @@ public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long
         ModuleConfigReader.Ticks(configuration, "DestructionDelayVariance", 0))
     {
         Phases = SlowDeathPhases.Parse(configuration),
+        OverkillBonus = ModuleConfigReader.Real(configuration, "ModifierBonusPerOverkillPercent", Fixed.Zero),
         SinkPerFrame = ModuleConfigReader.Real(configuration, "SinkRate", Fixed.Zero) / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond),
         FlingForce = ModuleConfigReader.Real(configuration, "FlingForce", Fixed.Zero),
         FlingForceVariance = ModuleConfigReader.Real(configuration, "FlingForceVariance", Fixed.Zero),
@@ -411,6 +413,7 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
 
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.ProbabilityModifier, 1);
+    public int ProbabilityWeightAfter(Fixed overkill) => SlowDeathLottery.Weight(data.ProbabilityModifier, data.OverkillBonus, overkill);
 
     public override void OnDie(IWorldServices world, in DamageInfo info) => SlowDeathLottery.Run(world, Entity, info, IsApplicable(info));
 
@@ -634,6 +637,10 @@ public interface ISlowDeathCandidate
 {
     bool IsApplicable(in DamageInfo info);
     int ProbabilityWeight { get; }
+
+    /// <summary><c>SlowDeathBehavior::getProbabilityModifier</c>: "pick more spectacular deaths when severly killed" (<paramref name="overkill"/> is the overkill over the maximum health).</summary>
+    int ProbabilityWeightAfter(Fixed overkill) => ProbabilityWeight;
+
     void BeginSlowDeath(IWorldServices world);
 }
 
@@ -641,20 +648,24 @@ public interface ISlowDeathCandidate
 /// The sibling lottery of <c>SlowDeathBehavior::onDie</c>: every applicable slow-death module of the object weighs in with its
 /// <c>ProbabilityModifier</c>, one <c>GameLogicRandomValue(1, total)</c> picks the winner, in module order; at most once per death.
 /// </summary>
-internal static class SlowDeathLottery
+public static class SlowDeathLottery
 {
+    /// <summary>The source's comment reckons in percent, its code in a share, so the bonus of 20 % adds one from five times the health upward: an <c>Int</c> cut from a <c>Real</c>.</summary>
+    public static int Weight(int modifier, Fixed bonus, Fixed overkill) => Math.Max(modifier + (int)(overkill * bonus).Floor(), 1);
+
     public static void Run(IWorldServices world, Entity entity, in DamageInfo info, bool applicable)
     {
         if (!applicable || entity.SlowDeathStarted) return;
         var deathInfo = info; // 'in' parameters cannot be captured by a lambda.
         var siblings = entity.Modules.OfType<ISlowDeathCandidate>().Where(candidate => candidate.IsApplicable(deathInfo)).ToArray();
-        var total = siblings.Sum(candidate => candidate.ProbabilityWeight);
+        var overkill = (entity.Body as ActiveBody)?.OverkillShare ?? Fixed.Zero;
+        var total = siblings.Sum(candidate => candidate.ProbabilityWeightAfter(overkill));
         if (total <= 0) return;
         var roll = world.LogicRandom.Range(1, total);
         var cumulative = 0;
         foreach (var candidate in siblings)
         {
-            cumulative += candidate.ProbabilityWeight;
+            cumulative += candidate.ProbabilityWeightAfter(overkill);
             if (roll > cumulative) continue;
             entity.SlowDeathStarted = true;
             candidate.BeginSlowDeath(world);

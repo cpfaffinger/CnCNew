@@ -260,6 +260,8 @@ run.Test("Phase 57: rubble is only for a locomotor with its surface (CELL_RUBBLE
 run.Test("Phase 57: a structure that dies and stays is rubble (setCorrectDamageState)", Tests.StructureThatDiesBecomesRubble);
 run.Test("Phase 57: an airborne target is the height of the locomotor (AIUpdateInterface::update)", Tests.AirborneTargetIsTheHeightOfTheLocomotor);
 run.Test("Phase 57: a bomb flies on from its plane (TransportContain::onRemoving)", Tests.BombFliesOnFromItsPlane);
+run.Test("Phase 57: an idle weapon fills its clip (AutoReloadWhenIdle)", Tests.IdleWeaponFillsItsClip);
+run.Test("Phase 57: overkill weighs a death (getProbabilityModifier)", Tests.OverkillWeighsADeath);
 run.Test("Phase 41 (F-55c): a unit that needs a line of sight does not fire through a structure (outOfWeaponRangeObject)", Tests.AttackNeedsAClearView);
 run.Test("Phase 41 (F-55d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight)", Tests.AcquisitionPassesBlockedCandidates);
 run.Test("Phase 41 (F-55e): the approach of an attack goes where it can fire (findAttackPath)", Tests.ApproachGoesWhereItCanFire);

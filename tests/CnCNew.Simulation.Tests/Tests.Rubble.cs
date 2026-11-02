@@ -1,5 +1,6 @@
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
@@ -147,6 +148,73 @@ static partial class Tests
         Check.That(still.Abs() < Fixed.One, $"A bomb that keeps nothing falls straight down ({still}).");
         Check.That(carried > Fixed.FromInt(50), $"One that keeps the plane's velocity lands ahead of the place it left ({carried}).");
         Check.That(angle.Abs() < Fixed.FromDecimal(0.2m), $"It leaves facing as the plane does ({angle}).");
+    }
+
+    public static void IdleWeaponFillsItsClip()
+    {
+        var files = new Dictionary<string, string>(SyntheticFixture.Files)
+        {
+            ["Data/INI/Object/ReloadFixture.ini"] = """
+            Weapon ReloadGun
+              PrimaryDamage = 1
+              AttackRange = 500.0
+              DamageType = EXPLOSION
+              ClipSize = 3
+              ClipReloadTime = 600000
+              DelayBetweenShots = 100
+              AutoReloadWhenIdle = 2000
+              AntiGround = Yes
+            End
+
+            Object ReloadShooter
+              KindOf = SELECTABLE VEHICLE
+              Body = ActiveBody Body01
+                MaxHealth = 1000.0
+                InitialHealth = 1000.0
+              End
+              WeaponSet
+                Conditions = None
+                Weapon = PRIMARY ReloadGun
+              End
+            End
+
+            Object ReloadDummy
+              KindOf = SELECTABLE VEHICLE
+              Body = ActiveBody Body01
+                MaxHealth = 100000.0
+                InitialHealth = 100000.0
+              End
+            End
+            """,
+        };
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(30, 30, 1), "reload");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "ReloadShooter", owner: 1, x: 100, y: 150);
+        feeder.Spawn(2, "ReloadDummy", owner: 2, x: 150, y: 150);
+        world.Step();
+        var shooter = world.Entities.First(value => value.Template.Name == "ReloadShooter");
+        var dummy = world.Entities.First(value => value.Template.Name == "ReloadDummy");
+        Check.That(world.TryFireWeaponSlot(shooter, 0, dummy), "It fires.");
+        for (var step = 0; step < world.Frames(30); step++) world.Step();
+        Check.That(shooter.ClipOf(0) == 2, $"One shot is gone ({shooter.ClipOf(0)}).");
+        Check.That(world.TryFireWeaponSlot(shooter, 0, dummy), "It fires again, which pushes the reload back.");
+        for (var step = 0; step < world.Frames(50); step++) world.Step();
+        Check.That(shooter.ClipOf(0) == 1, $"The clip is not full yet ({shooter.ClipOf(0)}).");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
+        for (var step = 0; step < world.Frames(20); step++) { world.Step(); restored.Step(); }
+        Check.That(shooter.ClipOf(0) == 3, $"Two seconds after the last shot the clip is full ({shooter.ClipOf(0)}).");
+        Check.That(restored.StateHash == world.StateHash, "A restored world reloads at the same tick.");
+    }
+
+    public static void OverkillWeighsADeath()
+    {
+        // ProbabilityModifier 5, ModifierBonusPerOverkillPercent 20 %: the bonus is a share of the health cut to a whole number.
+        Check.That(SlowDeathLottery.Weight(5, Fixed.FromDecimal(0.2m), Fixed.Zero) == 5, "A death without overkill weighs its modifier.");
+        Check.That(SlowDeathLottery.Weight(5, Fixed.FromDecimal(0.2m), Fixed.FromDecimal(4.9m)) == 5, "Short of five times the health the bonus is cut away.");
+        Check.That(SlowDeathLottery.Weight(5, Fixed.FromDecimal(0.2m), Fixed.FromInt(11)) == 7, "Eleven times the health adds two.");
+        Check.That(SlowDeathLottery.Weight(0, Fixed.Zero, Fixed.Zero) == 1, "Nothing weighs less than one.");
     }
 
     public static void StructureThatDiesBecomesRubble()

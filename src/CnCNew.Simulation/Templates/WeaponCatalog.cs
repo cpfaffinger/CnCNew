@@ -131,6 +131,9 @@ public sealed record WeaponInfo(
     /// <summary><see cref="ContinuousFireOneShots"/>, second stage.</summary>
     public int ContinuousFireTwoShots { get; init; } = int.MaxValue;
 
+    /// <summary><c>AutoReloadWhenIdle</c> (<c>m_autoReloadWhenIdleFrames</c>): how long after its last shot the object fills its clips at once, "so I do not hang around with a near empty clip forever"; 0 for never.</summary>
+    public long AutoReloadWhenIdleTicks { get; init; }
+
     /// <summary><c>ContinuousFireCoast</c> (<c>m_continuousFireCoastFrames</c>): how long after the next possible shot the stages are kept without firing; 0 = the stages end at once when the weapon stops.</summary>
     public long ContinuousFireCoastTicks { get; init; }
 
@@ -417,6 +420,7 @@ public sealed class WeaponCatalog
                 ContinuousFireOneShots = Number("ContinuousFireOne") is { } one ? checked((int)one) : int.MaxValue,
                 ContinuousFireTwoShots = Number("ContinuousFireTwo") is { } two ? checked((int)two) : int.MaxValue,
                 ContinuousFireCoastTicks = Number("ContinuousFireCoast") is { } coast ? timing.DurationMillisecondsToTicks(coast) : 0,
+                AutoReloadWhenIdleTicks = Number("AutoReloadWhenIdle") is { } idle ? timing.DurationMillisecondsToTicks(idle) : 0,
                 PreAttackDelayTicks = Number("PreAttackDelay") is { } preAttack ? timing.DurationMillisecondsToTicks(preAttack) : 0,
                 // TheWeaponPrefireNames; the constructor default is PREFIRE_PER_SHOT.
                 PreAttackType = Name("PreAttackType").Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToUpperInvariant() switch

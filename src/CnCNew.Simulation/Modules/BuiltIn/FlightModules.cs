@@ -119,6 +119,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
 
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.Base.ProbabilityModifier, 1);
+    public int ProbabilityWeightAfter(Fixed overkill) => SlowDeathLottery.Weight(data.Base.ProbabilityModifier, data.Base.OverkillBonus, overkill);
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 

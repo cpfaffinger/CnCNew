@@ -74,6 +74,9 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
     /// <summary><c>ActiveBody::canBeSubdued</c>: what is a fighter's estimate of a subdual weapon against this body worth (<c>estimateDamage</c>).</summary>
     public bool CanBeSubdued => _subdualCap > Fixed.Zero;
 
+    /// <summary>What the last blow dealt beyond the health it took, over the maximum health. Read inside the call that kills, so it is no state.</summary>
+    public Fixed OverkillShare { get; private set; }
+
     /// <summary><c>ActiveBody::calcDamageState</c>'s result, kept current by <see cref="InternalChangeHealth"/> exactly like the reference's <c>setCorrectDamageState</c> call inside <c>internalChangeHealth</c>.</summary>
     public int DamageState { get; private set; }
 
@@ -202,6 +205,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         world.RetaliateFor(Entity, info.Source);
         if (Health <= Fixed.Zero && healthBefore > Fixed.Zero)
         {
+            OverkillShare = MaxHealth > Fixed.Zero ? (amount - actualDamageClipped) / MaxHealth : Fixed.Zero;
             world.OnEntityDied(Entity, info);
             return DamageOutcome.Killed;
         }

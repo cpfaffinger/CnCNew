@@ -27,6 +27,9 @@ internal sealed class FiringState
     /// <summary><c>MODELCONDITION_CONTINUOUS_FIRE_SLOW</c>: the weapon spins down. A model condition only; mean and fast are weapon bonus conditions of the object.</summary>
     public bool Slow;
 
+    /// <summary><c>m_frameToForceReload</c>: 0 for no timer.</summary>
+    public long ForceReloadTick;
+
     /// <summary>The slot whose weapon winds up (<c>Weapon::m_whenPreAttackFinished</c> of the reference lives on the weapon); -1 for none.</summary>
     public int PreSlot = -1;
 
@@ -36,7 +39,7 @@ internal sealed class FiringState
     /// <summary>The first tick the wound-up weapon may fire.</summary>
     public long PreFinish;
 
-    public bool CountersAtRest => Shots == 0 && !Victim.IsValid && CooldownFrame == 0 && !Slow;
+    public bool CountersAtRest => Shots == 0 && !Victim.IsValid && CooldownFrame == 0 && !Slow && ForceReloadTick == 0;
 
     public bool IsDefault => CountersAtRest && PreSlot < 0;
 
@@ -54,6 +57,7 @@ internal sealed class FiringState
         writer.UInt("victim", Victim.Value);
         writer.Int("cooldownFrame", CooldownFrame);
         writer.Bool("slow", Slow);
+        if (ForceReloadTick != 0) writer.Int("forceReload", ForceReloadTick);
         if (PreSlot >= 0)
         {
             writer.Int("preSlot", PreSlot);
@@ -71,6 +75,7 @@ internal sealed class FiringState
             Victim = new EntityId(checked((uint)reader.UInt("victim"))),
             CooldownFrame = reader.Int("cooldownFrame"),
             Slow = reader.Bool("slow"),
+            ForceReloadTick = reader.Has("forceReload") ? reader.Int("forceReload") : 0,
         };
         if (reader.Has("preSlot"))
         {
@@ -89,7 +94,7 @@ internal sealed class FiringState
 /// <c>CONTINUOUS_FIRE_MEAN</c>, after more than <c>ContinuousFireTwo</c> <c>CONTINUOUS_FIRE_FAST</c> (exclusive, not cumulative); the weapon's <c>WeaponBonus</c> lines for those
 /// conditions (the Gattling weapons: <c>RATE_OF_FIRE</c> 200 % and 400 %) then shorten the delay between its shots. A change of victim within <c>ContinuousFireCoast</c> of the next
 /// possible shot keeps the count; once that time has passed without a shot the stage drops straight to none (showing <c>CONTINUOUS_FIRE_SLOW</c> for a second).
-/// The looping fire sound and <c>AutoReloadWhenIdle</c> of the reference's tracker are not part of this.
+/// <c>AutoReloadWhenIdle</c>: an object that has not fired for that long fills its clips at once. The looping fire sound of the reference's tracker is the client's.
 /// </summary>
 public sealed partial class SimulationWorld
 {
@@ -127,7 +132,7 @@ public sealed partial class SimulationWorld
         state?.ClearPreAttack();
         // Only weapons with stages, or with a wind-up that depends on the shots at the victim, need the counters; for every other weapon an object without counters stays without.
         var counted = weapon.ContinuousFireOneShots != int.MaxValue || weapon.ContinuousFireTwoShots != int.MaxValue
-                      || (weapon.PreAttackDelayTicks != 0 && weapon.PreAttackType == WeaponPrefire.PerAttack);
+                      || (weapon.PreAttackDelayTicks != 0 && weapon.PreAttackType == WeaponPrefire.PerAttack) || weapon.AutoReloadWhenIdleTicks != 0;
         if (!counted && (state is null || state.CountersAtRest))
         {
             if (state is not null) source.Firing = null;
@@ -135,6 +140,12 @@ public sealed partial class SimulationWorld
         }
 
         state ??= source.Firing = new FiringState();
+        // "Push back the time that we should force a reload with each shot"
+        if (weapon.AutoReloadWhenIdleTicks != 0)
+        {
+            state.ForceReloadTick = _tick + weapon.AutoReloadWhenIdleTicks;
+            _coolingTrackers.Add(source.Id.Value);
+        }
 
         if (victim == state.Victim) state.Shots++;
         else if (_tick < state.CooldownFrame)
@@ -251,11 +262,19 @@ public sealed partial class SimulationWorld
         List<uint>? finished = null;
         foreach (var id in _coolingTrackers)
         {
-            if (!_entities.TryGetValue(id, out var entity) || entity.Firing is not { } state || state.CooldownFrame == 0)
+            if (!_entities.TryGetValue(id, out var entity) || entity.Firing is not { } state || (state.CooldownFrame == 0 && state.ForceReloadTick == 0))
             {
                 (finished ??= []).Add(id);
                 continue;
             }
+
+            if (state.ForceReloadTick != 0 && tick >= state.ForceReloadTick)
+            {
+                ReloadAllAmmo(entity);
+                state.ForceReloadTick = 0;
+                if (state.IsDefault) entity.Firing = null;
+            }
+            if (state.CooldownFrame == 0) continue;
 
             // FiringTracker::update acts in the step after the deadline. That step is a logic frame of the original: coast + 1 frames after the next possible shot, not coast + 1 tick.
             if (tick < state.CooldownFrame + _turretFrameTicks) continue;
@@ -273,6 +292,6 @@ public sealed partial class SimulationWorld
 
     private void RegisterFiringTracker(Entity entity)
     {
-        if (entity.Firing is { CooldownFrame: not 0 }) _coolingTrackers.Add(entity.Id.Value);
+        if (entity.Firing is { } state && (state.CooldownFrame != 0 || state.ForceReloadTick != 0)) _coolingTrackers.Add(entity.Id.Value);
     }
 }

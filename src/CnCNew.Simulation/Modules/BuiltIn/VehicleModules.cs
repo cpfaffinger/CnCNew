@@ -155,6 +155,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
 
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.Base.ProbabilityModifier, 1);
+    public int ProbabilityWeightAfter(Fixed overkill) => SlowDeathLottery.Weight(data.Base.ProbabilityModifier, data.Base.OverkillBonus, overkill);
 
     /// <summary>
     /// The bus has hit the ground after its throw: <c>update</c> sets <c>MODELCONDITION_SECOND_LIFE</c> at that moment and never clears it. No flag is kept for it; it is read off the state: the first
