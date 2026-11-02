@@ -32,6 +32,12 @@ The built-in AI stays the default (no. 9 of Phase 23), and it may be better than
 5. The cosmetic leftovers of the report, the cost of `StepBlockedMovers` and of the launch table, `scripts/perf-profile.ps1`, the clean room.
 6. The open goals of `accepted.json`: move to `byMachine` what a program can prove.
 
+### Item 1: what was measured, and the thresholds, committed before the fix
+
+`SimTool ai-survey --seeds 4 --minutes 45` at `fc464d62`: 58 of 64 matches decided. So "8 of 16 decided" was mostly a short clock: Alpine Assault America against China is 26 units to 1 when the 25 minutes end. **But GLA wins 4 of 32 matches and stands still:** with 10,000 credits it starts nothing for three minutes on Death Valley, is defeated after 4.5 minutes and never has a barracks. The first barracks of a GLA player comes at about 115 s, against 43 to 53 s for China and America. Causes, seen in a throwaway log: its only worker stays reserved as a scout for 60 s after it arrived, it is sent only to the spot in front of the source and never to a legal spot it has not seen, and a second builder is made only after the first building stands.
+
+Thresholds for the same survey after the fix: **T1** a GLA player's first barracks at most 60 s (median over the 32 GLA matches); **T2** no GLA player without a barracks; **T3** at least 58 of 64 decided; **T4** GLA wins at least 8 of 32 (reported, the balance is not judged: this is only that the defect is gone).
+
 ## Bottlenecks and showstoppers
 
 A real-time step of a tier fails under load: nothing heavy beside `net-*` steps, and a failure there is run again alone before it is believed.
