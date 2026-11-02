@@ -493,7 +493,9 @@ public sealed partial class SkirmishAi
     {
         var builders = CountAlive(Role.Builder, false) + InFlight(Role.Builder);
         var supply = CountAlive(Role.SupplyCenter, false);
-        var wantBuilders = supply > 0 || _structures.Count > 1 ? 2 : 1;
+        // The GLA worker also carries and goes off to look at the supply source, and with one of them the base would stand still until it is back.
+        var builderCarries = _units.Any(value => (RoleOf(value.Template) & Role.Builder) != 0 && (RoleOf(value.Template) & Role.Carrier) != 0);
+        var wantBuilders = supply > 0 || _structures.Count > 1 || builderCarries ? 2 : 1;
         if (builders < wantBuilders) QueueWorker(Role.Builder);
         var carriers = CountAlive(Role.Carrier, false) + InFlight(Role.Carrier);
         var wantCarriers = _warehouses.Count == 0 && CountAlive(Role.Carrier, false) > 0 ? 0 : Math.Min(_plan.MaxCarriers, _plan.CarriersPerCenter * Math.Max(0, supply));
@@ -673,18 +675,23 @@ public sealed partial class SkirmishAi
                 break;
             }
             if (next is null) { if (essential) break; continue; }
-            if (next.BuildCost > _budget)
+            // What the first center will cost is not spent on the buildings behind it either.
+            if (next.BuildCost + reserved > _budget)
             {
-                reserved = next.BuildCost;
+                if (reserved == Fixed.Zero) reserved = next.BuildCost;
                 break;
             }
-            if (Backoff(unchecked(0x40000000u + (uint)next.Index), essential ? ShortRetryFrames : RetryFrames)) { if (essential) break; continue; }
             var bySupplies = (RoleOf(next) & Role.SupplyCenter) != 0;
-            var spot = bySupplies ? FindSupplyPlacement(next, builder, used) : FindPlacement(next, builder);
+            // The army does not spend what the first center will cost: its place may take a while to find, and without it nothing comes in.
+            if (bySupplies && CountAlive(Role.SupplyCenter, true) == 0) reserved = next.BuildCost;
+            if (Backoff(unchecked(0x40000000u + (uint)next.Index), essential ? ShortRetryFrames : RetryFrames)) { if (essential) break; continue; }
+            var looking = false;
+            var spot = bySupplies ? FindSupplyPlacement(next, builder, used, out looking) : FindPlacement(next, builder);
             if (bySupplies)
             {
                 // No legal spot beside the source for a while (cliffs, the map edge, an occupied yard): the center goes up at the base like every other structure rather than never.
-                _supplyPlacementFailures = spot is null ? _supplyPlacementFailures + 1 : 0;
+                // A builder on its way to look is no failure: a center at the base is a center 500 units from its supply.
+                _supplyPlacementFailures = spot is not null ? 0 : looking ? _supplyPlacementFailures : _supplyPlacementFailures + 1;
                 if (spot is null && _supplyPlacementFailures > SupplyPlacementPatience) spot = FindPlacement(next, builder);
             }
             if (spot is null) { if (essential) break; continue; }
@@ -716,7 +723,7 @@ public sealed partial class SkirmishAi
         foreach (var entity in _units)
         {
             if ((RoleOf(entity.Template) & Role.Builder) == 0 || used.Contains(entity.Id.Value) || AiOf(entity) is not { } ai || ai.IsBuilding) continue;
-            if (_retryAt.TryGetValue(ScoutKey(entity), out var scoutUntil) && scoutUntil > _tick) continue;
+            if (_retryAt.TryGetValue(ScoutKey(entity), out var scoutUntil) && scoutUntil > _tick && !ai.IsIdle) continue;
             if (!ai.IsIdle && !ai.IsOnUnorderedMove && (RoleOf(entity.Template) & Role.Carrier) == 0) continue;
             var distance = near is null ? Fixed.Zero : DistanceSquared(entity.X, entity.Y, near.X, near.Y);
             if (best is null || distance < bestDistance) { best = entity; bestDistance = distance; }
@@ -806,8 +813,9 @@ public sealed partial class SkirmishAi
     /// its border and the AI's bib pushes the first legal spot some 14 cells out). A spot the player has not explored yet cannot be built on (<c>ConstructCommand</c>), so the builder is first
     /// sent there to look. Without any supply source on the map the center goes up at the base like every other structure.
     /// </summary>
-    private (Fixed X, Fixed Y)? FindSupplyPlacement(ObjectTemplate template, Entity builder, HashSet<uint> used)
+    private (Fixed X, Fixed Y)? FindSupplyPlacement(ObjectTemplate template, Entity builder, HashSet<uint> used, out bool looking)
     {
+        looking = false;
         if (FindSupplySource() is not { } source) return FindPlacement(template, builder);
         var dx = source.X - _options.HomeX;
         var dy = source.Y - _options.HomeY;
@@ -817,28 +825,21 @@ public sealed partial class SkirmishAi
         var originY = length > Fixed.Zero ? source.Y - dy / length * back : source.Y;
         if (!_world.IsPositionExploredBy(_player, originX, originY))
         {
-            // Look first: the builder walks to the source; the placement is tried again once the ground is known.
-            if (!Backoff(unchecked(0x48000000u + builder.Id.Value), SupplyLookRetryFrames)
-                && Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, builder.Id, originX, originY)).Accepted)
-            {
-                used.Add(builder.Id.Value);
-                Stats.MoveOrders++;
-                // Only a builder that is also a supply carrier (the GLA worker) is taken while it walks (PickBuilder); a dozer on its way is not idle and is never taken.
-                if ((RoleOf(builder.Template) & Role.Carrier) != 0) _retryAt[ScoutKey(builder)] = _tick + _time.OriginalFrames(ScoutKeepFrames);
-            }
+            looking = LookAt(builder, originX, originY, used);
             return null;
         }
 
         var radius = template.BoundingCircleRadius;
         var gap = Fixed.FromInt(12);
         var paths = 0;
+        (Fixed X, Fixed Y)? unseen = null;
         (Fixed X, Fixed Y)? Try(Fixed x, Fixed y)
         {
             foreach (var entity in _structures) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var entity in _sites) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var (spotX, spotY) in _badSpots) if (DistanceSquared(spotX, spotY, x, y) < Fixed.FromInt(900)) return null;
             if (_world.CheckBuildGround(template, x, y, Fixed.Zero) != LegalBuildCode.Ok) return null;
-            if (!_world.IsPositionExploredBy(_player, x, y)) return null;
+            if (!_world.IsPositionExploredBy(_player, x, y)) { unseen ??= (x, y); return null; }
             if (_world.Navigation is { } grid && (++paths > 12 || !Reachable(grid, builder, x, y))) return null;
             return (x, y);
         }
@@ -859,7 +860,26 @@ public sealed partial class SkirmishAi
                 if (Try(originX - half + size, y) is { } right) return right;
             }
         }
+        // Everything legal lies beyond what the player has seen: the builder goes and looks there.
+        if (unseen is { } look) looking = LookAt(builder, look.X, look.Y, used);
         return null;
+    }
+
+    /// <summary>
+    /// The ground of a supply center is not known yet: the builder walks there, and the placement is tried again once it has seen it. One builder is enough: with one already on its way the
+    /// others stay at the base. True while somebody goes and looks.
+    /// </summary>
+    private bool LookAt(Entity builder, Fixed x, Fixed y, HashSet<uint> used)
+    {
+        foreach (var other in _units)
+            if (_retryAt.TryGetValue(ScoutKey(other), out var until) && until > _tick && AiOf(other) is { IsIdle: false }) return true;
+        if (Backoff(unchecked(0x48000000u + builder.Id.Value), SupplyLookRetryFrames)) return true;
+        if (!Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, builder.Id, x, y)).Accepted) return false;
+        used.Add(builder.Id.Value);
+        Stats.MoveOrders++;
+        // Only a builder that is also a supply carrier (the GLA worker) is taken while it walks (PickBuilder); a dozer on its way is not idle and is never taken.
+        if ((RoleOf(builder.Template) & Role.Carrier) != 0) _retryAt[ScoutKey(builder)] = _tick + _time.OriginalFrames(ScoutKeepFrames);
+        return true;
     }
 
     private bool Reachable(NavigationGrid grid, Entity builder, Fixed x, Fixed y)
@@ -1021,7 +1041,7 @@ public sealed partial class SkirmishAi
     private void ProduceArmy()
     {
         var armyCount = _units.Count(value => (RoleOf(value.Template) & Role.Army) != 0);
-        var spendable = armyCount < 4 ? _budget : _budget - _reserve;
+        var spendable = armyCount < 4 && CountAlive(Role.SupplyCenter, true) > 0 ? _budget : _budget - _reserve;
         var served = new HashSet<uint>();
         while (true)
         {
