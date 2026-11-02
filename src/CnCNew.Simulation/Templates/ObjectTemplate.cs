@@ -62,6 +62,9 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
     /// <summary><c>Locomotor::m_lift</c>: the upward acceleration of an aircraft at full lift, per tick² (<c>Lift</c> in the data is per second²).</summary>
     public Fixed Lift { get; init; }
 
+    /// <summary><c>CanMoveBackwards</c>: read by <c>Locomotor::moveTowardsPositionWheels</c> only.</summary>
+    public bool CanMoveBackwards { get; init; }
+
     /// <summary><c>Appearance = HOVER</c> (<c>LOCO_HOVER</c>): <c>Locomotor::moveTowardsPositionHover</c> flags the object <c>OVER_WATER</c> while it is over water. Not used by the movement itself.</summary>
     public bool IsHover { get; init; }
 
@@ -875,6 +878,8 @@ public sealed class TemplateCatalog
                 BrakesByData = braking > 0,
                 SpeedLimitZ = timing.PerSecondToPerTick(Get("SpeedLimitZ")),
                 Lift = timing.PerSecondSquaredToPerTickSquared(lift),
+                CanMoveBackwards = definition.Fields.LastOrDefault(field => field.Name.Equals("CanMoveBackwards", StringComparison.OrdinalIgnoreCase))?.Value.Value is true
+                    && definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().ToUpperInvariant() is "FOUR_WHEELS" or "MOTORCYCLE",
                 IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),

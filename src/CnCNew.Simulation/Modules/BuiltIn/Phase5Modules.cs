@@ -1860,6 +1860,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var desired = FixedTrig.Atan2(dy, dx);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
         var heading = Entity.Angle;
+        var backing = Backing(locomotor, difference, distance);
+        if (backing)
+        {
+            desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
+            difference = FixedTrig.AngleDifference(Entity.Angle, desired);
+        }
         Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnRate
             ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate))
             : desired;
@@ -1908,9 +1914,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
         // phase 10 (docs/SIMULATION-CORE.md, CnCNew.Simulation/World/SimulationWorld.Collision.cs): bounded local avoidance
         // against another unit's footprint, then the crush/topple collision check — both own-file, additive world services.
+        var forward = backing ? -speed : speed;
         var (stepX, stepY) = air
             ? (FixedTrig.Cos(Entity.Angle) * speed, FixedTrig.Sin(Entity.Angle) * speed)
-            : world.AvoidLocalBlockers(Entity, FixedTrig.Cos(Entity.Angle) * speed, FixedTrig.Sin(Entity.Angle) * speed);
+            : world.AvoidLocalBlockers(Entity, FixedTrig.Cos(Entity.Angle) * forward, FixedTrig.Sin(Entity.Angle) * forward);
         if (_stride > 1)
         {
             BeginFrame(world, locomotor, stepX, stepY, heading);
@@ -1923,6 +1930,26 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             world.ResolveFootprintCollisions(Entity, stepX, stepY);
         }
+    }
+
+    /// <summary><c>Locomotor::m_flags</c> <c>MOVING_BACKWARDS</c>; written only while set.</summary>
+    private bool _movingBackwards;
+
+    /// <summary>
+    /// <c>Locomotor::moveTowardsPositionWheels</c>: a wheeled unit at rest whose goal lies behind it reverses, if the rest of its way is no longer than five of its radii. Over a longer way
+    /// the original makes a three-point turn; the port's ground mover turns on the spot instead, which is what it does for every other unit.
+    /// </summary>
+    private bool Backing(LocomotorInfo locomotor, Fixed difference, Fixed distance)
+    {
+        if (!locomotor.CanMoveBackwards) return false;
+        if (FrameSpeed() == Fixed.Zero) _movingBackwards = difference.Abs() > FixedTrig.HalfPi;
+        if (!_movingBackwards) return false;
+        if (difference.Abs() < FixedTrig.HalfPi)
+        {
+            _movingBackwards = false;
+            return false;
+        }
+        return distance + TailLength() <= Entity.Template.GeometryMajorRadius * Fixed.FromInt(5);
     }
 
     /// <summary>
@@ -2708,6 +2735,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             writer.Fixed("rappelRate", _rappelRate);
             writer.Fixed("rappelDestZ", _rappelDestZ);
         }
+        if (_movingBackwards) writer.Bool("movingBackwards", true);
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
         if (_exitAfterEvacuate || _returning)
@@ -2788,6 +2816,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             _rappelRate = reader.Fixed("rappelRate");
             _rappelDestZ = reader.Fixed("rappelDestZ");
         }
+        _movingBackwards = reader.Has("movingBackwards");
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");

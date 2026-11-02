@@ -69,6 +69,78 @@ internal static partial class Tests
                 Check.That(Apart(units[first], units[second]), $"Units {first} and {second} do not stand inside each other.");
     }
 
+    private static readonly string ReverseIni = """
+        Locomotor ReverseLoco
+          Surfaces = GROUND
+          Speed = 30
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 90
+          Appearance = FOUR_WHEELS
+          CanMoveBackwards = Yes
+        End
+        Locomotor ForwardLoco
+          Surfaces = GROUND
+          Speed = 30
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 90
+          Appearance = FOUR_WHEELS
+        End
+        Object ReverseCar
+          KindOf = VEHICLE SELECTABLE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          Locomotor = SET_NORMAL ReverseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object ForwardCar
+          KindOf = VEHICLE SELECTABLE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          Locomotor = SET_NORMAL ForwardLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """;
+
+    /// <summary><c>Locomotor::moveTowardsPositionWheels</c>: a car with <c>CanMoveBackwards</c> reverses to a goal close behind it; one without turns round, and so does the first for a far goal.</summary>
+    public static void ACarReversesToAGoalCloseBehindIt()
+    {
+        foreach (var rate in new[] { SimulationRate.FromTicksPerSecond(30), SimulationRate.FromTicksPerSecond(60), SimulationRate.FromTicksPerSecond(120) })
+        {
+            var files = new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/Reverse.ini"] = ReverseIni };
+            Fixed Turned(string template, int back)
+            {
+                var (world, feeder, _) = RatedWorld(rate, files, NavTerrain());
+                feeder.Spawn(1, template, x: 170, y: 100);
+                for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+                var car = world.Entities.Single(value => value.Template.Name == template);
+                var start = car.Angle;
+                Check.That(world.Submit(new SetMoveTargetCommand(new PlayerId(1), 1000, world.Tick, car.Id, Fixed.FromInt(170 - back), Fixed.FromInt(100))).Accepted, $"{rate}: the move is accepted.");
+                for (var step = 0; step < world.Frames(600) && (step < 2 || car.HasMoveTarget); step++) world.Step();
+                Check.That(!car.HasMoveTarget && (car.X - Fixed.FromInt(170 - back)).Abs() < Fixed.FromInt(3), $"{rate}: {template} arrives ({car.X}).");
+                return FixedTrig.AngleDifference(start, car.Angle).Abs();
+            }
+            Check.That(Turned("ReverseCar", 40) < Fixed.FromDecimal(0.1m), $"{rate}: it backs up without turning.");
+            Check.That(Turned("ForwardCar", 40) > Fixed.FromInt(2), $"{rate}: a car that cannot turns round.");
+            Check.That(Turned("ReverseCar", 150) > Fixed.FromInt(2), $"{rate}: over a longer way it turns as well.");
+        }
+    }
+
     /// <summary><c>groupTightenToPosition</c>: a click into the group's own area gathers it; a click outside keeps the offsets, and so does a script's order.</summary>
     public static void AClickIntoTheGroupGathersIt()
     {
