@@ -5,10 +5,10 @@
   "directory": "Patch104pZH/GameFilesEdited",
   "expectedExport": {
     "importer": "CnCNew.RuntimeContentImporter",
-    "importerVersion": "2.0.0",
-    "contentManifestBytes": 27447222,
-    "contentManifestSha256": "280e5b6dd52d8c9ccaeac36cb9f45160219473393acc56871b4c8c6d9f121a17",
-    "runtimeFileCount": 25663
+    "importerVersion": "2.1.0",
+    "contentManifestBytes": 27342823,
+    "contentManifestSha256": "e1b15ea597dda40a31c1ed8e46f0f8b5ee1d86847eb0b3f6f110adf9cfbbc37e",
+    "runtimeFileCount": 25562
   },
   "files": [
     {

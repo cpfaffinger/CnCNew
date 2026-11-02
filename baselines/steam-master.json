@@ -7,10 +7,10 @@
   "totalBytes": 2939721100,
   "expectedExport": {
     "importer": "CnCNew.RuntimeContentImporter",
-    "importerVersion": "2.0.0",
-    "contentManifestBytes": 27087727,
-    "contentManifestSha256": "b1f8b14cd5cb005afd16237759c9020a8c3f2402874d24d2ff204e61c620fbab",
-    "runtimeFileCount": 25608
+    "importerVersion": "2.1.0",
+    "contentManifestBytes": 26983328,
+    "contentManifestSha256": "290c76880b17469a0acf677b5eba63431c7af88979152981f9b306279f32ece0",
+    "runtimeFileCount": 25507
   },
   "harmlessExtraFiles": [],
   "files": [
