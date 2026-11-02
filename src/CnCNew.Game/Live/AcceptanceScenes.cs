@@ -239,7 +239,7 @@ public static class AcceptanceScenes
         0, 0, 20f, 42f, 240f);
 
     /// <summary>Frames the two construction orders of the build scene are given at.</summary>
-    public const long BuildFirstOrder = 20, BuildSecondOrder = 420;
+    public const long BuildFirstOrder = 20, BuildSecondOrder = 900;
 
     /// <summary>A dozer builds a power plant and then a barracks: the scaffold, the rising building, the finished one.</summary>
     public static DemoScenario Build { get; } = new(

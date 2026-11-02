@@ -7,7 +7,7 @@
   (turret angle at every shot, capture stages UNPACKING/RAISING_FLAG/PACKING, flight phases of the jet). The exit code is 1 as soon as a scene fails a check -
   a failure here is a finding about the state of the simulation/presentation, not a tool error. The output lies under -OutDir (default: %TEMP%\cncnew-scenarios).
 
-  -Scenario all    (default) the three behaviour scenes capture-building, tank-duel, jet-strafe
+  -Scenario all    (default) the three behaviour scenes capture-building, tank-duel, jet-strafe, and the acceptance scenes whose facts a program can state
   -Scenario exits  the nine factory exits exit-<faction>-<building> (with -Faction only one faction): spawn position, door, exit through the door side, stopping point
   -Scenario <name> exactly this scene (names: PresentationTool scenario-audit <content> without --name)
 
@@ -46,7 +46,7 @@ if (-not $NoBuild) {
 }
 
 $names = switch ($Scenario) {
-    'all'   { @('capture-building', 'tank-duel', 'jet-strafe') }
+    'all'   { @('capture-building', 'tank-duel', 'jet-strafe', 'acc-march', 'acc-wheels', 'acc-board', 'acc-artillery', 'acc-repair', 'acc-firefight', 'acc-build', 'acc-combat-drop', 'acc-bodies', 'acc-subdual', 'acc-firestorm', 'acc-reverse') }
     'exits' {
         $factions = if ($Faction) { @($Faction.ToLowerInvariant()) } else { @('america', 'china', 'gla') }
         foreach ($f in $factions) { foreach ($b in @('commandcenter', 'barracks', 'warfactory')) { "exit-$f-$b" } }
