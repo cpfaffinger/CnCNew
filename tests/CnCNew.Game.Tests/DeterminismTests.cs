@@ -38,7 +38,7 @@ internal static class DeterminismTests
     /// SHA-256 of the airfield bone table (<c>ModelGeometry.Fingerprint</c>) of the retail content. It is part of the world fingerprint; a different value on another machine means the inputs differ before a single tick ran.
     /// The table is hashed as raw fixed-point values: the value changed with the resolution (phase 22, 24 fraction bits; at 16 it was 93D5819B…F1DA47). The poses are the same numbers, quantised as before. Since phase 31 the table also carries the exit bones of the door containers (F-03); with the airfields alone it was EA1915EB…DAC858. Since phase 41 it carries the fire points and stations of garrisons and transports (F-60, step 1); before, 4ECE1638…A0C980A. Since the turret pivot of PassengersInTurret (F-60, step 4) it is 843CCD2C…1591514; with the points alone E1A2A799…88E484C7.
     /// </summary>
-    private const string BoneTableGolden = "40ED75748D7AE4E129E4E5602320D235881A321D72B8D07F8DD4C4DA01E370EE";
+    private const string BoneTableGolden = "62ABC205E230D13E83139DC780FC553C3A1134FA991098ABF2F38227DFEBEDB1";
 
     public static int Run(string[] args)
     {

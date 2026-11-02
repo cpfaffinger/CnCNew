@@ -203,6 +203,13 @@ public static partial class RateCases
     {
         var quantities = new RateQuantities(scene);
         var healer = healerName.Length > 0 ? scene.Spawn(healerName, 1, 2000, 2000) : null;
+        // A vehicle that comes with its initial payload makes room for the patient first.
+        scene.StepFrames(2);
+        if (how == HealBy.Enter && healer?.Container is { ContainCount: > 0 } payload)
+        {
+            foreach (var rider in payload.Contained.ToArray()) scene.Kill(scene.World.FindEntity(rider)!);
+            scene.StepFrames(3);
+        }
         var patient = scene.Spawn(patientName, 1, healer is null ? 2000 : how == HealBy.Nothing ? 2030 : 2150, 2000);
         var body = patient.Body ?? throw new InvalidOperationException($"{patientName} has no body.");
         scene.HurtTo(patient, 1, 2);

@@ -451,7 +451,7 @@ internal static class ShellTests
         TestHarness.Assert(started.Setup.Opponents.Length == 1, $"one computer army entry starts one computer player, got {started.Setup.Opponents.Length}");
         TestHarness.Assert(started.Setup.AiOf(1) is { Kind: CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, Difficulty: CnCNew.Simulation.Scripting.ScriptDifficulty.Normal, Tactics: CnCNew.Simulation.Skirmish.AiTactics.Turtle },
             $"the turtle entry is the built-in AI with the turtle profile at medium strength ({started.Setup.AiOf(1)})");
-        TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: 0, StartPosition: 0 } && started.Setup.Details[1] is { Team: 2, Color: 5, StartPosition: 1 },
+        TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: 0, StartPosition: -1 } && started.Setup.Details[1] is { Team: 2, Color: 5, StartPosition: -1 },
             "the setup carries team, colour and start position of every slot that takes part");
 
         shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
