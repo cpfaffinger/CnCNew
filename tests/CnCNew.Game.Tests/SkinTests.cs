@@ -42,6 +42,8 @@ internal static class SkinTests
         harness.Run("R1: the original skin draws every shipped layout of the shell as it is, laid out as before skins existed", () => OriginalIsTheShippedLayouts(data));
         harness.Run("R2: the options, More options and the HUD of a match in both skins and six resolutions", () => Pinned(data, baselines, updating));
         harness.Run("The settings choose the skin, the run's --skin is kept until the person chooses, and More options writes what it shows", () => SettingsChooseTheSkin(data));
+        harness.Run("The modern command bar fills the width at every aspect ratio; its pictures keep their proportions and the width goes to the selection plate", () => ModernBarFillsTheWidth(data));
+        harness.Run("The options cover the main menu, a text field asks the host for characters, and the score screen's panel says what the match was", () => ShellDefectsOfTheAcceptance(data));
         harness.Run("R4: a person by script switches to the modern skin in the options and walks skirmish, score, analysis and the replay list with its playback", () => PersonSwitchesTheSkin(data));
         if (updating) SkinPins.Save(BaselinePath, baselines);
         return harness.Failures;
@@ -136,6 +138,77 @@ internal static class SkinTests
             Pin($"HudTooltip-{skin.Id}", hud.BuildDrawList, baselines, updating);
         }
         TestHarness.Assert(baselines.Count == 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
+    private static void ModernBarFillsTheWidth(GameData data)
+    {
+        var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(map, "FactionAmerica", ["FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = 3 };
+        var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
+        var hud = new MatchController(live, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = UiSkinName.Modern } });
+        for (var step = 0; step < 8; step++) live.Advance(0.25);
+        hud.Input.Selection.Replace([live.World.Entities.First(entity => entity.Owner == live.Human && entity.Template.IsKindOf("DOZER")).Id]);
+        hud.Update(0.25);
+        foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1920, 1080), (2560, 1080), (3440, 1440) })
+        {
+            var commands = hud.BuildDrawList(width, height).Commands;
+            var band = commands.OfType<UiFillRect>().First(fill => fill.Color == ModernLayout.Palette.Canvas).Rect;
+            TestHarness.Assert(band.X == 0 && band.Width == width && band.Bottom == height, $"{width}x{height}: the band spans the window ({band})");
+            TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(image => image.Destination.Width > height), $"{width}x{height}: no picture is stretched along the band");
+            var scale = Math.Min(width / 800.0, height / 600.0);
+            var cameo = hud.WindowRect("ControlBar.wnd:ButtonCommand01")!.Value;
+            TestHarness.Assert(Math.Abs(cameo.Width - 50 * scale) <= 2 && Math.Abs(cameo.Height - 44 * scale) <= 2, $"{width}x{height}: a cameo keeps its proportions ({cameo})");
+            var radar = hud.WindowRect("ControlBar.wnd:LeftHUD")!.Value;
+            var portrait = hud.WindowRect("ControlBar.wnd:CameoWindow")!.Value;
+            var last = hud.WindowRect("ControlBar.wnd:ButtonCommand14")!.Value;
+            TestHarness.Assert(radar.X <= 8 * scale + 1 && Math.Abs(radar.Width - 167 * scale) <= 2, $"{width}x{height}: the radar stands at the left edge in its size ({radar})");
+            TestHarness.Assert(last.Right <= portrait.X && width - hud.WindowRect("ControlBar.wnd:RightHUD")!.Value.Right <= 12 * scale + 1, $"{width}x{height}: commands, then the portrait, at the right edge ({last}, {portrait})");
+            var name = commands.OfType<UiTextDraw>().Any(text => text.Text == "Construction Dozer" || text.Text == "Dozer");
+            TestHarness.Assert(name == width * 3 > height * 4, $"{width}x{height}: the selection plate takes what the width adds beyond 4:3");
+            TestHarness.Assert(hud.Tree.HitTest(width / 2, height - 2) is not null, $"{width}x{height}: the band takes the pointer over its whole width");
+            TestHarness.Assert(hud.Tree.InputTarget(width / 2, band.Y - 3) is null, $"{width}x{height}: above the band the world takes it");
+        }
+    }
+
+    private static void ShellDefectsOfTheAcceptance(GameData data)
+    {
+        foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
+        {
+            var directory = Directory("defects-" + skin.Id);
+            var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(1920, 1080), skin: skin);
+            ShellTestInput.Click(shell, "MainMenu.wnd:ButtonOptions");
+            TestHarness.Assert(shell.CurrentScreen is OptionsScreen && !shell.MainMenuIsBackdrop, $"{skin}: the main menu's buttons leave the screen with the options (SKIN-03)");
+            TestHarness.Assert(shell.BuildDrawList().Commands.OfType<UiTextDraw>().All(text => text.LabelKey is not "GUI:SinglePlayer" and not "GUI:Credits"), $"{skin}: nothing of the main menu is drawn under them");
+            Delete(directory);
+        }
+
+        var analysis = new CnCNew.Game.Analysis.MatchAnalysis("Maps/Test/Test.map", 60, "product", 0, 1800, 1, "completed", "live", 100, 100,
+            [new CnCNew.Game.Analysis.AnalysisPlayer(1, "Player", "FactionAmerica", 0, false, "", 0x3030FF, true, false, 0, 500, 0, 0, [], [], [], [], 0, 0, 0, 0, 0, 3, [3]),
+             new CnCNew.Game.Analysis.AnalysisPlayer(2, "Computer", "FactionChina", 0, true, "builtin", 0xFF3030, false, true, 900, 700, 2, 300, [], [], [], [], 0, 1, 1, 1, 0, 9, [9])],
+            [new CnCNew.Game.Analysis.AnalysisSample(0, 1, 10000, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0), new CnCNew.Game.Analysis.AnalysisSample(150, 1, 9500, 0, 0, 500, 1200, 3, 1200, 0, 0, 1, 2, 5, 0, 1, 0, 0, 0)], [], [], 0);
+        var lines = CnCNew.Game.Analysis.TacticalAdvice.For(analysis, null, label => label);
+        TestHarness.Assert(lines.Length == 1 + CnCNew.Game.Analysis.TacticalAdvice.MaxTips && lines[0].Contains("0:", StringComparison.Ordinal) && lines[0].Contains("1 200", StringComparison.Ordinal), $"the panel opens with what happened ({lines[0]})");
+        TestHarness.Assert(lines[1] == "ACADEMY:NoIncome" && lines[2] == "ACADEMY:BuildMorePeons", $"then the game's tips in the order of its tiers ({string.Join(" | ", lines)})");
+        TestHarness.Assert(lines.SequenceEqual(CnCNew.Game.Analysis.TacticalAdvice.For(analysis, null, label => label)), "the same match gives the same advice");
+        var text = new GameShellText(data);
+        foreach (var label in new[] { "ACADEMY:NoIncome", "ACADEMY:BuildMorePeons", "ACADEMY:RanOutOfPower", "ACADEMY:ResearchUpgrades", "ACADEMY:SpendGeneralsPoints", "ACADEMY:TryUsingSuperweapons", "ACADEMY:TryCapturingStructures" })
+            TestHarness.Assert(text.Has(label), $"the game has the text {label}");
+
+        var folder = Directory("result");
+        var scored = GameShell.Create(data, new FixedShellEnvironment(folder), viewport: new UiViewport(1920, 1080), skin: UiSkin.Modern);
+        scored.MatchFinished(new CnCNew.Game.Shell.MatchResult([], 100) { Analysis = analysis });
+        var list = scored.CurrentScreen.Tree.FindByName("ScoreScreen.wnd:ListboxWarschoolAdvice")!;
+        TestHarness.Assert(list.ListBox!.Rows.Count >= 3, $"the score screen shows it ({list.ListBox.Rows.Count} rows)");
+        TestHarness.Assert(list.ListBox.Rows.All(row => scored.CurrentScreen.Tree.Services.TextMeasure.MeasureWidth(row.Cells[0], list.Font) <= CnCNew.Ui.Runtime.UiGadgetGeometry.ListContent(list).Width), "wrapped at the list's width");
+        Delete(folder);
+    }
+
+    /// <summary>Whether the string table has a label: the shell's text source answers with the label itself when it has not.</summary>
+    private sealed class GameShellText(GameData data)
+    {
+        private readonly CnCNew.Game.Shell.ShellTextSource _source = new(data.LoadText("English"));
+
+        public bool Has(string label) => _source.TryResolve(label, out _);
+    }
+
     }
 
     private static void SettingsChooseTheSkin(GameData data)

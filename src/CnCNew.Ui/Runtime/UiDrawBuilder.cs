@@ -33,7 +33,11 @@ public sealed partial class UiWindowTree
         public UiDrawList Build()
         {
             foreach (var root in tree.RootsBottomToTop()) Draw(root);
-            if (tree._openCombo is { IsVisible: true } combo) DrawDropDown(combo);
+            if (tree._openCombo is { IsVisible: true } combo)
+            {
+                if (combo.Definition.Flat != WndFlatRole.None) FlatDropDown(combo);
+                else DrawDropDown(combo);
+            }
             return new UiDrawList(_commands.ToImmutable(), new UiDrawStatistics(_windows, _unresolvedLabels, _unresolvedSizes, _border,
                 _custom.ToImmutableSortedDictionary(StringComparer.Ordinal)));
         }
@@ -79,6 +83,11 @@ public sealed partial class UiWindowTree
 
         private void DrawGadget(UiWindow window)
         {
+            if (window.Definition.Flat != WndFlatRole.None)
+            {
+                DrawFlat(window);
+                return;
+            }
             switch (window.Type)
             {
                 case WndWindowType.PushButton: DrawPushButton(window); break;
@@ -194,10 +203,13 @@ public sealed partial class UiWindowTree
         private void EditText(UiWindow window, UiTextEditState edit, UiRect area, bool fromStart)
         {
             var (color, shadow) = TextColors(window);
+            // The hilite colour of a field is what the modern skin fills a selection with: a field under the pointer keeps writing in its text colour.
+            if (window.Definition.Flat != WndFlatRole.None && StateOf(window) == DrawState.Hilite) color = window.Definition.TextColors.Enabled;
             var measure = tree.Services.TextMeasure;
             var inset = window.Transform.X.Length(5);
             var height = measure.LineHeight(window.Font);
-            var y = area.Y + window.Transform.Y.Length(5);
+            // The modern skin's type is higher than the windows were made for: the line stands in the middle of the field.
+            var y = window.Definition.Flat != WndFlatRole.None ? area.Y + (area.Height - height) / 2 : area.Y + window.Transform.Y.Length(5);
             var text = edit.DisplayText;
             var width = Math.Max(1, area.Width - 2 * inset);
             var textWidth = measure.MeasureWidth(text, window.Font);

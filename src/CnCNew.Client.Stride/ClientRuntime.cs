@@ -738,7 +738,8 @@ internal sealed class ClientRuntime : IDisposable
     /// </summary>
     private void UpdateShellMap(GameTime gameTime, int width, int height, double? fixedSeconds)
     {
-        if (!ShellMapEnabled || _shell is not { Phase: ShellPhase.Menus } || _netLoad is not null)
+        // The modern skin's panels are translucent, on the score screen too: the battle goes on behind them (the original's score screen has a blank window behind it).
+        if (!ShellMapEnabled || _shell is not { Phase: ShellPhase.Menus or ShellPhase.Results } || (_shell.Phase == ShellPhase.Results && !_shell.Skin.IsModern) || _netLoad is not null)
         {
             StopShellMap();
             return;

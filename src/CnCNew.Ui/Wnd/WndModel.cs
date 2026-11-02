@@ -178,6 +178,20 @@ public sealed record WndCallbacks(string? System, string? Input, string? Tooltip
     public static readonly WndCallbacks None = new(null, null, null, null);
 }
 
+/// <summary>How the modern skin draws a window it has derived (<c>UiWindowTree</c>'s flat gadgets); <see cref="None"/> is every window of a shipped layout.</summary>
+public enum WndFlatRole
+{
+    None,
+    /// <summary>A gadget, or a window without a look of its own.</summary>
+    Gadget,
+    /// <summary>A group of the screen: lifted off what lies behind it.</summary>
+    Panel,
+    /// <summary>A group inside a panel: a shade darker, with no edge of its own.</summary>
+    Well,
+    /// <summary>A panel with a picture of the whole creation area behind it, cut to the panel.</summary>
+    Picture,
+}
+
 /// <summary>One <c>WINDOW ... END</c> block with its <c>CHILD</c> windows in file order (file order is bottom-to-top z-order).</summary>
 public sealed record WndWindow(
     WndWindowType Type,
@@ -206,6 +220,12 @@ public sealed record WndWindow(
     ImmutableArray<WndWindow> Children,
     int Line)
 {
+    /// <summary>Set by the modern skin's derivation only.</summary>
+    public WndFlatRole Flat { get; init; }
+
+    /// <summary>In the anchored scale mode: a group that stays in the middle of the window with the rest of its screen, instead of going to the edge it lies nearest to.</summary>
+    public bool GroupCentered { get; init; }
+
     public WndDrawDataSet GetDrawData(WndDrawDataKind kind)
     {
         foreach (var set in DrawData)

@@ -333,7 +333,9 @@ public sealed partial class UiWindowTree
     private void Place(UiWindow window, UiTransform? inherited)
     {
         var rect = window.DesignRect;
-        var (transform, forChildren) = UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode, Options.KeepBandAspect);
+        var (transform, forChildren) = window.Definition.GroupCentered && Options.Mode == UiScaleMode.Anchor && inherited is null
+            ? UiScaler.Centered(rect, Viewport)
+            : UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode);
         window.Transform = transform;
         window.Rect = window.ScreenRectOverride ?? transform.Map(rect);
         window.HitRect = Options.MinimumHitTarget > 0 && window.IsInteractive ? window.Rect.ExpandTo(Options.MinimumHitTarget) : window.Rect;
@@ -377,14 +379,14 @@ public sealed partial class UiWindowTree
             var delay = hover.Definition.TooltipDelay >= 0 ? hover.Definition.TooltipDelay : Services.DefaultTooltipDelayMs;
             if (Now - _hoverSince < delay) return null;
             var age = Now - _hoverSince - delay;
-            if (TooltipOverride is { } custom)
-            {
             if (_tooltipWindow != hover)
             {
                 _tooltipWindow = hover;
                 _tooltipX = _hoverX;
                 _tooltipY = _hoverY;
             }
+            if (TooltipOverride is { } custom)
+            {
                 var text = custom(hover);
                 if (text is not null) return new UiTooltip(hover.Name, text, null, _tooltipX, _tooltipY, age);
             }
@@ -412,12 +414,12 @@ public sealed partial class UiWindowTree
 
     private UiWindow? _countedTooltipMiss;
 
-    /// <summary>
-    /// Tooltip text a host computes for a window (the control bar builds its command button descriptions in code, not from
     // The window whose tooltip is up, and where the pointer stood when it came: it stays there until another window is under the pointer.
     private UiWindow? _tooltipWindow;
     private int _tooltipX, _tooltipY;
 
+    /// <summary>
+    /// Tooltip text a host computes for a window (the control bar builds its command button descriptions in code, not from
     /// <c>TOOLTIPTEXT</c>); consulted before the window's own callback and text. Null from the function: the window decides.
     /// </summary>
     public Func<UiWindow, string?>? TooltipOverride { get; set; }

@@ -178,6 +178,7 @@ public sealed class ReplayMenuScreen : ShellScreen
             Name = AnalysisButton,
             Rect = rect with { Left = 563, Top = 452, Right = 563 + rect.Width, Bottom = 452 + rect.Height },
             Callbacks = copyButton.Callbacks with { System = "ReplayAnalysisSystem" },
+            GroupCentered = true,
         };
         return new WndLayout("ReplayAnalysis.wnd", 2, new WndLayoutCallbacks(null, null, null), WndDefaults.None, [button], [], ImmutableSortedDictionary<string, int>.Empty);
     }

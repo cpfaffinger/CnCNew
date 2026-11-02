@@ -18,10 +18,19 @@ public static class UiGadgetGeometry
     public const int HorizontalThumbOffsetY = HorizontalThumbHeight * 2 / 3;
     public const int TextInset = 5;
 
-    public static int RowHeight(UiWindow window) => Math.Max(1, window.Tree.Services.TextMeasure.LineHeight(window.Font));
+    /// <summary>Lines of a list or a drop-down; the modern skin gives them air (<c>FlatRowPadding</c> units above and below the text).</summary>
+    public static int RowHeight(UiWindow window)
+    {
+        var line = Math.Max(1, window.Tree.Services.TextMeasure.LineHeight(window.Font));
+        return window.Definition.Flat == WndFlatRole.None ? line : line + 2 * window.Transform.Y.Length(FlatRowPadding);
+    }
+
+    private const int FlatRowPadding = 2;
 
     public static int ScrollBarWidth(UiWindow window)
-        => window.ListBox is { Data.ScrollBar: true } ? Math.Min(window.Rect.Width, window.Transform.X.Length(GadgetSize)) : 0;
+        => window.ListBox is { Data.ScrollBar: true } ? Math.Min(window.Rect.Width, window.Transform.X.Length(window.Definition.Flat == WndFlatRole.None ? GadgetSize : FlatGadgetSize)) : 0;
+
+    private const int FlatGadgetSize = 14;
 
     public static UiRect ListContent(UiWindow window)
         => UiRect.FromEdges(window.Rect.X, window.Rect.Y, window.Rect.Right - ScrollBarWidth(window), window.Rect.Bottom);
@@ -92,15 +101,35 @@ public static class UiGadgetGeometry
         return Math.Min(max, combo.Entries.Count);
     }
 
-    /// <summary>The open drop-down list below the combo box.</summary>
+    /// <summary>The open drop-down list below the combo box; in the modern skin above it when the screen ends first.</summary>
     public static UiRect ComboDropDown(UiWindow window)
-        => new(window.Rect.X, window.Rect.Bottom, window.Rect.Width, ComboVisibleRows(window) * RowHeight(window));
+    {
+        var flat = window.Definition.Flat != WndFlatRole.None;
+        var height = ComboVisibleRows(window) * RowHeight(window) + (flat ? 2 : 0);
+        var y = flat && window.Rect.Bottom + height > window.Tree.Viewport.Height && window.Rect.Y - height >= 0 ? window.Rect.Y - height : window.Rect.Bottom;
+        return new UiRect(window.Rect.X, y, window.Rect.Width, height);
+    }
+
+    /// <summary>The row of an open drop-down at a height of the screen.</summary>
+    public static int ComboRowAt(UiWindow window, int y)
+    {
+        var drop = ComboDropDown(window);
+        var top = drop.Y + (window.Definition.Flat != WndFlatRole.None ? 1 : 0);
+        return window.ComboBox!.TopIndex + (y - top) / RowHeight(window);
+    }
 
     public static UiRect SliderThumb(UiWindow window)
     {
         var slider = window.Slider!;
         var rect = window.Rect;
         var range = Math.Max(1, slider.Maximum - slider.Minimum);
+        if (window.Definition.Flat != WndFlatRole.None && window.Type == WndWindowType.HorizontalSlider)
+        {
+            // The modern slider's thumb stands on its track in the middle of the window: where it is drawn is where it answers.
+            var thumbWidth = Math.Min(rect.Width, window.Transform.X.Length(FlatThumbWidth));
+            var thumbHeight = Math.Min(rect.Height, window.Transform.Y.Length(FlatThumbHeight));
+            return new UiRect(rect.X + (int)((long)(rect.Width - thumbWidth) * (slider.Value - slider.Minimum) / range), rect.Y + (rect.Height - thumbHeight) / 2, thumbWidth, thumbHeight);
+        }
         if (window.Type == WndWindowType.HorizontalSlider)
         {
             var width = Math.Min(rect.Width, window.Transform.X.Length(HorizontalThumbWidth));
@@ -112,6 +141,8 @@ public static class UiGadgetGeometry
         var y = rect.Y + (int)((long)(rect.Height - height) * (slider.Maximum - slider.Value) / range);
         return new UiRect(rect.X, y, rect.Width, height);
     }
+
+    private const int FlatThumbWidth = 8, FlatThumbHeight = 20;
 
     /// <summary>The slider value whose thumb is centered on the pointer (vertical sliders have the maximum at the top).</summary>
     public static int SliderValueAt(UiWindow window, int x, int y)

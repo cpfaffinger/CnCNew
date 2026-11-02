@@ -33,13 +33,6 @@ public sealed record UiScaleOptions
     public int MinimumHitTarget { get; init; }
     public decimal ResolutionFontAdjustment { get; init; } = 0.7m;
 
-    /// <summary>
-    /// Anchor mode only: a top-level group that spans one axis of the creation area but not the other (a band, such as the command bar) keeps its proportions and
-    /// is centred on the spanned axis, instead of being stretched along it. A canvas that covers both axes still stretches. Off for the original (it stretches a
-    /// band like <c>parseScreenRect</c>); the modern skin's HUD sets it (docs/UI-MODERN.md section 3).
-    /// </summary>
-    public bool KeepBandAspect { get; init; }
-
     public static readonly UiScaleOptions Original = new();
 }
 
@@ -131,10 +124,6 @@ public static class UiScaler
     /// (<see cref="ClassifyAxis"/>) that all its descendants share, so a dialog keeps its inner layout.
     /// </summary>
     public static (UiTransform Transform, UiTransform? Inherited) ForWindow(WndScreenRect rect, UiTransform? inherited, UiViewport viewport, UiScaleMode mode)
-        => ForWindow(rect, inherited, viewport, mode, keepBandAspect: false);
-
-    /// <summary>The same; <paramref name="keepBandAspect"/> is <see cref="UiScaleOptions.KeepBandAspect"/>.</summary>
-    public static (UiTransform Transform, UiTransform? Inherited) ForWindow(WndScreenRect rect, UiTransform? inherited, UiViewport viewport, UiScaleMode mode, bool keepBandAspect)
     {
         int cw = rect.CreationWidth, ch = rect.CreationHeight;
         switch (mode)
@@ -153,12 +142,14 @@ public static class UiScaler
             return (Create(viewport, cw, ch, UiAxisAnchor.Stretch, UiAxisAnchor.Stretch), null);
         var anchorX = ClassifyAxis(rect.Left, rect.Right, cw);
         var anchorY = ClassifyAxis(rect.Top, rect.Bottom, ch);
-        if (keepBandAspect)
-        {
-            if (anchorX == UiAxisAnchor.Stretch) anchorX = UiAxisAnchor.Center;
-            if (anchorY == UiAxisAnchor.Stretch) anchorY = UiAxisAnchor.Center;
-        }
         var transform = Create(viewport, cw, ch, anchorX, anchorY);
+        return (transform, transform);
+    }
+
+    /// <summary>A group that stays in the middle of the window, at the uniform scale, with its descendants (<see cref="WndWindow.GroupCentered"/>).</summary>
+    public static (UiTransform Transform, UiTransform? Inherited) Centered(WndScreenRect rect, UiViewport viewport)
+    {
+        var transform = Create(viewport, rect.CreationWidth, rect.CreationHeight, UiAxisAnchor.Center, UiAxisAnchor.Center);
         return (transform, transform);
     }
 

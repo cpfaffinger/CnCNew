@@ -35,7 +35,11 @@ public static class SkinTests
         Test(KeepArtChangesOnlyTheType);
         Test(ThePaletteMeetsTheContrastThresholds);
         Test(TheTypeScaleMeetsTheSmallestSizes);
-        Test(ABandKeepsItsProportionsOnlyWhenAsked);
+        Test(AGroupStaysInTheMiddleOfAWideWindow);
+        Test(TheSliderThumbStandsWhereItAnswers);
+        Test(TheEditBoxOfACombinationBoxIsThreePieces);
+        Test(ATooltipStaysUntilAnotherWindowIsUnderThePointer);
+        Test(TheDropDownOpensUpwardsAtTheBottomOfTheScreen);
         Test(TheReadabilityCheckFindsWideAndTallLabels);
         Console.WriteLine(_failures == 0 ? "Skin tests passed." : $"Skin tests: {_failures} failure(s).");
         return _failures;
@@ -134,7 +138,7 @@ public static class SkinTests
     {
         var derived = UiSkin.Modern.Derive(Sample(), Templates).AllWindows().ToArray();
         var backdrop = derived.Single(window => window.Name == "Test.wnd:Parent");
-        Check((backdrop.Status & WndStatus.Image) == 0 && backdrop.GetDrawData(WndDrawDataKind.Enabled)[0].Color == ModernLayout.Palette.Canvas, "a picture over the whole screen is the canvas");
+        Check((backdrop.Status & WndStatus.Image) == 0 && backdrop.GetDrawData(WndDrawDataKind.Enabled)[0].Color == ModernLayout.Scrim, "a picture over the whole screen is the translucent canvas: the battle behind the menus shows through");
         var logo = derived.Single(window => window.Name == "Test.wnd:Logo");
         Check((logo.Status & WndStatus.Image) != 0 && logo.GetDrawData(WndDrawDataKind.Enabled)[0].Image == "Logo", "a smaller picture stays the game's");
     }
@@ -184,17 +188,106 @@ public static class SkinTests
         Check(steps.Zip(steps.Skip(1)).All(pair => pair.First <= pair.Second), "the steps never get smaller");
     }
 
-    private static void ABandKeepsItsProportionsOnlyWhenAsked()
+    private static void AGroupStaysInTheMiddleOfAWideWindow()
     {
-        var bar = new WndScreenRect(0, 416, 799, 599, 800, 600);
-        var viewport = new UiViewport(1280, 720);
-        var (stretched, _) = UiScaler.ForWindow(bar, null, viewport, UiScaleMode.Anchor);
-        Check(stretched.Map(bar) is { X: 0, Width: >= 1278 }, $"the original stretches the band to the width ({stretched.Map(bar)})");
-        var (kept, _) = UiScaler.ForWindow(bar, null, viewport, UiScaleMode.Anchor, keepBandAspect: true);
-        var rect = kept.Map(bar);
-        Check(rect.Width == 958 && rect.X == (1280 - 960) / 2 && rect.Bottom == 718, $"the modern HUD keeps it at the height's scale, centred at the bottom ({rect})");
-        var canvas = new WndScreenRect(0, 0, 800, 600, 800, 600);
-        Check(UiScaler.ForWindow(canvas, null, viewport, UiScaleMode.Anchor, keepBandAspect: true).Transform.Map(canvas) is { X: 0, Width: 1280, Height: 720 }, "a canvas still covers the screen");
+        var viewport = new UiViewport(1920, 1080);
+        var derived = UiSkin.Modern.Derive(Layout(Window(WndWindowType.User, "Test.wnd:Parent", 0, 0, 800, 600, children:
+        [
+            Window(WndWindowType.PushButton, "Test.wnd:Left", 40, 500, 160, 540),
+            Window(WndWindowType.PushButton, "Test.wnd:Right", 640, 500, 760, 540),
+        ])), Templates);
+        Check(derived.AllWindows().Where(window => window.Type == WndWindowType.PushButton).All(window => window.GroupCentered), "the groups of a screen stay together");
+        var tree = new UiWindowTree(viewport, UiSkin.Modern.ShellScale(UiScaleOptions.Original), new UiTreeServices(new FixedMeasure()));
+        tree.AddLayout(derived);
+        var (left, right) = (tree.FindByName("Test.wnd:Left")!.Rect, tree.FindByName("Test.wnd:Right")!.Rect);
+        Check(left.X == 240 + 72 && right.X == 240 + 1152, $"at one scale, in the middle of the window ({left}, {right})");
+        var menu = UiSkin.Modern.Derive(new WndLayout("MainMenu.wnd", 2, new WndLayoutCallbacks(null, null, null), WndDefaults.None,
+            [Window(WndWindowType.User, "MainMenu.wnd:Parent", 0, 0, 800, 600, children: [Window(WndWindowType.PushButton, "MainMenu.wnd:Column", 640, 100, 760, 140), Window(WndWindowType.User, "MainMenu.wnd:WinFactionUS", 160, 460, 240, 520)])],
+            [], ImmutableSortedDictionary<string, int>.Empty), Templates).AllWindows().ToArray();
+        Check(!menu.Single(window => window.Name == "MainMenu.wnd:Column").GroupCentered && menu.Single(window => window.Name == "MainMenu.wnd:WinFactionUS").GroupCentered,
+            "the main menu keeps its column at the edge and only its row of medals together");
+    }
+
+    private static void TheSliderThumbStandsWhereItAnswers()
+    {
+        var slider = Window(WndWindowType.HorizontalSlider, "Test.wnd:Slider", 100, 100, 400, 126) with { Slider = new WndSliderData(0, 100) };
+        var derived = UiSkin.Modern.Derive(Layout(slider), Templates);
+        var tree = new UiWindowTree(new UiViewport(800, 600), UiSkin.Modern.ShellScale(UiScaleOptions.Original), new UiTreeServices(new FixedMeasure()));
+        tree.AddLayout(derived);
+        var window = tree.FindByName("Test.wnd:Slider")!;
+        window.SetSliderValue(50);
+        var thumb = UiGadgetGeometry.SliderThumb(window);
+        Check(thumb.Y + thumb.Height / 2 == window.Rect.Y + window.Rect.Height / 2, $"the thumb stands in the middle of the window, where its track is ({thumb} in {window.Rect})");
+        Check(UiGadgetGeometry.SliderValueAt(window, thumb.X + thumb.Width / 2, thumb.Y + thumb.Height / 2) == 50, "a press on the thumb keeps the value");
+        tree.MouseDown(window.Rect.X + 20, window.Rect.Y + window.Rect.Height / 2, UiMouseButton.Left);
+        var moved = UiGadgetGeometry.SliderThumb(window);
+        Check(Math.Abs(moved.X + moved.Width / 2 - (window.Rect.X + 20)) <= 3, $"the thumb goes to the pointer ({moved})");
+        var original = Window(WndWindowType.HorizontalSlider, "Old.wnd:Slider", 100, 100, 400, 126) with { Slider = new WndSliderData(0, 100) };
+        var old = new UiWindowTree(new UiViewport(800, 600), UiScaleOptions.Original, new UiTreeServices(new FixedMeasure()));
+        old.AddLayout(Layout(original));
+        Check(UiGadgetGeometry.SliderThumb(old.FindByName("Old.wnd:Slider")!).Y == 100 + UiGadgetGeometry.HorizontalThumbOffsetY, "the original's thumb hangs below the top edge as before");
+    }
+
+    private static void TheEditBoxOfACombinationBoxIsThreePieces()
+    {
+        WndDrawData Piece(string? image) => new(image, new WndColor(1, 2, 3, 255), new WndColor(4, 5, 6, 255));
+        var combo = Window(WndWindowType.ComboBox, "Test.wnd:Combo", 100, 100, 300, 124, WndStatus.Enabled | WndStatus.Image,
+            [new WndDrawDataSet(WndDrawDataKind.Enabled, [WndDrawData.Empty]), new WndDrawDataSet(WndDrawDataKind.ComboBoxEditBoxEnabled, [Piece("Left"), Piece("Right"), Piece("Center")]), new WndDrawDataSet(WndDrawDataKind.ComboBoxDropDownButtonEnabled, [Piece("Arrow")])])
+            with { ComboBox = new WndComboBoxData(false, 16, 4, false, false) };
+        var tree = new UiWindowTree(new UiViewport(800, 600), UiScaleOptions.Original, new UiTreeServices(new FixedMeasure()) { Images = new SizedImages() });
+        tree.AddLayout(Layout(combo));
+        var images = tree.BuildDrawList().Commands.OfType<UiImageDraw>().ToArray();
+        var edit = UiGadgetGeometry.ComboEdit(tree.FindByName("Test.wnd:Combo")!);
+        var left = images.Single(image => image.Image == "Left");
+        Check(left.Destination.Width == 8, $"the left end keeps its size: a gradient stretched over the box was the defect ({left.Destination})");
+        var right = images.Single(image => image.Image == "Right");
+        Check(right.Destination.Right == edit.Right && images.Count(image => image.Image == "Center") >= 2, "the right end closes the box and the middle is tiled");
+    }
+
+    private sealed class SizedImages : IUiImageLookup
+    {
+        public bool TryGetSize(string imageName, out int width, out int height) => (width = height = 8) > 0;
+    }
+
+    private static void ATooltipStaysUntilAnotherWindowIsUnderThePointer()
+    {
+        var tree = new UiWindowTree(new UiViewport(800, 600), UiScaleOptions.Original, new UiTreeServices(new FixedMeasure()));
+        tree.AddLayout(Layout(Window(WndWindowType.User, "Test.wnd:Parent", 0, 0, 800, 600, children:
+        [
+            Window(WndWindowType.PushButton, "Test.wnd:One", 100, 100, 200, 140) with { TooltipText = "One" },
+            Window(WndWindowType.PushButton, "Test.wnd:Two", 300, 100, 400, 140) with { TooltipText = "Two" },
+        ])));
+        tree.MouseMove(150, 120);
+        tree.AdvanceTo(400);
+        tree.MouseMove(151, 120);
+        tree.AdvanceTo(1000);
+        Check(tree.Tooltip is null, "before it is up a move starts the delay again");
+        tree.AdvanceTo(1300);
+        var shown = tree.Tooltip;
+        Check(shown is { Text: "One", X: 151, Y: 120 }, $"after the delay it comes where the pointer stands ({shown})");
+        tree.MouseMove(170, 125);
+        tree.AdvanceTo(1310);
+        var after = tree.Tooltip;
+        Check(after is { Text: "One", X: 151, Y: 120 } && after.AgeMs > shown!.AgeMs, $"a move over the same button leaves it standing, and its reveal goes on ({after})");
+        tree.MouseMove(350, 120);
+        Check(tree.Tooltip is null, "another button ends it");
+        tree.AdvanceTo(2200);
+        Check(tree.Tooltip is { Text: "Two" }, "and brings its own after the delay");
+    }
+
+    private static void TheDropDownOpensUpwardsAtTheBottomOfTheScreen()
+    {
+        var combo = Window(WndWindowType.ComboBox, "Test.wnd:Combo", 100, 560, 300, 584) with { ComboBox = new WndComboBoxData(false, 16, 6, false, false) };
+        var tree = new UiWindowTree(new UiViewport(800, 600), UiSkin.Modern.ShellScale(UiScaleOptions.Original), new UiTreeServices(new FixedMeasure()));
+        tree.AddLayout(UiSkin.Modern.Derive(Layout(combo), Templates));
+        var window = tree.FindByName("Test.wnd:Combo")!;
+        for (var entry = 0; entry < 6; entry++) window.AddComboEntry($"Entry {entry}");
+        var drop = UiGadgetGeometry.ComboDropDown(window);
+        Check(drop.Bottom == window.Rect.Y, $"it would leave the screen below ({drop})");
+        tree.MouseDown(150, 570, UiMouseButton.Left);
+        tree.MouseUp(150, 570, UiMouseButton.Left);
+        tree.MouseDown(150, drop.Y + 1 + UiGadgetGeometry.RowHeight(window) * 2 + 1, UiMouseButton.Left);
+        Check(window.ComboBox!.SelectedIndex == 2, $"and a click takes the row it hits ({window.ComboBox.SelectedIndex})");
     }
 
     private static void TheReadabilityCheckFindsWideAndTallLabels()

@@ -311,7 +311,7 @@ public sealed partial class UiWindowTree
         var combo = window.ComboBox!;
         if (combo.IsOpen && UiGadgetGeometry.ComboDropDown(window).Contains(x, y))
         {
-            var index = combo.TopIndex + (y - window.Rect.Bottom) / UiGadgetGeometry.RowHeight(window);
+            var index = UiGadgetGeometry.ComboRowAt(window, y);
             if (index >= 0 && index < combo.Entries.Count) SelectComboEntry(window, index);
             CloseCombo();
             return;
@@ -324,6 +324,10 @@ public sealed partial class UiWindowTree
         if (combo.IsOpen) CloseCombo();
         else OpenCombo(window);
     }
+
+    /// <summary>The row of the open drop-down under the pointer; -1 outside it.</summary>
+    internal int DropDownRowUnderPointer(UiWindow window)
+        => _pointerInside && UiGadgetGeometry.ComboDropDown(window).Contains(_hoverX, _hoverY) ? UiGadgetGeometry.ComboRowAt(window, _hoverY) : -1;
 
     private void OpenCombo(UiWindow window)
     {
