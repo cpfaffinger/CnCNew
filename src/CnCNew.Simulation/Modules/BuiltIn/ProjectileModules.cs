@@ -1037,7 +1037,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         var push = speedDelta > Fixed.Zero || _braking == Fixed.Zero ? acceleration : -_braking;
         var wanted = DirectionToApplyThrust(position, goal, push, ProjectileModules.GravityPerFrameSquared(world));
         // A missile without a locomotor is the stand-in of Launch: it thrusts where it wants to go.
-        var thrustLimit = turn || locomotor is null ? locomotor?.MaxThrustAngle ?? FixedTrig.Pi : Fixed.Zero;
+        var thrustLimit = turn ? locomotor?.MaxThrustAngle ?? FixedTrig.Pi : Fixed.Zero;
         var thrustDirection = RotateToward(_forward, wanted, thrustLimit, out var thrustTurned);
         if (speed.Abs() >= Nearly)
         {

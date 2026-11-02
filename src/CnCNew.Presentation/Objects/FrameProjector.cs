@@ -428,7 +428,7 @@ public sealed class FrameProjector
             chassis = chassis with { Pitch = chassis.Pitch + ToFloat(thrown.Tilt.Pitch), Roll = chassis.Roll + ToFloat(thrown.Tilt.Roll) };
         // A projectile's matrix has its flight in it (the missile's nose, a shell along its path): the simulation keeps the heading on the object and the rest on the module. A
         // chassis pitch is a rotation about y and lowers the nose (Rotate_Y), the flight's pitch raises it.
-        if (entity.Modules.OfType<CnCNew.Simulation.Modules.IProjectileModule>().FirstOrDefault() is { } projectile)
+        if (entity.Template.IsKindOf("PROJECTILE") && entity.Modules.OfType<CnCNew.Simulation.Modules.IProjectileModule>().FirstOrDefault() is { } projectile)
             chassis = chassis with { Pitch = chassis.Pitch - ToFloat(projectile.FlightPitch) };
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.

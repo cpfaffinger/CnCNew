@@ -66,6 +66,23 @@ static partial class Tests
           Behavior = AIUpdateInterface AI01
           End
         End
+        Object IdleAimer
+          KindOf = INFANTRY SELECTABLE
+          VisionRange = 400.0
+          Locomotor = SET_NORMAL AimerLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY ShellGun
+          End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            MoodAttackCheckRate = 100
+          End
+        End
         Object LazyAimer
           KindOf = INFANTRY SELECTABLE
           Locomotor = SET_NORMAL AimerLoco
@@ -450,6 +467,30 @@ static partial class Tests
         Check.That(frames == 15, $"A quarter turn at 6 degrees a frame is 15 frames, got {frames}.");
         Check.That(FixedTrig.AngleDifference(aimer.Angle, FixedTrig.PiFraction(1, 2)).Abs() <= Fixed.FromDecimal(0.035m), $"The unit looks at its victim, got {aimer.Angle}.");
         Check.That(FixedTrig.AngleDifference(Get(world, "TestShell").Angle, FixedTrig.PiFraction(1, 2)).Abs() < Fixed.FromDecimal(0.04m), "The shot leaves that way.");
+    }
+
+    /// <summary>A unit that finds its victim by itself turns to it too, in the first tick of its own frame, in the same frames at 30, 60 and 120 Hz.</summary>
+    public static void BodyAimOfASelfAcquiredVictim()
+    {
+        long? reference = null;
+        foreach (var (rate, factor) in MissileRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: LaunchFiles(), geometry: LaunchGeometry());
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "IdleAimer", x: 0, y: 0);
+            feeder.Spawn(2, "Dummy", x: 0, y: 150);
+            world.Step();
+            var aimer = Get(world, "IdleAimer");
+            var start = world.Tick;
+            long frame = -1;
+            for (var step = 0; step < world.Frames(60) && frame < 0; step++)
+                if (world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == aimer.Id)) frame = (world.Tick - 1 - start) / factor;
+            Check.That(frame >= 15, $"{rate}: the unit turns before it fires (first shot in frame {frame}).");
+            Check.That(FixedTrig.AngleDifference(aimer.Angle, FixedTrig.PiFraction(1, 2)).Abs() <= Fixed.FromDecimal(0.035m), $"{rate}: it looks at its victim ({aimer.Angle}).");
+            reference ??= frame;
+            Check.That(frame == reference, $"{rate}: the same frame as at 30 Hz ({frame} against {reference}).");
+        }
     }
 
     /// <summary><c>AcceptableAimDelta</c>: 180 degrees ask for no turn at all, 33 degrees let a unit stop within 33 degrees of its victim.</summary>

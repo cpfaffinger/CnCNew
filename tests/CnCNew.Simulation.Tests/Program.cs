@@ -658,6 +658,7 @@ run.Test("Missile flight: it detonates on the victim's geometry", Tests.MissileD
 run.Test("Shell flight: the nose follows the arc", Tests.ShellPitchFollowsItsArc);
 run.Test("Body aim: a unit without a turret turns to its victim before it fires", Tests.BodyAimTurnsTheUnitToItsVictim);
 run.Test("Body aim: the weapon's acceptable delta", Tests.BodyAimAcceptsTheWeaponsDelta);
+run.Test("Body aim: a victim the unit found by itself, in the same frames at every rate", Tests.BodyAimOfASelfAcquiredVictim);
 run.Test("Rate invariance, projectiles: a delayed hit counts its frames against the 30 Hz speed", Tests.RateProjectilesDelayedHitCountsAgainstTheOriginalFrameSpeed);
 run.Test("Rate invariance, projectiles: the speed per frame is the 30 Hz catalog value", Tests.RateProjectilesFrameSpeedIsTheThirtyHertzValue);
 run.Test("Rate invariance, projectiles: a straight shell flies the 30 Hz path", Tests.RateProjectilesStraightShellFliesTheThirtyHertzPath);
