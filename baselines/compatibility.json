@@ -4693,15 +4693,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/InitialPayload",
-      "count": 8,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "TransportContain/KeepContainerVelocityOnExit",
       "count": 24,
       "owners": [
