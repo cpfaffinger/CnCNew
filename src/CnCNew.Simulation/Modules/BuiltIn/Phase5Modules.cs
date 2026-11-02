@@ -1507,6 +1507,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             if (Entity.InPhysicsFlight && world.Time.TicksPerOriginalFrame > TickOrder.Next) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
+            // A turn on the spot the flight caught ends with its frame: the 30 Hz turn was taken whole before the flight began.
+            if (_frameTicksLeft > 0 && _frameArriving && _frameStepX == Fixed.Zero && _frameStepY == Fixed.Zero) Coast(world);
         }
         else if (Entity.HasMoveTarget)
         {
@@ -2131,7 +2133,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// The speed of the object in units per logic frame of the original, as the movement computes with it (a read access for measurements: above 30 Hz <see cref="Entity.Speed"/> is
     /// this value divided by the ticks per frame and has lost its last bits). <paramref name="ticksPerOriginalFrame"/> is the world's <c>Time.TicksPerOriginalFrame</c>.
     /// </summary>
-    public Fixed SpeedPerOriginalFrame(int ticksPerOriginalFrame) => _stride == 0 ? Entity.Speed * ticksPerOriginalFrame : FrameSpeed();
+    public Fixed SpeedPerOriginalFrame(int ticksPerOriginalFrame) => _stride != 0 ? FrameSpeed() : _frameSpeed != Fixed.Zero ? _frameSpeed : Entity.Speed * ticksPerOriginalFrame;
 
     /// <summary>The way the locomotor drives the object: along its heading where its frame ends, at the speed of that frame.</summary>
     public (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world)
@@ -2249,7 +2251,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// </summary>
     internal void TurnInPlace(IWorldServices world, Fixed desired)
     {
-        if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick) return;
+        // "Skip moveTowardsAngle if physics say you're stunned": a unit in the air, or one whose movement is held, does not turn.
+        if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick || Entity.InPhysicsFlight || HoldsMovement) return;
         if (_stride == 0) ResolveBlockerTiming(world.Time);
         if (_frameTicksLeft > 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         _spotTurnTick = world.Tick;

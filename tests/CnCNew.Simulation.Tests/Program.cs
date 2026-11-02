@@ -655,6 +655,7 @@ run.Test("Projectile launch: the barrels in turn", Tests.ProjectileLaunchTakesTh
 run.Test("Missile flight: a cruise missile climbs, holds its height and dives, the same at every rate", Tests.MissileCruisesAtItsPreferredHeightAndDives);
 run.Test("Missile flight: the nose turns at the locomotor's rate", Tests.MissileTurnsAtItsLocomotorsRate);
 run.Test("Missile flight: it detonates on the victim's geometry", Tests.MissileDetonatesOnTheVictimsGeometry);
+run.Test("Missile flight: the launcher's velocity, the same after a save", Tests.MissileTakesTheLaunchersVelocityAcrossASave);
 run.Test("Shell flight: the nose follows the arc", Tests.ShellPitchFollowsItsArc);
 run.Test("Body aim: a unit without a turret turns to its victim before it fires", Tests.BodyAimTurnsTheUnitToItsVictim);
 run.Test("Body aim: the weapon's acceptable delta", Tests.BodyAimAcceptsTheWeaponsDelta);

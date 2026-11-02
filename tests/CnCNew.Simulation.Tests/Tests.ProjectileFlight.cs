@@ -186,6 +186,23 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object RollingLauncher
+          KindOf = VEHICLE SELECTABLE
+          Locomotor = SET_NORMAL AimerLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY LimitedGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 50.0
+          End
+        End
         Object CruiseLauncher
           KindOf = VEHICLE SELECTABLE
           Body = ActiveBody Body01
@@ -417,6 +434,34 @@ static partial class Tests
         Check.That(path.Max(value => value.X) > Fixed.FromInt(50), $"It overshoots away from its victim before it comes round ({path.Max(value => value.X)}).");
     }
 
+    /// <summary>
+    /// <c>transferVelocityTo</c>: a missile takes the speed of a launcher on the move, the same after a save: the launcher's speed per frame of the original comes from the frame's
+    /// own value, not from the speed per tick, which has lost the division's rest. A world restored in the middle of the launcher's walk stays the continuous world.
+    /// </summary>
+    public static void MissileTakesTheLaunchersVelocityAcrossASave()
+    {
+        foreach (var (rate, _) in MissileRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: LaunchFiles(), geometry: LaunchGeometry());
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "RollingLauncher", x: 0, y: 0, angle: FixedTrig.PiFraction(1, 2));
+            feeder.Spawn(2, "Dummy", x: 0, y: 300);
+            world.Step();
+            var (launcher, dummy) = (Get(world, "RollingLauncher"), Get(world, "Dummy"));
+            feeder.SetMoveTarget(1, launcher.Id.Value, 0, 250);
+            for (var step = 0; step < world.Frames(10); step++) world.Step();
+            Check.That(launcher.Speed > Fixed.Zero, $"{rate}: the launcher is on its way.");
+            var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+            var other = feeder.ForkTo(restored);
+            feeder.FireWeapon(1, launcher.Id.Value, dummy.Id.Value);
+            other.FireWeapon(1, launcher.Id.Value, dummy.Id.Value);
+            for (var step = 0; step < world.Frames(10); step++)
+                Check.That(world.Step().StateHash == restored.Step().StateHash, $"{rate}: tick {step} after the save is the continuous one.");
+            Check.That(world.Entities.Any(value => value.Template.Name == "LimitedMissile"), $"{rate}: the shot went out.");
+        }
+    }
+
     /// <summary>The stand-in for the collision: a missile blows up where it meets the box of the object it was fired at, not at the object's feet in the middle of it.</summary>
     public static void MissileDetonatesOnTheVictimsGeometry()
     {
@@ -528,8 +573,9 @@ static partial class Tests
                     sides.Add(shell.Y > Fixed.Zero ? 3m : -3m);
                 if (sides.Count == snapshotAfter)
                 {
-                    world = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
-                    feeder = new Feeder(world);
+                    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                    feeder = feeder.ForkTo(restored);
+                    world = restored;
                     snapshotAfter = -1;
                 }
             }
