@@ -590,6 +590,24 @@ internal static class HudTests
             TestHarness.Assert(done(), what);
         }
 
+        // The places of a transport.
+        var humvee = Spawn("AmericaVehicleHumvee", match.Human, 200, 0);
+        var first = Spawn("AmericaInfantryRanger", match.Human, 220, 0);
+        var seat = Spawn("AmericaInfantryRanger", match.Human, 220, 20);
+        TestHarness.Assert(world.TryEnterContainer(first, humvee) && world.TryEnterContainer(seat, humvee), "two rangers sit in the humvee");
+        controller.Input.Selection.Replace([humvee.Id]);
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var places = controller.CommandBar.Slots.Where(button => button?.Button.Kind == GuiCommandKind.ExitContainer).ToArray();
+        TestHarness.Assert(places.Length == 5 && places[0]!.Rider == first.Id && places[1]!.Rider == seat.Id && places[0]!.IsEnabled && places[2] is { IsEnabled: false }, $"a button per place, the first two taken ({places.Length})");
+        var cameo = data.Visuals.TryGet("AmericaInfantryRanger", out var seated) ? seated.ButtonImage : null;
+        TestHarness.Assert(cameo is { Length: > 0 } && controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().Any(image => image.Image == cameo), "with the rider's cameo");
+        TestHarness.Assert(commands.Activate(world, places[1]!.Button, [seat]) == ActivationResult.Issued, "a press lets the rider out");
+        Until(() => !seat.ContainedBy.IsValid, "and the second ranger stands outside");
+        TestHarness.Assert(first.ContainedBy == humvee.Id, "the first stays");
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.CommandBar.Slots.Where(button => button?.Button.Kind == GuiCommandKind.ExitContainer).Count(button => button!.IsEnabled) == 1, "and one place is taken");
+
         // Internet hack.
         var hacker = Spawn("ChinaInfantryHacker", match.Human, 120, 0);
         var hack = hacker.Modules.OfType<HackInternetAIUpdate>().Single();

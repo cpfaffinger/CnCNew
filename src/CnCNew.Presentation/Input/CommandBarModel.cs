@@ -52,6 +52,7 @@ public enum ButtonReason
 
     /// <summary><c>CANMAKE_PARKING_PLACES_FULL</c>: the airfield has no free space for another aircraft.</summary>
     ParkingFull,
+    EmptyPlace,
 }
 
 /// <param name="Slot">1..14 as in the <c>CommandSet</c>.</param>
@@ -61,6 +62,9 @@ public sealed record CommandBarButton(int Slot, CommandButtonInfo Button, Button
     float? ReadyFraction, ImmutableArray<EntityId> Sources)
 {
     public bool IsEnabled => Availability is ButtonAvailability.Available or ButtonAvailability.Active;
+
+    /// <summary>An <c>EXIT_CONTAINER</c> button: who sits in this place (<c>ControlBar::m_containData</c>), invalid while it is free.</summary>
+    public EntityId Rider { get; init; } = EntityId.Invalid;
 }
 
 /// <summary>One production queue entry (<c>populateBuildQueue</c>, at most nine shown); only the head progresses.</summary>
@@ -279,7 +283,29 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             if (state.Availability == ButtonAvailability.Hidden) continue;
             slots[index] = Make(index + 1, button, state, [entity.Id], hotkeys);
         }
+        AddRiders(world, entity, set, slots);
         return new CommandBarView(CommandBarContext.Command, set.Name, [..slots], QueueOf(world, entity, set), entity.Id, UpgradesOf(world, entity), false);
+    }
+
+    /// <summary>
+    /// <c>ControlBar::doTransportInventoryUI</c>: the exit buttons of the set are the places of the container. A button shows who sits there and lets it out, a free place is a
+    /// disabled button, and a place beyond what the container holds is hidden - a tank that takes up three places makes two buttons disappear off the end.
+    /// </summary>
+    private void AddRiders(SimulationWorld world, Entity entity, CommandSetInfo set, CommandBarButton?[] slots)
+    {
+        if (entity.Container is not { } container || (entity.DisabledFlags(world.Tick) & DisabledMask.Unmanned) != 0) return;
+        var riders = container.Contained.Select(world.FindEntity).OfType<Entity>().ToList();
+        var room = container.ContainMax - (container is TransportContain ? riders.Sum(rider => Math.Max(rider.Template.TransportSlotCount - 1, 0)) : 0);
+        var (place, next) = (0, 0);
+        for (var index = 0; index < GridSlots; index++)
+        {
+            if (ButtonOf(set, index) is not { Kind: GuiCommandKind.ExitContainer } button) continue;
+            if (container.ContainMax >= 0 && ++place > room) continue;
+            var rider = next < riders.Count ? riders[next++] : null;
+            slots[index] = rider is null
+                ? new CommandBarButton(index + 1, button, ButtonAvailability.Restricted, ButtonReason.EmptyPlace, null, default, 0, null, [])
+                : new CommandBarButton(index + 1, button, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id };
+        }
     }
 
     private CommandBarView BuildMulti(SimulationWorld world, PlayerId player, List<Entity> units)
@@ -431,6 +457,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (!module.IsReady(world)) return State(ButtonAvailability.NotReady, ButtonReason.Recharging, ReadyFraction(world, player, (SimModule)module, power));
                 return State(ButtonAvailability.Available, ButtonReason.None, 1f);
             }
+            // Not a button of the command set: the places of the container (AddRiders; "if the contained count changes the UI is completely repopulated").
+            case GuiCommandKind.ExitContainer:
+                return State(ButtonAvailability.Hidden, ButtonReason.None);
             // ControlBarCommand.cpp, GUI_COMMAND_SWITCH_WEAPON: the object has the slot, and the button is checked while that is its current weapon.
             case GuiCommandKind.SwitchWeapon:
                 if (SimulationWorld.WeaponIndexIn(entity, button.WeaponSlotIndex) < 0) return State(ButtonAvailability.Restricted, ButtonReason.NoWeapon);

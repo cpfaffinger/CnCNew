@@ -1123,9 +1123,14 @@ public sealed partial class MatchController
             var button = CommandBar[slot];
             if (button is null || button.Availability == ButtonAvailability.Hidden) continue;
             var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
+            // populateInvDataCallback: an exit button wears the cameo and the rank of who sits there.
+            var rider = button.Rider.IsValid ? Match.World.FindEntity(button.Rider) : null;
+            var cameo = rider is not null && Match.Data.Visuals.TryGet(rider.Template.Name, out var seated) && seated.ButtonImage is { Length: > 0 } own ? own : button.Button.ButtonImage;
             // W3DGadgetPushButtonImageDraw: a disabled button that is merely not ready keeps its colours under the clock, one the player cannot pay for is dark (0x90), any other grey.
-            if (button.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(button.Button.ButtonImage, out _))
-                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, button.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false) { Grayscale = button.Availability == ButtonAvailability.Restricted });
+            if (cameo.Length > 0 && _assets.Images.TryGet(cameo, out _))
+                commands.Add(new UiImageDraw(cameo, rect, button.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false) { Grayscale = button.Availability == ButtonAvailability.Restricted });
+            if (rider is { VeterancyLevel: > 0 and <= 3 } && _assets.Images.TryGet($"SSChevron{rider.VeterancyLevel}L", out _))
+                commands.Add(new UiImageDraw($"SSChevron{rider.VeterancyLevel}L", rect, WndColor.White, false, false));
             // W3DGadgetPushButtonImageDraw: WIN_STATUS_FLASHING lays the pushed overlay over the cameo.
             if (_flashing.Contains(button.Button.Name) && _assets.Images.TryGet("Cameo_push", out _)) commands.Add(new UiImageDraw("Cameo_push", rect, WndColor.White, false, false));
             if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)

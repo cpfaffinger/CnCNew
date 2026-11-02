@@ -551,6 +551,9 @@ public sealed class CommandModeController
                     .Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
             }
+            // MSG_EXIT: the rider the button stands for.
+            case GuiCommandKind.ExitContainer:
+                return ForAll(sources, rider => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, rider.Id)));
             // MSG_SWITCH_WEAPONS (AIGroup::setWeaponLockForGroup): the slot, for good.
             case GuiCommandKind.SwitchWeapon:
                 return ForAll(sources, unit => Issue((sequence, tick) => new SetWeaponLockCommand(Player, sequence, tick, unit.Id, button.WeaponSlotIndex, WeaponLockKind.Permanent)));
