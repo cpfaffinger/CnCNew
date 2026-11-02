@@ -71,6 +71,7 @@ public static class LocomotorSchema
             Real("AccelerationDamaged"),
             Real("Braking"),
             Real("AirborneTargetingHeight"),
+            Real("TurnPivotOffset"),
             Real("PreferredHeight"),
             Real("PreferredHeightDamping"),
             Real("MaxThrustAngle"),

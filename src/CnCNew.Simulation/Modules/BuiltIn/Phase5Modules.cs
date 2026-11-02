@@ -1861,23 +1861,32 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
         var heading = Entity.Angle;
         var backing = Backing(locomotor, difference, distance);
-        if (backing)
-        {
-            desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
-            difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-        }
-        Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnRate
-            ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate))
-            : desired;
-
         var speed = FrameSpeed();
         var brakingDistance = locomotor.Braking > Fixed.Zero ? speed * speed / (braking * Fixed.FromInt(2)) : Fixed.Zero;
         var remaining = distance;
         if (distance <= brakingDistance && _pathIndex < _path.Count - 1) remaining += TailLength();
+        var wheels = locomotor.IsWheeled && !air;
+        // rotateObjAroundLocoPivot: the way is measured from the point the object turns about. "When braking we do exact movement towards goal, instead of physics."
+        var pivot = wheels && remaining > brakingDistance ? locomotor.TurnPivotOffset * Entity.Template.BoundingCircleRadius : Fixed.Zero;
+        if (pivot != Fixed.Zero) desired = FixedTrig.Atan2(target.Y - Entity.Y - FixedTrig.Sin(heading) * pivot, target.X - Entity.X - FixedTrig.Cos(heading) * pivot);
+        if (backing) desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
+        difference = FixedTrig.AngleDifference(heading, desired);
+        var turnNow = wheels ? WheelTurn(world, locomotor, difference, distance, speed, topSpeed, turnRate, out var turnSpeed) : turnRate;
+        Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnNow
+            ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnNow : turnNow))
+            : desired;
+
         var cruise = CappedFrameSpeed(topSpeed);
         var held = !air && HeldBehindAMover(world, ref cruise);
         var goalSpeed = remaining <= brakingDistance ? minSpeed : cruise;
-        if (FixedTrig.AngleDifference(Entity.Angle, desired).Abs() > MisalignedAngle)
+        if (wheels)
+        {
+            // "See if we are turning. If so, use the min turn speed."
+            var turnCap = Fixed.Max(locomotor.MinTurnSpeedPerFrame, topSpeed / Fixed.FromInt(4));
+            if (difference.Abs() > SmallTurnAngle) goalSpeed = Fixed.Min(goalSpeed, turnCap);
+            if (difference.Abs() > MisalignedAngle && turnRate > Fixed.Zero && distance < turnCap / turnRate * Fixed.FromInt(2)) goalSpeed = Fixed.Zero;
+        }
+        else if (FixedTrig.AngleDifference(Entity.Angle, desired).Abs() > MisalignedAngle)
         {
             goalSpeed = Fixed.Min(goalSpeed, minSpeed);
             // Inside the turning circle a moving object would orbit the waypoint: stop and turn on the spot instead.
@@ -1918,6 +1927,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var (stepX, stepY) = air
             ? (FixedTrig.Cos(Entity.Angle) * speed, FixedTrig.Sin(Entity.Angle) * speed)
             : world.AvoidLocalBlockers(Entity, FixedTrig.Cos(Entity.Angle) * forward, FixedTrig.Sin(Entity.Angle) * forward);
+        if (pivot != Fixed.Zero && Entity.Angle != heading)
+        {
+            stepX += pivot * (FixedTrig.Cos(heading) - FixedTrig.Cos(Entity.Angle));
+            stepY += pivot * (FixedTrig.Sin(heading) - FixedTrig.Sin(Entity.Angle));
+        }
         if (_stride > 1)
         {
             BeginFrame(world, locomotor, stepX, stepY, heading);
@@ -1930,6 +1944,38 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             world.ResolveFootprintCollisions(Entity, stepX, stepY);
         }
+    }
+
+    /// <summary><c>SMALL_TURN</c> of <c>moveTowardsPositionWheels</c>.</summary>
+    private static readonly Fixed SmallTurnAngle = FixedTrig.PiFraction(1, 20);
+
+    /// <summary><c>FIFTEEN_DEGREES</c>.</summary>
+    private static readonly Fixed ProjectedTurnAngle = FixedTrig.PiFraction(1, 12);
+
+    /// <summary><c>PROJECT_FRAMES</c>: half a second of the original.</summary>
+    private const int LookAheadSteps = 15;
+
+    /// <summary>
+    /// <c>Locomotor::moveTowardsPositionWheels</c>: "Wheeled can only turn while moving" - the turn of a frame grows with the speed up to the turn speed. A wheeled unit whose wide turn would
+    /// carry it onto ground it cannot enter turns at its full rate instead ("check &amp; see if we're moving into impassable territory"). A goal inside its turning circle does the same here:
+    /// the original circles such a goal until its donut timer brakes it, and the port's paths have more waypoints to circle.
+    /// </summary>
+    private Fixed WheelTurn(IWorldServices world, LocomotorInfo locomotor, Fixed difference, Fixed distance, Fixed speed, Fixed topSpeed, Fixed turnRate, out Fixed turnSpeed)
+    {
+        turnSpeed = Fixed.Max(locomotor.MinTurnSpeedPerFrame, topSpeed / Fixed.FromInt(4));
+        var turning = difference.Abs();
+        if (turnRate == Fixed.Zero || turnSpeed == Fixed.Zero) return turnRate;
+        if (turning > MisalignedAngle && distance < turnSpeed / turnRate * Fixed.FromInt(2)) return turnRate;
+        if (turning > ProjectedTurnAngle && world.Navigation is { } navigation)
+        {
+            var coming = (turnSpeed + speed) / Fixed.FromInt(2);
+            var turn = Fixed.Min(coming / turnSpeed, Fixed.One) * turnRate * Fixed.FromInt(LookAheadSteps) / Fixed.FromInt(4);
+            var angle = Entity.Angle + (difference.IsNegative ? -turn : turn);
+            var (aheadX, aheadY) = (FixedTrig.Cos(angle) * coming * Fixed.FromInt(LookAheadSteps), FixedTrig.Sin(angle) * coming * Fixed.FromInt(LookAheadSteps));
+            bool Clear(Fixed x, Fixed y) => navigation.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), locomotor.Surfaces);
+            if (!Clear(Entity.X + aheadX / Fixed.FromInt(2), Entity.Y + aheadY / Fixed.FromInt(2)) || !Clear(Entity.X + aheadX, Entity.Y + aheadY)) return turnRate;
+        }
+        return Fixed.Min(speed.Abs() / turnSpeed, Fixed.One) * turnRate;
     }
 
     /// <summary><c>Locomotor::m_flags</c> <c>MOVING_BACKWARDS</c>; written only while set.</summary>

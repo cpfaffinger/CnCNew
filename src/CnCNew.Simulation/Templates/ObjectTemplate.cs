@@ -44,6 +44,15 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
     /// <summary><c>LocomotorTemplate::m_wanderAboutPointRadius</c>: how far around a point a unit wanders (<c>AIWanderInPlaceState</c>).</summary>
     public Fixed WanderAboutPointRadius { get; init; }
 
+    /// <summary>The appearance is <c>FOUR_WHEELS</c> or <c>MOTORCYCLE</c>: <c>Locomotor::moveTowardsPositionWheels</c>.</summary>
+    public bool IsWheeled { get; init; }
+
+    /// <summary><c>m_turnPivotOffset</c>: the point on the object's axis it turns about, in shares of its bounding circle's radius (-1 the rear, 0 the centre, 1 the front).</summary>
+    public Fixed TurnPivotOffset { get; init; }
+
+    /// <summary><c>m_minTurnSpeed</c>, units per logic frame of the original.</summary>
+    public Fixed MinTurnSpeedPerFrame { get; init; }
+
     /// <summary><c>LocomotorTemplate::m_airborneTargetingHeight</c>: above this height over the terrain the object is an airborne target; a locomotor that does not name it never makes one.</summary>
     public Fixed AirborneTargetingHeight { get; init; } = Fixed.MaxValue;
 
@@ -927,6 +936,9 @@ public sealed class TemplateCatalog
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
                 StickToGround = definition.Fields.LastOrDefault(field => field.Name.Equals("StickToGround", StringComparison.OrdinalIgnoreCase))?.Value.Value is true,
+                IsWheeled = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().ToUpperInvariant() is "FOUR_WHEELS" or "MOTORCYCLE",
+                TurnPivotOffset = Fixed.FromDecimal(Signed("TurnPivotOffset")),
+                MinTurnSpeedPerFrame = SimulationRate.Original.Time.PerSecondToPerTick(Get("MinTurnSpeed")),
                 AirborneTargetingHeight = definition.Fields.Any(field => field.Name.Equals("AirborneTargetingHeight", StringComparison.OrdinalIgnoreCase)) ? Fixed.FromDecimal(Get("AirborneTargetingHeight")) : Fixed.MaxValue,
                 PenaltyDamageState = penaltyState,
             };

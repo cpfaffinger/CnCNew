@@ -217,6 +217,66 @@ static partial class Tests
         Check.That(SlowDeathLottery.Weight(0, Fixed.Zero, Fixed.Zero) == 1, "Nothing weighs less than one.");
     }
 
+    private static IReadOnlyDictionary<string, string> WheelFiles(string pivot) => new Dictionary<string, string>(SyntheticFixture.Files)
+    {
+        ["Data/INI/Object/WheelFixture.ini"] = $"""
+        Locomotor CarLoco
+          Surfaces = GROUND
+          Appearance = FOUR_WHEELS
+          Speed = 60.0
+          MinTurnSpeed = 15.0
+          Acceleration = 60.0
+          Braking = 120.0
+          TurnRate = 180.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+          TurnPivotOffset = {pivot}
+        End
+
+        Object TestCar
+          KindOf = SELECTABLE VEHICLE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 5.0
+          Locomotor = SET_NORMAL CarLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """,
+    };
+
+    /// <summary>A car at rest told to go to a place at its side: the angle it has turned after half a second, and the way it stands from its start then and when it has arrived.</summary>
+    private static (Fixed Turned, bool Arrived, Fixed DriftAtStart) CarTurn(string pivot)
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: WheelFiles(pivot));
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "wheels");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "TestCar", owner: 1, x: 300, y: 300);
+        world.Step();
+        var car = world.Entities.First(value => value.Template.Name == "TestCar");
+        var (startX, startAngle) = (car.X, car.Angle);
+        Check.That(feeder.SetMoveTarget(1, car.Id.Value, 300, 500).Accepted, "The car takes the order.");
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        var early = car.Angle;
+        for (var step = 0; step < world.Frames(900) && car.HasMoveTarget; step++) world.Step();
+        return (FixedTrig.AngleDifference(startAngle, early).Abs(), !car.HasMoveTarget, (car.X - startX).Abs());
+    }
+
+    public static void WheelsTurnOnlyWhileTheyMove()
+    {
+        var (turned, arrived, _) = CarTurn("0.0");
+        Check.That(turned < Fixed.FromDecimal(0.05m), $"A car at rest does not turn on the spot ({turned}).");
+        Check.That(arrived, "It gets where it was sent.");
+        var (_, pivoted, _) = CarTurn("-0.5");
+        Check.That(pivoted, "With its pivot at the rear as well.");
+    }
+
     public static void StructureThatDiesBecomesRubble()
     {
         var files = new Dictionary<string, string>(AttackViewFiles())
