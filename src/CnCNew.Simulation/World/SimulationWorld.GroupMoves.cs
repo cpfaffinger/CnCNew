@@ -120,8 +120,8 @@ public sealed partial class SimulationWorld
         var (growX, growY) = ((maxX - minX) * half, (maxY - minY) * half);
         (minX, maxX, minY, maxY) = (minX - growX, maxX + growX, minY - growY, maxY + growY);
         if (x < minX || x > maxX || y < minY || y > maxY) return false;
-        var cells = ((maxX - minX) / Fixed.FromInt(GroupGatherCellSize)).Floor();
-        return cells * cells < GroupGatherMaxCells;
+        var (across, along) = (((maxX - minX) / Fixed.FromInt(GroupGatherCellSize)).Floor(), ((maxX - minX) / Fixed.FromInt(GroupGatherCellSize)).Floor());
+        return across * along < GroupGatherMaxCells;
     }
 
     private const int GroupGatherCellSize = 10;

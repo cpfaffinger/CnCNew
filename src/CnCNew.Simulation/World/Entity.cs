@@ -126,6 +126,9 @@ public sealed class Entity
     /// <summary>Bits of the object status table (<see cref="ObjectStatusBits"/>).</summary>
     public ulong Status { get; internal set; }
 
+    /// <summary><c>m_partitionLastLook</c>: where the object looks from and who sees through it; written by the world, not with the object, because only the vision cells depend on it.</summary>
+    internal LookRecord? Look { get; set; }
+
     /// <summary><c>StatusDamageHelper::m_statusToHeal</c> and the tick it goes (0: none).</summary>
     internal int StatusDamageBit { get; set; }
     internal long StatusDamageUntil { get; set; }

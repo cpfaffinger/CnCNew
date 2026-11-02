@@ -530,6 +530,9 @@ public sealed class TemplateCatalog
             BeaconTemplates = [..factions.Factions.Select(faction => faction.BeaconName).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),
+            UnlookPersistFrames = ResolveUnlookPersistFrames(graph),
+            LookCellSize = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
+                .LastOrDefault(field => field.Name.Equals("PartitionCellSize", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal cell ? Fixed.FromDecimal(cell) : Fixed.FromInt(40),
             GroupGatherFactor = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroupMoveClickToGatherAreaFactor", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal gather ? Fixed.FromDecimal(gather) : Fixed.One,
             LowEnergy = ResolveLowEnergy(graph),
@@ -572,6 +575,15 @@ public sealed class TemplateCatalog
         return catalog;
     }
 
+    private static long ResolveUnlookPersistFrames(CompiledDefinitionGraph graph)
+    {
+        var field = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields.LastOrDefault(entry => entry.Name.Equals("UnlookPersistDuration", StringComparison.OrdinalIgnoreCase));
+        if (field is null) return 30;
+        var text = field.Value.OriginalText.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        return decimal.TryParse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var milliseconds)
+            ? -(long)(-milliseconds * CnCNew.Simulation.Time.SimulationRate.OriginalFramesPerSecond / 1000m - 0.999999m) : throw new InvalidDataException($"UnlookPersistDuration '{field.Value.OriginalText}' is no duration.");
+    }
+
     /// <summary><c>GlobalData::m_maxTunnelCapacity</c> (<c>GameData.ini MaxTunnelCapacity = 10</c>); absent key: the reference default 0.</summary>
     private static int ResolveMaxTunnelCapacity(CompiledDefinitionGraph graph)
     {
@@ -588,6 +600,12 @@ public sealed class TemplateCatalog
     /// (<c>PhysicsBehavior::handleBounce</c>, clamped to 0.01-0.99 there; F-63, docs/SHOCK-WAVE.md).
     /// </summary>
     public Fixed GroundStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
+
+    /// <summary><c>UnlookPersistDuration</c> in logic frames of the original: how long a look goes on after the object looked elsewhere (30 without the key).</summary>
+    public long UnlookPersistFrames { get; private init; } = CnCNew.Simulation.Time.SimulationRate.OriginalFramesPerSecond;
+
+    /// <summary><c>PartitionCellSize</c>: how far an object goes before it looks again (40 without the key).</summary>
+    public Fixed LookCellSize { get; private init; } = Fixed.FromInt(40);
 
     /// <summary><c>GroupMoveClickToGatherAreaFactor</c>: the share of a group's bounding box a click must fall into to gather the group (1 without the key).</summary>
     public Fixed GroupGatherFactor { get; private init; } = Fixed.One;

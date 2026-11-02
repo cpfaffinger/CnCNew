@@ -233,9 +233,9 @@ static partial class Tests
 
         // Bombardment: the weapon bonus raises the damage by 50 %.
         Check.That(plan.ActivePlan == BattlePlanKind.Bombardment, "Bombardment is in force.");
-        var dummy = CsSpawn(world, feeder, "PlanDummy", 2, 60, 100);
+        var dummy = CsSpawn(world, feeder, "PlanDummy", 2, 50, 100);
         var before = dummy.Body!.Health;
-        CsAi(soldier).OrderMove(world, Fixed.FromInt(55), Fixed.FromInt(100), false);
+        CsAi(soldier).OrderMove(world, Fixed.FromInt(45), Fixed.FromInt(100), false);
         CsRun(world, 40);
         Check.That(feeder.FireWeapon(1, soldier.Id.Value, dummy.Id.Value).Accepted, "The soldier fires.");
         world.Step();

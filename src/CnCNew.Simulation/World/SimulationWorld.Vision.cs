@@ -55,7 +55,9 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// Recomputes the visible cells: <c>Object::look</c> — every living, uncontained object with a positive shroud clearing range reveals it to
-    /// its owner and the owner's allies (<c>KINDOF_REVEAL_TO_ALL</c> to everybody); a structure under construction reveals its bounding circle.
+    /// its owner and the owner's allies (<c>KINDOF_REVEAL_TO_ALL</c> to everybody); a structure under construction reveals its bounding circle. A look stands where it was taken until
+    /// the object enters another partition cell or its sight or its viewers change, and then goes on for <c>UnlookPersistDuration</c> (<c>queueUndoShroudReveal</c>): the fog closes behind
+    /// a unit five seconds late, and a dead scout's last look stays that long.
     /// </summary>
     private void RefreshVision()
     {
@@ -87,23 +89,107 @@ public sealed partial class SimulationWorld
         foreach (var player in _players.Values) anySightBonus |= player.BattlePlan is { SearchAndDestroy: > 0 };
         foreach (var entity in _entities.Values)
         {
-            if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid) continue;
+            if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid)
+            {
+                Unlook(entity);
+                continue;
+            }
             var range = entity.HasStatus(ObjectStatusBits.UnderConstruction) ? entity.Template.BoundingCircleRadius : entity.Template.ShroudClearingRange;
             if (TryShroudOverride(entity, out var overridden)) range = overridden;
             if (entity.ShroudRange > Fixed.Zero) range = entity.ShroudRange;
-            if (range <= Fixed.Zero) continue;
+            if (range <= Fixed.Zero)
+            {
+                Unlook(entity);
+                continue;
+            }
             // The strategy center's own wider shroud and the search-and-destroy plan's sight bonus for the army.
             if (entity.ShroudScalar != Fixed.One) range *= entity.ShroudScalar;
             if (anySightBonus) range *= BattlePlanSightScalarOf(entity);
             var ownerSlot = _playerSlots![entity.Owner.Value];
             var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? _visionEverybody.AsSpan() : allySlots[ownerSlot].AsSpan(0, allyCounts[ownerSlot]);
-            foreach (var slot in viewers) vision.Reveal(slot, entity.X, entity.Y, range);
+            var mask = 0UL;
+            foreach (var slot in viewers) mask |= 1UL << slot;
             // SpyVisionUpdate: a player that spies through this object (reference count above zero) sees what it sees, though not its allies.
             if (entity.VisionSpiedBy is { Count: > 0 } spied)
                 for (var index = 0; index < spied.Count; index++)
-                    if (spied.Values[index] > 0 && SlotOf(new PlayerId(spied.Keys[index])) is var spy and >= 0 && !viewers.Contains(spy)) vision.Reveal(spy, entity.X, entity.Y, range);
+                    if (spied.Values[index] > 0 && SlotOf(new PlayerId(spied.Keys[index])) is var spy and >= 0) mask |= 1UL << spy;
+            var (cellX, cellY) = (LookCell(entity.X), LookCell(entity.Y));
+            if (entity.Look is not { } look || look.CellX != cellX || look.CellY != cellY || look.Range != range || look.Viewers != mask)
+            {
+                Unlook(entity);
+                entity.Look = look = new LookRecord(entity.X, entity.Y, range, mask, cellX, cellY);
+            }
+            RevealTo(vision, look.Viewers, look.X, look.Y, look.Range);
         }
+        var now = Time.FramesIn(_tick);
+        while (_unlooks.Count > 0 && _unlooks.Peek().Until < now) _unlooks.Dequeue();
+        foreach (var (_, look) in _unlooks) RevealTo(vision, look.Viewers, look.X, look.Y, look.Range);
         vision.EndCollectedRefresh();
+    }
+
+    private void RevealTo(VisionMap vision, ulong viewers, Fixed x, Fixed y, Fixed range)
+    {
+        for (var slot = 0; viewers != 0; slot++, viewers >>= 1)
+            if ((viewers & 1) != 0) vision.Reveal(slot, x, y, range);
+    }
+
+    private int LookCell(Fixed coordinate) => checked((int)(coordinate / _templates.LookCellSize).Floor());
+
+    /// <summary><c>m_pendingUndoShroudReveals</c>: the looks that were given up, oldest first, with the logic frame they go in.</summary>
+    private readonly Queue<(long Until, LookRecord Look)> _unlooks = [];
+
+    /// <summary><c>Object::unlook</c>: the object stops looking from where it looked, and that look goes on for <c>UnlookPersistDuration</c>.</summary>
+    private void Unlook(Entity entity)
+    {
+        if (_vision is null || entity.Look is not { } look) return;
+        entity.Look = null;
+        _unlooks.Enqueue((Time.FramesIn(_tick) + _templates.UnlookPersistFrames, look));
+    }
+
+    private void DescribeLooks(IStateWriter writer)
+    {
+        if (_vision is null) return;
+        writer.BeginArray("looks");
+        foreach (var entity in _entities.Values)
+        {
+            if (entity.Look is not { } look) continue;
+            writer.BeginObject(null);
+            writer.UInt("entity", entity.Id.Value);
+            DescribeLook(writer, look);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.BeginArray("unlooks");
+        foreach (var (until, look) in _unlooks)
+        {
+            writer.BeginObject(null);
+            writer.Int("until", until);
+            DescribeLook(writer, look);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    private static void DescribeLook(IStateWriter writer, LookRecord look)
+    {
+        writer.Fixed("x", look.X);
+        writer.Fixed("y", look.Y);
+        writer.Fixed("range", look.Range);
+        writer.UInt("viewers", look.Viewers);
+        writer.Int("cellX", look.CellX);
+        writer.Int("cellY", look.CellY);
+    }
+
+    private static LookRecord LoadLook(IStateReader reader)
+        => new(reader.Fixed("x"), reader.Fixed("y"), reader.Fixed("range"), reader.UInt("viewers"), checked((int)reader.Int("cellX")), checked((int)reader.Int("cellY")));
+
+    private void LoadLooks(IStateReader state)
+    {
+        _unlooks.Clear();
+        if (!state.Has("looks")) return;
+        foreach (var entry in state.Array("looks"))
+            if (FindEntity(new EntityId(checked((uint)entry.UInt("entity")))) is { } entity) entity.Look = LoadLook(entry);
+        foreach (var entry in state.Array("unlooks")) _unlooks.Enqueue((entry.Int("until"), LoadLook(entry)));
     }
 
     private int SlotOf(PlayerId player) => _playerSlots is not null && _playerSlots.TryGetValue(player.Value, out var slot) ? slot : -1;
@@ -177,3 +263,6 @@ public sealed partial class SimulationWorld
         for (var slot = 0; slot < slots.Count; slot++) _vision.Load(slot, slots[slot].Text("cells"));
     }
 }
+
+/// <summary>Where an object looked from, how far, for whom, and the partition cell it stood in then.</summary>
+internal sealed record LookRecord(Fixed X, Fixed Y, Fixed Range, ulong Viewers, int CellX, int CellY);

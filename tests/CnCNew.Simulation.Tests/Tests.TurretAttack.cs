@@ -389,7 +389,7 @@ static partial class Tests
         Check.That(world.AttackTargetOf(tank) == target.Id, "...as long as the spotter lives (the victim is in range, so nothing else ends the attack).");
 
         feeder.Destroy(IdOf(world, "FogSpotter"));
-        for (var i = 0; i < world.Frames(30); i++) world.Step();
+        for (var i = 0; i < world.Frames(45); i++) world.Step();
         Check.That(!world.CanPlayerSee(player, target), "Without the spotter the victim is in the fog.");
         Check.That(world.AttackTargetOf(tank) == target.Id, "The fog does not end the attack: the victim is in range and not stealthed.");
     }

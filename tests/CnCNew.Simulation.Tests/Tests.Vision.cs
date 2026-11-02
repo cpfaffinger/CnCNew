@@ -136,6 +136,8 @@ static partial class Tests
 
         var scout = VisionAt(world, "Scout", 100, 100);
         feeder.Kill(scout.Id.Value);
+        // UnlookPersistDuration: the last look goes on for a second without the key.
+        for (var tick = 0; tick < world.Frames(40); tick++) world.Step();
         VisionSettle(world);
         Check.That(!vision.IsVisible(1, 10, 10) && vision.IsExplored(1, 10, 10) && vision.IsExplored(1, 10, 14),
             "When the looker dies the cells go dark but stay explored.");
@@ -217,7 +219,7 @@ static partial class Tests
         firstFeeder.Kill(VisionAt(first, "Scout", 60, 60).Id.Value);
         first.Step();
         Check.That(first.StateHash != hashBefore, "The state hash covers the vision.");
-        for (var tick = 0; tick < first.Frames(5); tick++) first.Step();
+        for (var tick = 0; tick < first.Frames(40); tick++) first.Step();
 
         var bytes = WorldSnapshot.Write(first);
         var restored = WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain);

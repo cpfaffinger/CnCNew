@@ -544,6 +544,7 @@ run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapa
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
 run.Test("Group move: a click into the group gathers it", Tests.AClickIntoTheGroupGathersIt);
 run.Test("Wheels: a car reverses to a goal close behind it", Tests.ACarReversesToAGoalCloseBehindIt);
+run.Test("Vision: a look goes on after its object is gone", Tests.ALookGoesOnAfterItsObjectIsGone);
 run.Test("Weapons: a weapon looks at the pitch of its victim", Tests.AWeaponLooksAtThePitchOfItsVictim);
 run.Test("Weapons: the designator marks its target", Tests.TheDesignatorMarksItsTarget);
 run.Test("Slow death: a body is flung and sinks", Tests.ABodyIsFlungAndSinks);

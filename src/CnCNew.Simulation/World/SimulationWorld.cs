@@ -1877,6 +1877,7 @@ public sealed partial class SimulationWorld : IWorldServices
             _activeTurrets.Remove(entity.Id.Value);
             _acquirers.Remove(entity.Id.Value);
             _coolingTrackers.Remove(entity.Id.Value);
+            Unlook(entity);
             _entities.Remove(entity.Id.Value);
             UnindexEntity(entity);
             UntrackCollidable(entity);
@@ -2443,6 +2444,7 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.Int("tick", _tick);
         DescribeBridges(writer);
         DescribeHistoricDamage(writer);
+        DescribeLooks(writer);
         DescribeWater(writer);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         if (HulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", HulkLifetimeOverrideTicks);

@@ -174,6 +174,7 @@ public sealed partial class SimulationWorld
             throw new InvalidDataException("Snapshot table sizes do not match their contents.");
         LoadBridges(state);
         LoadHistoricDamage(state);
+        LoadLooks(state);
         LoadVision(state);
         RebuildDisabledEdges();
         ComputeFullHash();

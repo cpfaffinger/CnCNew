@@ -335,6 +335,8 @@ static partial class Tests
 
         Check.That(!spy.Active && !scout.IsVisionSpiedBy(alpha) && !center.IsVisionSpiedBy(alpha), "After MaxDuration the spying ended.");
         Check.That(ended - start >= world.Frames(44) && ended - start <= world.Frames(47), $"The duration was the capped 45 ticks ({ended - start}).");
+        // UnlookPersistDuration: what was seen stays in sight a second longer.
+        for (var tick = 0; tick < world.Frames(40); tick++) world.Step();
         VisionSettle(world);
         Check.That(!vision.IsVisible(slot, 15, 15) && vision.IsExplored(slot, 15, 15), "What was seen stays explored but is dark again.");
 

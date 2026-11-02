@@ -101,6 +101,9 @@ static partial class Tests
         while (world.Tick < used + world.Frames(88)) world.Step();
         Check.That(Pings().Any(), "The view is still open just before ViewObjectDuration (3 s) is over.");
         while (world.Tick < used + world.Frames(95)) world.Step();
+        Check.That(!Pings().Any(), "After ViewObjectDuration the view is gone.");
+        // UnlookPersistDuration: the area closes a second later.
+        while (world.Tick < used + world.Frames(135)) world.Step();
         Check.That(!Pings().Any() && !world.IsPositionVisibleTo(player, Fixed.FromInt(800), Fixed.FromInt(600)), "After ViewObjectDuration the view is gone, and the area with it.");
     }
 }
