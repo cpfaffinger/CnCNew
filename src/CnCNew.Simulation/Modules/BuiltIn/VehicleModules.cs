@@ -38,7 +38,7 @@ public sealed record UndeadBodyData(BodyData Body, Fixed SecondLifeMaxHealth) : 
 /// <c>UndeadBody.cpp</c>: the body of an object that has two lives. While on its first life, health-damaging damage that would kill it (unresistable damage never counts) is cut to leave one hit
 /// point, is taken, and then starts the second life: the maximum health becomes <c>SecondLifeMaxHealth</c> and is fully restored, and the slow-death modules of the object that apply to the
 /// damage draw lots (their <c>ProbabilityModifier</c>) for which of them <em>begins</em> — a module that cannot tell this from a real death by its own flag (the bus's) plays its special first
-/// death. Not modeled: the second-life armor set (<c>ARMORSET_SECOND_LIFE</c>; the simulation has no armor-set conditions beyond the player upgrade and the veterancy levels).
+/// death. The second life wears its own armor set (<see cref="Templates.ObjectTemplate.SecondLifeArmor"/>).
 /// </summary>
 public sealed class UndeadBody(UndeadBodyData data) : ActiveBody(data.Body, "UndeadBody")
 {

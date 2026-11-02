@@ -287,6 +287,9 @@ public sealed class ObjectTemplate
 
     /// <summary><c>ArmorSet Conditions = CRATE_UPGRADE_ONE</c> (index 1) / <c>CRATE_UPGRADE_TWO</c> (index 2) variant, or <see langword="null"/>; the <c>SECOND_LIFE</c> combinations are not modeled.</summary>
     public ImmutableArray<ArmorInfo?> CrateUpgradeArmor { get; init; } = [null, null, null];
+
+    /// <summary><c>ArmorSet Conditions = SECOND_LIFE</c> (index 0) and with <c>CRATE_UPGRADE_ONE</c>/<c>TWO</c> (index 1, 2): what an <c>UndeadBody</c> wears in its second life.</summary>
+    public ImmutableArray<ArmorInfo?> SecondLifeArmor { get; init; } = [null, null, null];
     public LocomotorInfo? Locomotor { get; }
 
     /// <summary>The <c>Turret</c>/<c>AltTurret</c> blocks of the object's AI update module (<c>AIUpdateInterface::m_turretAI</c>); null for an object without a turret, which fires without aiming (docs/SIM-TURRET-AIM.md).</summary>
@@ -520,6 +523,7 @@ public sealed class TemplateCatalog
             {
                 LocomotorSets = ResolveLocomotorSets(definition, locomotors),
                 CrateUpgradeArmor = ResolveCrateUpgradeArmor(definition, armors),
+                SecondLifeArmor = ResolveSecondLifeArmor(definition, armors),
             });
         }
         var commands = CommandCatalog.Build(graph);
@@ -807,6 +811,24 @@ public sealed class TemplateCatalog
                 _ => null,
             };
             if (armorName is not null && armors.TryGetValue(armorName, out var info)) levels[level] = info;
+        }
+        return [..levels];
+    }
+
+    private static ImmutableArray<ArmorInfo?> ResolveSecondLifeArmor(ObjectDefinition definition, ImmutableDictionary<string, ArmorInfo> armors)
+    {
+        var levels = new ArmorInfo?[3];
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("ArmorSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            var tokens = ConditionTokens(section);
+            if (!tokens.Any(token => token.Equals("SECOND_LIFE", StringComparison.OrdinalIgnoreCase))) continue;
+            var level = tokens.Select(token => CrateConditionIndex(token, "CRATE_UPGRADE_")).Max();
+            var armorName = section.Fields.LastOrDefault(value => value.Name.Equals("Armor", StringComparison.OrdinalIgnoreCase))?.Value.Value switch
+            {
+                DefinitionReference { IsNone: false } reference => reference.Name,
+                _ => null,
+            };
+            if (armorName is not null && armors.TryGetValue(armorName, out var info)) levels[level] ??= info;
         }
         return [..levels];
     }

@@ -709,7 +709,8 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>Armor counterpart of <see cref="ActiveWeaponSet"/>; see <see cref="Templates.ObjectTemplate.VeteranArmor"/>.</summary>
     private static ArmorInfo ActiveArmor(Entity entity)
     {
-        // ARMORSET_CRATE_UPGRADE_ONE/TWO (SalvageCrateCollide).
+        // ARMORSET_CRATE_UPGRADE_ONE/TWO (SalvageCrateCollide), and the second life of an UndeadBody.
+        if (entity.Body is Modules.BuiltIn.UndeadBody { IsSecondLife: true } && entity.Template.SecondLifeArmor[Math.Max(entity.CrateArmorLevel, 0)] is { } second) return second;
         if (entity.CrateArmorLevel > 0 && entity.Template.CrateUpgradeArmor[entity.CrateArmorLevel] is { } crate) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranArmor[entity.VeterancyLevel] is { } veteran) return veteran;
         return entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;

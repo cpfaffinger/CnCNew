@@ -90,6 +90,7 @@ internal static class AirWeaponModules
 
     public static ArmorInfo ArmorOf(Entity entity)
     {
+        if (entity.Body is UndeadBody { IsSecondLife: true } && entity.Template.SecondLifeArmor[Math.Max(entity.CrateArmorLevel, 0)] is { } second) return second;
         if (entity.CrateArmorLevel > 0 && entity.Template.CrateUpgradeArmor[entity.CrateArmorLevel] is { } crate) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranArmor[entity.VeterancyLevel] is { } veteran) return veteran;
         return entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
