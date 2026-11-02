@@ -1056,7 +1056,12 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         rider.Angle = FixedTrig.Normalize(angle);
         world.MarkDirty(rider);
         if (rider.EffectivelyDead) return;
-        if (CrateModules.AiOf(rider) is { } ai && rider.Template.Locomotor is not null) ai.OrderExitContainer(world, Entity, x, y, false);
+        if (CrateModules.AiOf(rider) is { } ai && rider.Template.Locomotor is not null)
+        {
+            // The transport dies after the updates of a frame's first tick: the rider's first step is the next frame's, as at 30 Hz, not the next tick's.
+            ai.OrderExitContainer(world, Entity, x, y, false);
+            ai.BeginMoveWithNextFrame(world);
+        }
         else
         {
             rider.X = x;

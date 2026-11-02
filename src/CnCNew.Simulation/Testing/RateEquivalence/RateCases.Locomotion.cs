@@ -343,9 +343,15 @@ public static partial class RateCases
             var turning = scene.Fresh();
             var unit = turning.Spawn(name, 1, 2000, 2000);
             turning.Align();
-            var start = unit.Angle;
+            var (turned, heading) = (Fixed.Zero, unit.Angle);
             turning.Move(unit, 2000 + dx * (int)run, 2000 + dy * (int)run);
-            var steps = turning.StepUntil(() => FixedTrig.AngleDifference(start, unit.Angle).Abs() >= angle - TurnMargin, RateScene.Seconds(120));
+            // The way turned, not the angle to the start: a unit that turns a half and a little passes the end of the circle between two frames of the original.
+            var steps = turning.StepUntil(() =>
+            {
+                turned += FixedTrig.AngleDifference(heading, unit.Angle);
+                heading = unit.Angle;
+                return turned.Abs() >= angle - TurnMargin;
+            }, RateScene.Seconds(120));
             quantities.Event(label + " time", steps);
         }
 
