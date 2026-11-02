@@ -48,6 +48,14 @@ public abstract class ShellScreen
 
     internal UiWindow Window(string name) => W(name);
 
+    /// <summary>What the preview window of a setup shows for a map: its name, and the picture that lies beside it.</summary>
+    protected ShellMapPreviewContext PreviewOf(string? mapPath, string? displayName)
+    {
+        if (mapPath is null || !Shell.MapCatalog.TryGetValue(mapPath, out var entry)) return new ShellMapPreviewContext(displayName);
+        var picture = Path.ChangeExtension(mapPath, ".tga");
+        return new ShellMapPreviewContext(displayName, Shell.Data.Content.Exists(picture) ? picture : null, (entry.Extent.MaxX - entry.Extent.MinX, entry.Extent.MaxY - entry.Extent.MinY));
+    }
+
     protected UiWindow? TryW(string name) => Tree.FindByName($"{LayoutName}.wnd:{name}");
 
     /// <summary>Resolves a label through the shell's text source, falling back to the label key itself (never thrown away silently: unresolved labels are also counted when drawn).</summary>

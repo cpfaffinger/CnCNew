@@ -317,7 +317,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     public override UiDrawList BuildDrawList()
     {
         var list = ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(),
-            new ShellMapPreviewContext(_selectedMapPath is null ? null : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource)),
+            PreviewOf(_selectedMapPath, _selectedMapPath is null ? null : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource)),
             Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
         var window = W("ListboxInfo");
         return !window.IsVisible || _honors.IsDefaultOrEmpty ? list : list with { Commands = list.Commands.AddRange(HonorCells(window).Select(cell => (UiDrawCommand)cell.Draw)) };
@@ -428,6 +428,6 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
 
     public override UiDrawList BuildDrawList()
         => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(),
-            new ShellMapPreviewContext(_selectedIndex >= 0 && _selectedIndex < _mapPaths.Length ? Shell.MapNames.DisplayName(_mapPaths[_selectedIndex], Shell.MapCatalog, Shell.TextSource) : null),
+            PreviewOf(_selectedIndex >= 0 && _selectedIndex < _mapPaths.Length ? _mapPaths[_selectedIndex] : null, _selectedIndex >= 0 && _selectedIndex < _mapPaths.Length ? Shell.MapNames.DisplayName(_mapPaths[_selectedIndex], Shell.MapCatalog, Shell.TextSource) : null),
             Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
 }

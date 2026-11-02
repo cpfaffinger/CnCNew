@@ -20,6 +20,9 @@ public sealed record UiBorderRect(UiRect Rect, WndColor Color) : UiDrawCommand
 }
 
 /// <summary>A mapped image by name, stretched to <see cref="Destination"/>; the renderer resolves the name through the mapped image table.</summary>
+/// <summary>A picture that is a file of its own and no mapped image: the preview that lies beside a map.</summary>
+public sealed record UiFileImageDraw(string VirtualPath, UiRect Destination, WndColor Tint) : UiDrawCommand;
+
 public sealed record UiImageDraw(string Image, UiRect Destination, WndColor Tint, bool FlipHorizontal, bool FlipVertical) : UiDrawCommand
 {
     /// <summary>Drawn in the luminance of its colours (<c>Display::DRAW_IMAGE_GRAYSCALE</c>, the look of a disabled cameo).</summary>

@@ -147,6 +147,30 @@ internal sealed class UiImageTextures(GraphicsDevice device, ContentFileSystem c
     // every sample. See UiRenderer.ToColor for the matching choice on colors and the full explanation.
     private static PixelFormat Format() => PixelFormat.R8G8B8A8_UNorm;
 
+    private readonly Dictionary<string, Texture?> _files = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A picture that is a file of its own (a TGA of the content); null when it cannot be read. A file is read once and kept for the life of the renderer.</summary>
+    public Texture? ResolveFile(string virtualPath)
+    {
+        if (_files.TryGetValue(virtualPath, out var known)) return known;
+        Texture? texture = null;
+        if (content.Exists(virtualPath))
+        {
+            try
+            {
+                using var stream = content.OpenRead(virtualPath);
+                var tga = TgaReader.Read(stream);
+                texture = Texture.New2D(device, tga.Width, tga.Height, Format(), tga.RgbaPixels, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
+            }
+            catch (Exception exception) when (exception is InvalidDataException or IOException or NotSupportedException)
+            {
+                Report($"{virtualPath} ({exception.Message})");
+            }
+        }
+        _files[virtualPath] = texture;
+        return texture;
+    }
+
     private Page? LoadPage(string textureFile, out string? error)
     {
         error = null;

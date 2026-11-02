@@ -6,7 +6,9 @@ using CnCNew.Ui.Wnd;
 namespace CnCNew.Game.Shell;
 
 /// <summary>What the map preview custom draw needs: the display name of the currently selected map, if any.</summary>
-public sealed record ShellMapPreviewContext(string? MapDisplayName);
+/// <param name="Picture">The TGA beside the map, if the content has one: the original's preview. Without it the map's name stands in the window.</param>
+/// <param name="Extent">The size of the map in world units: the picture keeps its proportions (<c>findDrawPositions</c>).</param>
+public sealed record ShellMapPreviewContext(string? MapDisplayName, string? Picture = null, (decimal Width, decimal Height) Extent = default);
 
 /// <summary>What the credits custom draw needs: the parsed lines, a vertical scroll offset in pixels, and the text source for label lines.</summary>
 /// <summary>The three credits fonts of <c>Language.ini</c> (<c>CreditsTitleFont</c>, <c>CreditsMinorTitleFont</c>, <c>CreditsNormalFont</c>, resolution adjusted).</summary>
@@ -65,6 +67,14 @@ public static class ShellCustomDraw
             : new UiFont("Arial", Math.Max(8, rect.Height / 12), false);
         // Without a map the original's preview window shows nothing (W3DDrawMapPreview has no image to draw).
         if (context.MapDisplayName is not { Length: > 0 } text) return builder.ToImmutable();
+        if (context.Picture is { Length: > 0 } picture)
+        {
+            var (mapWidth, mapHeight) = context.Extent;
+            var scale = mapWidth > 0 && mapHeight > 0 ? Math.Min(rect.Width / mapWidth, rect.Height / mapHeight) : 0m;
+            var (width2, height2) = scale > 0 ? ((int)(mapWidth * scale), (int)(mapHeight * scale)) : (rect.Width, rect.Height);
+            builder.Add(new UiFileImageDraw(picture, new UiRect(rect.X + (rect.Width - width2) / 2, rect.Y + (rect.Height - height2) / 2, width2, height2), WndColor.White));
+            return builder.ToImmutable();
+        }
         var width = measure.MeasureWidth(text, font);
         var x = rect.X + Math.Max(0, (rect.Width - width) / 2);
         var y = rect.Y + rect.Height / 2 - measure.LineHeight(font) / 2;

@@ -787,6 +787,10 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
     /// </summary>
     public bool ArmedRidersUpgradeMyWeaponSet { get; init; }
 
+    /// <summary><c>InitialPayload</c>: who sits in a new transport (the Troop Crawler's Red Guards, the Demo trap's rider).</summary>
+    public string InitialPayload { get; init; } = string.Empty;
+    public int InitialPayloadCount { get; init; }
+
     public static TransportContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "Slots", 0)),
@@ -801,6 +805,8 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
         WeaponBonusPassedToPassengers = ModuleConfigReader.Bool(configuration, "WeaponBonusPassedToPassengers", false),
         ArmedRidersUpgradeMyWeaponSet = ModuleConfigReader.Bool(configuration, "ArmedRidersUpgradeMyWeaponSet", false),
+        InitialPayload = (ModuleConfigReader.Find(configuration, "InitialPayload")?.Value.Value as CountedReference)?.Reference.Name ?? string.Empty,
+        InitialPayloadCount = (ModuleConfigReader.Find(configuration, "InitialPayload")?.Value.Value as CountedReference)?.Count ?? 0,
     };
 }
 
@@ -810,8 +816,8 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
 /// at all, and the sum of contained occupants' slot costs plus the candidate's own must not exceed
 /// <see cref="TransportContainData.Slots"/>. <c>HealthRegen%PerSec</c> heals every occupant continuously (unlike
 /// <c>GarrisonContain</c>'s ramp-to-full-over-a-fixed-duration): <c>MaxHealth * percent / 100</c> per second, applied
-/// as a per-tick sliver. Deliberately not modeled: <c>InitialPayload</c> (same reason as <c>GarrisonContain</c>'s
-/// <c>InitialRoster</c>), the exit bone and pitch, and capture handling. Firing from inside, the exit paths, the door's delay and the scatter of a dead
+/// as a per-tick sliver. <c>InitialPayload</c> sits in the transport one frame after it exists. Deliberately not modeled: the exit bone and pitch,
+/// and capture handling. Firing from inside, the exit paths, the door's delay and the scatter of a dead
 /// transport's riders are modeled (F-60, F-03, F-51); <c>ArmedRidersUpgradeMyWeaponSet</c> switches the transport's weapon set (F-60, step 7).
 /// </summary>
 public class TransportContain(TransportContainData data) : ContainModuleBase(data.Base)
@@ -840,7 +846,15 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     }
 
     public override void OnSpawn(IWorldServices world)
-        => NextWake = data.HealthRegenPercentPerSecond > Fixed.Zero ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+    {
+        NextWake = data.HealthRegenPercentPerSecond > Fixed.Zero ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        // TransportContain::createPayload: "We are creating a transport that comes with a initial payload, so add it now!"
+        if (data.InitialPayload.Length == 0) return;
+        for (var index = 0; index < data.InitialPayloadCount; index++) ContainChainModules.RequestPayload(world, Entity, data.InitialPayload, _pendingPayload);
+        if (_pendingPayload.Count > 0) NextWake = world.Tick + SimulationTiming.SleepNone;
+    }
+
+    private readonly List<EntityId> _pendingPayload = [];
 
     public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
@@ -1026,6 +1040,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     {
         PruneDead(world);
         var sleep = Regenerate(world);
+        if (_pendingPayload.Count > 0 && ContainChainModules.EnterPayload(world, Entity, _pendingPayload)) sleep = SimulationTiming.SleepNone;
         if (_exitWanted.Count == 0) return sleep;
         var wait = ReleaseThroughDoor(world);
         return _exitWanted.Count == 0 ? sleep : Math.Min(sleep, wait ? SimulationTiming.SleepNone : _exitNotBusyTick - world.Tick);
@@ -1056,6 +1071,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         writer.Int("usedSlots", _usedSlots);
         if (_exitNotBusyTick != 0) writer.Int("exitNotBusy", _exitNotBusyTick);
         if (_whichExitPath != 1) writer.Int("whichExitPath", _whichExitPath);
+        if (_pendingPayload.Count > 0) writer.Text("initialPayload", string.Join(',', _pendingPayload.Select(id => id.Value)));
         if (_exitWanted.Count == 0) return;
         writer.BeginArray("exitWanted");
         foreach (var id in _exitWanted)
@@ -1070,6 +1086,9 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     public override void Load(IStateReader reader)
     {
         LoadContained(reader);
+        _pendingPayload.Clear();
+        if (reader.Has("initialPayload"))
+            _pendingPayload.AddRange(reader.Text("initialPayload").Split(',').Select(id => new EntityId(uint.Parse(id, System.Globalization.CultureInfo.InvariantCulture))));
         _usedSlots = checked((int)reader.Int("usedSlots"));
         _exitNotBusyTick = reader.Has("exitNotBusy") ? reader.Int("exitNotBusy") : 0;
         _whichExitPath = reader.Has("whichExitPath") ? checked((int)reader.Int("whichExitPath")) : 1;

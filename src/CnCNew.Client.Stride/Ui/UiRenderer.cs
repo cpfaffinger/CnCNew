@@ -160,6 +160,10 @@ internal sealed class UiRenderer : IDisposable
             case UiFillRect fill: DrawRect(fill.Rect, fill.Color); break;
             case UiBorderRect border: DrawBorder(border.Rect, border.Color); break;
             case UiLineDraw line: DrawLine(line); break;
+            case UiFileImageDraw file:
+                if (_images.ResolveFile(file.VirtualPath) is { } picture) DrawTexture(picture, file.Destination, null, file.Tint);
+                else Placeholder(file.Destination);
+                break;
             case UiImageDraw image: DrawImage(image.Image, image.Destination, image.Tint, image.FlipHorizontal, image.FlipVertical, image.Grayscale); break;
             case UiTextDraw text: DrawText(text); break;
             case UiPushClip push: PushClip(push.Rect); break;

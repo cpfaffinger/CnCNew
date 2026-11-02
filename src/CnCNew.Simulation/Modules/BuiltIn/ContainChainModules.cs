@@ -149,7 +149,8 @@ public sealed record RiderChangeContainData(TransportContainData Transport, bool
             riders.Add(new RiderInfo(tokens[0], tokens[1], tokens[2], status, tokens[4], tokens[5]));
         }
         var payload = ModuleConfigReader.Find(configuration, "InitialPayload")?.Value.Value as CountedReference;
-        return new RiderChangeContainData(TransportContainData.Parse(configuration), ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
+        // The rider of a bike is this module's own: it must be in before the first rider line is asked.
+        return new RiderChangeContainData(TransportContainData.Parse(configuration) with { InitialPayload = string.Empty, InitialPayloadCount = 0 }, ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
             riders.ToImmutable(), ModuleConfigReader.Ticks(configuration, "ScuttleDelay", 0), payload?.Reference.Name ?? string.Empty, payload?.Count ?? 0);
     }
 }
