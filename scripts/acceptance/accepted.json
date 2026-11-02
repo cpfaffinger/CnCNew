@@ -78,5 +78,22 @@
     "WORLD-09",
     "WORLD-10"
   ],
-  "byMachine": {}
+  "byMachine": {
+    "INPUT-01": "Presentation.Tests InputTests: a producer sets its rally point, a unit with a queue moves; the owner's cause is AUTO_RALLYPOINT",
+    "INPUT-02": "Game.Tests HudTests: Mouse setups, with AlternateMouse off the left button orders",
+    "INST-01": "The launcher made the game on the owner's second PC; scripts/check-setup.ps1 -Full compares every Steam file before and after",
+    "INST-03": "Import.Tests InstallRepairAndUninstall: only a directory with our record, and nothing of the game",
+    "MISS-04": "Game.Tests CampaignShellTests: a challenge's map started by its name plays the challenge's side; the journal of GC_ChemGeneral shows fog and the camera tour",
+    "MISS-06": "Simulation.Tests F-25: a script moves the water",
+    "MISS-08": "Game.Tests CampaignShellTests: the score of a mission, its sides and what a script excludes",
+    "SHELL-09": "Game.Tests CampaignTests: a save of another rate is refused with a message",
+    "SHELL-13": "Game.Tests CampaignShellTests: the player's record, and a decided match counts in the skirmish setup",
+    "SKIRM-01": "check-dozer-build builds through the click path; Game.Tests HUD build tests; the commands-only agent plays by orders alone",
+    "SKIRM-05": "Simulation.Tests Phase 50 (F-18): the objects under a building site",
+    "SKIRM-06": "Simulation.Tests Phase 51 (F-17): a computer player's unit walks to its victim from rest",
+    "SND-05": "Presentation.Tests FxTests: an upgrade granted by a module or a script is silent, a research is announced",
+    "SPEC-09": "demo-spectator draws a new seed at every start; both manifests prove the same seed gives the same match",
+    "UNIT-08": "scripts/audit-scenarios.ps1 -Scenario exits -Faction China; F-08 test: two Red Guards per order",
+    "UNIT-09": "scripts/audit-scenarios.ps1 -Scenario exits -Faction GLA"
+  }
 }

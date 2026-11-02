@@ -1,6 +1,6 @@
 # Acceptance by a human: catalogue, guided run, pre-check
 
-As of 9 October 2026. **Nothing in this project has been accepted by a human** – not the look, not the sound, not the controls, not playability, not 60 Hz. The
+As of 2 November 2026: the owner's first report covered all 115 goals (`docs/ACCEPTANCE-FINDINGS.md`). 77 are accepted by a person, 16 proved by a program, 22 are open: those the report failed and a person must judge again. The
 project owner looked at the running game twice for a few minutes and each time found real defects that every test had passed (`docs/DEMO-FINDINGS.md`). This document
 is the template for the acceptance: one catalogue of items, one scene per item that can be started by its id, a script that leads through them and records the
 verdicts, a picture page that needs nobody at the keyboard, and the reading of an agent before – which is **not** an acceptance.
