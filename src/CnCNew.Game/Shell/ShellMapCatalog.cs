@@ -9,7 +9,14 @@ namespace CnCNew.Game.Shell;
 /// <param name="IsMultiplayer">Whether the map is flagged for skirmish/multiplayer.</param>
 /// <param name="StartPositionCount">Number of <c>Player_N_Start</c> entries (playable slots).</param>
 /// <param name="HasScripts">A user's map with scripts of its own: only the session with the script engine plays it as its author built it.</param>
-public sealed record ShellMapEntry(string VirtualPath, string? NameLookupTag, bool IsMultiplayer, int StartPositionCount, bool HasScripts = false);
+public sealed record ShellMapEntry(string VirtualPath, string? NameLookupTag, bool IsMultiplayer, int StartPositionCount, bool HasScripts = false)
+{
+    /// <summary>Where the <c>Player_N_Start</c> waypoints stand in world units, in the order of N; empty when the entry does not say.</summary>
+    public ImmutableArray<(decimal X, decimal Y)> Starts { get; init; } = [];
+
+    /// <summary><c>extentMin</c> and <c>extentMax</c>: the rectangle of the map the preview shows.</summary>
+    public (decimal MinX, decimal MinY, decimal MaxX, decimal MaxY) Extent { get; init; }
+}
 
 /// <summary>
 /// A minimal reader of <c>Maps/MapCache.ini</c> (<c>WorldBuilder</c>'s auto-generated map cache), used only to pick
@@ -36,16 +43,24 @@ public static class ShellMapCatalog
         string? nameLookupTag = null;
         bool isMultiplayer = false;
         var startPositions = 0;
+        var starts = new SortedDictionary<int, (decimal X, decimal Y)>();
+        (decimal X, decimal Y) extentMin = default, extentMax = default;
 
         void Flush()
         {
             if (blockKey is null) return;
             if (byEscapedPath.TryGetValue(blockKey, out var realPath))
-                result[realPath] = new ShellMapEntry(realPath, string.IsNullOrEmpty(nameLookupTag) ? null : nameLookupTag, isMultiplayer, startPositions);
+                result[realPath] = new ShellMapEntry(realPath, string.IsNullOrEmpty(nameLookupTag) ? null : nameLookupTag, isMultiplayer, startPositions)
+                {
+                    Starts = [..starts.Values],
+                    Extent = (extentMin.X, extentMin.Y, extentMax.X, extentMax.Y),
+                };
             blockKey = null;
             nameLookupTag = null;
             isMultiplayer = false;
             startPositions = 0;
+            starts.Clear();
+            extentMin = extentMax = default;
         }
 
         foreach (var rawLine in text.Split('\n'))
@@ -66,10 +81,25 @@ public static class ShellMapCatalog
             var value = line[(equals + 1)..].Trim();
             if (key.Equals("nameLookupTag", StringComparison.Ordinal)) nameLookupTag = value;
             else if (key.Equals("isMultiplayer", StringComparison.Ordinal)) isMultiplayer = value.Equals("yes", StringComparison.OrdinalIgnoreCase);
-            else if (key.StartsWith("Player_", StringComparison.Ordinal) && key.EndsWith("_Start", StringComparison.Ordinal)) startPositions++;
+            else if (key.StartsWith("Player_", StringComparison.Ordinal) && key.EndsWith("_Start", StringComparison.Ordinal))
+            {
+                startPositions++;
+                if (int.TryParse(key["Player_".Length..^"_Start".Length], NumberStyles.None, CultureInfo.InvariantCulture, out var number)) starts[number] = Coordinates(value);
+            }
+            else if (key.Equals("extentMin", StringComparison.Ordinal)) extentMin = Coordinates(value);
+            else if (key.Equals("extentMax", StringComparison.Ordinal)) extentMax = Coordinates(value);
         }
         Flush();
         return result.ToImmutable();
+    }
+
+    /// <summary>The two first numbers of <c>X:0.00 Y:0.00 Z:0.00</c>.</summary>
+    private static (decimal X, decimal Y) Coordinates(string text)
+    {
+        var numbers = text.Split([' ', ':', 'X', 'Y', 'Z'], StringSplitOptions.RemoveEmptyEntries);
+        return numbers.Length >= 2
+            && decimal.TryParse(numbers[0], NumberStyles.Number, CultureInfo.InvariantCulture, out var x)
+            && decimal.TryParse(numbers[1], NumberStyles.Number, CultureInfo.InvariantCulture, out var y) ? (x, y) : default;
     }
 
     /// <summary>

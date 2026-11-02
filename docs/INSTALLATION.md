@@ -266,9 +266,7 @@ Not shown: a machine without .NET (this one has the SDK), a machine where Steam 
   `install.json`, so the result cannot pass itself off as a checked installation.
 - `install.ps1` publishes the client from the source code: that needs the SDK and, because that publishing
   is not self-contained, .NET 10 on the machine at run time. The package of the section above is self-contained.
-- The export takes over the whole content of the installation, including files outside the product scope
-  (program files, manuals, installation metadata of the original – marked in the manifest as
-  `out-of-product-scope`). The client does not need them.
+- The export leaves out what the client does not read: the original's program files, manuals and installation metadata stay in the Steam installation (F-33, Phase 56).
 - `content-manifest.json` is written with the line endings of the platform; the recorded hash applies
   to Windows.
 - The search through registry and `libraryfolders.vdf` has not been tried on an installation outside the

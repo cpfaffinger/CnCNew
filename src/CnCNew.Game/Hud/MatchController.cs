@@ -943,6 +943,33 @@ public sealed partial class MatchController
         return Match.Data.Visuals.TryGet(entity.Template.Name, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _) ? image : null;
     }
 
+    private ImmutableDictionary<string, string>? _upgradeImages;
+
+    /// <summary><c>ButtonImage</c> of every upgrade, by its name.</summary>
+    private ImmutableDictionary<string, string> UpgradeImages => _upgradeImages ??= Match.Data.Graph.Definitions.OfType<CnCNew.Data.Definitions.UpgradeDefinition>()
+        .Select(upgrade => (upgrade.OriginalName, Image: upgrade.Fields.LastOrDefault(entry => entry.Name.Equals("ButtonImage", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty))
+        .Where(upgrade => upgrade.Image.Length > 0).GroupBy(upgrade => upgrade.OriginalName, StringComparer.Ordinal).ToImmutableDictionary(group => group.Key, group => group.Last().Image, StringComparer.Ordinal);
+
+    /// <summary><c>ControlBar::setPortraitByObject</c>: the upgrades the object names beside its portrait, lit when it or its player has them.</summary>
+    private void ShowUpgradeCameos(bool shown)
+    {
+        var entity = shown && Input.Selection.Selected.ToArray() is [var only] ? Match.World.FindEntity(only) : null;
+        var cameos = entity is not null && Match.Data.Visuals.TryGet(entity.Template.Name, out var visual) ? visual.UpgradeCameos : [];
+        for (var place = 0; place < 5; place++)
+        {
+            if (_tree.FindByName($"ControlBar.wnd:UnitUpgrade{place + 1}") is not { } window) continue;
+            var name = place < cameos.Length ? cameos[place] : string.Empty;
+            if (entity is null || name.Length == 0 || !Match.World.Upgrades.TryGet(name, out var upgrade) || !UpgradeImages.TryGetValue(name, out var image) || !_assets.Images.TryGet(image, out _))
+            {
+                window.SetHidden(true);
+                continue;
+            }
+            window.SetHidden(false);
+            window.SetEnabledImage0(image);
+            window.SetEnabled(entity.CompletedUpgrades.Has(upgrade.Index) || Match.World.PlayerUpgrades(entity.Owner).Has(upgrade.Index));
+        }
+    }
+
     private void RefreshDynamicWindows()
     {
         var view = CommandBar;
@@ -980,6 +1007,7 @@ public sealed partial class MatchController
         var portrait = view.Context == CommandBarContext.Command && view.Queue.IsEmpty ? SelectedPortrait() : null;
         _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(portrait is null);
         _tree.FindByName("ControlBar.wnd:CameoWindow")?.SetEnabledImage0(portrait);
+        ShowUpgradeCameos(portrait is not null);
         _showsSideLogo = portrait is null && view.Queue.IsEmpty;
     }
 

@@ -45,6 +45,8 @@ public enum ScenarioOrderKind
     /// <see cref="ScenarioOrder.X"/>/<see cref="ScenarioOrder.Y"/> as one group (<c>GroupMoveCommand</c>); each gets a destination of its own.
     /// </summary>
     MoveGroup,
+    /// <summary>The actor (a Chinook) lets its riders down at <see cref="ScenarioOrder.X"/>/<see cref="ScenarioOrder.Y"/>.</summary>
+    CombatDrop,
 }
 
 /// <summary>
@@ -192,6 +194,9 @@ public sealed class LiveScenario : LiveGame
                     throw new InvalidOperationException($"Scenario '{Scenario.Name}': building '{order.Template}' with '{order.Actor}' was refused.");
                 _pendingProduction[index] = order.Target;
                 return true;
+            case ScenarioOrderKind.CombatDrop:
+                Book(player).Clear(actor);
+                return Issue(player, (sequence, tick) => new CombatDropCommand(player, sequence, tick, [actor], EntityId.Invalid, Fixed.FromDecimal((decimal)(Anchor.X + order.X)), Fixed.FromDecimal((decimal)(Anchor.Y + order.Y)))).Accepted;
             case ScenarioOrderKind.MoveGroup:
             {
                 var members = ImmutableArray.CreateBuilder<EntityId>();

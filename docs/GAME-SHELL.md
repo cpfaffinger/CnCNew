@@ -559,8 +559,15 @@ the latest value of a box wins, chat beyond a queue of eight lines is counted as
 shows is what the server said last, and a request the server refuses is a line in the chat list with the server's reason. When the host changes the settings
 everybody keeps the seat (if it still is a player's) and nobody stays ready (docs/NETWORK-PROTOCOL.md section 22.3).
 
-Not there: a box for the start position (the slots take the map's places in their order, as in the skirmish setup); the superweapon limit; a way to remove a member
-from the screen (`INetLobby.Kick` exists and is tested; no button asks for it); a list of the people on a server (a list of rooms says nothing about people).
+The numbered spots on the map preview are the original's `ButtonMapStartPosition0..7` (`StartSpots`, the same in the skirmish setup and the room; `positionStartSpots`, `updateMapStartSpots`,
+the clicks of `LanGameOptionsMenu.cpp`): a map shows as many as it has places, each where its `Player_N_Start` waypoint lies on the preview (from `MapCache.ini`, for a user's map from the map
+itself), with the number of the seat that took it. A left click on a free spot takes it for the person's first seat without a place, or moves its own seat there; on a spot of its own it goes on
+to the next seat without a place or is given up; a right click gives it up; somebody else's spot stays. The host decides for the computer armies too. A seat without a place gets a random one by
+the seed of the match description, which is the original's default; before Phase 56 the seats took the places in their order. A new map clears every place.
+
+The host's box on somebody else's seat removes that member, as in the original: Open, Closed or Computer sends `INetLobby.Kick` and sets the seat to what was chosen.
+
+Not there: the superweapon limit; a list of the people on a server (a list of rooms says nothing about people).
 
 ### 15.4 Every "no" has words
 
@@ -583,6 +590,18 @@ whoever is back first opens it again and is its host. "Exit" of the in-game menu
 
 Fixed with this path: when a match that was started from the shell ended, the client threw in the first frame of the score screen - the Stride compositor outlived
 the scene (`ClientRuntime.FinishRunning`). It hit every match that ended in the shell, local ones too; no check had ever played one to its end in a window.
+
+### 15.6 Back into a match, and watching (Phase 56)
+
+**Back into a match.** A game that loses its connection in a running match is asked over the score (`GameShell.MatchLost`): Yes rebuilds the way to the server and enters with the seat's token
+(`ShellNetSession.SeatToken`, `INetLobby.Enter`/`ReturnToRoom` with `seatToken`), and the server hands it the state of the match; the load screen stands until it plays in time again, and the
+match goes on (`docs/NETWORK-PROTOCOL.md` section 18). No forgets the seat. The token is also kept in `held-seats.txt` in the directory of `--net-dir` while the match runs, so a game that crashed
+or was closed goes back the same way: the front of the server says "You have a seat in this match" and Join takes it. A match that ended by its rules, a leave by choice, and the server's
+`SeatNotHeld` or `CannotCatchUp` forget it. A hosted game holds a lost seat five minutes, like a dedicated server (`HostedServer.ProductRoom`, D-19).
+
+**Watching.** The button beside Join is the original's direct-connect button, whose address screen comes first here; it says "Watch". In a room that has not started a watcher takes no seat; a match
+that runs is shown from the state a member hands over, or from its start when the server delays watchers (a hosted game does, by two minutes, as D-19 says). What a watcher sees is the observer's
+HUD (`docs/SPECTATOR-MODE.md` section 14): F4 is everything, F5 to F12 the view of one player, which is the choice of fog.
 
 ## 16. A person at the menus, as a script (`ShellScript`, Phase 29)
 

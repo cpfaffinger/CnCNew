@@ -1046,10 +1046,12 @@ internal sealed class ClientRuntime : IDisposable
         else if (game is LiveMatch match)
         {
             string? note = null;
+            var seatMayBeHeld = false;
             var analysis = running.Analysis?.Finish(CnCNew.Game.Replays.MatchRecordingFormat.KindName(CnCNew.Game.Replays.MatchRecorder.EndingOf(match, _leaveRequested).Kind));
             if (match.Remote is { } relay && _shell!.Net is not null)
             {
                 note = _leaveRequested ? null : NetText.MatchEndNote(relay, match.IsOver, match.DiagnosticsDirectory);
+                seatMayBeHeld = note is not null && !match.IsOver && !relay.Client.IsOpen && relay.Client.End is null && relay.Client.Desync is null && relay.Client.RejoinToken != 0;
                 LastNetMatch = string.Create(System.Globalization.CultureInfo.InvariantCulture,
                     $"net-match: end tick {match.World.Tick} hash {match.Session.StateHash():X16} chain {match.HashChain:X16} player {relay.Client.Player} winner {match.Winner?.Value ?? 0} over {(match.IsOver ? "yes" : "no")} left {(_leaveRequested ? "yes" : "no")} orders {_netOrders} intents {relay.Client.IntentsSent} stalls {match.Lockstep.Stalls} note {note ?? "none"}");
                 _netOrders = 0;
@@ -1060,7 +1062,9 @@ internal sealed class ClientRuntime : IDisposable
                 relay.Dispose();
                 _leaveRequested = false;
             }
-            _shell!.MatchFinished(CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics) with { Analysis = analysis }, note);
+            var result = CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics) with { Analysis = analysis };
+            if (seatMayBeHeld) _shell!.MatchLost(result, note!);
+            else _shell!.MatchFinished(result, note);
         }
         // The compositor goes with the scene: left in place it collects the lights of a scene that is no longer there, and the first frame of the score screen throws.
         _game.SceneSystem.SceneInstance = null;

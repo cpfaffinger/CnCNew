@@ -30,6 +30,9 @@ public sealed class HostedServer : CnCNew.Game.Shell.IShellHost
     private volatile bool _running = true;
     private Exception? _failure;
 
+    /// <summary>The owner's defaults of a server (D-19): a lost seat is held five minutes, a watcher sees the match two minutes late, and may come when it runs.</summary>
+    private static readonly RelayOptions ProductRoom = new(SeatHoldMs: 300_000, SpectatorDelayMs: 120_000, AllowLateWatchers: true);
+
     private HostedServer(HostedServerOptions options)
     {
         _identity = options.KeyFile is { Length: > 0 } file ? PlayerKeyFile.Load(file) : UdpIdentity.Create();
@@ -38,7 +41,7 @@ public sealed class HostedServer : CnCNew.Game.Shell.IShellHost
         try
         {
             _core = new ServerCore(_socket, clock, RandomNumberGenerator.GetBytes(32), _identity, () => BitConverter.ToUInt32(RandomNumberGenerator.GetBytes(4)), options.Transport,
-                new DirectoryOptions(options.MaxRooms, Room: options.Room) { ListRooms = options.ListRooms });
+                new DirectoryOptions(options.MaxRooms, Room: options.Room ?? ProductRoom) { ListRooms = options.ListRooms });
         }
         catch
         {

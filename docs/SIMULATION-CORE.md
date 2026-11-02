@@ -4803,3 +4803,27 @@ The open ends of section 68.7, see there.
 ### 78.5 The GLA player that stood still
 
 `docs/SKIRMISH-AI.md` §7c.
+
+### 78.6 What the data named and nobody read
+
+A list of the keys of the compatibility baseline that no code names found these; each was read in the original, each has a test that fails on the code before at 30, 60 and 120 Hz.
+
+**A shell meets what stands in its way** (`ProjectileCollidesWith`, `shouldProjectileCollideWith`): a projectile collides on its way with what its weapon's mask names, and the default mask is `STRUCTURES`. Before, every shell flew through every building. The intended victim stays the end of the flight, not a collision, or a shell lands a frame early.
+
+**Napalm makes a firestorm** (`HistoricBonus*`, `dealDamageInternal`): that many hits of one weapon template, anybody's, close enough in time and place, set off the bonus weapon, and the list starts anew.
+
+**A clip goes out in its pattern** (`ScatterTarget`, `ScatterTargetScalar`, `Weapon::privateFireWeapon`): every offset once per clip in a random order, at a place on the ground beside the victim.
+
+**A leech-range weapon** (`LeechRangeWeapon`): once its attack has fired, its range holds no more for the rest of the attack.
+
+**Status damage and the designator** (`DamageStatusType`, `StatusDamageHelper`, `FiringTracker::shotFired`): a hit of `DAMAGE_STATUS` puts its status on the victim for its amount in milliseconds, one status at a time. The Avenger's designator hit for nothing before; now a marked target is `FAERIE_FIRE`, and who shoots at it has `TARGET_FAERIE_FIRE`.
+
+**Pitch limits** (`MinTargetPitch`, `MaxTargetPitch`, `Weapon::isWithinTargetPitch`): a height difference under 10 units never matters; above it the pitches from the source's centre to the victim's bottom and top must meet the weapon's range. An order for one slot asks whether any weapon of the set could (`isAnyWithinTargetPitch`).
+
+**A body is flung and sinks** (`FlingForce`, `FlingPitch`, `SinkRate`, `SinkDelay`): `beginSlowDeath` draws direction, pitch and force after the module's timers and before the initial phase, throws the object with its physics and turns it that way; the sink, midpoint and destruction timers wait while it flies; from the sink frame on it goes into the ground once per frame. Neither was built: a soldier lay where he fell and every body and hulk vanished whole. Not built: a body caught in a tree (the port's flight meets nothing), and the sinking of the four subclasses, whose data names no `SinkRate`.
+
+**A click into the group gathers it** (`GroupMoveClickToGatherAreaFactor`, `groupTightenToPosition`): `GroupMoveCommand.FromPlayer` says it was a click, because a script's order never gathers; fixed-wing aircraft in the air are not gathered, helicopters take rings of 70 units around the click. The cell count reads the width twice, as the original does.
+
+**A wheeled unit reverses** (`CanMoveBackwards`, `moveTowardsPositionWheels`): at rest, with its goal behind it and at most five radii of way left. Over a longer way the original makes a three-point turn; the port's mover turns on the spot, as it does for every other unit.
+
+**Toppling and disguise show their effects** (`ToppleStartFX`, `ToppleDoneFX`, `CrushingFX`, `DisguiseFX`, `DisguiseRevealFX`).

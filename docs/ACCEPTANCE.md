@@ -155,7 +155,12 @@ are only asked with `-IncludeOptional`. The PERF items cost nothing: they are ju
 | FX-01 | Muzzle flashes | 0.8 | window (motion) | `acc-firefight` |
 | FX-02 | Tracers and hits | 0.2 | window (motion) | `acc-firefight` |
 | FX-03 | Explosions, smoke, wreck | 0.3 | window (motion) | `tank-duel` |
+| UNIT-30 | Combat drop | 0.8 | window (motion) | `acc-combat-drop` |
+| UNIT-31 | Bodies flung and sinking | 0.5 | window (motion) | `acc-bodies` |
+| UNIT-32 | Microwave and ECM | 0.8 | window (motion) | `acc-subdual` |
+| UNIT-33 | Reversing | 0.4 | window (motion) | `acc-reverse` |
 | FX-05 | Flames, smoke and burning | 0.6 | window (motion) | `acc-flames` |
+| FX-07 | Firestorm | 0.8 | window (motion) | `acc-firestorm` |
 | FX-04 | Smoke trails and fire at the impact | 0.2 | window (motion) | `acc-artillery` |
 | FX-06 | The data stream of the Black Lotus | 1.0 | window (motion) | `skirmish-china` |
 | SND-01 | Shot and impact sounds | 0.2 | window (motion, sound) | `tank-duel` |

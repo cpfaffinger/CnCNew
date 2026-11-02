@@ -300,6 +300,10 @@ without flooding the voice pool. An object without the matching key is counted
 `SoundCueKind.Voice` cues of `SimEventKind.VoiceFearRequested`), `VoiceCreated`/`VoiceTaskComplete` stay
 positioned on the `Voice` bus, since they come from the simulation and have a world location.
 
+## The sounds of a state (Phase 56)
+
+The simulation raises no event for what the original plays where a state changes, so `SoundCueDeriver.Track` (`src/CnCNew.Presentation/Fx/SoundCues.States.cs`) compares the world once per logic frame of the original: the move's start (`SoundMoveStart`, `SoundMoveStartDamaged`), a worse condition (`SoundOnDamaged`, `SoundOnReallyDamaged`), stealth (`SoundStealthOn`, `SoundStealthOff`), a chute that opens, an ability that packs, unpacks or triggers (`ParachuteOpenSound`, `PackSound`, `UnpackSound`, `TriggerSound`); a container's `EnterSound` and `ExitSound` come from its events. Measured without a device (`AudioDirectorTests`): the move's start 7 times in 120 s of a real match. Loops are not played: `SoundMoveLoop` and `PrepSoundLoop` need a voice that ends with the state. Nobody has heard any of it.
+
 ## Movie sequences (Bink)
 
 Movies are played by `CnCNew.Game.Movies` (`docs/CLIENT-VIDEO.md`). The sound of a movie is one voice on the `Voice` bus at 0.81 of the speech volume

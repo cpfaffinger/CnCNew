@@ -46,6 +46,8 @@ public abstract class ShellScreen
     /// <summary>Hides a window of this screen's layout (throws if the shipped file does not have it).</summary>
     internal void HideWindow(string name) => W(name).SetHidden(true);
 
+    internal UiWindow Window(string name) => W(name);
+
     protected UiWindow? TryW(string name) => Tree.FindByName($"{LayoutName}.wnd:{name}");
 
     /// <summary>Resolves a label through the shell's text source, falling back to the label key itself (never thrown away silently: unresolved labels are also counted when drawn).</summary>

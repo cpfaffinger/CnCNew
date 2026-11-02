@@ -75,7 +75,9 @@ public interface INetLobby
     void Connect(IPEndPoint server, string serverKey = "");
     void AcceptServer();
     void RefreshRooms();
-    void Enter(string room, string password = "", bool watch = false);
+    /// <param name="watch">Watch: no seat, and a match that runs is shown as it stands.</param>
+    /// <param name="seatToken">The token of a seat held in a match that runs (<see cref="LockstepClient.RejoinToken"/>): that seat back. 0 otherwise.</param>
+    void Enter(string room, string password = "", bool watch = false, ulong seatToken = 0);
     void Configure(RoomSettings settings);
     void RequestSlot(int slot, string faction, int team, int color, int startPosition);
     void LeaveSlot();
@@ -89,8 +91,8 @@ public interface INetLobby
     void Pump();
     /// <summary>The host started the match: the connection goes to the game. Null when this lobby has no connection to hand over (a scripted one).</summary>
     RemoteRelay? TakeRelay();
-    /// <summary>After a match: the same server, the same room by name.</summary>
-    void ReturnToRoom();
+    /// <summary>After a match: the same server, the same room by name; with a token the seat in the match that still runs.</summary>
+    void ReturnToRoom(ulong seatToken = 0);
 }
 
 /// <param name="Known">The servers this client has met; null keeps the list for the life of the lobby.</param>
@@ -129,7 +131,7 @@ public sealed class NetLobby : INetLobby, IDisposable
     private long _nextListMs;
     private string _password = string.Empty;
     private bool _watch;
-    private (string Room, string Password, bool Watch)? _enterWhenConnected;
+    private (string Room, string Password, bool Watch, ulong Token)? _enterWhenConnected;
     // Requests wait here and go out at the lobby's own pace: the latest of each kind is what counts, chat lines in their order.
     private RoomSettings? _pendingSettings;
     private (int Slot, string Faction, int Team, int Color, int Start)? _pendingSlot;
@@ -236,11 +238,11 @@ public sealed class NetLobby : INetLobby, IDisposable
         _nextListMs = _clock.Milliseconds + _options.ListEveryMs;
     }
 
-    public void Enter(string room, string password = "", bool watch = false)
+    public void Enter(string room, string password = "", bool watch = false, ulong seatToken = 0)
     {
         if (Stage is LobbyStage.Connecting)
         {
-            _enterWhenConnected = (room, password, watch);
+            _enterWhenConnected = (room, password, watch, seatToken);
             return;
         }
         if (Stage != LobbyStage.Browsing) return;
@@ -248,7 +250,7 @@ public sealed class NetLobby : INetLobby, IDisposable
         {
             // The server sent this connection home meanwhile (it browsed for long, or the server lists nothing) - its close may still be on the way behind the
             // refusal: a fresh one, and the hello on it.
-            _enterWhenConnected = (room, password, watch);
+            _enterWhenConnected = (room, password, watch, seatToken);
             Reconnects++;
             Open();
             return;
@@ -258,7 +260,7 @@ public sealed class NetLobby : INetLobby, IDisposable
         RoomName = room;
         _password = password;
         _watch = watch;
-        _client = new LockstepClient(_endpoint.Connection, _options.PlayerName, _options.DefinitionFingerprint, _options.Identity, room, _clock, watch: watch, roomPassword: password,
+        _client = new LockstepClient(_endpoint.Connection, _options.PlayerName, _options.DefinitionFingerprint, _options.Identity, room, _clock, rejoinToken: seatToken, watch: watch, roomPassword: password,
             playerKey: _options.PlayerKey);
         Stage = LobbyStage.Entering;
     }
@@ -369,7 +371,7 @@ public sealed class NetLobby : INetLobby, IDisposable
                     if (_enterWhenConnected is { } enter)
                     {
                         _enterWhenConnected = null;
-                        Enter(enter.Room, enter.Password, enter.Watch);
+                        Enter(enter.Room, enter.Password, enter.Watch, enter.Token);
                     }
                 }
                 else if (_endpoint.State == UdpClientState.Failed)
@@ -472,10 +474,10 @@ public sealed class NetLobby : INetLobby, IDisposable
     }
 
     /// <summary>After a match: the same server, the same room by name (whoever is back first opens it again and is its host).</summary>
-    public void ReturnToRoom()
+    public void ReturnToRoom(ulong seatToken = 0)
     {
         if (Server is null || RoomName.Length == 0) return;
-        _enterWhenConnected = (RoomName, _password, _watch);
+        _enterWhenConnected = (RoomName, _password, _watch, seatToken);
         Open();
     }
 

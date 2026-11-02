@@ -196,14 +196,8 @@ checked" is what is left for a human or for hardware that was not there.
 | In every match one of the two games closed its connection before the server had ended the match, and the server counted a player who lost the connection in a running match | the endurance run's events, broken down by reason and phase (188 of 188 matches) | the client's end of a match since Phase 27; it now keeps the connection until the server's end, three seconds at most |
 | `System.Security.Cryptography.Xml` and `.Pkcs` 10.0.12 of the Stride tooling have five advisories published since Phase 28 | the package audit of tier 4 | pinned to 10.0.13 |
 
-**Not built** (each named where a person would look for it):
-
-- **A window client cannot come back into a running match.** The server holds a seat and the protocol has the token (Phase 27); clients without a window use it.
-  The menus do not: after a lost connection the score screen leads back to the room's name, and a room whose match runs takes nobody (`MatchRunning`). A person
-  who lost the connection cannot rejoin from the window.
-- **No watcher's way through the menus.** A member without a seat watches (the room's last row can be left); there is no "watch" button, no choice of whose fog
-  to see, and `ObserverQuit.wnd` is not used. `--join --watch` on the command line is unchanged.
-- **No button to remove a member** (the lobby can; the screen has no control for it). **No start position box.** **No votes** (D-23).
+**Not built at the time, built in Phase 56** (`docs/GAME-SHELL.md` sections 15.3 and 15.6): a window client back into a running match, a watcher's way through the menus, removing a member, the start
+positions. **Votes** came with Phase 53 (D-23).
 - **No list of servers and no discovery**: a server is an address somebody was given. "Online" of the main menu stays inert.
 - **The original's `DisconnectScreen.wnd`** is not used (it is built around votes); the waiting panel of the HUD says what it would.
 - **Texts are English only** and this project's own; the game's language files have no words for a relay.

@@ -37,6 +37,12 @@ public interface IShellNetwork
     int MatchSeconds { get; }
     /// <summary>The fingerprint of a map's terrain as the simulation computes it - what a room states so that every member builds the same ground; null when the map cannot be read.</summary>
     string? TerrainFingerprint(CnCNew.Game.Data.GameData data, string mapPath);
+
+    /// <summary>The token of a seat in a running match, kept so that this game can go back to it even after it ended.</summary>
+    void RememberSeat(IPEndPoint server, string room, ulong token) { }
+    /// <summary>The token kept for that room of that server; 0 for none.</summary>
+    ulong HeldSeat(IPEndPoint server, string room) => 0;
+    void ForgetSeat(IPEndPoint server, string room) { }
 }
 
 /// <summary>One visit to a server: the lobby, the server this game hosts for it (if it does), and who the person is there. The shell pumps it once a frame.</summary>
@@ -51,6 +57,10 @@ public sealed class ShellNetSession(INetLobby lobby, IShellHost? host, string pl
     public string Password { get; set; } = string.Empty;
     /// <summary>The relay of the running match while the game owns it; the shell reads the end of the match from it.</summary>
     public RemoteRelay? Relay { get; set; }
+    /// <summary>The token of the seat this game has in a running match: what takes it back when the connection went. 0 for none.</summary>
+    public ulong SeatToken { get; set; }
+    /// <summary>This visit came to watch: a room's open seats are not for it.</summary>
+    public bool Watching { get; set; }
 
     public void Dispose()
     {
@@ -161,6 +171,29 @@ public sealed class ShellNetwork : IShellNetwork
         {
             return null;
         }
+    }
+
+    private string SeatFile => Path.Combine(_directory, "held-seats.txt");
+
+    private List<string[]> Seats() => File.Exists(SeatFile) ? [..File.ReadAllLines(SeatFile).Select(line => line.Split('\t')).Where(fields => fields.Length == 3)] : [];
+
+    private void WriteSeats(IEnumerable<string[]> seats) => File.WriteAllLines(SeatFile, seats.Select(fields => string.Join('\t', fields)));
+
+    public void RememberSeat(IPEndPoint server, string room, ulong token)
+    {
+        var seats = Seats();
+        seats.RemoveAll(fields => fields[0] == server.ToString() && fields[1] == room);
+        seats.Add([server.ToString(), room, token.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+        WriteSeats(seats);
+    }
+
+    public ulong HeldSeat(IPEndPoint server, string room)
+        => Seats().FirstOrDefault(fields => fields[0] == server.ToString() && fields[1] == room) is { } seat && ulong.TryParse(seat[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var token) ? token : 0;
+
+    public void ForgetSeat(IPEndPoint server, string room)
+    {
+        var seats = Seats();
+        if (seats.RemoveAll(fields => fields[0] == server.ToString() && fields[1] == room) > 0) WriteSeats(seats);
     }
 
     public INetLobby CreateLobby(string playerName)
@@ -330,9 +363,16 @@ public static class NetText
         return $"{(room.HasPassword ? "[locked] " : string.Empty)}{room.Name} - {(mapName.Length == 0 ? "no map yet" : mapName)} - {state}";
     }
 
-    public static string RoomInfo(ListedRoom room, string mapName, string ownBuild, int ownRate)
+    /// <summary>The question over the score when the connection went in a running match.</summary>
+    public const string BackIntoTheMatch = "Your seat may be held for you. Go back into the match?";
+
+    /// <summary>The caption of the button beside Join (the original's direct connect, whose address screen comes first here).</summary>
+    public const string WatchButton = "Watch";
+
+    public static string RoomInfo(ListedRoom room, string mapName, string ownBuild, int ownRate, bool seatHeld = false)
     {
         var lines = new List<string> { room.Name, mapName.Length == 0 ? "No map chosen yet" : mapName, $"{room.Members} connected, {room.Players} of {room.Seats} seats taken" };
+        if (seatHeld) lines.Add("You have a seat in this match: Join takes it back");
         if (room.HasPassword) lines.Add("Needs a password");
         if (room.TickRate != 0 && room.TickRate != ownRate) lines.Add($"Runs at {room.TickRate} Hz - this game runs at {ownRate} Hz");
         if (room.SimulationId.Length > 0 && ownBuild.Length > 0 && room.SimulationId != ownBuild) lines.Add("Opened by another build of the game");

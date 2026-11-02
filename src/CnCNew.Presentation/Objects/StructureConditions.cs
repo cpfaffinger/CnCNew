@@ -25,6 +25,7 @@ public static class StructureConditions
     public static readonly ModelConditionFlag Packing = ModelConditions.Parse("PACKING");
     public static readonly ModelConditionFlag Unpacking = ModelConditions.Parse("UNPACKING");
     public static readonly ModelConditionFlag DockingActive = ModelConditions.Parse("DOCKING_ACTIVE");
+    public static readonly ModelConditionFlag DockingBeginning = ModelConditions.Parse("DOCKING_BEGINNING");
     public static readonly ModelConditionFlag ConstructionComplete = ModelConditions.Parse("CONSTRUCTION_COMPLETE");
     public static readonly ModelConditionFlag Captured = ModelConditions.Parse("CAPTURED");
     public static readonly ModelConditionFlag Smoldering = ModelConditions.Parse("SMOLDERING");
@@ -122,6 +123,7 @@ public static class StructureConditions
         world.GetDockActivity(entity, out var dockerInside, out var dockActive);
         if (dockerInside) set = set.With(ModelConditions.Docking);
         if (dockActive) set = set.With(DockingActive);
+        else if (dockerInside) set = set.With(DockingBeginning);
         return set;
     }
 
@@ -131,6 +133,7 @@ public static class StructureConditions
     private static void DockActive(AIUpdateInterface ai, ref ModelConditionSet set)
     {
         if (ai.IsDockActive) set = set.With(DockingActive);
+        else if (ai.IsInsideDock) set = set.With(DockingBeginning);
     }
 
     /// <summary>

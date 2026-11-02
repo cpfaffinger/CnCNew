@@ -29,6 +29,9 @@ public sealed record ObjectVisual(
     /// <summary>How this template casts its shadow.</summary>
     public ShadowSpec ShadowCast => ShadowInfo ?? ShadowSpec.None;
 
+    /// <summary><c>UpgradeCameo1</c> to <c>UpgradeCameo5</c>: the upgrades the bar shows beside the portrait, a name per place, empty where the object names none.</summary>
+    public ImmutableArray<string> UpgradeCameos { get; init; } = [];
+
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
     public bool IsUnit => IsKindOf("INFANTRY") || IsKindOf("VEHICLE") || IsKindOf("AIRCRAFT") || IsKindOf("HUGE_VEHICLE");
@@ -103,7 +106,10 @@ public sealed class ObjectVisualCatalog
         return new ObjectVisual(definition.OriginalName, kindOf, (float)(Number(definition.Fields, "Scale") ?? 1m), shadow, (float)radius,
             Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(),
             locomotors is null ? null : NormalSuspension(definition, locomotors), PlacementViewAngleOf(definition),
-            ShadowSpec.From(shadow, Text(definition.Fields, "ShadowTexture"), Size("ShadowSizeX"), Size("ShadowSizeY"), Size("ShadowOffsetX"), Size("ShadowOffsetY")));
+            ShadowSpec.From(shadow, Text(definition.Fields, "ShadowTexture"), Size("ShadowSizeX"), Size("ShadowSizeY"), Size("ShadowOffsetX"), Size("ShadowOffsetY")))
+        {
+            UpgradeCameos = [..Enumerable.Range(1, 5).Select(place => Text(definition.Fields, $"UpgradeCameo{place}") ?? string.Empty)],
+        };
 
         float Size(string key) => (float)(Number(definition.Fields, key) ?? 0m);
     }

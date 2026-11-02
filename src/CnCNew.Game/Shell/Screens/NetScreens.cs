@@ -121,11 +121,14 @@ public sealed class NetLobbyScreen : ShellScreen
         Tree.Register("LanLobbyMenuInput", OnInput);
         W("TextEntryPlayerName").SetEntryText(session.PlayerName);
         W("TextEntryPlayerName").SetEnabled(false);
+        // The layout's TEXT of an entry field is the word "Entry"; a server's front has no chat of its own.
+        W("TextEntryChat").SetEntryText(string.Empty);
         W("TextEntryChat").SetEnabled(false);
         W("ButtonEmote").SetEnabled(false);
         W("ButtonClear").SetEnabled(false);
         W("ListboxPlayers").SetEnabled(false);
-        W("ButtonDirectConnect").SetHidden(true);
+        W("ButtonDirectConnect").SetText(NetText.WatchButton);
+        W("ButtonDirectConnect").SetEnabled(false);
         W("ButtonJoin").SetEnabled(false);
         W("ButtonHost").SetEnabled(false);
         Refresh();
@@ -157,7 +160,11 @@ public sealed class NetLobbyScreen : ShellScreen
         {
             _shownStage = stage;
             W("ButtonHost").SetEnabled(browsing);
-            if (!browsing) W("ButtonJoin").SetEnabled(false);
+            if (!browsing)
+            {
+                W("ButtonJoin").SetEnabled(false);
+                W("ButtonDirectConnect").SetEnabled(false);
+            }
             switch (stage)
             {
                 case LobbyStage.Connecting: W("StaticTextGameInfo").SetText($"Connecting to {_session.Server} ..."); break;
@@ -178,6 +185,12 @@ public sealed class NetLobbyScreen : ShellScreen
                 _dialogOpen = true;
                 var (title, message) = NetText.Failure(failure, _session.Server);
                 // A room that turned this client away leaves the server's other rooms open; everything else ends the visit.
+                if (failure is { Kind: LobbyFailureKind.Rejected, Reject: RejectReason.SeatNotHeld or RejectReason.CannotCatchUp })
+                {
+                    // The time is over or the match is: nothing is held for this game any more.
+                    _session.SeatToken = 0;
+                    Shell.Network?.ForgetSeat(_session.Server, _session.Room);
+                }
                 var backToRooms = failure.Kind == LobbyFailureKind.Rejected && failure.Reject is not (RejectReason.ProtocolVersion or RejectReason.Banned or RejectReason.BadIdentity or RejectReason.ServerFull);
                 Shell.Tell(title, message, () =>
                 {
@@ -189,6 +202,8 @@ public sealed class NetLobbyScreen : ShellScreen
             }
             case LobbyStage.Browsing: ShowRooms(); break;
             case LobbyStage.InRoom: Shell.OpenNetRoom(_session); break;
+            // Back into a match that runs, or to watch it: no room to stand in, the next thing is the match.
+            case LobbyStage.Starting: Shell.BeginNetMatch(_session); break;
             case LobbyStage.Idle: Shell.CloseNet(); break;
         }
     }
@@ -205,6 +220,7 @@ public sealed class NetLobbyScreen : ShellScreen
             W("ListboxGames").ClearList();
             _rooms = [];
             W("ButtonJoin").SetEnabled(false);
+            W("ButtonDirectConnect").SetEnabled(false);
             W("StaticTextGameInfo").SetText("This server does not list its rooms.\nChoose Host and enter the name of the room you were given.");
             return;
         }
@@ -226,23 +242,28 @@ public sealed class NetLobbyScreen : ShellScreen
     {
         var chosen = _rooms.FirstOrDefault(room => room.Name == _selected);
         W("ButtonJoin").SetEnabled(chosen is not null && Lobby.Stage == LobbyStage.Browsing);
+        W("ButtonDirectConnect").SetEnabled(chosen is not null && Lobby.Stage == LobbyStage.Browsing);
         W("StaticTextGameInfo").SetText(chosen is not null
-            ? NetText.RoomInfo(chosen, MapName(chosen.MapPath), BuildIdentity.Current.Id, Shell.Data.Rate.TicksPerSecond)
+            ? NetText.RoomInfo(chosen, MapName(chosen.MapPath), BuildIdentity.Current.Id, Shell.Data.Rate.TicksPerSecond, SeatIn(chosen) != 0)
             : rooms.TotalRooms == 0 ? $"{_session.Server}\nNo room is open on this server.\nChoose Host to open one."
             : $"{_session.Server}\n{rooms.TotalRooms} of {rooms.MaxRooms} rooms open{(rooms.TotalRooms > _rooms.Length ? $" (the first {_rooms.Length} are listed)" : string.Empty)}");
     }
+
+    private ulong SeatIn(ListedRoom room) => room.Phase is RoomPhase.Match ? Shell.Network?.HeldSeat(_session.Server, room.Name) ?? 0 : 0;
 
     internal void Enter(string room, string password)
     {
         _session.Room = room;
         _session.Password = password;
-        Lobby.Enter(room, password);
+        _session.SeatToken = _session.Watching ? 0 : Shell.Network?.HeldSeat(_session.Server, room) ?? 0;
+        Lobby.Enter(room, password, _session.Watching, _session.SeatToken);
     }
 
-    private void JoinSelected()
+    private void JoinSelected(bool watch = false)
     {
         if (_rooms.FirstOrDefault(room => room.Name == _selected) is not { } chosen || Lobby.Stage != LobbyStage.Browsing) return;
         Shell.PlaySound(ShellUiSounds.ButtonClick);
+        _session.Watching = watch;
         if (chosen.HasPassword) Shell.OpenNetJoinPopup(this, chosen.Name);
         else Enter(chosen.Name, string.Empty);
     }
@@ -260,9 +281,11 @@ public sealed class NetLobbyScreen : ShellScreen
                 JoinSelected();
                 break;
             case UiEventKind.ButtonSelected when e.Source == "LanLobbyMenu.wnd:ButtonJoin": JoinSelected(); break;
+            case UiEventKind.ButtonSelected when e.Source == "LanLobbyMenu.wnd:ButtonDirectConnect": JoinSelected(watch: true); break;
             case UiEventKind.ButtonSelected when e.Source == "LanLobbyMenu.wnd:ButtonHost":
                 if (Lobby.Stage != LobbyStage.Browsing) break;
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
+                _session.Watching = false;
                 Shell.OpenNetHostPopup(this, _session.PlayerName);
                 break;
             case UiEventKind.ButtonSelected when e.Source == "LanLobbyMenu.wnd:ButtonBack":
@@ -425,7 +448,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         // Superweapon limits are not a rule of this build's matches.
         W("CheckboxLimitSuperweapons").SetEnabled(false);
         W("ButtonEmote").SetEnabled(false);
-        SkirmishSetupScreen.HideStartPositionMarkers(this);
+        StartSpots.Hide(this);
         Sync();
         Transitions?.SetGroup("LanGameOptionsFade");
     }
@@ -500,7 +523,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             _shown = room;
             ShowRoom(room);
             // A member that has no seat takes the first open one (a room without one leaves it watching).
-            if (!IsHost && Me is { Slot: < 0 } && FirstOpenSeat(room) is var open and >= 0) TakeSeat(open);
+            if (!IsHost && !_session.Watching && Me is { Slot: < 0 } && FirstOpenSeat(room) is var open and >= 0) TakeSeat(open);
         }
         ShowChat(room);
     }
@@ -592,6 +615,8 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             W("ComboBoxStartingCash").SetEnabled(IsHost);
             W("ComboBoxStartingCash").SetComboSelection(MoneyChoices.IndexOf(settings.StartMoney));
             W("TextEntryMapDisplay").SetText(MapName(settings.MapPath));
+            Shell.MapCatalog.TryGetValue(settings.MapPath, out var entry);
+            StartSpots.Show(this, entry, _mapPickerOpen, [..settings.Slots.Select(slot => slot.TakesPart ? slot.StartPosition : -1)]);
         }
         finally
         {
@@ -639,8 +664,9 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         var count = Math.Clamp(entry.StartPositionCount, 2, Slots);
         var slots = ImmutableArray.CreateBuilder<MatchSlotDescription>(count);
         for (var slot = 0; slot < count; slot++)
-            slots.Add(slot < current.Slots.Length ? current.Slots[slot] with { StartPosition = slot }
-                : new MatchSlotDescription(MatchSlotKind.Human, MatchSetup.RandomFaction, 0, _colorCount == 0 ? -1 : slot % _colorCount, slot));
+            // A new map has other places: nobody keeps one (the original's default is a random place).
+            slots.Add(slot < current.Slots.Length ? current.Slots[slot] with { StartPosition = current.MapPath == mapPath ? current.Slots[slot].StartPosition : -1 }
+                : new MatchSlotDescription(MatchSlotKind.Human, MatchSetup.RandomFaction, 0, _colorCount == 0 ? -1 : slot % _colorCount, -1));
         var standard = SkirmishMatchOptions.StandardAt(Shell.Data.Rate);
         var maxTicks = Shell.Network is { MatchSeconds: > 0 } network ? Shell.Data.Rate.Time.WholeSecondsToTicks(network.MatchSeconds) : SkirmishMatchOptions.NoTimeLimit;
         return new RoomSettings(Shell.Data.Rate.TicksPerSecond, mapPath, fingerprint, maxTicks, current.StartMoney > 0 ? current.StartMoney : standard.StartMoney, standard.GraceTicks,
@@ -695,9 +721,14 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             return;
         }
         var mine = member is { } seated && seated.ConnectionId == Lobby.ConnectionId;
-        if (member is not null && !mine)
+        if (member is { } other && !mine)
         {
-            // Somebody sits there: the host removes people with the room, not with this box. Show what is.
+            // As in LanGameOptionsMenu: the host's box on somebody else's seat is how a member is removed, and the seat becomes what was chosen. Choosing the member again changes nothing.
+            if (value is OpenEntry or ClosedEntry or ArmyEntry)
+            {
+                Lobby.Kick(other.ConnectionId);
+                ConfigureSlot(slot, description with { Kind = value switch { OpenEntry => MatchSlotKind.Human, ArmyEntry => MatchSlotKind.Computer, _ => MatchSlotKind.Closed } });
+            }
             _shown = null;
             return;
         }
@@ -722,6 +753,22 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         else if (IsHost && description.Kind == MatchSlotKind.Computer) ConfigureSlot(slot, description);
     }
 
+    /// <summary>A spot of the preview: the seat of this client, and for the host a computer army's, take it or give it up; the changes go out as one request each way.</summary>
+    private void OnStartSpot(int spot, bool right)
+    {
+        if (Lobby.Room is not { } room) return;
+        var slots = room.Settings.Slots;
+        var local = Me?.Slot ?? -1;
+        var starts = StartSpots.Click([..slots.Select(slot => slot.TakesPart ? slot.StartPosition : -1)], spot, local, IsHost, slot => slots[slot].Kind == MatchSlotKind.Computer, right);
+        Shell.PlaySound(ShellUiSounds.ButtonClick);
+        var changed = slots;
+        for (var slot = 0; slot < slots.Length; slot++)
+            if (slot != local && slots[slot].Kind == MatchSlotKind.Computer && slots[slot].StartPosition != starts[slot]) changed = changed.SetItem(slot, slots[slot] with { StartPosition = starts[slot] });
+        if (!changed.SequenceEqual(slots)) Lobby.Configure(room.Settings with { Slots = changed });
+        if (local >= 0 && local < slots.Length && slots[local].StartPosition != starts[local])
+            Lobby.RequestSlot(local, slots[local].Faction, slots[local].Team, slots[local].Color, starts[local]);
+    }
+
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
         if (_syncing) return;
@@ -737,6 +784,9 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
                     Shell.PlaySound(ShellUiSounds.ButtonClick);
                     Lobby.SetReady(!seated.Ready);
                 }
+                break;
+            case UiEventKind.ButtonSelected or UiEventKind.ButtonSelectedRight when StartSpots.SpotOf(name) is var spot and >= 0:
+                OnStartSpot(spot, e.Kind == UiEventKind.ButtonSelectedRight);
                 break;
             case UiEventKind.ButtonSelected when name == "ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);

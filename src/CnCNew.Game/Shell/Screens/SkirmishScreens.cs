@@ -48,6 +48,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     private int _startMoney;
     // The room of the local game (docs/NETWORK-PROTOCOL.md section 4): what the team and colour boxes of a slot say travels into the match description.
     private readonly int[] _team = new int[Slots];
+    private readonly int[] _start = [-1, -1, -1, -1, -1, -1, -1, -1];
     private readonly int[] _color = new int[Slots];
 
     public SkirmishSetupScreen(GameShell shell) : base(shell, ShellLayoutNames.SkirmishGameOptionsMenu)
@@ -106,7 +107,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         if (PreferredMap() is { } map) SetSelectedMap(map);
         RefreshMapDisplay();
         ApplySlotVisibility();
-        HideStartPositionMarkers();
+        ShowStartSpots();
         ShowHonors();
         // SkirmishGameOptionsMenuUpdate: the screen fades in (FULLFADE of SubParent) and fades out again when it is closed.
         Transitions?.SetGroup("SkirmishGameOptionsMenuFade");
@@ -158,17 +159,20 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 
     private bool _mapPickerOpen;
 
-    /// <summary>
-    /// The eight numbered start-position bubbles of the map preview (<c>ButtonMapStartPosition0..7</c>, children of <c>MapWindow</c>) are not hidden in the layout file: the original hides
-    /// them at init and <c>positionStartSpots</c> shows and places the ones the map has. This build's map catalog knows how many start positions a map has but not where they are, so
-    /// the bubbles stay hidden instead of standing in a diagonal row on top of the preview's text.
-    /// </summary>
-    internal static void HideStartPositionMarkers(ShellScreen screen)
+    private void ShowStartSpots()
     {
-        for (var slot = 0; slot < Slots; slot++) screen.HideWindow($"ButtonMapStartPosition{slot}");
+        var entry = _selectedMapPath is { } path && Shell.MapCatalog.TryGetValue(path, out var known) ? known : null;
+        StartSpots.Show(this, entry, _mapPickerOpen, [.._start.Select((start, slot) => slot == 0 || _computer[slot] ? start : -1)]);
     }
 
-    private void HideStartPositionMarkers() => HideStartPositionMarkers(this);
+    /// <summary>A spot of the preview, as in the room: the human's seat and the computer armies take it or give it up.</summary>
+    private void OnStartSpot(int spot, bool right)
+    {
+        var starts = StartSpots.Click([.._start.Select((start, slot) => slot == 0 || _computer[slot] ? start : -1)], spot, 0, true, slot => _computer[slot], right);
+        Array.Copy(starts.ToArray(), _start, Slots);
+        Shell.PlaySound(ShellUiSounds.ButtonClick);
+        ShowStartSpots();
+    }
 
     /// <summary>The windows of the setup that <c>showSkirmishGameOptionsUnderlyingGUIElements</c> (<c>SkirmishMapSelectMenu.cpp</c>) hides while the map picker lies over it
     /// (the picker's own layout has no opaque background, so what it does not hide would show through its list): the map preview with its caption and name, the three
@@ -182,6 +186,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         _mapPickerOpen = open;
         foreach (var name in HiddenWhileMapPicker) W(name).SetHidden(open);
         ApplySlotVisibility();
+        ShowStartSpots();
         W("ButtonReset").SetEnabled(!open);
         W("ButtonBack").SetEnabled(!open);
     }
@@ -218,8 +223,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     {
         _selectedMapPath = mapPath;
         _startPositionCount = Shell.MapCatalog.TryGetValue(mapPath, out var entry) ? Math.Clamp(entry.StartPositionCount, 1, Slots) : Slots;
+        // A new map has other places: nobody keeps one.
+        Array.Fill(_start, -1);
         RefreshMapDisplay();
         ApplySlotVisibility();
+        ShowStartSpots();
     }
 
     private string ResolveFaction(int slot)
@@ -236,15 +244,15 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         // The AI of each slot in slot order; the first slot is the human's.
         var ai = ImmutableArray.CreateBuilder<MatchAi>();
         ai.Add(MatchAi.Builtin);
-        // Team and colour of every slot that takes part, in the order of the match's slots; the start positions follow that order (the layout has no box for them).
+        // Team, colour and place of every slot that takes part, in the order of the match's slots; a slot without a place gets a random one by the seed of the description.
         // A map's own scripts run only in the session with the script engine, and that is the session of the original AI (SidesList::prepareForMP_or_Skirmish): a user's map brings them.
         var scripted = _originalAi || (Shell.MapCatalog.TryGetValue(_selectedMapPath, out var chosenMap) && chosenMap.HasScripts);
         var details = ImmutableArray.CreateBuilder<MatchSlotDetails>();
-        details.Add(new MatchSlotDetails(_team[0], _color[0], StartPosition: 0));
+        details.Add(new MatchSlotDetails(_team[0], _color[0], StartPosition: _start[0]));
         for (var slot = 1; slot < _startPositionCount; slot++)
         {
             if (!_computer[slot]) continue;
-            details.Add(new MatchSlotDetails(_team[slot], _color[slot], StartPosition: details.Count));
+            details.Add(new MatchSlotDetails(_team[slot], _color[slot], StartPosition: _start[slot]));
             opponents.Add(ResolveFaction(slot));
             ai.Add(new MatchAi(scripted ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, _difficulty[slot],
                 scripted ? null : _tactics[slot]));
@@ -263,6 +271,9 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     {
         switch (e.Kind)
         {
+            case UiEventKind.ButtonSelected or UiEventKind.ButtonSelectedRight when e.Source.StartsWith("SkirmishGameOptionsMenu.wnd:", StringComparison.Ordinal) && StartSpots.SpotOf(e.Source["SkirmishGameOptionsMenu.wnd:".Length..]) is var spot and >= 0:
+                OnStartSpot(spot, e.Kind == UiEventKind.ButtonSelectedRight);
+                break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonStart": TryStart(); break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
@@ -339,7 +350,7 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
         Tree.Register($"{layoutName}Input", OnInput);
         W("RadioButtonSystemMaps").SetChecked(true);
         PopulateSystemMaps();
-        SkirmishSetupScreen.HideStartPositionMarkers(this);
+        StartSpots.Hide(this);
         _owner.SetMapPickerOpen(true);
         Shell.RescanUserMaps();
     }

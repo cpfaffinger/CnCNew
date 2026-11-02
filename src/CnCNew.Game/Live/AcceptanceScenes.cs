@@ -9,7 +9,7 @@ namespace CnCNew.Game.Live;
 /// </summary>
 public static class AcceptanceScenes
 {
-    public static ImmutableArray<DemoScenario> All => [March, Wheels, Board, Artillery, Repair, Firefight, Build, Flames, Paradrop, Lotus];
+    public static ImmutableArray<DemoScenario> All => [March, Wheels, Board, Artillery, Repair, Firefight, Build, Flames, Paradrop, Lotus, CombatDrop, Bodies, Subdual, Firestorm, Reverse];
 
     /// <summary>The two ends of the march and the frames its two legs start at; the audit reads them.</summary>
     public const float MarchEast = 90f, MarchWest = -90f;
@@ -160,6 +160,83 @@ public static class AcceptanceScenes
             new(40, "hunter", ScenarioOrderKind.Attack, "plant"),
         ],
         40, -20, 20f, 42f, 330f);
+
+    /// <summary>Four Rangers board a Chinook, which flies to a place and lets them down its ropes.</summary>
+    public static DemoScenario CombatDrop { get; } = new(
+        "acc-combat-drop", "Combat drop",
+        "Four Rangers board a Chinook. It flies over the open ground and hovers. To see: ropes come down from the helicopter, the soldiers slide down them one after the other and stand on the ground.",
+        1500,
+        [
+            new("chinook", "AmericaVehicleChinook", 1, -120, 0, 0f),
+            ..Enumerable.Range(0, 4).Select(index => new ScenarioUnit($"ranger{index + 1}", "AmericaInfantryRanger", 1, -120, 40 + 12 * index, 270f)),
+        ],
+        [
+            ..Enumerable.Range(0, 4).Select(index => new ScenarioOrder(10, $"ranger{index + 1}", ScenarioOrderKind.Enter, "chinook")),
+            new(300, "chinook", ScenarioOrderKind.CombatDrop, X: 60f, Y: 0f),
+        ],
+        0, 0, 20f, 42f, 420f);
+
+    /// <summary>Missile soldiers fire at a squad: a rocket throws a body in the air, and every body goes into the ground before it is gone.</summary>
+    public static DemoScenario Bodies { get; } = new(
+        "acc-bodies", "Bodies flung and sinking",
+        "Two missile soldiers fire at a squad of Rangers. To see: a soldier killed by a rocket is thrown through the air and lands; the dead lie for a few seconds, then sink slowly into the ground and are gone.",
+        900,
+        [
+            new("rocket1", "AmericaInfantryMissileDefender", 1, -70, -15, 0f),
+            new("rocket2", "AmericaInfantryMissileDefender", 1, -70, 15, 0f),
+            ..Enumerable.Range(0, 4).Select(index => new ScenarioUnit($"ranger{index + 1}", "AmericaInfantryRanger", 2, 70, -24 + 16 * index, 180f)),
+        ],
+        [
+            new(20, "rocket1", ScenarioOrderKind.Attack, "ranger1"),
+            new(20, "rocket2", ScenarioOrderKind.Attack, "ranger3"),
+            new(220, "rocket1", ScenarioOrderKind.Attack, "ranger2"),
+            new(220, "rocket2", ScenarioOrderKind.Attack, "ranger4"),
+        ],
+        30, 0, 20f, 42f, 240f);
+
+    /// <summary>The microwave tank and the ECM tank disable without killing.</summary>
+    public static DemoScenario Subdual { get; } = new(
+        "acc-subdual", "Microwave and ECM",
+        "A microwave tank beams at a power plant and an ECM tank at a Crusader. To see: the beam of each; after some seconds the Crusader stops and stands blue, the building goes dark; neither loses health, and when the beam stops they come back.",
+        1500,
+        [
+            new("microwave", "AmericaTankMicrowave", 1, -80, -60, 0f),
+            new("plant", "AmericaPowerPlant", 2, 60, -80, 180f),
+            new("ecm", "ChinaTankECM", 1, -80, 60, 0f),
+            new("crusader", "AmericaTankCrusader", 2, 60, 60, 180f),
+        ],
+        [
+            new(20, "microwave", ScenarioOrderKind.Attack, "plant"),
+            new(20, "ecm", ScenarioOrderKind.Attack, "crusader"),
+        ],
+        0, 0, 20f, 42f, 330f);
+
+    /// <summary>Three napalm hits make a firestorm.</summary>
+    public static DemoScenario Firestorm { get; } = new(
+        "acc-firestorm", "Firestorm",
+        "Three MiGs fire napalm at one spot. To see: the first hits burn on the ground, and when enough of them have fallen at one place a tall firestorm rises there and burns what stands around it.",
+        1500,
+        [
+            ..Enumerable.Range(0, 3).Select(index => new ScenarioUnit($"mig{index + 1}", "ChinaJetMIG", 1, -260, -40 + 40 * index, 0f)),
+            new("plant", "AmericaPowerPlant", 2, 80, 0, 180f),
+            new("barracks", "AmericaBarracks", 2, 120, 90, 180f),
+        ],
+        [
+            ..Enumerable.Range(0, 3).Select(index => new ScenarioOrder(30 + 20 * index, $"mig{index + 1}", ScenarioOrderKind.Attack, "plant")),
+        ],
+        60, 20, 20f, 42f, 420f);
+
+    /// <summary>A Humvee backs up to a goal close behind it, and turns for one far behind it.</summary>
+    public static DemoScenario Reverse { get; } = new(
+        "acc-reverse", "Reversing",
+        "A Humvee stands still, then is sent a car's length behind itself, and later far behind itself. To see: for the short way it backs up without turning round; for the long way it turns.",
+        900,
+        [new("humvee", "AmericaVehicleHumvee", 1, 60, 0, 0f)],
+        [
+            new(40, "humvee", ScenarioOrderKind.MoveTo, X: 20f, Y: 0f),
+            new(300, "humvee", ScenarioOrderKind.MoveTo, X: -120f, Y: 0f),
+        ],
+        0, 0, 20f, 42f, 240f);
 
     /// <summary>Frames the two construction orders of the build scene are given at.</summary>
     public const long BuildFirstOrder = 20, BuildSecondOrder = 420;

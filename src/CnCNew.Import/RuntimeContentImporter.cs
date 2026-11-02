@@ -16,7 +16,7 @@ public sealed record DependencyAuditResult(int AssetCount, int Resolved, int Fal
 public static class RuntimeContentImporter
 {
     public const string ImporterName = "CnCNew.RuntimeContentImporter";
-    public const string ImporterVersion = "2.0.0";
+    public const string ImporterVersion = "2.1.0";
 
     public static IReadOnlyList<string> ValidateAsset(string virtualPath, Stream stream)
     {
@@ -123,7 +123,8 @@ public static class RuntimeContentImporter
         IProgress<ImportProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var virtualPaths = source.EnumerateFiles().Where(path => !path.EndsWith(".big", StringComparison.OrdinalIgnoreCase)).ToArray();
+        // What the game's installer brought for the original's own program stays where it is: program files, manuals and its metadata are of no use here (F-33).
+        var virtualPaths = source.EnumerateFiles().Where(path => !path.EndsWith(".big", StringComparison.OrdinalIgnoreCase) && AssetFormat.Classify(path).Strategy != "out-of-scope").ToArray();
         EnsureNoCaseCollisions(virtualPaths);
         var drafts = new List<Draft>(virtualPaths.Length);
         var cacheHits = 0;

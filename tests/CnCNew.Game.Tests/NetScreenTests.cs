@@ -127,7 +127,7 @@ internal static class NetScreenTests
         public void Connect(IPEndPoint server, string serverKey = "") { Calls.Add($"Connect {server} {serverKey}"); Server = server; Failure = null; Stage = LobbyStage.Connecting; }
         public void AcceptServer() { Calls.Add("AcceptServer"); Stage = LobbyStage.Browsing; }
         public void RefreshRooms() => Calls.Add("RefreshRooms");
-        public void Enter(string room, string password = "", bool watch = false) { Calls.Add($"Enter '{room}' '{password}'"); RoomName = room; Stage = LobbyStage.Entering; }
+        public void Enter(string room, string password = "", bool watch = false, ulong seatToken = 0) { Calls.Add($"Enter '{room}' '{password}'{(watch ? " watch" : string.Empty)}{(seatToken != 0 ? " seat" : string.Empty)}"); RoomName = room; Stage = LobbyStage.Entering; }
         public void Configure(RoomSettings settings) => Calls.Add($"Configure {string.Join(",", settings.Slots.Select(slot => slot.Kind))} {settings.StartMoney} {settings.MapPath}");
         public void RequestSlot(int slot, string faction, int team, int color, int startPosition) => Calls.Add($"RequestSlot {slot} '{faction}' {team} {color} {startPosition}");
         public void LeaveSlot() => Calls.Add("LeaveSlot");
@@ -139,7 +139,7 @@ internal static class NetScreenTests
         public void Disconnect() { Calls.Add("Disconnect"); Stage = LobbyStage.Idle; }
         public void Pump() { }
         public RemoteRelay? TakeRelay() { Calls.Add("TakeRelay"); Stage = LobbyStage.Idle; return null; }
-        public void ReturnToRoom() { Calls.Add("ReturnToRoom"); Stage = LobbyStage.Entering; }
+        public void ReturnToRoom(ulong seatToken = 0) { Calls.Add("ReturnToRoom"); Stage = LobbyStage.Entering; }
     }
 
     private sealed class ScriptedHost : IShellHost
@@ -349,6 +349,16 @@ internal static class NetScreenTests
         var chat = tree.FindByName("LanGameOptionsMenu.wnd:ListboxChatWindowLanGame")!.ListBox!.Rows.Select(row => row.Cells[0]).ToArray();
         TestHarness.Assert(chat.SequenceEqual(["Bob: hello Alice", "Alice: hello Bob", "* The room is not ready to start. (Not every player is ready.)"]), $"chat lines carry their names, a refusal the server's reason ({string.Join(" | ", chat)})");
         Capture(shell, "Net-Room-Host", baselines, updating);
+
+        // The host's box on a member's seat removes the member, as in the original; the seat becomes what was chosen.
+        lobby.Calls.Clear();
+        var person = ShellScript.Parse(["select LanGameOptionsMenu.wnd:ComboBoxPlayer1 Closed"], "host");
+        for (var frame = 0; frame < 200 && !person.IsFinished; frame++)
+        {
+            person.Advance(shell, 0.05);
+            Step(shell, 1);
+        }
+        TestHarness.Assert(lobby.Calls.Count == 2 && lobby.Calls[0] == "Kick 8" && lobby.Calls[1].StartsWith("Configure Human,Closed,Human,Computer", StringComparison.Ordinal), $"the host removes a member through its seat ({string.Join("; ", lobby.Calls)})");
 
         // The host's start closes the seat nobody took, then asks.
         lobby.Calls.Clear();

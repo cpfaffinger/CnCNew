@@ -46,7 +46,27 @@ public sealed class OptionsScreen : ShellScreen
         W("TextEntryHTTPProxy").SetEntryText(string.Empty);
         W("TextEntryFirewallPortOverride").SetEntryText(string.Empty);
         BuildResolutionList();
+        foreach (var (box, text) in FixedBoxes) ShowFixed(box, text);
         RefreshWidgets();
+    }
+
+    /// <summary>What the layout offers and this game has only one of: one level of detail, no anti-aliasing to choose, and a server that finds this machine by itself. The boxes say so and take no input.</summary>
+    private (string Box, string Text)[] FixedBoxes
+    {
+        get
+        {
+            var address = Shell.Network?.LocalAddresses ?? "127.0.0.1";
+            return [("ComboBoxDetail", "High"), ("ComboBoxAntiAliasing", "Off"), ("ComboBoxIP", address), ("ComboBoxOnlineIP", address)];
+        }
+    }
+
+    private void ShowFixed(string box, string text)
+    {
+        var combo = W(box);
+        combo.ClearCombo();
+        combo.AddComboEntry(text);
+        combo.SetComboSelection(0);
+        combo.SetEnabled(false);
     }
 
     private void BuildResolutionList()

@@ -34,6 +34,7 @@ internal static class NetShellTests
         var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Host game and join: main menu, address, the server's key, the rooms, the room, the load screen, a match, the score and back into the room", () => HostAndJoin(data));
         harness.Run("In the match: the connection line, a chat line to all and one to the allies, a pause that names who asked - through the HUD of both games", () => InMatch(data));
+        harness.Run("Back into a match through the menus: a game that lost its connection is asked and takes its seat again, another comes to watch, and the places on the map hold", () => BackIntoTheMatch(data));
         // --endurance-minutes N (scripts/check-net-endurance.ps1): everything of this phase that has a time limit, for at least N minutes of one hosted server.
         var minutesAt = Array.IndexOf(args, "--endurance-minutes");
         if (minutesAt >= 0 && minutesAt + 1 < args.Length && int.TryParse(args[minutesAt + 1], out var minutes) && minutes > 0)
@@ -63,6 +64,17 @@ internal static class NetShellTests
         public List<byte[]> Replays { get; } = [];
         private CnCNew.Game.Replays.MatchRecorder? _recorder;
         private NetMatchLoad? _load;
+
+        /// <summary>The line goes: no word to the server, and the game says what the client's runtime says then.</summary>
+        public void LoseConnection()
+        {
+            var match = Match!;
+            match.Remote!.Dispose();
+            Match = null;
+            Hud = null;
+            _recorder = null;
+            Shell.MatchLost(MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, null), NetText.Close(CnCNew.Net.Udp.UdpCloseReason.Timeout));
+        }
 
         public void Key(CnCNew.Presentation.Input.KeyCode key) => Hud!.Process(new CnCNew.Presentation.Input.KeyEvent(++_inputClock, key, IsDown: true));
         public void Type(string text) { foreach (var character in text) Hud!.Process(new CnCNew.Presentation.Input.TextInputEvent(++_inputClock, character)); }
@@ -356,6 +368,62 @@ internal static class NetShellTests
         TestHarness.Assert(step == 5, $"the two people got through chat and pause (step {step}; {string.Join("; ", seen)})");
         TestHarness.Assert(host.Played.Count == 1 && guest.Played.Count == 1 && host.Played[0] == guest.Played[0] && host.Played[0].Note is null,
             $"and the match was the same on both to its end ({host.Played.FirstOrDefault()} / {guest.Played.FirstOrDefault()})");
+    }
+
+    private static void BackIntoTheMatch(GameData data)
+    {
+        var port = FreePort();
+        string[] toLobby(string name) =>
+        [
+            .. ToAddress,
+            $"type NetworkDirectConnect.wnd:EditPlayerName {name}", $"type NetworkDirectConnect.wnd:ComboboxRemoteIP 127.0.0.1:{port}", "wait seconds 3", "click NetworkDirectConnect.wnd:ButtonJoin",
+            "wait screen MessageBoxScreen", "click MessageBox.wnd:ButtonYes", "wait screen NetLobbyScreen",
+        ];
+        using var host = new Player(data, "host", RunDirectory("host"), port,
+        [
+            .. HostToRoom("Comeback"), "limit 60", "wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer1 shows Bob",
+            // A place on the map: the seat's number stands on the spot, and a second click on one's own spot gives it up again.
+            "click LanGameOptionsMenu.wnd:ButtonMapStartPosition1", "wait text LanGameOptionsMenu.wnd:ButtonMapStartPosition1 equals 1",
+            "click LanGameOptionsMenu.wnd:ButtonMapStartPosition1", "wait text LanGameOptionsMenu.wnd:ButtonMapStartPosition1 lacks 1",
+            "click LanGameOptionsMenu.wnd:ButtonMapStartPosition1", "wait text LanGameOptionsMenu.wnd:ButtonMapStartPosition1 equals 1",
+            "wait text LanGameOptionsMenu.wnd:ButtonMapStartPosition0 equals 2",
+            "wait shown LanGameOptionsMenu.wnd:ButtonAccept1", "click LanGameOptionsMenu.wnd:ButtonStart",
+            "limit 90", "wait screen NetLoadingScreen", "wait phase InMatch", "wait phase Results", "wait screen ScoreScreenScreen",
+        ], 40) { WithHud = true };
+        using var guest = new Player(data, "guest", RunDirectory("guest"), port,
+        [
+            .. toLobby("Bob"), "pick LanLobbyMenu.wnd:ListboxGames Comeback", "click LanLobbyMenu.wnd:ButtonJoin",
+            "wait screen NetRoomScreen", "wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer1 shows Bob",
+            "limit 60", "wait text LanGameOptionsMenu.wnd:ButtonMapStartPosition1 equals 1",
+            "click LanGameOptionsMenu.wnd:ButtonMapStartPosition0", "wait text LanGameOptionsMenu.wnd:ButtonMapStartPosition0 equals 2",
+            "wait hidden LanGameOptionsMenu.wnd:ButtonAccept1", "wait seconds 1", "click LanGameOptionsMenu.wnd:ButtonStart",
+            "limit 90", "wait screen NetLoadingScreen", "wait phase InMatch",
+            // The test takes the line away here; the person is asked over the score.
+            "wait screen MessageBoxScreen", "expect text MessageBox.wnd:StaticTextMessage contains Go back into the match", "click MessageBox.wnd:ButtonYes",
+            "wait phase InMatch", "wait phase Results", "wait screen ScoreScreenScreen",
+        ], 40) { WithHud = true };
+        using var watcher = new Player(data, "watcher", RunDirectory("watcher"), port,
+        [
+            .. toLobby("Carol"), "limit 90", "wait list LanLobbyMenu.wnd:ListboxGames contains match running", "pick LanLobbyMenu.wnd:ListboxGames Comeback",
+            "wait enabled LanLobbyMenu.wnd:ButtonDirectConnect", "expect text LanLobbyMenu.wnd:ButtonDirectConnect equals Watch", "click LanLobbyMenu.wnd:ButtonDirectConnect",
+            "wait screen NetLoadingScreen", "wait phase InMatch",
+        ], 40) { WithHud = true };
+
+        var lost = false;
+        var startsOfHost = -1;
+        guest.InMatch = player =>
+        {
+            if (lost || player.Match!.World.Tick < 600) return;
+            lost = true;
+            startsOfHost = host.Match!.Session.Match.Slots[0].StartPosition;
+            player.LoseConnection();
+        };
+        Play(170, host, guest, watcher);
+        TestHarness.Assert(lost, "the guest played on before its line went");
+        TestHarness.Assert(startsOfHost == 1, $"the host stands where it clicked ({startsOfHost})");
+        TestHarness.Assert(guest.Played.Count == 1 && host.Played.Count == 1 && guest.Played[0].Tick == host.Played[0].Tick && guest.Played[0].Hash == host.Played[0].Hash && guest.Played[0].Note is null,
+            $"the game that came back ended the match with the other ({guest.Played.FirstOrDefault()} / {host.Played.FirstOrDefault()})");
+        TestHarness.Assert(watcher.Match?.Remote?.Client.Player is 0 or null, "the watcher holds no seat");
     }
 
     private static void Endurance(GameData data, int minutes)

@@ -210,7 +210,12 @@ public sealed class GameShell
                 CnCNew.Data.World.MapData map;
                 using (var stream = File.OpenRead(file.DiskPath)) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
                 var scripted = map.PlayerScripts.Any(list => list.Scripts.Length + list.Groups.Length > 0);
-                read[index] = (new ShellMapEntry(file.Entry.VirtualPath, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath).StartPositions.Length, scripted), null);
+                var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath);
+                read[index] = (new ShellMapEntry(file.Entry.VirtualPath, null, true, terrain.StartPositions.Length, scripted)
+                {
+                    Starts = [..terrain.StartPositions.Select(start => (start.X.ToDecimal(), start.Y.ToDecimal()))],
+                    Extent = (0m, 0m, terrain.ExtentX.ToDecimal(), terrain.ExtentY.ToDecimal()),
+                }, null);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {
@@ -573,15 +578,44 @@ public sealed class GameShell
     /// <summary>The same for a result the host has put together itself (a match with the original AI has no <c>SkirmishMatchSession</c>).</summary>
     public void MatchFinished(MatchResult result) => MatchFinished(result, null);
 
+    /// <summary>The connection went and the server may hold this game's seat: the person is asked over the score, Yes goes back into the running match (docs/GAME-SHELL.md section 15.6).</summary>
+    public void MatchLost(MatchResult result, string note)
+    {
+        MatchFinished(result, null, keepSeat: true);
+        AskYesNo(NetText.TitleMatchEnded, $"{note}\n{NetText.BackIntoTheMatch}",
+            yes: () =>
+            {
+                CloseTop();
+                ReturnToMainMenuFromResults();
+            },
+            no: () =>
+            {
+                CloseTop();
+                if (Net is { } net) ForgetSeat(net);
+            });
+    }
+
+    private void ForgetSeat(ShellNetSession session)
+    {
+        session.SeatToken = 0;
+        Network?.ForgetSeat(session.Server, session.Room);
+    }
+
     /// <summary>
     /// The same, with what a server said when the match did not end by its own rules (<paramref name="netNote"/>: the connection was lost, the games were out of
     /// sync, the server reached a limit) - shown as a message over the score screen. After a match of a server the score screen leads back to its room.
     /// </summary>
-    public void MatchFinished(MatchResult result, string? netNote)
+    public void MatchFinished(MatchResult result, string? netNote) => MatchFinished(result, netNote, keepSeat: false);
+
+    private void MatchFinished(MatchResult result, string? netNote, bool keepSeat)
     {
         _returnToReplays = false;
         PlayedReplay = null;
-        if (Net is { } net) net.Relay = null;
+        if (Net is { } net)
+        {
+            net.Relay = null;
+            if (!keepSeat) ForgetSeat(net);
+        }
         _pendingNet = null;
         if (_playedSkirmish is { } skirmish) RecordSkirmish(skirmish, result);
         _playedSkirmish = null;
@@ -679,9 +713,15 @@ public sealed class GameShell
     {
         var room = session.Lobby.Room;
         var rows = room is null ? [] : NetLoadingScreen.RowsOf(room);
-        var mapPath = room?.Settings.MapPath ?? string.Empty;
+        var relay = session.Lobby.TakeRelay();
+        var mapPath = room?.Settings.MapPath ?? relay?.Client.Description?.MapPath ?? string.Empty;
         var mapName = mapPath.Length == 0 ? string.Empty : MapCatalog.ContainsKey(mapPath) ? MapNames.DisplayName(mapPath, MapCatalog, TextSource) : Path.GetFileNameWithoutExtension(mapPath);
-        session.Relay = session.Lobby.TakeRelay();
+        session.Relay = relay;
+        if (relay is { Client.RejoinToken: not 0 and var token })
+        {
+            session.SeatToken = token;
+            Network?.RememberSeat(session.Server, session.Room, token);
+        }
         _pendingNet = session;
         _netStartSent = false;
         _loadingFrameShown = false;
@@ -714,7 +754,7 @@ public sealed class GameShell
         Phase = ShellPhase.Menus;
         Replace(new MainMenuScreen(this));
         Push(new NetworkDirectConnectScreen(this));
-        session.Lobby.ReturnToRoom();
+        session.Lobby.ReturnToRoom(session.SeatToken);
         Push(new NetLobbyScreen(this, session));
     }
 
