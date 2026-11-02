@@ -82,8 +82,8 @@ internal sealed class AcquisitionState
 
     public void Describe(IStateWriter writer)
     {
-        if (LeechRange) writer.Bool("leechRange", true);
         writer.BeginObject("acquisition");
+        if (LeechRange) writer.Bool("leechRange", true);
         writer.UInt("victim", Victim.Value);
         if (Ordered)
         {
