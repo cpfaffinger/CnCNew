@@ -160,7 +160,7 @@ internal sealed class UiRenderer : IDisposable
             case UiFillRect fill: DrawRect(fill.Rect, fill.Color); break;
             case UiBorderRect border: DrawBorder(border.Rect, border.Color); break;
             case UiLineDraw line: DrawLine(line); break;
-            case UiImageDraw image: DrawImage(image.Image, image.Destination, image.Tint, image.FlipHorizontal, image.FlipVertical); break;
+            case UiImageDraw image: DrawImage(image.Image, image.Destination, image.Tint, image.FlipHorizontal, image.FlipVertical, image.Grayscale); break;
             case UiTextDraw text: DrawText(text); break;
             case UiPushClip push: PushClip(push.Rect); break;
             case UiPopClip: PopClip(); break;
@@ -230,7 +230,7 @@ internal sealed class UiRenderer : IDisposable
         _batch.Draw(texture, new RectangleF(line.X0, line.Y0, length, line.Thickness), source, ToColor(line.Color), MathF.Atan2(dy, dx), new Vector2(0f, source.Height / 2f), SpriteEffects.None, ImageOrientation.AsIs, 0f);
     }
 
-    public void DrawImage(string name, UiRect destination, WndColor tint, bool flipHorizontal = false, bool flipVertical = false)
+    public void DrawImage(string name, UiRect destination, WndColor tint, bool flipHorizontal = false, bool flipVertical = false, bool grayscale = false)
     {
         RequireFrame();
         if (destination.IsEmpty || !tint.IsVisible) return;
@@ -240,7 +240,7 @@ internal sealed class UiRenderer : IDisposable
             Placeholder(destination);
             return;
         }
-        var sprite = _images.Resolve(image, out var failure);
+        var sprite = grayscale ? _images.ResolveGray(image, out var failure) : _images.Resolve(image, out failure);
         if (sprite is null)
         {
             _frame.MissingTexture(failure);

@@ -992,12 +992,14 @@ public sealed partial class MatchController
         var cooldown = new WndColor(0, 0, 0, 160);
 
         for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
+    private static readonly WndColor CantAffordTint = new(144, 144, 144, 255);
+
         {
             var button = CommandBar[slot];
             if (button is null || button.Availability == ButtonAvailability.Hidden) continue;
             var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
             if (button.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(button.Button.ButtonImage, out _))
-                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, WndColor.White, false, false));
+                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, button.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false) { Grayscale = button.Availability == ButtonAvailability.Restricted });
             // W3DGadgetPushButtonImageDraw: WIN_STATUS_FLASHING lays the pushed overlay over the cameo.
             if (_flashing.Contains(button.Button.Name) && _assets.Images.TryGet("Cameo_push", out _)) commands.Add(new UiImageDraw("Cameo_push", rect, WndColor.White, false, false));
             if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)

@@ -22,8 +22,11 @@ public sealed record UiBorderRect(UiRect Rect, WndColor Color) : UiDrawCommand
 /// <summary>A mapped image by name, stretched to <see cref="Destination"/>; the renderer resolves the name through the mapped image table.</summary>
 public sealed record UiImageDraw(string Image, UiRect Destination, WndColor Tint, bool FlipHorizontal, bool FlipVertical) : UiDrawCommand
 {
+    /// <summary>Drawn in the luminance of its colours (<c>Display::DRAW_IMAGE_GRAYSCALE</c>, the look of a disabled cameo).</summary>
+    public bool Grayscale { get; init; }
+
     public override string ToString()
-        => $"image {Image} {Destination} tint {Tint}{(FlipHorizontal ? " flip-h" : "")}{(FlipVertical ? " flip-v" : "")}";
+        => $"image {Image} {Destination} tint {Tint}{(FlipHorizontal ? " flip-h" : "")}{(FlipVertical ? " flip-v" : "")}{(Grayscale ? " grey" : "")}";
 }
 
 public enum UiTextAlignment

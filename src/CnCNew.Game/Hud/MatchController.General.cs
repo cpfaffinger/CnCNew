@@ -88,7 +88,7 @@ public sealed partial class MatchController
 
     private void RefreshGeneralsWindow()
     {
-        if (_scheme is { } scheme)
+        if (_scheme is { } scheme && _modernBar is null)
             _tree.FindByName("ControlBar.wnd:ButtonGeneral")?.SetEnabledImage0(StarBlinks && _starFlash && _clockMs % 1000 >= 500 ? scheme.GeneralImages.Hilited : scheme.GeneralImages.Enabled);
         if (!IsGeneralsWindowOpen || Generals is not { } view) return;
         Slots(GeneralsRank1, view.Rank1);
@@ -119,12 +119,11 @@ public sealed partial class MatchController
 
         void Cameos(string prefix, ImmutableArray<CommandBarButton?> slots)
         {
-            var grey = new WndColor(110, 110, 110, 255);
             for (var index = 0; index < slots.Length; index++)
             {
                 if (slots[index] is not { } button || button.Button.ButtonImage.Length == 0 || !_assets.Images.TryGet(button.Button.ButtonImage, out _)) continue;
                 var rect = _tree.FindByName(prefix + index.ToString(CultureInfo.InvariantCulture))!.Rect;
-                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, button.IsEnabled || button.Reason == ButtonReason.AlreadyOwned ? WndColor.White : grey, false, false));
+                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, WndColor.White, false, false) { Grayscale = !button.IsEnabled && button.Reason != ButtonReason.AlreadyOwned });
             }
         }
     }
