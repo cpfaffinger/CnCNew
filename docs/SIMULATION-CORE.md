@@ -4687,7 +4687,7 @@ The port does that now (`SimulationWorld.Collision.cs`, `AIUpdateInterface.HeldB
 - A unit counts as under way with a speed of its frame: an order given in the last tick of a frame above 30 Hz belongs to the next frame.
 - `IsNoObstacleOnTheMove`: the bounded avoidance no longer turns a step for a unit on the move, unless that unit comes towards the mover (`calculateMaxBlockedSpeed`: "They are running into us"): the original answers that with `aiMoveAwayFromUnit`, the port still with the turned step. For standing units nothing changed (§23, the detour of `StationaryBlockersAhead`).
 - The new path after two seconds asks with the circles of the units around (`MoversInTheWay`), because the port's path search does not see units.
-- Found by the rate suite on the way: a rider's look at its container (`UpdateEnter`) came only in a tick with a share of a step, so above 30 Hz a boarder that stood through its frame waiting for its path (`movement-budget`) missed it and went in a frame after 30 Hz (`DecidedThisTick`).
+- Found by the rate suite on the way: a rider's look at its container (`UpdateEnter`) came only in a tick with a share of a step, so above 30 Hz a boarder that stood through its frame waiting for its path (`movement-budget`) missed it and went in a frame after 30 Hz (`DecidedThisTick`). With that `ai/skirmish FactionGLA against FactionAmerica` no longer parts and leaves `KnownMovementRateCases`.
 
 Measured on `acc-march`: direction changes above 0.1 radians 2 to 4 per tank (largest 0.114), no sign flip, the tank drives straight at 0.28 to 0.35 units per tick behind the soldiers, who walk at 0.33. The AI match China against GLA on the rate comparison: all compared fields equal over 16,000 frames at 30 and 60 Hz.
 
