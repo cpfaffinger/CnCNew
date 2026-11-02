@@ -72,6 +72,7 @@ internal static class AudioDirectorTests
         harness.Run("Time scale: Eva's wait between two announcements of one event is the same game time at 30, 60 and 120 Hz", EvaLockTimeIsGameTime);
         harness.Run("Music playlist: side filter, silent/unresolved skipped, no immediate repeat", MusicPlaylistBehaviour);
         harness.Run("Director: bus mapping and shouldPlayLocally", DirectorCueDispatch);
+        harness.Run("Director: a looping fire sound is one voice for a stream of shots", DirectorFireLoop);
         harness.Run("Director: rate limiting, unit voice interruption, missing voice keys", DirectorLimitsAndUnitVoices);
         harness.Run("Wiring: CaptureFlash becomes the MiscAudio DefectorTimerTickSound at the building", CaptureFlashTicksAtTheBuilding);
         harness.Run("Wiring: selection, orders, clicks and refusals reach the director", SelectionOrdersAndClicks);
@@ -339,6 +340,11 @@ internal static class AudioDirectorTests
               Sounds = tone
               Type = world everyone
             End
+            AudioEvent GunLoop
+              Sounds = tone
+              Control = loop
+              Type = world everyone
+            End
             AudioEvent WorldPlayerOnly
               Sounds = tone
               Type = world player
@@ -422,6 +428,29 @@ internal static class AudioDirectorTests
             _ => throw new FileNotFoundException(path),
         };
         return new AudioDirector(catalog, fx, eva, Open, mixer, new AudioDirectorOptions { Seed = seed }, ownsMixer: true);
+    }
+
+    private static void DirectorFireLoop()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        using var director = NewDirector(catalog, fx);
+        var view = new FakeView();
+        var shooter = new EntityId(7);
+        void Shot(long tick) => director.Submit([new Presentation.Fx.SoundCue(tick, "GunLoop", Presentation.Fx.SoundCueKind.Effect, new Vector3(10, 10, 0), shooter, view.Human, 1f, 2, "test") { LoopTicks = 30 }], view);
+        Shot(1);
+        director.Tick(view, 0.01);
+        Shot(10);
+        Shot(20);
+        director.Tick(view, 0.01);
+        TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("GunLoop") == 1, "a stream of shots is one voice");
+        view.Tick = 49;
+        director.Tick(view, 0.01);
+        Shot(49);
+        TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("GunLoop") == 1, "a shot before the end carries the voice on");
+        view.Tick = 80;
+        director.Tick(view, 0.01);
+        Shot(81);
+        TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("GunLoop") == 2, "after the time of the last shot it has stopped and a new shot starts it");
     }
 
     private static void DirectorCueDispatch()

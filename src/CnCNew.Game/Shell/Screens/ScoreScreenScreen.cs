@@ -19,6 +19,9 @@ public sealed class ScoreScreenScreen : ShellScreen
 {
     private readonly MatchResult _result;
 
+    /// <summary>The faction of the first player of this machine; none for a watcher.</summary>
+    public string? ViewerFaction => _result.Rows.FirstOrDefault(row => !row.Player.IsComputer)?.Player.Faction;
+
     public ScoreScreenScreen(GameShell shell, MatchResult result) : base(shell, ShellLayoutNames.ScoreScreen)
     {
         _result = result;

@@ -657,6 +657,8 @@ internal static class HudTests
         var bomb = Press(terrorist, "Command_GLAInfantryTerroristMakeCarBomb");
         TestHarness.Assert(commands.Activate(world, bomb.Button, [terrorist]) == ActivationResult.EnteredMode && commands.CompleteTarget(world, car, null), "the terrorist goes for the car");
         Until(() => car.HasStatus(ObjectStatusBits.Index("IS_CARBOMB")), "and the car is a bomb");
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Overlay.Icons.Any(icon => icon.Entity == car.Id), "the owner sees the bomb over the car (drawBombed)");
 
         // Sabotage: an enemy building.
         var saboteur = Spawn("GLAInfantrySaboteur", match.Human, -60, 120);

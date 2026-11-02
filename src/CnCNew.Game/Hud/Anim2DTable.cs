@@ -47,6 +47,17 @@ public sealed class Anim2DTable
         return table;
     }
 
+    /// <summary>
+    /// The clock of a timed bomb: <c>ICON_BOMB_TIMED</c> has a picture per second, and <c>setMinFrame(numFrames - seconds - 1)</c> starts it at the seconds that are left; a longer
+    /// fuse waits at the first picture. Null when the data has no such animation.
+    /// </summary>
+    public string? CountdownFrame(string name, long secondsLeft)
+    {
+        if (!_templates.TryGetValue(name, out var template) || template.Images.IsEmpty) return null;
+        var pictures = template.Images.Length;
+        return template.Images[pictures - 1 - (int)Math.Clamp(secondsLeft, 0, pictures - 1)];
+    }
+
     /// <summary>The image of an animation at a time in milliseconds, its start moved by <paramref name="phase"/>; null when the data has no such animation.</summary>
     public string? FrameAt(string name, long clockMs, uint phase)
     {

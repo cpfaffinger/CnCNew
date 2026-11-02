@@ -1029,6 +1029,19 @@ public sealed class GameShell
         return lookChanged;
     }
 
+    /// <summary>
+    /// The track a load or a score screen of the shell plays: the viewer's <c>LoadScreen.cpp</c> and <c>ScoreScreen.cpp</c>, "FactionObserver" for who has no faction. Null elsewhere.
+    /// </summary>
+    public string? ScreenMusic => (_stack.Count == 0 ? null : CurrentScreen) switch
+    {
+        LoadingScreen when _pendingMatchSetup is { } setup => MusicOf(setup.HumanFaction)?.LoadScreen,
+        ScoreScreenScreen score => MusicOf(score.ViewerFaction)?.ScoreScreen,
+        _ => null,
+    };
+
+    private CnCNew.Presentation.Fx.FactionMusic? MusicOf(string? faction)
+        => Data.Fx.FactionMusics.GetValueOrDefault(string.IsNullOrEmpty(faction) ? "FactionObserver" : faction);
+
     internal void BeginMatchLoading(MatchSetup setup)
     {
         _pendingMatchSetup = setup;

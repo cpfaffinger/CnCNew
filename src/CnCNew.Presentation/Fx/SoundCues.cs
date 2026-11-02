@@ -16,7 +16,11 @@ public enum SoundCueKind { Effect, Voice, Eva, Music, UiSound }
 /// <see cref="Tick"/> is the simulation tick of the event (ticks of the world's rate).
 /// </summary>
 public sealed record SoundCue(long Tick, string EventName, SoundCueKind Kind, Vector3? Position, EntityId Entity, PlayerId Player, float Volume,
-    int Priority, string Origin);
+    int Priority, string Origin)
+{
+    /// <summary><c>FiringTracker::shotFired</c>, a weapon with <c>FireSoundLoopTime</c>: the sound of the entity goes on for this many ticks after this shot, one voice for a stream of shots.</summary>
+    public long LoopTicks { get; init; }
+}
 
 /// <summary>
 /// Derives audio requests from simulation events, following the reference call sites (see <c>docs/PRESENTATION-FX.md</c> for the rule
@@ -43,7 +47,10 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
         {
             case SimEventKind.WeaponFired:
                 if (catalog.FindWeapon(simEvent.Text) is { } weapon && FxCatalog.IsAudible(weapon.FireSound) && view.GetPose(simEvent.Entity) is { } shooter)
+                {
                     Add(output, tick, weapon.FireSound!, SoundCueKind.Effect, shooter.Position, simEvent.Entity, shooter.Owner, "Weapon.FireSound");
+                    if (weapon.FireSoundLoopFrames > 0) output[^1] = output[^1] with { LoopTicks = time.OriginalFrames(weapon.FireSoundLoopFrames) };
+                }
                 break;
             case SimEventKind.VoiceFearRequested:
                 ObjectSound(output, simEvent, simEvent.Entity, view, "VoiceFear", SoundCueKind.Voice);
@@ -228,7 +235,7 @@ public sealed class SoundCueRateLimiter(SoundCueLimits limits)
             }
             if (!_recent.TryGetValue(cue.EventName, out var times)) _recent[cue.EventName] = times = new Queue<long>();
             while (times.Count > 0 && times.Peek() <= frame - Limits.WindowFrames) times.Dequeue();
-            if (times.Count >= Limits.MaxPerEventName) { DroppedByRate++; continue; }
+            if (times.Count >= Limits.MaxPerEventName && cue.LoopTicks == 0) { DroppedByRate++; continue; }
             if (_acceptedThisFrame >= Limits.MaxPerFrame) { DroppedByFrameCap++; continue; }
             times.Enqueue(frame);
             _acceptedThisFrame++;

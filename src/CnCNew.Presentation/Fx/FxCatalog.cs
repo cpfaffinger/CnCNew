@@ -8,6 +8,9 @@ namespace CnCNew.Presentation.Fx;
 /// <c>VeterancyLevel</c> (REGULAR, VETERAN, ELITE, HEROIC); <c>FireFX</c> fills all four (<c>parseAllVetLevelsFXList</c>), a later
 /// <c>VeterancyFireFX = LEVEL name</c> overrides one (<c>parsePerVetLevelFXList</c>). <see cref="WeaponSpeed"/> is distance per frame.
 /// </summary>
+/// <summary>A <c>PlayerTemplate</c>'s <c>LoadScreenMusic</c> and <c>ScoreScreenMusic</c>.</summary>
+public sealed record FactionMusic(string? LoadScreen, string? ScoreScreen);
+
 public sealed record WeaponFxInfo(
     string Name,
     ImmutableArray<string?> FireFx,
@@ -17,7 +20,8 @@ public sealed record WeaponFxInfo(
     float WeaponSpeed,
     float PrimaryDamageRadius,
     float AttackRange,
-    string DamageType)
+    string DamageType,
+    long FireSoundLoopFrames = 0)
 {
     /// <summary><c>WeaponTemplate::isContactWeapon</c> with <c>RATIONALIZE_ATTACK_RANGE</c>: range minus a quarter cell below one cell (10).</summary>
     public bool IsContact => AttackRange - 2.5f < 10f;
@@ -110,6 +114,9 @@ public sealed class FxCatalog
     /// <summary>The reference skips empty event names and <c>NoSound</c> (<c>Weapon.cpp</c> FireSound check, <c>AudioEventRTS</c>).</summary>
     public static bool IsAudible(string? name) => !string.IsNullOrEmpty(name) && !name.Equals("NoSound", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The music of each <c>PlayerTemplate</c>, by name.</summary>
+    public ImmutableSortedDictionary<string, FactionMusic> FactionMusics { get; private init; } = ImmutableSortedDictionary<string, FactionMusic>.Empty;
+
     /// <summary>Builds the catalog from a compiled graph. Parsing never throws for data problems; they end up in <see cref="Diagnostics"/>.</summary>
     public static FxCatalog Build(CompiledDefinitionGraph graph)
     {
@@ -124,6 +131,7 @@ public sealed class FxCatalog
         var powers = ImmutableSortedDictionary.CreateBuilder<string, NamedSounds>(Names);
         var misc = ImmutableSortedDictionary.CreateBuilder<string, string>(Names);
         var audio = ImmutableSortedDictionary.CreateBuilder<string, AudioEventInfo>(Names);
+        var music = ImmutableSortedDictionary.CreateBuilder<string, FactionMusic>(Names);
         GameDefinition? gameData = null;
 
         foreach (var definition in graph.Definitions)
@@ -154,6 +162,9 @@ public sealed class FxCatalog
                 case AudioEventDefinition sound:
                     audio[sound.OriginalName] = ParseAudioEvent(sound);
                     break;
+                case FactionDefinition faction:
+                    music[faction.OriginalName] = new FactionMusic(Token(faction, "LoadScreenMusic"), Token(faction, "ScoreScreenMusic"));
+                    break;
                 case GlobalDataDefinition global when global.Id.Kind == DefinitionKind.GameData:
                     gameData = global;
                     break;
@@ -167,6 +178,7 @@ public sealed class FxCatalog
         var catalog = new FxCatalog
         {
             FxLists = fxLists.ToImmutable(),
+            FactionMusics = music.ToImmutable(),
             ParticleSystems = particles.ToImmutable(),
             Weapons = weapons.ToImmutable(),
             Objects = objects.ToImmutable(),
@@ -213,6 +225,7 @@ public sealed class FxCatalog
         var detonation = new string?[4];
         string? sound = null, projectile = null, damageType = null;
         float speed = 0f, radius = 0f, range = 0f;
+        long soundLoop = 0;
         foreach (var field in weapon.Fields)
         {
             var tokens = FxValueReader.Tokens(field.Value.OriginalText);
@@ -223,6 +236,8 @@ public sealed class FxCatalog
                 case "veterancyfirefx": FillVeterancy(fire, tokens, read, field.Name, field.Value.OriginalText); break;
                 case "veterancyprojectiledetonationfx": FillVeterancy(detonation, tokens, read, field.Name, field.Value.OriginalText); break;
                 case "firesound": sound = tokens.FirstOrDefault(); break;
+                // INI::parseDurationUnsignedInt: milliseconds into logic frames of the original, rounded up.
+                case "firesoundlooptime": soundLoop = (long)MathF.Ceiling(read.Real(field.Name, field.Value.OriginalText, 0f) * Data.OriginalFrame.PerSecond / 1000f); break;
                 case "projectileobject": projectile = tokens.FirstOrDefault(); break;
                 case "weaponspeed": speed = read.VelocityPerFrame(field.Name, field.Value.OriginalText, 0f); break;
                 case "primarydamageradius": radius = read.Real(field.Name, field.Value.OriginalText, 0f); break;
@@ -231,7 +246,7 @@ public sealed class FxCatalog
             }
         }
         return new WeaponFxInfo(weapon.OriginalName, [..fire], [..detonation], sound, IsNamed(projectile) ? projectile : null, speed, radius,
-            range, damageType ?? "EXPLOSION");
+            range, damageType ?? "EXPLOSION", soundLoop);
     }
 
     private static void Fill(string?[] levels, int level, string? name)

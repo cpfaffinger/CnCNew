@@ -341,6 +341,7 @@ internal static class MatchAnalysisTests
         TestHarness.Assert(screen.Page == MatchAnalysisScreen.PageTitles.Length - 1, "Previous page from the first is the last");
         ShellTestInput.Click(shell, "ScoreScreen.wnd:ButtonOk");
         TestHarness.Assert(shell.CurrentScreen is ScoreScreenScreen, "OK leads back to the score screen");
+        TestHarness.Assert(shell.ScreenMusic is { Length: > 0 }, "the score screen has the music of the viewer's side");
 
         // From the replay list: the analysis is computed first, a piece every frame, with its progress in the header.
         shell.Replays!.Save("Analysed", played.File);

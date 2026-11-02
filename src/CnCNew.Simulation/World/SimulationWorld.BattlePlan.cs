@@ -112,6 +112,11 @@ public sealed partial class SimulationWorld
         }
     }
 
+    /// <summary><c>Player::doesObjectQualifyForBattlePlan</c>: whether a plan of its owner is working on this object.</summary>
+    public bool QualifiesForBattlePlan(Entity entity)
+        => _players.TryGetValue(entity.Owner.Value, out var owner) && owner.BattlePlan is { } state
+           && state.ValidKindOf.Any(entity.Template.IsKindOf) && !state.InvalidKindOf.Any(entity.Template.IsKindOf);
+
     /// <inheritdoc cref="IWorldServices.BattlePlansActive"/>
     public int BattlePlansActive(PlayerId player, BattlePlanKind plan)
         => _players.TryGetValue(player.Value, out var owner) && owner.BattlePlan is { } state

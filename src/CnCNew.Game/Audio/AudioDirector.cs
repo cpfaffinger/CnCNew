@@ -17,7 +17,7 @@ using AudioEventInfo = CnCNew.Audio.Catalog.AudioEventInfo;
 namespace CnCNew.Game.Audio;
 
 /// <summary>Which order a unit acknowledges (<c>Object</c> voice keys <c>VoiceMove</c>, <c>VoiceAttack</c>, ...).</summary>
-public enum UnitVoiceKind { Move, Attack, Guard, Enter, Garrison }
+public enum UnitVoiceKind { Move, Attack, AttackAir, Guard, Enter, Garrison }
 
 /// <param name="Seed">Seed of the director's own generator (sound variations, Eva picks, playlist shuffle); not the simulation's.</param>
 /// <param name="CueLimits">Flood protection applied to derived cues before they are resolved (see <see cref="SoundCueRateLimiter"/>).</param>
@@ -342,6 +342,7 @@ public sealed partial class AudioDirector : IDisposable
         _now += Math.Max(0, dt);
         PruneTracked();
         if (view is not null && !_paused) UpdateEva(view);
+        if (view is not null) StopFireLoops(view.Clock.Tick);
         UpdateMusic();
         SyncBuses();
     }
@@ -470,7 +471,30 @@ public sealed partial class AudioDirector : IDisposable
             return;
         }
 
+        if (cue.LoopTicks > 0 && cue.Entity.IsValid)
+        {
+            // FiringTracker::shotFired: "If the sound has stopped playing, then we need to re-add it."
+            var (handle, _) = _fireLoops.GetValueOrDefault(cue.Entity);
+            if (!_tracked.Exists(voice => voice.Handle == handle)) handle = Play(AudioSource.Simulation, info, position, null, null);
+            _fireLoops[cue.Entity] = (handle, cue.Tick + cue.LoopTicks);
+            return;
+        }
+
         Play(AudioSource.Simulation, info, position, cue.Kind == SoundCueKind.Voice ? AudioBus.Voice : null, null);
+    }
+
+    // The looping fire sounds: per object its voice and the tick it stops at (m_frameToStopLoopingSound).
+    private readonly Dictionary<EntityId, (VoiceHandle Handle, long StopTick)> _fireLoops = [];
+
+    /// <summary><c>FiringTracker::update</c>: "Time to stop the sound."</summary>
+    private void StopFireLoops(long tick)
+    {
+        if (_fireLoops.Count == 0) return;
+        foreach (var (entity, loop) in _fireLoops.Where(pair => tick >= pair.Value.StopTick).ToArray())
+        {
+            _mixer.Stop(loop.Handle);
+            _fireLoops.Remove(entity);
+        }
     }
 
     /// <summary>Starts the event for <paramref name="source"/> and books the result: a started voice is tracked until the mixer drops it, anything else is a counted drop.</summary>
@@ -607,6 +631,7 @@ public sealed partial class AudioDirector : IDisposable
     {
         UnitVoiceKind.Move => "VoiceMove",
         UnitVoiceKind.Attack => "VoiceAttack",
+        UnitVoiceKind.AttackAir => "VoiceAttackAir",
         UnitVoiceKind.Guard => "VoiceGuard",
         UnitVoiceKind.Enter => "VoiceEnter",
         UnitVoiceKind.Garrison => "VoiceGarrison",
@@ -794,6 +819,16 @@ public sealed partial class AudioDirector : IDisposable
         _musicDead = false;
         var track = _catalog.Find("Shell");
         if (track is null || !StartTrack(track, loop: true)) _musicDead = true;
+    }
+
+    /// <summary>A load or score screen's own track (<c>LoadScreenMusic</c>, <c>ScoreScreenMusic</c>) over whatever plays: <c>setShouldFade</c>, once.</summary>
+    public void PlayScreenMusic(string eventName)
+    {
+        _musicMode = MusicMode.None;
+        _playlist = null;
+        _musicDead = false;
+        if (_catalog.Find(eventName) is { } track) StartTrack(track, loop: false);
+        else _unresolved[eventName] = _unresolved.GetValueOrDefault(eventName) + 1;
     }
 
     /// <summary>Starts the shuffled in-game tracks of <paramref name="side"/> (for example <c>America</c>); the next track follows after a gap.</summary>

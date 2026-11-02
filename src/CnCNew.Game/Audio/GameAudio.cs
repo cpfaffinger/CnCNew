@@ -8,6 +8,7 @@ using CnCNew.Presentation.Fx;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Templates;
 using CnCNew.Ui.Settings;
 
 namespace CnCNew.Game.Audio;
@@ -63,6 +64,18 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
     public long PlayMovieSound(CnCNew.Video.BinkSound sound) => Director.PlayMovieSound(sound);
 
     public void StopMovieSound(long handle) => Director.StopMovieSound(handle);
+
+    private string? _screenMusic;
+
+    /// <summary>What the shell's load or score screen wants to hear; when it wants nothing any more the menu theme comes back.</summary>
+    public void FollowScreenMusic(string? eventName)
+    {
+        if (eventName == _screenMusic) return;
+        var ended = _screenMusic is not null;
+        _screenMusic = eventName;
+        if (eventName is not null) Director.PlayScreenMusic(eventName);
+        else if (ended && _live is null) Director.PlayMenuMusic();
+    }
 
     /// <summary>The shell is on screen: the menu theme plays (looped) until a game is attached.</summary>
     public void EnterShell()
@@ -219,7 +232,8 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
         UnitVoiceKind? voice = feedback.Kind switch
         {
             FeedbackKind.MoveMarker or FeedbackKind.WaypointMarker => UnitVoiceKind.Move,
-            FeedbackKind.AttackMarker => UnitVoiceKind.Attack,
+            // CommandXlat: "info.m_air = targetObj->isUsingAirborneLocomotor()".
+            FeedbackKind.AttackMarker => _live?.World.FindEntity(feedback.Target)?.Template.Locomotor is { } flies && (flies.Surfaces & LocomotorSurfaces.Air) != 0 ? UnitVoiceKind.AttackAir : UnitVoiceKind.Attack,
             FeedbackKind.EnterMarker => UnitVoiceKind.Enter,
             _ => null,
         };

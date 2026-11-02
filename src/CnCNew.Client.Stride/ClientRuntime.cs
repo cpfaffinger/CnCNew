@@ -697,6 +697,7 @@ internal sealed class ClientRuntime : IDisposable
             if (width > 0 && height > 0 && (_shell.Viewport.Width != width || _shell.Viewport.Height != height)) _shell.Resize(width, height);
             foreach (var inputEvent in events) _shell.HandleInput(inputEvent);
             _shell.Update(seconds);
+            _audio.Game.FollowScreenMusic(_shell.ScreenMusic);
             foreach (var output in _shell.DrainOutputs()) Carry(output);
             FollowTextFocus(input, _running is null && _shell.WantsTextInput, fixedSeconds, events);
             StepNetLoad();
