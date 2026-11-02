@@ -188,6 +188,7 @@ public sealed class MatchAnalysisScreen : ShellScreen
         private WndColor Plate => skin.IsModern ? skin.Style.Palette.Panel : MatchAnalysisScreen.Plate;
         private WndColor Shadow => skin.IsModern ? skin.Style.Palette.Shadow : MatchAnalysisScreen.Shadow;
         private WndColor Field => skin.IsModern ? skin.Style.Palette.Canvas : new WndColor(25, 25, 25, 255);
+        private bool Modern => skin.IsModern;
 
         private static WndColor Color(int rgb, int alpha = 255) => new((byte)AnalysisPalette.Red(rgb), (byte)AnalysisPalette.Green(rgb), (byte)AnalysisPalette.Blue(rgb), (byte)alpha);
 
@@ -199,6 +200,11 @@ public sealed class MatchAnalysisScreen : ShellScreen
 
         public void Page(MatchAnalysis analysis, int page, int scroll)
         {
+            if (skin.IsModern)
+            {
+                ModernPage(analysis, page, scroll);
+                return;
+            }
             Fill(area, Plate);
             var timelines = AnalysisCharts.Timelines(analysis);
             TimelineChart Chart(string key) => timelines.First(chart => chart.Key == key);
@@ -224,7 +230,7 @@ public sealed class MatchAnalysisScreen : ShellScreen
                     Exchange(analysis, lower);
                     break;
                 case 4:
-                    Maps(analysis);
+                    Maps(analysis, area);
                     break;
                 default:
                     Timeline(Chart("commands"), upper);
@@ -232,6 +238,128 @@ public sealed class MatchAnalysisScreen : ShellScreen
                     break;
             }
             if (page != 4) Legend(analysis, new UiRect(area.X, area.Bottom - S(22), area.Width, S(22)));
+        }
+
+        /// <summary>
+        /// A page of the modern skin: the six pages as a row of tabs, the charts on cards of their own, the legend once under them, the lines in colours that read on the dark card
+        /// (docs/UI-MODERN.md section 16).
+        /// </summary>
+        private void ModernPage(MatchAnalysis analysis, int page, int scroll)
+        {
+            var palette = skin.Style.Palette;
+            var tabHeight = measure.LineHeight(Small) + S(10);
+            var width = area.Width / PageTitles.Length;
+            for (var index = 0; index < PageTitles.Length; index++)
+            {
+                var tab = new UiRect(area.X + index * width, area.Y, width, tabHeight);
+                var active = index == page;
+                if (active) Fill(tab, palette.Selected);
+                Fill(new UiRect(tab.X, tab.Bottom - Math.Max(1, S(2)), tab.Width, Math.Max(1, S(2))), active ? palette.Accent : palette.Border);
+                Centered(PageTitles[index].Split(' ')[0], Small, active ? palette.Text : palette.Muted, tab.X + width / 2, tab.Y + S(4));
+            }
+            var legendHeight = page == 4 ? 0 : measure.LineHeight(Small) + S(8);
+            var gap = S(8);
+            var content = UiRect.FromEdges(area.X, area.Y + tabHeight + gap, area.Right, area.Bottom - legendHeight);
+            var half = (content.Height - gap) / 2;
+            var upper = content with { Height = half };
+            var lower = UiRect.FromEdges(content.X, content.Y + half + gap, content.Right, content.Bottom);
+            var timelines = AnalysisCharts.Timelines(analysis);
+            TimelineChart Chart(string key) => timelines.First(chart => chart.Key == key);
+            switch (page)
+            {
+                case 0:
+                    ModernTimeline(Chart("money"), upper);
+                    ModernTimeline(Chart("income"), lower);
+                    break;
+                case 1:
+                    ModernTimeline(Chart("army"), upper);
+                    ModernTimeline(Chart("regions"), lower);
+                    break;
+                case 2:
+                    ModernTimeline(Chart("spent"), upper);
+                    ModernTimeline(Chart("lost"), lower);
+                    break;
+                case 3:
+                    Card(upper);
+                    Compositions(analysis, upper.Inset(S(4)));
+                    Card(lower);
+                    Exchange(analysis, lower.Inset(S(4)));
+                    break;
+                case 4:
+                    Card(content);
+                    Maps(analysis, content.Inset(S(8)));
+                    break;
+                default:
+                    ModernTimeline(Chart("commands"), upper);
+                    Card(lower);
+                    Events(analysis, lower.Inset(S(4)), scroll);
+                    break;
+            }
+            if (page != 4) ModernLegend(analysis, new UiRect(area.X, content.Bottom + S(6), area.Width, measure.LineHeight(Small)));
+        }
+
+        private void Card(UiRect rect)
+        {
+            Fill(rect, CnCNew.Ui.Skins.ModernLayout.Well);
+            commands.Add(new UiBorderRect(rect, skin.Style.Palette.Border));
+        }
+
+        private WndColor Line(int rgb) => CnCNew.Ui.Skins.ModernLayout.Readable(Color(rgb));
+
+        private void ModernLegend(MatchAnalysis analysis, UiRect row)
+        {
+            var x = row.X;
+            var height = measure.LineHeight(Small);
+            foreach (var player in analysis.Players)
+            {
+                var label = AnalysisCharts.LabelOf(player);
+                Fill(new UiRect(x, row.Y + height / 2 - S(1), S(14), Math.Max(2, S(3))), Line(player.ColorRgb));
+                Text(label, Small, Ink, x + S(18), row.Y);
+                x += S(18) + measure.MeasureWidth(label, Small) + S(18);
+                if (x > row.Right - S(60)) break;
+            }
+        }
+
+        private void ModernTimeline(TimelineChart chart, UiRect box)
+        {
+            Card(box);
+            var palette = skin.Style.Palette;
+            var labelHeight = measure.LineHeight(Small);
+            var left = box.X + S(60);
+            var right = box.Right - S(16);
+            var top = box.Y + S(6) + measure.LineHeight(Bold) + labelHeight / 2 + S(2);
+            var bottom = box.Bottom - labelHeight - S(8);
+            var width = right - left;
+            var height = Math.Max(1, bottom - top);
+            Text(chart.Title, Bold, Ink, box.X + S(10), box.Y + S(5));
+            foreach (var step in chart.Ticks)
+            {
+                var y = bottom - step * height / chart.MaxY;
+                Line(left, y, right, y, step == 0 ? palette.Muted : palette.Border);
+                Right(AnalysisCharts.Number(step), Small, palette.Muted, left - S(6), (int)y - labelHeight / 2);
+            }
+            foreach (var second in MatchReport.TimeSteps(chart.MaxX))
+            {
+                var x = left + (int)(second * width / chart.MaxX);
+                Line(x, bottom, x, bottom + S(3), palette.Muted);
+                Centered(AnalysisCharts.Time(second), Small, palette.Muted, x, bottom + S(5));
+            }
+            foreach (var series in chart.Series)
+            {
+                var color = Line(series.ColorRgb);
+                for (var index = 1; index < series.Points.Length; index++)
+                {
+                    var (x0, y0) = series.Points[index - 1];
+                    var (x1, y1) = series.Points[index];
+                    Line(left + Math.Min(x0, chart.MaxX) * width / chart.MaxX, bottom - y0 * height / chart.MaxY,
+                        left + Math.Min(x1, chart.MaxX) * width / chart.MaxX, bottom - y1 * height / chart.MaxY, color, 2);
+                }
+                if (series.Points.IsDefaultOrEmpty) continue;
+                // Where a line ends: its last value at a glance.
+                var (lastX, lastY) = series.Points[^1];
+                var dot = Math.Max(3, S(3));
+                Fill(new UiRect((int)(left + Math.Min(lastX, chart.MaxX) * width / chart.MaxX) - dot, (int)(bottom - lastY * height / chart.MaxY) - dot, 2 * dot, 2 * dot), color);
+            }
         }
 
         private void Legend(MatchAnalysis analysis, UiRect row)
@@ -289,7 +417,7 @@ public sealed class MatchAnalysisScreen : ShellScreen
             {
                 var chart = charts[index];
                 var top = box.Y + S(20) + index * rowHeight;
-                Text(chart.Label, Small, Color(chart.ColorRgb), box.X + S(8), top + rowHeight / 2 - S(6));
+                Text(chart.Label, Small, Modern ? Line(chart.ColorRgb) : Color(chart.ColorRgb), box.X + S(8), top + rowHeight / 2 - S(6));
                 var bar = Math.Max(1, width / Math.Max(1, chart.Bars.Length));
                 foreach (var item in chart.Bars)
                 {
@@ -327,15 +455,15 @@ public sealed class MatchAnalysisScreen : ShellScreen
             }
         }
 
-        private void Maps(MatchAnalysis analysis)
+        private void Maps(MatchAnalysis analysis, UiRect box)
         {
             var size = MatchAnalysis.HeatGridSize;
-            var side = Math.Min((area.Width - S(48)) / 2, area.Height - S(48)) / size * size;
+            var side = Math.Min((box.Width - S(48)) / 2, box.Height - S(48)) / size * size;
             var cell = side / size;
-            var top = area.Y + S(22);
-            var lefts = new[] { area.X + area.Width / 4 - side / 2, area.X + area.Width * 3 / 4 - side / 2 };
-            Text("Movement: whose army stood where", Bold, Ink, lefts[0], area.Y + S(2));
-            Text("Fights: where units and buildings died", Bold, Ink, lefts[1], area.Y + S(2));
+            var top = box.Y + S(22);
+            var lefts = new[] { box.X + box.Width / 4 - side / 2, box.X + box.Width * 3 / 4 - side / 2 };
+            Text("Movement: whose army stood where", Bold, Ink, lefts[0], box.Y + S(2));
+            Text("Fights: where units and buildings died", Bold, Ink, lefts[1], box.Y + S(2));
             foreach (var left in lefts) Fill(new UiRect(left, top, side, side), Field);
             var movement = AnalysisCharts.MovementMap(analysis);
             var fights = AnalysisCharts.FightsMap(analysis);
@@ -356,7 +484,7 @@ public sealed class MatchAnalysisScreen : ShellScreen
                 Line(x - r, y, x + r, y, color, 2);
                 Line(x, y - r, x, y + r, color, 2);
             }
-            Text("North is up; a sample every 5 s of game time. A cross marks a superweapon strike.", Small, Muted, area.X + S(8), top + side + S(6));
+            Text("North is up; a sample every 5 s of game time. A cross marks a superweapon strike.", Small, Muted, box.X + S(8), top + side + S(6));
         }
 
         private void Events(MatchAnalysis analysis, UiRect box, int scroll)
