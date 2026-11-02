@@ -4833,3 +4833,11 @@ A list of the keys of the compatibility baseline that no code names found these;
 **A transport comes with its payload** (`InitialPayload`, `TransportContain::createPayload`): the key was read for a bike's rider only, so a Troop Crawler came out of the factory without its eight Red Guards. The riders exist a frame after the transport and sit in it a frame later, as the bike's rider does. The keys of the catalogue are typed now.
 
 **A second life wears its armour** (`ArmorSet Conditions = SECOND_LIFE`).
+### 78.7 Orders a player could not give
+
+`MoveAndEnterCommand` is `MSG_ENTER` now in full: an object that is no container for the actor but that one of its collide modules would like to touch is approached (`AIUpdateInterface.OrderApproachGoal` from a player) and the module acts on arrival. `SimulationWorld.CollideEntryOf` is `ActionManager::canHijackVehicle`, `canConvertObjectToCarBomb` and `canSabotageBuilding`: the target alive and seen, hijacking and sabotage only of enemies, a hijacker not at aircraft or drones, and last the module's `WouldLikeToCollideWith` (`ICollideModule.Entry` names which of the three it is). `HackInternetCommand` is `MSG_INTERNET_HACK`. Scripts and tests could do all of this; a player could not. No new version: the command code 42 falls into the same unreleased `CommandTypes.Version` 23 and replay 22.
+
+### 78.8 F-109: the creation list of a shot
+
+`FireOCL` was typed nowhere: every poison cloud, radiation field and firestorm of the shipped data stayed out, because those weapons do nothing but make an object. `SimulationWorld.FireWeaponAt` now makes the list at the object that fires, as `WeaponTemplate::fireWeaponTemplate` does before the scatter; a weapon that is fired by what it hits (a missile's historic bonus, a death weapon) makes it there. The test of the firestorm of Phase 56 had used a weapon of damage in its place and passed; the machine check of the scene `acc-firestorm` found it, which is why the five new scenes have checks of their own (`AcceptanceAudit`) and why that scene flies five MiGs: `HistoricBonusCount` is 8 within three seconds.
+
