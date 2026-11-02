@@ -204,7 +204,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 (WeaponLockKind)checked((byte)reader.Int("lock"))),
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
-            CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack")),
+            CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack"), reader.Has("fromPlayer")),
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
                 new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
@@ -1004,7 +1004,8 @@ public sealed record SetMineClearingCommand(PlayerId Player, ulong Sequence, lon
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }
 
-public sealed record GroupMoveCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, bool Attack) : SimCommand(Player, Sequence, Tick)
+/// <param name="FromPlayer"><c>CMD_FROM_PLAYER</c>: a click, not a script; only a click into the group's own area gathers it (<c>m_groupMoveClickToGatherFactor</c>).</param>
+public sealed record GroupMoveCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, bool Attack, bool FromPlayer = false) : SimCommand(Player, Sequence, Tick)
 {
     /// <summary>Own limit: more units than this in one order are refused (a selection of the original holds far fewer; the bound keeps a hostile command small).</summary>
     public const int MaxUnits = 1024;
@@ -1024,6 +1025,7 @@ public sealed record GroupMoveCommand(PlayerId Player, ulong Sequence, long Tick
         writer.Fixed("x", X);
         writer.Fixed("y", Y);
         writer.Bool("attack", Attack);
+        if (FromPlayer) writer.Bool("fromPlayer", true);
     }
 
     // The unit list is compared by content: two commands with the same members are the same command (a replay or a snapshot reads its own array).

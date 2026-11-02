@@ -527,6 +527,8 @@ public sealed class TemplateCatalog
             BeaconTemplates = [..factions.Factions.Select(faction => faction.BeaconName).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),
+            GroupGatherFactor = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
+                .LastOrDefault(field => field.Name.Equals("GroupMoveClickToGatherAreaFactor", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal gather ? Fixed.FromDecimal(gather) : Fixed.One,
             LowEnergy = ResolveLowEnergy(graph),
             BuildSite = ResolveBuildSite(graph),
             SpecialPowerViewObject = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
@@ -583,6 +585,9 @@ public sealed class TemplateCatalog
     /// (<c>PhysicsBehavior::handleBounce</c>, clamped to 0.01-0.99 there; F-63, docs/SHOCK-WAVE.md).
     /// </summary>
     public Fixed GroundStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
+
+    /// <summary><c>GroupMoveClickToGatherAreaFactor</c>: the share of a group's bounding box a click must fall into to gather the group (1 without the key).</summary>
+    public Fixed GroupGatherFactor { get; private init; } = Fixed.One;
 
     /// <summary><c>AllowedHeightVariationForBuilding</c>, <c>MinDistFromEdgeOfMapForBuild</c> and <c>SupplyBuildBorder</c> of <c>GameData</c> (F-18).</summary>
     public BuildSiteRules BuildSite { get; private init; } = BuildSiteRules.None;

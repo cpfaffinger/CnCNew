@@ -354,7 +354,7 @@ public sealed class CommandModeController
         if (movable.Length == 1) return attack ? AttackMove(movable[0], ground) : Move(world, movable[0], ground);
         var (x, y) = (SimulationQueries.ToFixed(ground.X), SimulationQueries.ToFixed(ground.Y));
         ImmutableArray<EntityId> ids = [..movable.Select(unit => unit.Id)];
-        return Issue((sequence, tick) => new GroupMoveCommand(Player, sequence, tick, ids, x, y, attack)).Accepted;
+        return Issue((sequence, tick) => new GroupMoveCommand(Player, sequence, tick, ids, x, y, attack, FromPlayer: true)).Accepted;
     }
 
     private bool Move(SimulationWorld world, Entity unit, Vector3 ground)

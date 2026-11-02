@@ -69,6 +69,34 @@ internal static partial class Tests
                 Check.That(Apart(units[first], units[second]), $"Units {first} and {second} do not stand inside each other.");
     }
 
+    /// <summary><c>groupTightenToPosition</c>: a click into the group's own area gathers it; a click outside keeps the offsets, and so does a script's order.</summary>
+    public static void AClickIntoTheGroupGathersIt()
+    {
+        foreach (var rate in new[] { SimulationRate.FromTicksPerSecond(30), SimulationRate.FromTicksPerSecond(60), SimulationRate.FromTicksPerSecond(120) })
+        {
+            var (world, _, _, units) = GroupMoveWorld(rate, (100, 100), (160, 100), (100, 160), (160, 160));
+            Check.That(world.Submit(new GroupMoveCommand(new PlayerId(1), 1000, world.Tick, [..units.Select(unit => unit.Id)], Fixed.FromInt(130), Fixed.FromInt(130), false, FromPlayer: true)).Accepted, $"{rate}: the click is accepted.");
+            world.Step();
+            foreach (var unit in units)
+            {
+                var (dx, dy) = (unit.MoveTargetX - Fixed.FromInt(130), unit.MoveTargetY - Fixed.FromInt(130));
+                Check.That(dx.Abs() <= Fixed.FromInt(25) && dy.Abs() <= Fixed.FromInt(25), $"{rate}: every member goes for the click ({unit.MoveTargetX}, {unit.MoveTargetY}).");
+            }
+            Check.That(units.Select(unit => (unit.MoveTargetX, unit.MoveTargetY)).Distinct().Count() == 4, $"{rate}: each to a place of its own.");
+
+            (world, _, _, units) = GroupMoveWorld(rate, (100, 100), (160, 100), (100, 160), (160, 160));
+            Check.That(GroupMove(world, units, 130, 130).Accepted, $"{rate}: a script's order is accepted.");
+            world.Step();
+            Check.That(units.Any(unit => (unit.MoveTargetX - Fixed.FromInt(130)).Abs() >= Fixed.FromInt(30) || (unit.MoveTargetY - Fixed.FromInt(130)).Abs() >= Fixed.FromInt(30)), $"{rate}: it keeps the offsets.");
+
+            // The factor of the fixture is 1 (the key is not there): the whole box gathers. A click outside it does not.
+            (world, _, _, units) = GroupMoveWorld(rate, (100, 100), (160, 100), (100, 160), (160, 160));
+            Check.That(world.Submit(new GroupMoveCommand(new PlayerId(1), 1000, world.Tick, [..units.Select(unit => unit.Id)], Fixed.FromInt(400), Fixed.FromInt(400), false, FromPlayer: true)).Accepted, $"{rate}: a click far away is accepted.");
+            world.Step();
+            Check.That(units.Any(unit => (unit.MoveTargetX - Fixed.FromInt(400)).Abs() >= Fixed.FromInt(30) || (unit.MoveTargetY - Fixed.FromInt(400)).Abs() >= Fixed.FromInt(30)), $"{rate}: outside the box the offsets stay.");
+        }
+    }
+
     /// <summary>Offsets that would put two members on one place (after shortening) are adjusted: the second takes the nearest free cell; an occupied goal moves a single mover too.</summary>
     public static void GroupMoveAdjustsToFreePlaces()
     {
