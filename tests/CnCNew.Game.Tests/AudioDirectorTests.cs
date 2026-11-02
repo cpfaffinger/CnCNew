@@ -89,6 +89,7 @@ internal static class AudioDirectorTests
         var watch = Stopwatch.StartNew();
         var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"), rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Director drives a real match: deterministic, audible, bounded, WAV dump", () => RealDataRun(data));
+        harness.Run("State sounds on real data: a unit that moves is heard", () => StateSoundsOnRealData(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
     }
@@ -854,6 +855,27 @@ internal static class AudioDirectorTests
     }
 
     // ------------------------------------------------------------------------------------------ real data
+
+    /// <summary>
+    /// What the simulation raises no event for: <c>SoundMoveStart</c> of 282 objects, <c>SoundOnDamaged</c> of 406, stealth, a chute, an ability. Nothing played them before; a match on real data has to
+    /// bring at least the move, and every event has to be known to the audio table.
+    /// </summary>
+    private static void StateSoundsOnRealData(GameData data)
+    {
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard) { AutoPlay = true };
+        var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        using var director = AudioDirector.Create(data, new AudioDirectorOptions { Seed = 1 });
+        var origins = new Dictionary<string, int>();
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 120; frame++)
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            foreach (var cue in live.DrainSoundCues())
+                if (cue.Origin.StartsWith("Object.Sound", StringComparison.Ordinal)) origins[cue.Origin] = origins.GetValueOrDefault(cue.Origin) + 1;
+        }
+        Console.WriteLine($"       state sounds: {string.Join(", ", origins.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}={pair.Value}"))}");
+        TestHarness.Assert(origins.GetValueOrDefault("Object.SoundMoveStart") > 0, "units that start to move are heard");
+    }
 
     private static void RealDataRun(GameData data)
     {

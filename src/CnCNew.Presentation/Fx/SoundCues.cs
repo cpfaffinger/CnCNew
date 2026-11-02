@@ -23,7 +23,7 @@ public sealed record SoundCue(long Tick, string EventName, SoundCueKind Kind, Ve
 /// table). FX-list <c>Sound</c> nuggets are emitted by <see cref="FxExecutor"/>, not here.
 /// </summary>
 /// <param name="time">The time service of the world whose events are derived: durations of the original are converted to its ticks.</param>
-public sealed class SoundCueDeriver(FxCatalog catalog, SimulationTime time)
+public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime time)
 {
     private const float UnderAttackDistance = 250f;
 
@@ -88,9 +88,14 @@ public sealed class SoundCueDeriver(FxCatalog catalog, SimulationTime time)
                 break;
             case SimEventKind.EntityContained:
                 ObjectSound(output, simEvent, simEvent.Other, view, "SoundEnter", SoundCueKind.Effect);
+                ObjectSound(output, simEvent, simEvent.Other, view, "EnterSound", SoundCueKind.Effect);
+                // OpenContain::onContaining of a parachute: the rider's own sound of falling.
+                if (view.GetPose(simEvent.Other) is { } chute && catalog.FindObject(chute.TemplateName)?.IsKindOf("PARACHUTE") == true)
+                    ObjectSound(output, simEvent, simEvent.Entity, view, "SoundFallingFromPlane", SoundCueKind.Effect);
                 break;
             case SimEventKind.EntityUncontained:
                 ObjectSound(output, simEvent, simEvent.Other, view, "SoundExit", SoundCueKind.Effect);
+                ObjectSound(output, simEvent, simEvent.Other, view, "ExitSound", SoundCueKind.Effect);
                 break;
             case SimEventKind.EntityDied:
                 Died(output, simEvent, view);

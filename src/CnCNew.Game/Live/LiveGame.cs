@@ -457,7 +457,11 @@ public abstract class LiveGame
         observer?.PhaseEnded(PresentationPhase.FxExecuteEvents);
         observer?.PhaseStarted(PresentationPhase.FxUpdate);
         // Effects are authored per original frame: their clock is game time on the 1/30 s grid, not the tick. At 30 Hz every tick begins a frame.
-        if (World.Time.IsOriginalFrameBoundary(World.Tick)) Fx.Update(_fxView);
+        if (World.Time.IsOriginalFrameBoundary(World.Tick))
+        {
+            Fx.Update(_fxView);
+            Fx.TrackSounds(World, _fxView);
+        }
         observer?.PhaseEnded(PresentationPhase.FxUpdate);
         observer?.PhaseStarted(PresentationPhase.DrainSoundCues);
         _soundCues.AddRange(Fx.DrainSoundCues());

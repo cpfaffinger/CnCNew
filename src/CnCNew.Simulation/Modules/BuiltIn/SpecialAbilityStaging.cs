@@ -106,6 +106,14 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
 {
     private enum PackState : byte { None, Packing, Unpacking, Packed, Unpacked }
 
+    /// <summary>What the presentation reads to play <c>PackSound</c> and <c>UnpackSound</c>.</summary>
+    public const byte PhasePacking = (byte)PackState.Packing, PhaseUnpacking = (byte)PackState.Unpacking;
+
+    public byte PackPhase => (byte)_packState;
+
+    /// <summary>How often the ability has fired, for <c>TriggerSound</c>; no state of the simulation.</summary>
+    public int Triggers { get; private set; }
+
     /// <summary>Approach orders that ended without getting within range before the ability gives up (the reference re-issues the approach every tick forever).</summary>
     private const int MaxApproachOrders = 6;
 
@@ -470,6 +478,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     /// </summary>
     private void TriggerEffect(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
+        Triggers++;
         if (data.AwardXp > 0) world.AddExperiencePoints(Entity, data.AwardXp);
         // "If unspecified, it'll use the award experience to units for triggering value."
         var skillPoints = data.SkillPoints != -1 ? data.SkillPoints : data.AwardXp;

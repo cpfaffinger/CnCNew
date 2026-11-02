@@ -247,6 +247,8 @@ public sealed class FxCatalog
         Fill(levels, level, tokens[1]);
     }
 
+    private static readonly ImmutableHashSet<string> ModuleSoundKeys = ImmutableHashSet.Create(Names, "EnterSound", "ExitSound", "ParachuteOpenSound", "PackSound", "UnpackSound", "TriggerSound");
+
     private static ObjectFxInfo ParseObject(ObjectDefinition obj)
     {
         var sounds = ImmutableSortedDictionary.CreateBuilder<string, string>(Names);
@@ -254,6 +256,11 @@ public sealed class FxCatalog
             if ((field.Name.StartsWith("Voice", StringComparison.OrdinalIgnoreCase) || field.Name.StartsWith("Sound", StringComparison.OrdinalIgnoreCase))
                 && FxValueReader.Tokens(field.Value.OriginalText).FirstOrDefault() is { } name)
                 sounds[field.Name] = name;
+        // What modules name: OpenContain, ParachuteContain, SpecialAbilityUpdate.
+        foreach (var module in obj.Modules)
+            foreach (var field in module.Fields)
+                if (ModuleSoundKeys.Contains(field.Name) && FxValueReader.Tokens(field.Value.OriginalText).FirstOrDefault() is { } name)
+                    sounds[field.Name] = name;
         var unitSpecific = ImmutableSortedDictionary.CreateBuilder<string, string>(Names);
         string? damageFx = null;
         foreach (var section in obj.Sections)

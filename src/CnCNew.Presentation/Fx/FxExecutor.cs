@@ -371,6 +371,9 @@ public sealed class FxExecutor
     }
 
     /// <summary>All sound cues since the last drain, in event order.</summary>
+    /// <summary>Once per logic frame of the original: the sounds of what changed (<see cref="SoundCueDeriver.Track"/>).</summary>
+    public void TrackSounds(CnCNew.Simulation.World.SimulationWorld world, IFxWorldView view) => _deriver.Track(world, view, _cues);
+
     public ImmutableArray<SoundCue> DrainSoundCues()
     {
         var cues = _cues.ToImmutableArray();
