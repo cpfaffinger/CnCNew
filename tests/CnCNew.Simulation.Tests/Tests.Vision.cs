@@ -161,6 +161,8 @@ static partial class Tests
         site.Step();
         var tower = VisionAt(site, "Tower", 100, 100);
         site.SetStatus(tower.Id, 1UL << ObjectStatusBits.UnderConstruction);
+        // The look it took before the status goes on for UnlookPersistDuration.
+        for (var tick = 0; tick < site.Frames(40); tick++) site.Step();
         VisionSettle(site);
         Check.That(site.Vision!.IsVisible(1, 10, 10) && !site.Vision.IsVisible(1, 10, 15) && !site.Vision.IsVisible(1, 10, 13),
             "A structure under construction only reveals its bounding circle (20 units), not its vision range.");
