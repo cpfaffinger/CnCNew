@@ -92,10 +92,13 @@ public sealed class ModelGeometry
     /// <summary>The launch points of objects that fire projectiles, by template name (case-insensitive); a template without an entry launches from its geometry centre along its heading.</summary>
     public ImmutableDictionary<string, WeaponLaunchPoints> WeaponLaunches { get; }
 
+    /// <summary>The ropes of a Chinook by template name (case-insensitive): the bones <c>RopeStartNN</c> and <c>RopeEndNN</c> in the object's frame (<c>ChinookCombatDropState::onEnter</c>).</summary>
+    public ImmutableDictionary<string, ImmutableArray<ExitPath>> Ropes { get; }
+
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty;
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
 
@@ -104,8 +107,9 @@ public sealed class ModelGeometry
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths,
         IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null,
-        IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null)
+        IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>>? ropes = null)
     {
+        Ropes = (ropes ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Airfields = airfields.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         ExitPaths = exitPaths.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         FirePoints = firePoints.Where(pair => !pair.Value.IsEmpty).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
@@ -136,6 +140,9 @@ public sealed class ModelGeometry
             static string Bone(BonePose? pose) => pose is { } value ? Pose(value) : "-";
             text.Append(CultureInfo.InvariantCulture, $"exits {pair.Key.ToUpperInvariant()} {string.Join(";", pair.Value.Select(path => Bone(path.Start) + ">" + Bone(path.End)))}\n");
         }
+        foreach (var pair in Ropes.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
+            text.Append(CultureInfo.InvariantCulture, $"ropes {pair.Key.ToUpperInvariant()} {string.Join(";", pair.Value.Select(path => Rope(path.Start) + ">" + Rope(path.End)))}\n");
+        static string Rope(BonePose? bone) => bone is { } pose ? Pose(pose) : "-";
         // Written only when the table has rider points: a table without them keeps its fingerprint.
         foreach (var pair in FirePoints.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
         {

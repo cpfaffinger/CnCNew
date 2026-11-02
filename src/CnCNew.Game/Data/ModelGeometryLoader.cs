@@ -42,7 +42,7 @@ public static class ModelGeometryLoader
             layouts[definition.OriginalName] = ReadLayout(library, definition.OriginalName, model, rows, cols);
         }
 
-        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library));
+        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library), ReadRopes(graph, visuals, library));
     }
 
     /// <summary>The fraction bits of a launch bone's direction.</summary>
@@ -399,6 +399,32 @@ public static class ModelGeometryLoader
         }
 
         return exits;
+    }
+
+    /// <summary>The bones <c>RopeStartNN</c> and <c>RopeEndNN</c> of every object with a <c>ChinookAIUpdate</c> (<c>getPristineBonePositions("RopeStart", 1, ..)</c>): consecutive from 01 until the first missing.</summary>
+    private static SortedDictionary<string, ImmutableArray<ExitPath>> ReadRopes(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        var ropes = new SortedDictionary<string, ImmutableArray<ExitPath>>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            if (!definition.Modules.Any(value => value.Name == "ChinookAIUpdate") || !visuals.TryGet(definition.OriginalName, out var visual)) continue;
+            foreach (var draw in visual.Draws)
+            {
+                if (BestStateSelector.FindBest(draw, ModelConditionSet.Empty) is not (var state and >= 0) || state >= draw.States.Length || draw.States[state].Model is not { } model) continue;
+                var skeleton = library.GetModel(model).Skeleton;
+                if (skeleton is null) continue;
+                var pairs = ImmutableArray.CreateBuilder<ExitPath>();
+                for (var index = 1; ; index++)
+                {
+                    var suffix = index.ToString("00", CultureInfo.InvariantCulture);
+                    if (skeleton.FindBone("RopeStart" + suffix) is not (var start and >= 0) || skeleton.FindBone("RopeEnd" + suffix) is not (var end and >= 0)) break;
+                    pairs.Add(new ExitPath(RestPose(skeleton, start), RestPose(skeleton, end)));
+                }
+                if (pairs.Count > 0) ropes[definition.OriginalName] = pairs.ToImmutable();
+                break;
+            }
+        }
+        return ropes;
     }
 
     private static int Count(ObjectDefinition definition, ModuleConfiguration module, string key)

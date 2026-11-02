@@ -493,6 +493,11 @@ public sealed class CommandModeController
                 _sources = movers;
                 return ActivationResult.EnteredMode;
             }
+            case GuiCommandKind.CombatDrop:
+            {
+                var chinooks = sources.Where(unit => SimulationQueries.Rappellers(world, unit) > 0).Select(unit => unit.Id).ToImmutableArray();
+                return chinooks.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, chinooks);
+            }
             // MSG_META_PLACE_BEACON: a place, and no unit behind it.
             case GuiCommandKind.PlaceBeacon:
                 return EnterButtonMode(button, []);
@@ -650,6 +655,8 @@ public sealed class CommandModeController
                     GuiCommandKind.SetRallyPoint when position is { } rally => SetRally(world, sources, rally),
                     GuiCommandKind.PlaceBeacon when position is { } beacon => Issue((sequence, tick) => new PlaceBeaconCommand(Player, sequence, tick, SimulationQueries.ToFixed(beacon.X), SimulationQueries.ToFixed(beacon.Y))).Accepted,
                     GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut => UseSpecialPower(world, button, sources, objectTarget, position),
+                    // MSG_COMBATDROP_AT_OBJECT, MSG_COMBATDROP_AT_LOCATION (AIGroup::groupCombatDrop).
+                    GuiCommandKind.CombatDrop when objectTarget is not null || position is not null => CombatDrop(sources, objectTarget, position),
                     // ATTACK_OBJECTS_POSITION: the weapon goes to the object's place (MSG_DO_WEAPON_AT_LOCATION).
                     GuiCommandKind.FireWeapon when objectTarget is not null && button.Has(CommandOptions.AttackObjectsPosition)
                         => AttackPlace(sources, EntityPicker.CenterOf(objectTarget), own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
@@ -667,6 +674,14 @@ public sealed class CommandModeController
             default:
                 return false;
         }
+    }
+
+    private bool CombatDrop(ImmutableArray<Entity> units, Entity? target, Vector3? place)
+    {
+        var ids = units.Select(unit => unit.Id).ToImmutableArray();
+        var spot = place ?? (target is null ? Vector3.Zero : EntityPicker.CenterOf(target));
+        var (x, y) = (SimulationQueries.ToFixed(spot.X), SimulationQueries.ToFixed(spot.Y));
+        return Issue((sequence, tick) => new CombatDropCommand(Player, sequence, tick, ids, target?.Id ?? EntityId.Invalid, x, y)).Accepted;
     }
 
     /// <summary>

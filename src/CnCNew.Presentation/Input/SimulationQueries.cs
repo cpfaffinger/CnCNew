@@ -50,6 +50,9 @@ public static class SimulationQueries
 
     public static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
+    /// <summary><c>getRappellerCount</c>: the riders who can go down a Chinook's ropes.</summary>
+    public static int Rappellers(SimulationWorld world, Entity entity) => AiOf(entity)?.RappellerCount(world) ?? 0;
+
     /// <summary><c>SimulationWorld.BuilderOf</c>: a dozer or worker AI on a finished object.</summary>
     public static bool IsBuilder(Entity entity) => AiOf(entity) is { CanBuild: true } && !entity.HasStatus(ObjectStatusBits.UnderConstruction);
 

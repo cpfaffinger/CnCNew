@@ -846,6 +846,62 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         return true;
     }
 
+    private bool _rappelling;
+    private EntityId _rappelBuilding;
+    private Fixed _rappelRate;
+    private Fixed _rappelDestZ;
+
+    /// <summary><c>MODELCONDITION_RAPPELLING</c>.</summary>
+    public bool IsRappelling => _rappelling;
+
+    /// <summary>The riders who can rappel, for a Chinook; nobody for anything else.</summary>
+    public virtual int RappellerCount(IWorldServices world) => 0;
+
+    /// <summary>The ropes of a combat drop, for a Chinook.</summary>
+    public virtual IReadOnlyList<ChinookRope> Ropes => [];
+
+    /// <summary><c>AIRappelState::onEnter</c>: down to the top of the building, or to the highest surface at the place. <paramref name="ratePerFrame"/> is <c>RappelSpeed</c>.</summary>
+    public void BeginRappel(IWorldServices world, EntityId goal, Fixed ratePerFrame)
+    {
+        if (!Entity.Template.IsKindOf("CAN_RAPPEL")) return;
+        var building = world.FindEntity(goal) is { EffectivelyDead: false } found && found.Template.IsKindOf("STRUCTURE") ? found : null;
+        var layer = world.HighestLayerFor(Entity.X, Entity.Y, Entity.Z, onlyHealthyBridges: true);
+        _rappelDestZ = world.LayerHeightAt(Entity.X, Entity.Y, layer);
+        if (building is not null) _rappelDestZ += ToppleAndFallModules.MaxHeightAbovePosition(building.Template);
+        else world.SetLayer(Entity, layer);
+        (_rappelling, _rappelBuilding, _rappelRate) = (true, building?.Id ?? EntityId.Invalid, ratePerFrame);
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+    }
+
+    /// <summary>The Chinook is gone and with it the rope: what hangs on it falls.</summary>
+    public void DropFromRope(IWorldServices world)
+    {
+        if (!_rappelling) return;
+        _rappelling = false;
+        _rappelBuilding = EntityId.Invalid;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>AIRappelState::update</c>: the rate is a value per frame of the original, flown in shares per tick; a building that fell meanwhile leaves the ground as the goal.</summary>
+    private long StepRappel(IWorldServices world)
+    {
+        var building = _rappelBuilding.IsValid ? world.FindEntity(_rappelBuilding) : null;
+        if (_rappelBuilding.IsValid && building is not { EffectivelyDead: false })
+        {
+            _rappelBuilding = EntityId.Invalid;
+            _rappelDestZ = world.GroundHeightAt(Entity.X, Entity.Y);
+        }
+        if (!_rappelBuilding.IsValid) _rappelDestZ = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
+        Entity.Z -= _rappelRate / Fixed.FromInt(world.Time.TicksPerOriginalFrame);
+        world.MarkDirty(Entity);
+        if (Entity.Z > _rappelDestZ) return SimulationTiming.SleepNone;
+        Entity.Z = _rappelDestZ;
+        _rappelling = false;
+        if (_rappelBuilding.IsValid) world.FinishCombatDrop(Entity, building!);
+        _rappelBuilding = EntityId.Invalid;
+        return SimulationTiming.SleepNone;
+    }
+
     /// <summary>The object keeps its move but does not move this tick (<c>setLocomotorGoalNone</c> while a deploying unit packs or unpacks): the move goes on afterwards.</summary>
     protected virtual bool HoldsMovement => false;
 
@@ -1473,6 +1529,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     public virtual long Update(IWorldServices world)
     {
+        if (_rappelling) return Entity.EffectivelyDead ? SimulationTiming.SleepForever : StepRappel(world);
         // A death whose stop waits for this turn (StopAtDeath): the step of the frame the object died in is taken below, then it stands. A wait that was not
         // answered in the tick of the death (the module did not run) ends without a step.
         var dying = _dyingSince != 0;
@@ -2636,6 +2693,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         writer.UInt("taskTarget", _taskTarget.Value);
         writer.Bool("approaching", _approaching);
         if (_working) writer.Bool("working", true);
+        if (_rappelling)
+        {
+            writer.UInt("rappelBuilding", _rappelBuilding.Value);
+            writer.Fixed("rappelRate", _rappelRate);
+            writer.Fixed("rappelDestZ", _rappelDestZ);
+        }
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
         if (_exitAfterEvacuate || _returning)
@@ -2709,6 +2772,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
         _approaching = reader.Bool("approaching");
         _working = reader.Has("working") && reader.Bool("working");
+        _rappelling = reader.Has("rappelRate");
+        if (_rappelling)
+        {
+            _rappelBuilding = new EntityId(checked((uint)reader.UInt("rappelBuilding")));
+            _rappelRate = reader.Fixed("rappelRate");
+            _rappelDestZ = reader.Fixed("rappelDestZ");
+        }
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");

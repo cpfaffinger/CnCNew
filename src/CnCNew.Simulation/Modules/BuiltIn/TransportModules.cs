@@ -1,9 +1,11 @@
 using System.Collections.Immutable;
+using CnCNew.Data;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -39,10 +41,55 @@ public sealed class TransportAIUpdate(AIUpdateData data) : AIUpdateInterface(dat
 
 // ==================================================================================================== ChinookAIUpdate
 
-/// <summary><c>ChinookAIUpdateModuleData</c>: the supply-truck fields plus the rappel and rope settings of the combat drop (typed, the drop is not simulated).</summary>
+/// <summary><c>ChinookAIUpdateModuleData</c>: the supply-truck fields plus the rappel and rope settings of the combat drop. Speeds are per logic frame of the original, delays in frames of it.</summary>
 public sealed record ChinookData(SupplyCarrierData Carrier) : ModuleData
 {
-    public static ChinookData Parse(RatedModuleConfiguration configuration) => new(SupplyCarrierData.Parse(configuration));
+    public int NumRopes { get; init; } = 4;
+    public int PerRopeDelayMinFrames { get; init; }
+    public int PerRopeDelayMaxFrames { get; init; }
+    public Fixed RopeFinalHeight { get; init; }
+    public Fixed RappelSpeed { get; init; } = Fixed.One;
+    public Fixed RopeDropSpeed { get; init; } = Fixed.FromInt(1_000_000);
+    public Fixed MinDropHeight { get; init; } = Fixed.FromInt(30);
+    public bool WaitForRopesToDrop { get; init; } = true;
+
+    public static ChinookData Parse(RatedModuleConfiguration configuration)
+    {
+        var perFrame = Fixed.FromInt(OriginalFrame.PerSecond);
+        var ticksPerFrame = configuration.Time.TicksPerOriginalFrame;
+        var data = new ChinookData(SupplyCarrierData.Parse(configuration))
+        {
+            NumRopes = checked((int)ModuleConfigReader.Int(configuration, "NumRopes", 4)),
+            PerRopeDelayMinFrames = checked((int)(ModuleConfigReader.Ticks(configuration, "PerRopeDelayMin", 0) / ticksPerFrame)),
+            PerRopeDelayMaxFrames = checked((int)(ModuleConfigReader.Ticks(configuration, "PerRopeDelayMax", 0) / ticksPerFrame)),
+            RopeFinalHeight = ModuleConfigReader.Real(configuration, "RopeFinalHeight", Fixed.Zero),
+            MinDropHeight = ModuleConfigReader.Real(configuration, "MinDropHeight", Fixed.FromInt(30)),
+            WaitForRopesToDrop = ModuleConfigReader.Bool(configuration, "WaitForRopesToDrop", true),
+        };
+        var rappel = ModuleConfigReader.Real(configuration, "RappelSpeed", Fixed.Zero);
+        var rope = ModuleConfigReader.Real(configuration, "RopeDropSpeed", Fixed.Zero);
+        return data with
+        {
+            RappelSpeed = rappel > Fixed.Zero ? rappel / perFrame : data.RappelSpeed,
+            RopeDropSpeed = rope > Fixed.Zero ? rope / perFrame : data.RopeDropSpeed,
+        };
+    }
+}
+
+/// <summary>One rope of a Chinook's combat drop (<c>ChinookCombatDropState::RopeInfo</c>): where it hangs from, where its riders start, how long it is and who is on it.</summary>
+public sealed class ChinookRope
+{
+    public Fixed TopX { get; init; }
+    public Fixed TopY { get; init; }
+    public Fixed TopZ { get; init; }
+    public Fixed DropX { get; init; }
+    public Fixed DropY { get; init; }
+    public Fixed DropZ { get; init; }
+    public Fixed MaxLength { get; init; }
+    public Fixed Length { get; set; } = Fixed.One;
+    public Fixed Speed { get; set; }
+    public long NextDrop { get; set; }
+    public List<EntityId> Rappellers { get; } = [];
 }
 
 /// <summary>
@@ -50,11 +97,25 @@ public sealed record ChinookData(SupplyCarrierData Carrier) : ModuleData
 /// Chinook's own dock delays and the <c>UpgradedSupplyBoost</c> once the player owns <c>Upgrade_AmericaSupplyLines</c>
 /// (<c>ChinookAIUpdate::getUpgradedSupplyBoost</c>). Flight: the Chinook keeps <c>PreferredHeight</c> above the ground while it flies and changes
 /// height by one locomotor speed per logic frame of the original (the reference's <c>ChinookTakeoffOrLandingState</c> lets the locomotor lift it); passengers only leave a
-/// landed Chinook (<c>getAiFreeToExit</c>), so an evacuation order lands it first and it takes off again when it moves on. The combat drop
-/// (rappelling), the airfield healing and the head-off-map state are not simulated.
+/// landed Chinook (<c>getAiFreeToExit</c>), so an evacuation order lands it first and it takes off again when it moves on. A combat drop
+/// (<c>ChinookMoveToBldgState</c>, <c>ChinookCombatDropState</c>) flies to its building or place and lets the riders who can rappel down its ropes. The airfield healing and the
+/// head-off-map state are not simulated.
 /// </summary>
 internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.Carrier)
 {
+    private enum DropPhase { None, MoveTo, Dropping }
+
+    private DropPhase _dropPhase;
+    private EntityId _dropTarget;
+    private Fixed _dropX;
+    private Fixed _dropY;
+    /// <summary>The height a drop flies at: above the building by <c>MinDropHeight</c>, and never lower than the locomotor's.</summary>
+    private Fixed _dropHeight;
+    private readonly List<ChinookRope> _ropes = [];
+
+    /// <summary>The ropes that hang from it now.</summary>
+    public override IReadOnlyList<ChinookRope> Ropes => _ropes;
+
     private bool _landing;
     /// <summary>The pending evacuation is the Chinook's own (<c>MOVE_TO_AND_EVAC</c>, <c>ChinookEvacuateState</c>): an unload at a place, which puts everybody out at once.</summary>
     private bool _dropAll;
@@ -77,8 +138,122 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     /// <summary>The Chinook stands on the ground.</summary>
     public bool Landed(IWorldServices world) => Entity.Z <= world.LayerHeightAt(Entity.X, Entity.Y, world.HighestLayerFor(Entity.X, Entity.Y, Entity.Z, onlyHealthyBridges: true));
 
-    /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: landed (the combat drop, which lets a rider that can rappel out in the air, is not simulated).</summary>
-    public override bool AiFreeToExit(IWorldServices world, Entity rider) => Landed(world);
+    /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: landed, or a rider who can rappel in the middle of a combat drop.</summary>
+    public override bool AiFreeToExit(IWorldServices world, Entity rider) => Landed(world) || (_dropPhase == DropPhase.Dropping && rider.Template.IsKindOf("CAN_RAPPEL"));
+
+    /// <summary><c>getPotentialRappeller</c>: the first rider who can rappel.</summary>
+    private Entity? PotentialRappeller(IWorldServices world)
+    {
+        if (Entity.Container is not { } contain) return null;
+        foreach (var id in contain.Contained)
+            if (world.FindEntity(id) is { } rider && rider.Template.IsKindOf("CAN_RAPPEL")) return rider;
+        return null;
+    }
+
+    /// <summary><c>getRappellerCount</c>: what the button asks.</summary>
+    public override int RappellerCount(IWorldServices world)
+    {
+        var count = 0;
+        if (Entity.Container is { } contain)
+            foreach (var id in contain.Contained)
+                if (world.FindEntity(id) is { } rider && rider.Template.IsKindOf("CAN_RAPPEL")) count++;
+        return count;
+    }
+
+    /// <summary><c>ChinookAIUpdate::privateCombatDrop</c>, <c>ChinookMoveToBldgState::onEnter</c>: into a building, or to a place.</summary>
+    public void OrderCombatDrop(IWorldServices world, Entity? target, Fixed x, Fixed y)
+    {
+        EndDrop(world);
+        var height = Entity.Template.Locomotor?.PreferredHeight ?? Fixed.Zero;
+        if (target is not null)
+        {
+            (x, y) = (target.X, target.Y);
+            if (target.Template.IsKindOf("STRUCTURE")) height = Fixed.Max(height, ToppleAndFallModules.MaxHeightAbovePosition(target.Template) + data.MinDropHeight);
+        }
+        _dropTarget = target?.Id ?? EntityId.Invalid;
+        _dropHeight = height;
+        _landing = false;
+        OrderMove(world, x, y, fromPlayer: true);
+        (_dropX, _dropY) = (Entity.MoveTargetX, Entity.MoveTargetY);
+        _dropPhase = DropPhase.MoveTo;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>ChinookCombatDropState::onEnter</c>: the supplies go, and a rope hangs from every pair of bones, as many as the data allows.</summary>
+    private void BeginDrop(IWorldServices world)
+    {
+        while (LoseOneBox()) { }
+        var bones = world.Templates.Geometry.Ropes.TryGetValue(Entity.Template.Name, out var known) ? known : [];
+        var count = Math.Min(data.NumRopes, bones.Length);
+        if (count <= 0) { _dropPhase = DropPhase.None; return; }
+        var (cos, sin) = (FixedTrig.Cos(Entity.Angle), FixedTrig.Sin(Entity.Angle));
+        (Fixed X, Fixed Y, Fixed Z) Place(BonePose? bone)
+            => bone is { } pose ? (Entity.X + pose.X * cos - pose.Y * sin, Entity.Y + pose.X * sin + pose.Y * cos, Entity.Z + pose.Z) : (Entity.X, Entity.Y, Entity.Z);
+        var stride = world.Time.TicksPerOriginalFrame;
+        for (var index = 0; index < count; index++)
+        {
+            var (top, drop) = (Place(bones[index].Start), Place(bones[index].End));
+            var floor = world.LayerHeightAt(top.X, top.Y, world.HighestLayerFor(top.X, top.Y, top.Z, onlyHealthyBridges: true));
+            var delay = world.LogicRandom.Range(data.PerRopeDelayMinFrames, data.PerRopeDelayMaxFrames) - data.PerRopeDelayMinFrames;
+            _ropes.Add(new ChinookRope
+            {
+                TopX = top.X, TopY = top.Y, TopZ = top.Z, DropX = drop.X, DropY = drop.Y, DropZ = drop.Z,
+                MaxLength = top.Z - floor - data.RopeFinalHeight, NextDrop = world.Tick + delay * stride,
+            });
+        }
+        _dropPhase = DropPhase.Dropping;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>ChinookCombatDropState::update</c>, once per logic frame of the original.</summary>
+    private void StepDrop(IWorldServices world)
+    {
+        var stride = world.Time.TicksPerOriginalFrame;
+        var now = world.Tick;
+        var inUse = 0;
+        foreach (var rope in _ropes)
+        {
+            rope.Rappellers.RemoveAll(id => world.FindEntity(id) is not { EffectivelyDead: false } rappeller || !world.IsSignificantlyAboveTerrain(rappeller));
+            if (rope.Length < rope.MaxLength)
+            {
+                rope.Speed = Fixed.Min(rope.Speed + FlightFrames.GravityPerFrameSquared(world.Templates).Abs(), data.RopeDropSpeed);
+                rope.Length += rope.Speed;
+                if (data.WaitForRopesToDrop)
+                {
+                    // "Can't use this rope till it's dropped all the way."
+                    rope.NextDrop += stride;
+                    continue;
+                }
+            }
+            if (now >= rope.NextDrop && PotentialRappeller(world) is { } rappeller)
+            {
+                ((ContainModuleBase)Entity.Container!).Remove(world, rappeller, true);
+                world.Emit(SimEventKind.EntityUncontained, rappeller.Id, Entity.Id, string.Empty, 0);
+                (rappeller.X, rappeller.Y, rappeller.Z) = (rope.DropX, rope.DropY, rope.DropZ);
+                CrateModules.AiOf(rappeller)?.BeginRappel(world, _dropTarget, data.RappelSpeed);
+                world.MarkDirty(rappeller);
+                rope.Rappellers.Add(rappeller.Id);
+                rope.NextDrop = now + world.LogicRandom.Range(data.PerRopeDelayMinFrames, data.PerRopeDelayMaxFrames) * stride;
+            }
+            if (rope.Rappellers.Count > 0) inUse++;
+        }
+        world.MarkDirty(Entity);
+        if (inUse == 0 && PotentialRappeller(world) is null) EndDrop(world);
+    }
+
+    /// <summary><c>ChinookCombatDropState::onExit</c>: with the Chinook dead, "oops. drop the rangers".</summary>
+    private void EndDrop(IWorldServices world)
+    {
+        if (Entity.EffectivelyDead)
+            foreach (var rope in _ropes)
+                foreach (var id in rope.Rappellers)
+                    if (world.FindEntity(id) is { } rappeller) CrateModules.AiOf(rappeller)?.DropFromRope(world);
+        if (_dropPhase == DropPhase.None) return;
+        _dropPhase = DropPhase.None;
+        _ropes.Clear();
+        _dropTarget = EntityId.Invalid;
+        world.MarkDirty(Entity);
+    }
 
     /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: <c>WAIT_TO_EXIT</c> while not landed - a rider told to leave stays at the door (F-62).</summary>
     public override bool RidersWaitToExit(IWorldServices world) => !Landed(world);
@@ -115,13 +290,29 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
 
     public override long Update(IWorldServices world)
     {
-        if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        if (Entity.EffectivelyDead)
+        {
+            EndDrop(world);
+            return SimulationTiming.SleepForever;
+        }
         // A new Chinook begins its first logic frame of the original one frame after it appeared (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): at 30 Hz the next tick.
         // Above 30 Hz a climb begun one tick after the appearance would end every frame of its flight in the first tick of a frame of whoever created it instead of the last.
         var stride = world.Time.TicksPerOriginalFrame;
         if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
         var sleep = base.Update(world);
         if (!EvacuatePending) _landing = _dropAll = false;
+        if (_dropPhase == DropPhase.MoveTo)
+        {
+            // Any other order takes the Chinook off the drop (the state machine's new state).
+            if (Entity.HasMoveTarget && (Entity.MoveTargetX != _dropX || Entity.MoveTargetY != _dropY)) _dropPhase = DropPhase.None;
+            // "The normal moveto state will bail when 2d pos matches; we need z, too."
+            else if (!Entity.HasMoveTarget && (Entity.Z - world.GroundHeightAt(Entity.X, Entity.Y) - _dropHeight).Abs() <= Fixed.FromInt(3)) BeginDrop(world);
+        }
+        else if (_dropPhase == DropPhase.Dropping)
+        {
+            if (Entity.HasMoveTarget) EndDrop(world);
+            else if (world.Time.IsOriginalFrameBoundary(world.Tick)) StepDrop(world);
+        }
         // ChinookAIUpdate::update, "if we are attacking something, lets make sure our passengers follow suit": every frame whose number ends in 1 (frame % 10 == 1) a rider
         // without a victim is given the Chinook's (F-60).
         if (Entity.Acquisition is { Victim.IsValid: true } attack && Entity.Container is { } held && held.IsPassengerAllowedToFire(world, null)
@@ -150,7 +341,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         var atTheDoor = Entity.Container is TransportContain { HasRidersWaitingToExit: true };
         var forBoarders = !_landing && !Entity.HasMoveTarget && !IsInsideDock
                           && ((SupplyIdle && (atTheDoor || HasBoarders(world))) || (atTheDoor && Landed(world)));
-        var target = _landing || forBoarders ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
+        var target = _landing || forBoarders ? ground : ground + (_dropPhase != DropPhase.None ? _dropHeight : locomotor?.PreferredHeight ?? Fixed.Zero);
         // "When takeoff is complete, always go back to layer-ground, rather than some bridge layer."
         world.SetLayer(Entity, target == ground ? surface : SimulationWorld.GroundLayer);
         var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
@@ -163,7 +354,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         }
         _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
         // ... and an attacking Chinook with riders stays awake for its re-issue.
-        return Entity.Z != target || forBoarders || (Entity.Acquisition is { Victim.IsValid: true } && Entity.Container is { ContainCount: > 0 }) ? SimulationTiming.SleepNone : sleep;
+        return Entity.Z != target || forBoarders || _dropPhase != DropPhase.None || (Entity.Acquisition is { Victim.IsValid: true } && Entity.Container is { ContainCount: > 0 }) ? SimulationTiming.SleepNone : sleep;
     }
 
     /// <summary><c>OpenContain::hasObjectsWantingToEnterOrExit</c> for entering: a living object whose enter order aims at this Chinook.</summary>
@@ -184,6 +375,37 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         writer.Bool("landing", _landing);
         if (_dropAll) writer.Bool("dropAll", true);
         _climb.Describe(writer, "climbStep");
+        if (_dropPhase == DropPhase.None) return;
+        writer.Int("dropPhase", (int)_dropPhase);
+        writer.UInt("dropTarget", _dropTarget.Value);
+        writer.Fixed("dropX", _dropX);
+        writer.Fixed("dropY", _dropY);
+        writer.Fixed("dropHeight", _dropHeight);
+        writer.BeginArray("ropes");
+        foreach (var rope in _ropes)
+        {
+            writer.BeginObject(null);
+            writer.Fixed("topX", rope.TopX);
+            writer.Fixed("topY", rope.TopY);
+            writer.Fixed("topZ", rope.TopZ);
+            writer.Fixed("dropX", rope.DropX);
+            writer.Fixed("dropY", rope.DropY);
+            writer.Fixed("dropZ", rope.DropZ);
+            writer.Fixed("maxLength", rope.MaxLength);
+            writer.Fixed("length", rope.Length);
+            writer.Fixed("speed", rope.Speed);
+            writer.Int("nextDrop", rope.NextDrop);
+            writer.BeginArray("rappellers");
+            foreach (var id in rope.Rappellers)
+            {
+                writer.BeginObject(null);
+                writer.UInt("id", id.Value);
+                writer.EndObject();
+            }
+            writer.EndArray();
+            writer.EndObject();
+        }
+        writer.EndArray();
     }
 
     public override void Load(IStateReader reader)
@@ -192,6 +414,23 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         _landing = reader.Bool("landing");
         _dropAll = reader.Has("dropAll") && reader.Bool("dropAll");
         _climb.Load(reader, "climbStep");
+        _ropes.Clear();
+        _dropPhase = reader.Has("dropPhase") ? (DropPhase)reader.Int("dropPhase") : DropPhase.None;
+        if (_dropPhase == DropPhase.None) return;
+        _dropTarget = new EntityId(checked((uint)reader.UInt("dropTarget")));
+        _dropX = reader.Fixed("dropX");
+        _dropY = reader.Fixed("dropY");
+        _dropHeight = reader.Fixed("dropHeight");
+        foreach (var item in reader.Array("ropes"))
+        {
+            var rope = new ChinookRope
+            {
+                TopX = item.Fixed("topX"), TopY = item.Fixed("topY"), TopZ = item.Fixed("topZ"), DropX = item.Fixed("dropX"), DropY = item.Fixed("dropY"), DropZ = item.Fixed("dropZ"),
+                MaxLength = item.Fixed("maxLength"), Length = item.Fixed("length"), Speed = item.Fixed("speed"), NextDrop = item.Int("nextDrop"),
+            };
+            foreach (var id in item.Array("rappellers")) rope.Rappellers.Add(new EntityId(checked((uint)id.UInt("id"))));
+            _ropes.Add(rope);
+        }
     }
 }
 

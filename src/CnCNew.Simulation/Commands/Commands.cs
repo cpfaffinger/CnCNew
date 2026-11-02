@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 22;
+    public const int Version = 23;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -117,7 +117,10 @@ public static class CommandTypes
     /// <summary><c>MSG_REMOVE_BEACON</c> (<c>GameLogic::onRemoveBeacon</c>, F-24).</summary>
     public const ushort RemoveBeacon = 40;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= RemoveBeacon;
+    /// <summary><c>MSG_COMBATDROP_AT_OBJECT</c> / <c>MSG_COMBATDROP_AT_LOCATION</c> to a group (<c>AIGroup::groupCombatDrop</c>).</summary>
+    public const ushort CombatDrop = 41;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= CombatDrop;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -205,6 +208,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
                 new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
+            CommandTypes.CombatDrop => new CombatDropCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))],
+                new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"),
                 reader.Fixed("y"), reader.Bool("own"), checked((int)reader.Int("slot")), checked((int)reader.Int("maxShots"))),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
@@ -839,6 +844,36 @@ public sealed record GuardCommand(PlayerId Player, ulong Sequence, long Tick, Im
     public bool Equals(GuardCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && Object == other.Object && Mode == other.Mode
            && Area == other.Area && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
+}
+
+/// <summary>
+/// <c>AIGroup::groupCombatDrop</c>: every Chinook of the group flies to the building (<see cref="Target"/>) or the place and lets the riders who can rappel down its ropes.
+/// </summary>
+public sealed record CombatDropCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, EntityId Target, Fixed X, Fixed Y)
+    : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.CombatDrop;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.UInt("target", Target.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+
+    public bool Equals(CombatDropCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && Target == other.Target && X == other.X && Y == other.Y
+           && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

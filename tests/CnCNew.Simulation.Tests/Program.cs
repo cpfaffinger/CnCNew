@@ -537,6 +537,8 @@ run.Test("Bridges (F-20): a deck stops a shell and a building, and takes a slave
 run.Test("Bridges (F-20): what falls lands on a deck, what is under it stays on the ground", Tests.WhatFallsLandsOnADeck);
 run.Test("Subdual: it disables what holds as much as it has health, and wears off", Tests.SubdualDamageDisablesAndWearsOff);
 run.Test("Subdual: a body without a cap takes none", Tests.SubdualDamageNeedsABodyThatCanBeSubdued);
+run.Test("Combat drop: the riders come down the ropes at a place", Tests.CombatDropAtAPlace);
+run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDropIntoABuilding);
 run.Test("Structures: OCL updates, dynamic shroud, floating, checkpoints, enemy-near, firestorms", Tests.StructuresWorldEffects);
 run.Test("Structures: weapon bonus beacons and cost modifiers", Tests.StructuresWeaponBonusAndCostModifier);
 run.Test("Structures: a broken dam sends the flood wave", Tests.StructuresDamMakesTheWaveFlood);

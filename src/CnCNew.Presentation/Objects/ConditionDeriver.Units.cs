@@ -16,6 +16,8 @@ public static class UnitFlags
     public static readonly ModelConditionFlag Freefall = ModelConditions.Parse("FREEFALL");
     public static readonly ModelConditionFlag Parachuting = ModelConditions.Parse("PARACHUTING");
     public static readonly ModelConditionFlag Climbing = ModelConditions.Parse("CLIMBING");
+    public static readonly ModelConditionFlag Rappelling = ModelConditions.Parse("RAPPELLING");
+    public static readonly ModelConditionFlag Jammed = ModelConditions.Parse("JAMMED");
     public static readonly ModelConditionFlag OverWater = ModelConditions.Parse("OVER_WATER");
     public static readonly ModelConditionFlag JetAfterburner = ModelConditions.Parse("JETAFTERBURNER");
     public static readonly ModelConditionFlag JetExhaust = ModelConditions.Parse("JETEXHAUST");
@@ -78,6 +80,12 @@ public static partial class ConditionDeriver
                     break;
                 case BattleBusSlowDeathBehavior bus when bus.HasLanded(world):
                     set = set.With(UnitFlags.SecondLife);
+                    break;
+                case AIUpdateInterface { IsRappelling: true }:
+                    set = set.With(UnitFlags.Rappelling);
+                    break;
+                case MissileAIUpdate { Jammed: true }:
+                    set = set.With(UnitFlags.Jammed);
                     break;
                 case RailroadBehavior when world.Terrain is not null && entity.Z < world.GroundHeightAt(entity.X, entity.Y) - TunnelDepth:
                     set = set.With(UnitFlags.OverWater);

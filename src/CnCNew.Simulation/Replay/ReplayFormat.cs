@@ -50,7 +50,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 21;
+    public const int CurrentVersion = 22;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -389,6 +389,13 @@ public static class ReplayFormat
             case PlayerLeaveCommand leave:
                 writer.Write(leave.TransferToAlly);
                 break;
+            case CombatDropCommand drop:
+                writer.Write(drop.Units.Length);
+                foreach (var unit in drop.Units) writer.Write(unit.Value);
+                writer.Write(drop.Target.Value);
+                writer.Write(drop.X.Raw);
+                writer.Write(drop.Y.Raw);
+                break;
             case GuardCommand guard:
                 writer.Write(guard.Units.Length);
                 foreach (var unit in guard.Units) writer.Write(unit.Value);
@@ -491,6 +498,7 @@ public static class ReplayFormat
             CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, ReadUnits(reader)),
             CommandTypes.PlaceBeacon => new PlaceBeaconCommand(player, sequence, tick, Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.RemoveBeacon => new RemoveBeaconCommand(player, sequence, tick, ReadUnits(reader)),
+            CommandTypes.CombatDrop => new CombatDropCommand(player, sequence, tick, ReadUnits(reader), new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), new EntityId(reader.ReadUInt32()), (GuardMode)reader.ReadByte(),
                 ReadString(reader)),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),

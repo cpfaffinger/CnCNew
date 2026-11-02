@@ -821,6 +821,7 @@ public sealed partial class SimulationWorld : IWorldServices
             AttackMoveCommand march => InReach(march.X, limit) && InReach(march.Y, limit),
             GroupMoveCommand group => InReach(group.X, limit) && InReach(group.Y, limit),
             GuardCommand guard => InReach(guard.X, limit) && InReach(guard.Y, limit),
+            CombatDropCommand drop => InReach(drop.X, limit) && InReach(drop.Y, limit),
             AttackPositionCommand place => InReach(place.X, limit) && InReach(place.Y, limit),
             PursueCommand pursue => InReach(pursue.X, limit) && InReach(pursue.Y, limit),
             UseSpecialPowerCommand power => InReach(power.X, limit) && InReach(power.Y, limit),
@@ -917,6 +918,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 break;
             case GuardCommand guard:
                 return CheckGuard(command.Player, guard);
+            case CombatDropCommand drop:
+                return CheckCombatDrop(command.Player, drop);
             case AttackPositionCommand place:
                 return CheckAttackPosition(command.Player, place);
             case SetMineClearingCommand clearing:
@@ -1145,6 +1148,7 @@ public sealed partial class SimulationWorld : IWorldServices
             case RepairCommand order: return Sleeps(order.Builder);
             case GroupMoveCommand order: return AllSleep(order.Units);
             case GuardCommand order: return AllSleep(order.Units);
+            case CombatDropCommand order: return AllSleep(order.Units);
             case AttackPositionCommand order: return AllSleep(order.Units);
             case ExecuteRailedTransportCommand order: return AllSleep(order.Units);
             default: return false;
@@ -1328,6 +1332,13 @@ public sealed partial class SimulationWorld : IWorldServices
             case GroupMoveCommand group:
                 ExecuteGroupMove(group with { Units = WithoutSleepers(group.Units) });
                 break;
+            case CombatDropCommand drop:
+            {
+                var reason = CheckCombatDrop(command.Player, drop);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                ExecuteCombatDrop(drop with { Units = WithoutSleepers(drop.Units) });
+                break;
+            }
             case GuardCommand guard:
             {
                 var reason = CheckGuard(command.Player, guard);
