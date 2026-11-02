@@ -13,6 +13,7 @@ const string Usage = """
       scenario-audit <content-dir> [--name NAME] [--every N] [--ticks N] [--tick-rate N]   Runs a staged demo (capture-building, tank-duel, jet-strafe) headless and checks what it is meant to show; without --name lists them.
       road-audit <content-dir> [--map <virtual map path>]      Road layout (segments, curves, tees, crossings, joins), templates and textures of every retail map.
       sync-perf <content-dir> --map <virtual map path> (--players N | --factions A,B,..) [--ticks N] [--tick-rate N] [--hud] [--digest] [--json FILE] [--label TEXT]   Cost of the game layer per simulation tick (LiveGame.SyncAfterTick and its parts, the projection), headless with computer players (docs/PERF-GAME-LAYER.md).
+      camera-script <content-dir> --map <virtual map path> [--seconds 90] [--every 30] [--fps 60] [--tick-rate N] [--waypoints A,B]   The scripted camera of a mission in numbers, per frame (docs/SCRIPT-ENGINE.md).
     """;
 
 if (args.Length == 0)
