@@ -1228,8 +1228,11 @@ internal static class HudTests
         TestHarness.Assert(joined.StartsWith(name.Split(' ')[0], StringComparison.Ordinal), $"the first line is the button name '{name}': {joined}");
         if (button.Cost.Raw > 0) TestHarness.Assert(joined.Contains("Cost: " + (int)button.Cost.ToDecimal(), StringComparison.Ordinal), $"the cost line follows: {joined}");
 
-        controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX + 1, rect.CenterY)));
-        TestHarness.Assert(!controller.BuildDrawList(1280, 720).Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "moving the pointer hides the tooltip until it has been still for the delay again (1 ms here)");
+        var box = shown.OfType<UiFillRect>().First(command => command.Color is { R: 20, G: 20, B: 20 }).Rect;
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX + 3, rect.CenterY + 2)));
+        TestHarness.Assert(controller.BuildDrawList(1280, 720).Commands.OfType<UiFillRect>().Any(command => command.Color is { R: 20, G: 20, B: 20 } && command.Rect == box), "a move over the same button leaves the tooltip where it is (HUD-02)");
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(4, 4)));
+        TestHarness.Assert(!controller.BuildDrawList(1280, 720).Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "leaving the button ends it");
     }
 
     /// <summary>

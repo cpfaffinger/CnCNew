@@ -83,8 +83,16 @@ public sealed partial class UiWindowTree
             _hoverSince = Now;
             if (target is not null) Enter(target);
         }
-        // Mouse::createStreamMessages shows a tooltip once the pointer has been still for the delay: moving hides it again.
-        if (x != _hoverX || y != _hoverY) _hoverSince = Now;
+        // Mouse::createStreamMessages shows a tooltip once the pointer has been still for the delay. A tooltip that is up stays where it is while the pointer moves over its window
+        // (the control bar's description of a button stands still in the original as well); only another window ends it. Before it is up, every move starts the delay again.
+        if (x != _hoverX || y != _hoverY)
+        {
+            if (_tooltipWindow is null || (DisabledWindowAt(x, y) ?? target) != _tooltipWindow)
+            {
+                _tooltipWindow = null;
+                _hoverSince = Now;
+            }
+        }
         _hoverX = x;
         _hoverY = y;
         return target is not null;

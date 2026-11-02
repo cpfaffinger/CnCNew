@@ -369,14 +369,24 @@ public sealed partial class UiWindowTree
         {
             // The tooltip window is found without the enabled check (winProcessMouseEvent: winPointInAnyChild( x, y, TRUE, TRUE )): a disabled button explains itself, too.
             var hover = _grab is null && _pointerInside ? DisabledWindowAt(_hoverX, _hoverY) ?? _hover : _hover;
-            if (hover is null || _grab is not null || !hover.IsVisible) return null;
+            if (hover is null || _grab is not null || !hover.IsVisible)
+            {
+                _tooltipWindow = null;
+                return null;
+            }
             var delay = hover.Definition.TooltipDelay >= 0 ? hover.Definition.TooltipDelay : Services.DefaultTooltipDelayMs;
             if (Now - _hoverSince < delay) return null;
             var age = Now - _hoverSince - delay;
             if (TooltipOverride is { } custom)
             {
+            if (_tooltipWindow != hover)
+            {
+                _tooltipWindow = hover;
+                _tooltipX = _hoverX;
+                _tooltipY = _hoverY;
+            }
                 var text = custom(hover);
-                if (text is not null) return new UiTooltip(hover.Name, text, null, _hoverX, _hoverY, age);
+                if (text is not null) return new UiTooltip(hover.Name, text, null, _tooltipX, _tooltipY, age);
             }
             var callback = hover.Definition.Callbacks.Tooltip;
             if (callback is not null)
@@ -391,12 +401,12 @@ public sealed partial class UiWindowTree
                     }
                     return null;
                 }
-                return provider(this, hover) is { } text ? new UiTooltip(hover.Name, text, null, _hoverX, _hoverY, age) : null;
+                return provider(this, hover) is { } text ? new UiTooltip(hover.Name, text, null, _tooltipX, _tooltipY, age) : null;
             }
             if (hover.Definition.TooltipText is not { } label) return null;
             return Services.Text is { } source && source.TryResolve(label, out var resolved)
-                ? new UiTooltip(hover.Name, resolved, label, _hoverX, _hoverY, age)
-                : new UiTooltip(hover.Name, label, label, _hoverX, _hoverY, age);
+                ? new UiTooltip(hover.Name, resolved, label, _tooltipX, _tooltipY, age)
+                : new UiTooltip(hover.Name, label, label, _tooltipX, _tooltipY, age);
         }
     }
 
@@ -404,6 +414,10 @@ public sealed partial class UiWindowTree
 
     /// <summary>
     /// Tooltip text a host computes for a window (the control bar builds its command button descriptions in code, not from
+    // The window whose tooltip is up, and where the pointer stood when it came: it stays there until another window is under the pointer.
+    private UiWindow? _tooltipWindow;
+    private int _tooltipX, _tooltipY;
+
     /// <c>TOOLTIPTEXT</c>); consulted before the window's own callback and text. Null from the function: the window decides.
     /// </summary>
     public Func<UiWindow, string?>? TooltipOverride { get; set; }
