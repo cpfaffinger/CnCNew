@@ -1862,7 +1862,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var desired = FixedTrig.Atan2(dy, dx);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
         var heading = Entity.Angle;
-        var backing = Backing(locomotor, difference, distance);
+        var threePoint = false;
+        var backing = Backing(locomotor, difference, distance, out threePoint);
         var speed = FrameSpeed();
         var brakingDistance = locomotor.Braking > Fixed.Zero ? speed * speed / (braking * Fixed.FromInt(2)) : Fixed.Zero;
         var remaining = distance;
@@ -1871,7 +1872,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // rotateObjAroundLocoPivot: the way is measured from the point the object turns about. "When braking we do exact movement towards goal, instead of physics."
         var pivot = wheels && remaining > brakingDistance ? locomotor.TurnPivotOffset * Entity.Template.BoundingCircleRadius : Fixed.Zero;
         if (pivot != Fixed.Zero) desired = FixedTrig.Atan2(target.Y - Entity.Y - FixedTrig.Sin(heading) * pivot, target.X - Entity.X - FixedTrig.Cos(heading) * pivot);
-        if (backing) desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
+        // A three-point turn reverses with the front swinging to the goal; a short way back keeps the tail to it.
+        if (backing && !threePoint) desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
         difference = FixedTrig.AngleDifference(heading, desired);
         var turnNow = wheels ? WheelTurn(world, locomotor, difference, distance, speed, topSpeed, turnRate, out var turnSpeed) : turnRate;
         Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnNow
@@ -1984,11 +1986,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private bool _movingBackwards;
 
     /// <summary>
-    /// <c>Locomotor::moveTowardsPositionWheels</c>: a wheeled unit at rest whose goal lies behind it reverses, if the rest of its way is no longer than five of its radii. Over a longer way
-    /// the original makes a three-point turn; the port's ground mover turns on the spot instead, which is what it does for every other unit.
+    /// <c>Locomotor::moveTowardsPositionWheels</c>: a wheeled unit at rest whose goal lies behind it reverses. If the rest of its way is no longer than five of its radii it goes all the
+    /// way backwards; over a longer way it makes a three-point turn (<c>DOING_THREE_POINT_TURN</c>): it reverses with its front swinging to the goal until the goal is ahead of it.
     /// </summary>
-    private bool Backing(LocomotorInfo locomotor, Fixed difference, Fixed distance)
+    private bool Backing(LocomotorInfo locomotor, Fixed difference, Fixed distance, out bool threePoint)
     {
+        threePoint = false;
         if (!locomotor.CanMoveBackwards) return false;
         if (FrameSpeed() == Fixed.Zero) _movingBackwards = difference.Abs() > FixedTrig.HalfPi;
         if (!_movingBackwards) return false;
@@ -1997,7 +2000,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             _movingBackwards = false;
             return false;
         }
-        return distance + TailLength() <= Entity.Template.GeometryMajorRadius * Fixed.FromInt(5);
+        threePoint = distance + TailLength() > Entity.Template.GeometryMajorRadius * Fixed.FromInt(5);
+        return true;
     }
 
     /// <summary>

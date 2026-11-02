@@ -275,6 +275,30 @@ static partial class Tests
         Check.That(arrived, "It gets where it was sent.");
         var (_, pivoted, _) = CarTurn("-0.5");
         Check.That(pivoted, "With its pivot at the rear as well.");
+
+        // A goal far behind a unit that can reverse: it backs up with its front swinging to the goal, and drives off forwards (DOING_THREE_POINT_TURN).
+        var fixture = new SyntheticFixture(TestRate.Default, files: WheelFiles("0.0").ToDictionary(pair => pair.Key, pair => pair.Value.Replace("Appearance = FOUR_WHEELS", "Appearance = FOUR_WHEELS\n  CanMoveBackwards = Yes")));
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "three-point");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "TestCar", owner: 1, x: 300, y: 300);
+        world.Step();
+        var car = world.Entities.First(value => value.Template.Name == "TestCar");
+        var (startX, startAngle) = (car.X, car.Angle);
+        Check.That(feeder.SetMoveTarget(1, car.Id.Value, 80, 300).Accepted, "It takes the order.");
+        var (backedFacing, swung) = (Fixed.Zero, Fixed.Zero);
+        var backed = false;
+        for (var step = 0; step < world.Frames(900) && (step < 2 || car.HasMoveTarget); step++)
+        {
+            world.Step();
+            swung = Fixed.Max(swung, FixedTrig.AngleDifference(startAngle, car.Angle).Abs());
+            if (backed || car.X > startX - Fixed.FromInt(2)) continue;
+            backed = true;
+            backedFacing = swung;
+        }
+        Check.That(backed && backedFacing < Fixed.FromDecimal(0.5m), $"It sets off backwards, its tail to the goal ({backedFacing}).");
+        Check.That(swung > FixedTrig.HalfPi, $"Its front swings round ({swung}).");
+        Check.That(!car.HasMoveTarget, "It arrives.");
     }
 
     public static void StructureThatDiesBecomesRubble()

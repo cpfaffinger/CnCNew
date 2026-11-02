@@ -4848,3 +4848,29 @@ One manifest commit for the whole phase (`4fcce5f7`), because the causes were bu
 ### 78.10 The line that left the map
 
 `NavigationGrid.IsAttackLineBlocked`, since Phase 41: the walk's last minor step comes after the victim's cell and can leave the map, and the port indexed the cell. `Pathfinder::iterateCellsAlongLine` asks `getCell`, which answers `NULL`, and returns 0. A unit that looked along a line ending on the map's edge ended the match with an index out of range; beyond the right edge the index wrapped into the next row without an error. The performance profile found it, because the eight-player run of the binaries of `fc464d62` stopped at it. The walk stops at the map now, as the original's does. No field of either manifest moved.
+
+## 79. What the data named and the port did not do (Phase 57, F-111)
+
+### 79.1 Rubble
+
+`ActiveBody::setCorrectDamageState`, for a structure whose body reaches `BODY_RUBBLE`: "here we make sure nobody collides with us, ever again" (`NO_COLLISIONS`), and its footprint comes off the pathfinding map and back on as `CELL_RUBBLE` (`PathfindCell::setTypeAsObstacle`). Only a locomotor with the surface `RUBBLE` enters such a cell (`validLocomotorSurfacesForCellType`: 28 of the 111 locomotors), and it blocks no view, because `attackBlockedByObstacleCallback` looks at `CELL_OBSTACLE`. In the port the wreck of a building that stays (`KeepObjectDie`, every garrisonable building) stood as a whole building for ever. `SimulationWorld.BecomeRubble`, `NavigationGrid.AddRubble`, a cell state of its own (`RubbleBit`); a mover caught on rubble it could not enter walks out as out of a footprint (`IsCovered`). `Entity.IsRubble` is saved. The original also lowers the geometry to `StructureRubbleHeight` or `DefaultStructureRubbleHeight`; everything that reads that height looks past the dead or past objects without collisions, so the two keys stay unread on purpose.
+
+### 79.2 The airborne target
+
+`OBJECT_STATUS_AIRBORNE_TARGET` is set in one place: `AIUpdateInterface::update`, after the movement, for an object higher above the terrain than the `AirborneTargetingHeight` of its locomotor. The port asked `IsSignificantlyAboveTerrain`, about one unit. So a helicopter coming down was a target for anti-air down to the ground, and a soldier thrown by a shock wave was an airborne target; now a helicopter below 30 is a ground target, and a locomotor that does not name the height never makes one. `SimulationWorld.IsAirborneTarget` and `...AtFrameEnd`; used by the anti-mask of a victim (`getVictimAntiMask`), `DAMAGE_DEPLOY`, the shock wave, point defence, countermeasures, group moves, retaliation and the garrison's check. `isSignificantlyAboveTerrain` stays where the original calls that.
+
+### 79.3 Leaving a transport in the air
+
+`TransportContain::onRemoving`: `OrientLikeContainerOnExit`, and `KeepContainerVelocityOnExit` with `ExitPitchRate` times the rider's `CenterOfMassOffset`: a bomb of a B-52, a B-3 or a cargo plane flies on as fast as its plane and tips over, and lands ahead of where it left. `DelayExitInAir` (`isExitBusy`) keeps riders in while the transport is above the terrain. `ExitBone` is not read: the riders leave at the plane's centre and `DropOffset`, a few units from the bay.
+
+### 79.4 Wheels
+
+`Locomotor::moveTowardsPositionWheels`: "Wheeled can only turn while moving". The turn of a frame is the turn rate times the speed over the turn speed (`MinTurnSpeed`, at least a quarter of the top speed), up to the full rate; a unit at rest drives off before it turns; beyond `SMALL_TURN` its speed is capped at the turn speed. `rotateObjAroundLocoPivot`: a unit turns about a point on its axis (`TurnPivotOffset`, 65 locomotors, -0.2 to -0.7 of its bounding radius, the two technicals +0.5), except while it brakes, so its centre moves as it turns. The look ahead of half a second: a wide turn that would carry it onto ground it cannot enter is turned at the full rate. **Not the original's:** a goal inside the turning circle is turned at the full rate on the spot, where the original circles it until its donut timer brakes it; the port's paths have more waypoints to circle. A goal behind a unit that can reverse: within five radii it goes all the way backwards, beyond them it makes the three-point turn (`DOING_THREE_POINT_TURN`), backing with its front swinging to the goal until the goal lies ahead.
+
+### 79.5 An idle weapon, and overkill
+
+`FiringTracker::update`: "I have been idle long enough that I should reload, so I do not hang around with a near empty clip forever" (`AutoReloadWhenIdle`, 29 weapons: the Comanche's rockets, the Scud Storm, the Patriot). `SlowDeathBehavior::getProbabilityModifier`: `ModifierBonusPerOverkillPercent`. The source's comment reckons in percent and its code in a share cut to an `Int`, so the 20 % of the data add one from five times the health upward; ported as the code is.
+
+### 79.6 Named, not built
+
+`GroupMovementPriority` and the columns of a group move (`friend_moveInfantryToPos`, `friend_moveVehicleToPos`), a design of 350 lines that the port's individual destinations stand in for; `FlightDeckBehavior` (one object, a shell); `InitialRoster` (two lines, one of them 0); the car alarm of `CrushDie` (and its draw of the logic stream); the sound loops of the particle cannon, the train's sounds.
