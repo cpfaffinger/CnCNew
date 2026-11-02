@@ -318,13 +318,9 @@ public sealed partial class MatchController
         // LeftHUDInput: without a radar (or with it hidden) the window eats the input; the click does not reach the world.
         if (!rect.Contains((int)screen.X, (int)screen.Y) || !Match.RadarOn) return false;
         var minimap = Match.Minimap;
-        var scale = Math.Min(rect.Width / (float)minimap.Width, rect.Height / (float)minimap.Height);
-        var drawWidth = minimap.Width * scale;
-        var drawHeight = minimap.Height * scale;
-        var offsetX = rect.X + (rect.Width - drawWidth) / 2f;
-        var offsetY = rect.Y + (rect.Height - drawHeight) / 2f;
-        var px = (screen.X - offsetX) / scale;
-        var py = (screen.Y - offsetY) / scale;
+        var (scale, offset) = MinimapFit(rect);
+        var px = (screen.X - offset.X) / scale;
+        var py = (screen.Y - offset.Y) / scale;
         if (px < 0 || py < 0 || px >= minimap.Width || py >= minimap.Height) return false;
         world = minimap.PixelToWorld(new Vector2(px, py));
         return true;
@@ -333,6 +329,36 @@ public sealed partial class MatchController
     private void OnInputUiRequest(MetaAction action)
     {
         if (action == MetaAction.Options) { OpenMenu(); return; }
+    /// <summary>The scale and the top-left corner of the minimap inside its window, the aspect-preserving rule the client draws it with.</summary>
+    private (float Scale, Vector2 Offset) MinimapFit(UiRect rect)
+    {
+        var minimap = Match.Minimap;
+        var scale = Math.Min(rect.Width / (float)minimap.Width, rect.Height / (float)minimap.Height);
+        return (scale, new Vector2(rect.X + (rect.Width - minimap.Width * scale) / 2f, rect.Y + (rect.Height - minimap.Height * scale) / 2f));
+    }
+
+    /// <summary>
+    /// The camera's footprint on the radar as lines of this frame: the radar's picture is composed four times a second, and the frame must follow the camera, which moves in
+    /// every drawn frame. Drawn over the radar's window; the client's picture no longer holds it.
+    /// </summary>
+    private void AddRadarOutline(ImmutableArray<UiDrawCommand>.Builder commands, UiRect rect)
+    {
+        if (!Match.RadarOn) return;
+        var (scale, offset) = MinimapFit(rect);
+        var minimap = Match.Minimap;
+        var clip = new UiRect((int)MathF.Floor(offset.X), (int)MathF.Floor(offset.Y), (int)MathF.Ceiling(minimap.Width * scale), (int)MathF.Ceiling(minimap.Height * scale));
+        var footprint = Match.Camera.GroundFootprint();
+        var thickness = MathF.Max(1f, MathF.Round(rect.Height / 170f));
+        commands.Add(new UiPushClip(clip));
+        for (var corner = 0; corner < footprint.Length; corner++)
+        {
+            var from = offset + minimap.WorldToPixel(footprint[corner]) * scale;
+            var to = offset + minimap.WorldToPixel(footprint[(corner + 1) % footprint.Length]) * scale;
+            commands.Add(new UiLineDraw(from.X, from.Y, to.X, to.Y, thickness, WndColor.White));
+        }
+        commands.Add(new UiPopClip());
+    }
+
         if (action == MetaAction.Diplomacy) { ToggleDiplomacy(); return; }
         if (action == MetaAction.PlaceBeacon) { ArmBeacon(); return; }
         if (action == MetaAction.DeleteBeacon) { RemoveSelectedBeacons(); return; }
@@ -787,19 +813,24 @@ public sealed partial class MatchController
     /// </summary>
     private ImmutableArray<UiDrawCommand> ResolveControlBarCallbacks(ImmutableArray<UiDrawCommand> commands)
     {
-        if (_scheme is not { } scheme) return commands;
-        var result = ImmutableArray.CreateBuilder<UiDrawCommand>(commands.Length + scheme.ImageParts.Length);
+        var result = ImmutableArray.CreateBuilder<UiDrawCommand>(commands.Length + (_scheme?.ImageParts.Length ?? 0) + 6);
         foreach (var command in commands)
         {
             switch (command)
             {
-                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" }:
+                case UiCustomDraw { Callback: "W3DLeftHUDDraw" } radar:
+                    result.Add(radar);
+                    AddRadarOutline(result, radar.Rect);
+                    break;
+                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" or "W3DCommandBarForegroundDraw" } when _modernBar is not null:
+                    break;
+                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" } when _scheme is { } scheme:
                     AddSchemeParts(result, scheme, scheme.BackgroundParts);
                     break;
-                case UiCustomDraw { Callback: "W3DCommandBarForegroundDraw" }:
+                case UiCustomDraw { Callback: "W3DCommandBarForegroundDraw" } when _scheme is { } scheme:
                     AddSchemeParts(result, scheme, scheme.ForegroundParts);
                     break;
-                case UiCustomDraw { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" } rightHud:
+                case UiCustomDraw { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" } rightHud when _scheme is { } scheme:
                     if (_showsSideLogo && SchemeImage(scheme.RightHudImage) is { } logo) result.Add(new UiImageDraw(logo, rightHud.Rect, WndColor.White, false, false));
                     break;
                 default:
@@ -988,7 +1019,16 @@ public sealed partial class MatchController
             }
         }
 
-        if (_scheme is { } scheme)
+        if (_modernBar is { } modern)
+        {
+            if (!_controlBarRoot.IsHidden)
+            {
+                commands.AddRange(modern.Power(Hud.EnergyProduction, Hud.EnergyConsumption, _textMeasure, _scaleOptions.TextScale));
+                commands.AddRange(modern.Selection(SelectionForPlate(), _textMeasure, _scaleOptions.TextScale));
+                if (Generals is { } general) commands.AddRange(modern.General(_assets.Text.Get("SCIENCE:Rank" + general.RankLevel.ToString(CultureInfo.InvariantCulture)), general.ProgressPercent, StarBlinks && _starFlash, _textMeasure, _scaleOptions.TextScale));
+            }
+        }
+        else if (_scheme is { } scheme)
         {
             var powerRect = SchemeRectOnScreen(scheme, scheme.PowerBar);
             var powerColor = Hud.Underpowered ? new WndColor(220, 40, 40, 255) : new WndColor(40, 200, 60, 255);
