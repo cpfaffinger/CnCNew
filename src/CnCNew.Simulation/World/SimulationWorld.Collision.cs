@@ -318,13 +318,15 @@ public sealed partial class SimulationWorld
         var goal = ai.IgnoredObstacle;
         var (x, y, _) = mover.FrameEnd(_tick);
         var angle = mover.FrameEndAngle(_tick);
-        var reach = Magnitude(CircleRadius(mover)) + _widestMobile + ScanSlack;
+        // Per pair and from the templates: a box reaches beyond its circle, and _widestMobile remembers units long dead, which a restored world does not.
+        var extent = GroundPlanExtent(mover.Template);
         var ours = new SiteShape(mover.Template, x, y, angle);
         var mobiles = _mobiles;
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
             var (otherX, otherY, _) = other.FrameEnd(_tick);
+            var reach = extent + GroundPlanExtent(other.Template) + ScanSlack;
             if (Magnitude(otherX - x) > reach || Magnitude(otherY - y) > reach) continue;
             if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || !other.HasMoveTarget || OnAnotherLevel(mover, other)) continue;
             var otherAngle = other.FrameEndAngle(_tick);
@@ -340,6 +342,9 @@ public sealed partial class SimulationWorld
         }
         return blocked;
     }
+
+    private static long GroundPlanExtent(Templates.ObjectTemplate template)
+        => Magnitude(template.GeometryMajorRadius) + (template.IsBox ? Magnitude(template.GeometryMinorRadius) : 0);
 
     /// <summary><c>AIUpdateInterface::calculateMaxBlockedSpeed</c>: as fast as the other moves away from the mover, in the direction the mover drives towards it.</summary>
     private static Fixed MaxBlockedSpeed(Fixed x, Fixed y, Fixed angle, Fixed otherX, Fixed otherY, Fixed otherAngle, Fixed otherSpeed)
