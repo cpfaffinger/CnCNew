@@ -89,6 +89,58 @@ internal static class ProjectileModules
         return SquaredReach.Of(template.GeometryMajorRadius + radius).Contains(dx * dx + dy * dy);
     }
 
+    /// <summary>
+    /// What a projectile meets at <paramref name="point"/> on its way (<c>WeaponTemplate::shouldProjectileCollideWith</c>): the first of what its weapon's <c>ProjectileCollidesWith</c> names, in the
+    /// order of the ids. What it was fired at is the end of its flight and no business of this. The port has no collision system, so the question is asked once per logic frame of the original where
+    /// the projectile is at the end of it.
+    /// </summary>
+    internal static Entity? Collision(IWorldServices world, Entity projectile, EntityId launcher, EntityId victim, int weaponIndex, Point3 point)
+    {
+        if (weaponIndex < 0) return null;
+        var weapon = world.Weapons[weaponIndex];
+        var radius = projectile.Template.BoundingCircleRadius;
+        var mask = weapon.ProjectileCollideMask;
+        if (mask == 0) return null;
+        var source = world.FindEntity(launcher);
+        // What is no structure is only met when the weapon asks for it: most weapons name structures alone, and a world has few of them.
+        if ((mask & ~(WeaponInfo.CollideStructures | WeaponInfo.CollideControlledStructures | WeaponInfo.CollideWalls)) == 0)
+        {
+            foreach (var other in world.EntitiesOfKind("STRUCTURE").AsSpan())
+                if (Meets(world, projectile, source, other, victim, weapon, point, radius)) return other;
+            return null;
+        }
+        foreach (var other in world.Entities)
+            if (Meets(world, projectile, source, other, victim, weapon, point, radius)) return other;
+        return null;
+    }
+
+    private static bool Meets(IWorldServices world, Entity projectile, Entity? source, Entity other, EntityId victim, WeaponInfo weapon, Point3 point, Fixed radius)
+    {
+        if (other == projectile || other.Id == victim || other.DestroyRequested || other.EffectivelyDead || other.ContainedBy.IsValid || !Touches(other, world.Tick, point, radius)) return false;
+        // "Don't hit your own launcher, ever", nor what it sits in.
+        if (source is not null && (other == source || source.ContainedBy == other.Id)) return false;
+        // "Never bother burning already-burned things."
+        if (weapon.DamageType is DamageTypes.Flame or DamageTypes.ParticleBeam && other.HasStatus(BurnedStatus)) return false;
+        var template = other.Template;
+        // "Horrible special case for airplanes sitting on airfields."
+        if (template.IsKindOf("FS_AIRFIELD") && victim.IsValid && other.Modules.OfType<ParkingPlaceBehavior>().Any(place => place.HasReservedSpace(victim))) return false;
+        var required = world.RelationshipOf(projectile.Owner, other.Owner) switch
+        {
+            Relationship.Allies => WeaponInfo.CollideAllies,
+            Relationship.Enemies => WeaponInfo.CollideEnemies,
+            _ => 0,
+        };
+        if (template.IsKindOf("STRUCTURE")) required |= other.Owner == projectile.Owner ? WeaponInfo.CollideControlledStructures : WeaponInfo.CollideStructures;
+        if (template.IsKindOf("SHRUBBERY")) required |= WeaponInfo.CollideShrubbery;
+        if (template.IsKindOf("PROJECTILE")) required |= WeaponInfo.CollideProjectile;
+        if (template.FenceWidth > Fixed.Zero) required |= WeaponInfo.CollideWalls;
+        if (template.IsKindOf("SMALL_MISSILE")) required |= WeaponInfo.CollideSmallMissiles;
+        if (template.IsKindOf("BALLISTIC_MISSILE")) required |= WeaponInfo.CollideBallisticMissiles;
+        return (weapon.ProjectileCollideMask & required) != 0;
+    }
+
+    private static readonly int BurnedStatus = ObjectStatusBits.Index("BURNED");
+
     /// <summary>The shared end of both projectiles: detonate (radius damage, effect, creation list), then kill with <c>DEATH_DETONATED</c> or destroy.</summary>
     internal static void KillDetonated(IWorldServices world, Entity projectile)
     {
@@ -365,6 +417,15 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         var point = PathPoint(_step);
         var previous = _step > 0 ? PathPoint(_step - 1) : _start;
         if (point.X != previous.X || point.Y != previous.Y) Entity.Angle = FixedTrig.Atan2(point.Y - previous.Y, point.X - previous.X);
+        // PhysicsBehavior's collision: what stands in the way of this frame's step.
+        if (ProjectileModules.Collision(world, Entity, _launcher, _victim, _weapon, point) is { } struck)
+        {
+            (Entity.X, Entity.Y, Entity.Z) = (point.X, point.Y, point.Z);
+            Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            if (!ProjectileModules.ClearGarrison(world, Entity, _launcher, struck.Id, data.GarrisonHitKillCount, data.GarrisonHitKillRequiredKindOf, data.GarrisonHitKillForbiddenKindOf, data.GarrisonHitKillFx))
+                Detonate(world);
+            return SimulationTiming.SleepForever;
+        }
         // "see if we' still in the bridge's xy area": a shell that sinks through a deck blows up on it.
         if (world.ProjectileHitsDeck(point.X, point.Y, previous.Z, point.Z, out var deckZ))
         {
@@ -975,6 +1036,12 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             Settled(_velocity.Y + push.Y - _velocity.Y * friction),
             Settled(_velocity.Z + push.Z + gravity - _velocity.Z * friction));
         var next = killing ? Cheat(position, speed) : new Point3(position.X + _velocity.X, position.Y + _velocity.Y, position.Z + _velocity.Z);
+        if (_armed && ProjectileModules.Collision(world, Entity, _launcher, _firedAt, _weapon, next) is { } inTheWay)
+        {
+            Place(world, next);
+            if (!ClearGarrison(world, inTheWay.Id)) Detonate(world);
+            return;
+        }
         if (_armed && world.FindEntity(_firedAt) is { DestroyRequested: false } struck && ProjectileModules.Touches(struck, world.Tick, next, Entity.Template.GeometryMajorRadius))
         {
             Place(world, next);

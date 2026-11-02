@@ -119,6 +119,7 @@ public sealed class ObjectTemplate
         Geometry = definition.Fields.LastOrDefault(field => field.Name.Equals("Geometry", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue geometry ? geometry.Name : string.Empty;
         GeometryMajorRadius = Real(definition, "GeometryMajorRadius");
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
+        FenceWidth = Real(definition, "FenceWidth");
         GeometryHeight = Real(definition, "GeometryHeight");
         FactoryExitWidth = Real(definition, "FactoryExitWidth");
         FactoryExtraBibWidth = Real(definition, "FactoryExtraBibWidth");
@@ -179,6 +180,9 @@ public sealed class ObjectTemplate
     /// <summary><c>W3DLaserDraw::getLaserTemplateWidth</c>: half the <c>OuterBeamWidth</c> of a laser object's draw module (0 for any other object); the logic reads it for the radius of a beam (<c>LaserUpdate::getCurrentLaserRadius</c>).</summary>
     public Fixed LaserBeamRadius { get; }
     public Fixed GeometryMinorRadius { get; }
+
+    /// <summary><c>FenceWidth</c>: above zero the object is a wall to a projectile (<c>WEAPON_COLLIDE_WALLS</c>).</summary>
+    public Fixed FenceWidth { get; }
     public Fixed GeometryHeight { get; }
 
     /// <summary><c>FactoryExitWidth</c>: how much room a factory keeps free in front of it (F-18).</summary>

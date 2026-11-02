@@ -30,6 +30,13 @@ public sealed record WeaponInfo(
     // WeaponTemplate ctor default (Weapon.cpp): ALLIES | ENEMIES | NEUTRALS.
     public const int DefaultAffects = AffectsAllies | AffectsEnemies | AffectsNeutrals;
 
+    /// <summary><c>WeaponCollideMaskType</c> (<c>TheWeaponCollideMaskNames</c>).</summary>
+    public const int CollideAllies = 1, CollideEnemies = 2, CollideStructures = 4, CollideShrubbery = 8, CollideProjectile = 16, CollideWalls = 32, CollideSmallMissiles = 64,
+        CollideBallisticMissiles = 128, CollideControlledStructures = 256;
+
+    /// <summary><c>ProjectileCollidesWith</c>: what the projectile meets on its way, besides what it was fired at.</summary>
+    public int ProjectileCollideMask { get; init; } = CollideStructures;
+
     /// <summary><c>WeaponTemplate</c> ctor: <c>m_weaponSpeed = m_minWeaponSpeed = 999999.0f</c> (per frame, "effectively instant").</summary>
     public static readonly Fixed InstantSpeed = Fixed.FromInt(999999);
 
@@ -255,6 +262,19 @@ public sealed class WeaponCatalog
                 foreach (var name in affectsFlags.Names)
                     affects |= 1 << (NameTablesPhase5.WeaponAffectsMask.TryIndexOf(name, out var bit) ? bit : throw new InvalidDataException($"{definition.OriginalName}: unknown RadiusDamageAffects {name}."));
             }
+            var collide = WeaponInfo.CollideStructures;
+            if (Field("ProjectileCollidesWith") is { } collideField)
+            {
+                collide = 0;
+                foreach (var name in collideField.Value.OriginalText.Split(';', 2)[0].Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries))
+                    collide |= name.ToUpperInvariant() switch
+                    {
+                        "ALLIES" => WeaponInfo.CollideAllies, "ENEMIES" => WeaponInfo.CollideEnemies, "STRUCTURES" => WeaponInfo.CollideStructures, "SHRUBBERY" => WeaponInfo.CollideShrubbery,
+                        "PROJECTILES" => WeaponInfo.CollideProjectile, "WALLS" => WeaponInfo.CollideWalls, "SMALL_MISSILES" => WeaponInfo.CollideSmallMissiles,
+                        "BALLISTIC_MISSILES" => WeaponInfo.CollideBallisticMissiles, "CONTROLLED_STRUCTURES" => WeaponInfo.CollideControlledStructures, "NONE" => 0,
+                        _ => throw new InvalidDataException($"{definition.OriginalName}: ProjectileCollidesWith names '{name}'."),
+                    };
+            }
             // Keys without a strict weapon schema keep the generic typing (Text/Distance/Boolean, or the NONE sentinel); read them explicitly.
             string Name(string key) => Field(key)?.Value switch
             {
@@ -311,6 +331,7 @@ public sealed class WeaponCatalog
                 ProjectileObject = projectile,
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
+                ProjectileCollideMask = collide,
                 AllowAttackGarrisonedBuildings = Flag("AllowAttackGarrisonedBldgs"),
                 ShockWaveAmount = Length("ShockWaveAmount"),
                 ShockWaveRadius = Length("ShockWaveRadius"),

@@ -539,6 +539,7 @@ run.Test("Subdual: it disables what holds as much as it has health, and wears of
 run.Test("Subdual: a body without a cap takes none", Tests.SubdualDamageNeedsABodyThatCanBeSubdued);
 run.Test("Combat drop: the riders come down the ropes at a place", Tests.CombatDropAtAPlace);
 run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDropIntoABuilding);
+run.Test("Projectiles: a shell meets what stands in its way", Tests.ProjectilesMeetWhatStandsInTheirWay);
 run.Test("Structures: OCL updates, dynamic shroud, floating, checkpoints, enemy-near, firestorms", Tests.StructuresWorldEffects);
 run.Test("Structures: weapon bonus beacons and cost modifiers", Tests.StructuresWeaponBonusAndCostModifier);
 run.Test("Structures: a broken dam sends the flood wave", Tests.StructuresDamMakesTheWaveFlood);
