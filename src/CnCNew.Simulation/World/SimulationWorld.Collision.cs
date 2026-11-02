@@ -292,6 +292,7 @@ public sealed partial class SimulationWorld
     /// its own way holds it up (the ground plans overlap, the other lies ahead and moves on) and how fast it may then drive; its next frame's decision reads that. In one pass, at the frame's end, so
     /// no unit sees another at a moment of its own, at any rate.
     /// </summary>
+    /// <remarks>After the delayed damage of the tick: a unit killed in a frame is no obstacle at the end of that frame at any rate.</remarks>
     private void StepBlockedMovers(long tick)
     {
         if (!Time.IsOriginalFrameBoundary(tick + TickOrder.Next)) return;

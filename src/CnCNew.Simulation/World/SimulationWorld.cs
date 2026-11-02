@@ -2261,13 +2261,13 @@ public sealed partial class SimulationWorld : IWorldServices
         StepAcquisition(tick);
         StepRepulsion(tick);
         StepContacts(tick);
-        StepBlockedMovers(tick);
         StepTurrets(tick);
         StepFiringTrackers(tick);
         DeliverEvents();
         ProcessSales(tick);
         ProcessDestroys();
         ProcessDelayedDamage(tick);
+        StepBlockedMovers(tick);
         ProcessSpawns();
         DeliverEvents();
         if (_vision is not null && tick % VisionInterval == _visionPhase) RefreshVision();
@@ -2307,7 +2307,6 @@ public sealed partial class SimulationWorld : IWorldServices
         StepAcquisition(tick);
         StepRepulsion(tick);
         StepContacts(tick);
-        StepBlockedMovers(tick);
         observer.PhaseEnded(TickPhase.Acquisition);
         observer.PhaseStarted(TickPhase.Turrets);
         StepTurrets(tick);
@@ -2326,6 +2325,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseEnded(TickPhase.Destroys);
         observer.PhaseStarted(TickPhase.DelayedDamage);
         ProcessDelayedDamage(tick);
+        StepBlockedMovers(tick);
         observer.PhaseEnded(TickPhase.DelayedDamage);
         observer.PhaseStarted(TickPhase.Spawns);
         ProcessSpawns();
