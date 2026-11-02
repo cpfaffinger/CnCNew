@@ -9,7 +9,7 @@ namespace CnCNew.Game.Live;
 /// </summary>
 public static class AcceptanceScenes
 {
-    public static ImmutableArray<DemoScenario> All => [March, Wheels, Board, Artillery, Repair, Firefight, Build, Flames];
+    public static ImmutableArray<DemoScenario> All => [March, Wheels, Board, Artillery, Repair, Firefight, Build, Flames, Paradrop, Lotus];
 
     /// <summary>The two ends of the march and the frames its two legs start at; the audit reads them.</summary>
     public const float MarchEast = 90f, MarchWest = -90f;
@@ -168,7 +168,7 @@ public static class AcceptanceScenes
     public static DemoScenario Build { get; } = new(
         "acc-build", "Construction",
         "A dozer builds a power plant and then a barracks. To see: the dozer drives to the site, the building rises (construction progress), and stands complete in the player's colour afterwards; to hear: the construction sound and the announcement of the finished building.",
-        960,
+        2700,
         [new("dozer", "AmericaVehicleDozer", 1, -90, 0, 0f)],
         [
             new(BuildFirstOrder, "dozer", ScenarioOrderKind.Build, "plant", X: 30, Y: -70, Template: "AmericaPowerPlant"),
@@ -177,5 +177,35 @@ public static class AcceptanceScenes
         20, -15, 20f, 42f, 330f)
     {
         StartMoney = 5000,
+    };
+
+    /// <summary>The paratroopers of the Air Force general at once: a person should not have to earn the rank to judge a chute.</summary>
+    public static DemoScenario Paradrop { get; } = new(
+        "acc-paradrop", "Paratroopers",
+        "A plane drops paratroopers on open ground, ninety seconds after the start at the latest. To see: each soldier hangs under his chute and comes down with it, none drops as a chute alone, none stands inside the plane.",
+        1800,
+        [new("centre", "AmericaCommandCenter", 1, -260, -80, 0f)],
+        [new(30, "centre", ScenarioOrderKind.UsePower, X: 40f, Y: 0f, Template: "SuperweaponParadropAmerica")],
+        40, 0, 20f, 42f, 420f)
+    {
+        PowersReady = true,
+        Sciences = ["SCIENCE_Paradrop1"],
+    };
+
+    /// <summary>The Black Lotus at work at once: a person should not have to build up to her to judge the arc of data.</summary>
+    public static DemoScenario Lotus { get; } = new(
+        "acc-lotus", "The Black Lotus",
+        "The Black Lotus captures a building. To see: while she works an arc of data runs from her to the building, does not go through the ground, and ends when she does.",
+        1500,
+        [
+            new("lotus", "ChinaInfantryBlackLotus", 1, -70, 0, 0f),
+            new("barracks", "AmericaBarracks", 2, 60, 0, 180f),
+        ],
+        [new(30, "lotus", ScenarioOrderKind.Capture, "barracks")],
+        0, 0, 20f, 42f, 300f)
+    {
+        HumanFaction = "FactionChina",
+        OpponentFaction = "FactionAmerica",
+        PowersReady = true,
     };
 }

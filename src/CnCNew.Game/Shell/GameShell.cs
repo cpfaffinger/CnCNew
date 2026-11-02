@@ -192,12 +192,16 @@ public sealed class GameShell
         var maps = ImmutableArray.CreateBuilder<ShellMapEntry>();
         var problems = ImmutableArray.CreateBuilder<string>();
         problems.AddRange(scan.Problems);
-        foreach (var file in scan.Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)))
+        // The owner's folder of 370 maps took a minute one after the other: each map is read by itself, and the list keeps the folder's order.
+        var files = scan.Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var read = new (ShellMapEntry? Entry, string? Problem)[files.Length];
+        Parallel.For(0, files.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, System.Environment.ProcessorCount - 1) }, index =>
         {
+            var file = files[index];
             if (unchanged?.Contains(file) == true && entries!.TryGetValue(file.Entry.VirtualPath, out var entry))
             {
-                maps.Add(entry);
-                continue;
+                read[index] = (entry, null);
+                return;
             }
 
             // Files of strangers: whatever one of them breaks costs that map, never the game.
@@ -206,12 +210,17 @@ public sealed class GameShell
                 CnCNew.Data.World.MapData map;
                 using (var stream = File.OpenRead(file.DiskPath)) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
                 var scripted = map.PlayerScripts.Any(list => list.Scripts.Length + list.Groups.Length > 0);
-                maps.Add(new ShellMapEntry(file.Entry.VirtualPath, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath).StartPositions.Length, scripted));
+                read[index] = (new ShellMapEntry(file.Entry.VirtualPath, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath).StartPositions.Length, scripted), null);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {
-                problems.Add($"{Path.GetFileName(file.DiskPath)}: {exception.Message}");
+                read[index] = (null, $"{Path.GetFileName(file.DiskPath)}: {exception.Message}");
             }
+        });
+        foreach (var (entry, problem) in read)
+        {
+            if (entry is not null) maps.Add(entry);
+            if (problem is not null) problems.Add(problem);
         }
 
         return new UserMapRead(scan, maps.ToImmutable(), problems.ToImmutable());

@@ -86,6 +86,8 @@ public abstract class LiveGame
         TerrainModel = TerrainRenderModel.Build(map, lookup, renderOptions, mapPath);
         Heights = new TerrainHeightSampler(map.HeightField);
         Camera = new RtsCamera(RtsCameraSettings.FromDefinitions(graph), Heights, viewport);
+        // The owner's wish (INPUT-03): half as far again as MaxCameraHeight of the data. A modern screen shows more of the map than the original's did at this height.
+        Camera.SetMaxHeightAboveGround(Camera.MaxHeightAboveGround * 1.5f);
         Camera.InitializeForMap(cameraStart);
         Fog = FogOfWarGrid.ForVision(world.Vision!, FogSettings.FromDefinitions(graph, 510f));
         var water = renderOptions.Water?.RadarColor ?? new Rgba32(100, 120, 140, 255);
