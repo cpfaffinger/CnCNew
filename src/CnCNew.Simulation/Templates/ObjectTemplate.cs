@@ -838,7 +838,8 @@ public sealed class TemplateCatalog
             var speedDamaged = Optional("SpeedDamaged") is { } sd && sd >= 0 ? sd : speed;
             var turnRateDamaged = Optional("TurnRateDamaged") is { } td && td >= 0 ? td : turnRate;
             var accelerationDamaged = Optional("AccelerationDamaged") is { } ad && ad >= 0 ? ad : acceleration;
-            var lift = Get("Lift");
+            // No key of the schema: the value arrives as text.
+            var lift = Optional("Lift") ?? 0m;
             var liftDamaged = Optional("LiftDamaged") is { } ld && ld >= 0 ? ld : lift;
             var normal = new LocomotorInfo(
                 timing.PerSecondToPerTick(speed), timing.PerSecondSquaredToPerTickSquared(acceleration),

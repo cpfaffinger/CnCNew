@@ -149,6 +149,13 @@ static partial class Tests
         }
     }
 
+    /// <summary><c>Lift</c> is no key of the locomotor schema and arrives as text; it was read as 0 for every locomotor, and only <c>LiftDamaged</c> took effect.</summary>
+    public static void ALocomotorReadsItsLift()
+    {
+        var (world, _) = FlightRateWorld(SimulationRate.Hz30, WingAirfieldFiles, terrain: false);
+        Check.That(world.Templates.TryGet("AirTestJet", out var jet) && jet.Locomotor is { } locomotor && locomotor.Lift == Fixed.FromDecimal(120m / 900m), "The jet's Lift of 120 per second² is its lift per frame².");
+    }
+
     /// <summary><c>blockedBy</c>: a unit beside the mover, off 45 degrees and going its own way, holds nothing up: the two overlap for a moment, as in the original.</summary>
     public static void AUnitBesideAMoverIsNoObstacle()
     {

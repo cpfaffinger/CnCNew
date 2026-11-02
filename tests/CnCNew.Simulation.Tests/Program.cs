@@ -105,6 +105,7 @@ run.Test("Acceptance (SPEC-08): a building site sees a rectangle laid across ano
 run.Test("Acceptance (UNIT-10): a unit appears on the ground of its place", Tests.AUnitAppearsOnTheGroundOfItsPlace);
 run.Test("Acceptance (UNIT-02): a tank behind infantry follows without a stutter", Tests.TankBehindInfantryFollowsWithoutAStutter);
 run.Test("Acceptance (UNIT-02): a unit beside a mover is no obstacle", Tests.AUnitBesideAMoverIsNoObstacle);
+run.Test("Acceptance (UNIT-19): a locomotor reads its lift", Tests.ALocomotorReadsItsLift);
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
 run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlliesMakeWayForAHarvester);
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);
