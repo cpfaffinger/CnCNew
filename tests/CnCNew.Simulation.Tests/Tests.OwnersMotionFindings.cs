@@ -98,6 +98,33 @@ static partial class Tests
     }
 
     /// <summary>
+    /// UNIT-10: <c>DefaultProductionExitUpdate::exitObjectViaDoor</c> "make sure the point is on the terrain": a factory on a step of the ground makes its unit on the ground of the place
+    /// it appears at, not at the factory's own height. On a ramp in the model the unit stays on the terrain too: the logic has no other height.
+    /// </summary>
+    public static void AUnitAppearsOnTheGroundOfItsPlace()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (x, _) => x >= 26 ? 40 : 0), "step");
+            var (world, feeder, _) = RatedWorld(rate, MotionFiles(), terrain);
+            feeder.GiveMoney(1, 100);
+            feeder.Spawn(1, "MotionFactory", owner: 1, x: 300, y: 300);
+            for (var tick = 0; tick < factor; tick++) world.Step();
+            var factory = world.Entities.Single(value => value.Template.Name == "MotionFactory");
+            Check.That(factory.Z > world.GroundHeightAt(Fixed.FromInt(230), Fixed.FromInt(300)) + Fixed.FromInt(10), $"{rate}: the factory stands above the place of its exit.");
+            Check.That(feeder.QueueProduction(1, factory.Id.Value, "MotionTank").Accepted, $"{rate}: the tank is queued.");
+            Entity? tank = null;
+            for (var tick = 0; tick < world.Frames(120) && tank is null; tick++)
+            {
+                world.Step();
+                tank = world.Entities.SingleOrDefault(value => value.Template.Name == "MotionTank");
+            }
+            Check.That(tank is not null, $"{rate}: the tank appears.");
+            Check.That(tank!.Z == world.GroundHeightAt(tank.X, tank.Y), $"{rate}: on the ground ({(tank.Z.Raw - world.GroundHeightAt(tank.X, tank.Y).Raw) / (double)Fixed.ScaleRaw:F2} units above it).");
+        }
+    }
+
+    /// <summary>
     /// UNIT-02: a tank behind infantry that walks the same way stuttered: the bounded avoidance shoved its step aside by 45 degrees, the path pulled it back, frame after frame.
     /// <c>AIUpdateInterface::processCollision</c> holds it behind the soldier at his speed instead (<c>calculateMaxBlockedSpeed</c>, <c>m_bumpSpeedLimit</c>).
     /// </summary>
