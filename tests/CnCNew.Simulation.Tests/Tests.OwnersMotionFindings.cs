@@ -156,6 +156,46 @@ static partial class Tests
         Check.That(world.Templates.TryGet("AirTestJet", out var jet) && jet.Locomotor is { } locomotor && locomotor.Lift == Fixed.FromDecimal(120m / 900m), "The jet's Lift of 120 per second² is its lift per frame².");
     }
 
+    /// <summary>
+    /// UNIT-19: the height of a landing was a straight line from the cruising height to the end of the runway: the sink began at once and ended at full speed on the ground. The original holds
+    /// the height with the locomotor's lift (<c>Locomotor::calcLiftToUseAtPt</c>): the sink builds up, is braked in time, and the wheels touch softly. The aircraft does not go back for an
+    /// approach point it has passed and does not stand still in the air for the state change.
+    /// </summary>
+    public static void AJetFlaresItsLanding()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder) = FlightRateWorld(rate, WingAirfieldFiles, terrain: false);
+            feeder.Spawn(1, "AirTestAirfield", owner: 1, x: 500, y: 500);
+            StepFrames(world, 1);
+            feeder.GiveMoney(1, 1000);
+            StepFrames(world, 1);
+            var airfield = Only(world, "AirTestAirfield");
+            var track = new List<(Fixed X, Fixed Y, Fixed Z)>();
+            BitTrack(world, "AirTestJet", 1500, (frame, jet) =>
+            {
+                if (frame == 0) Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, $"{rate}: the jet is queued.");
+                if (jet is null) return;
+                if (frame == 100) Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1200, 300).Accepted, $"{rate}: the parked jet is sent away.");
+                if (JetOf(jet).Phase == JetAIUpdate.JetPhase.Landing) track.Add((jet.X, jet.Y, jet.Z));
+            });
+            Check.That(track.Count > 40, $"{rate}: the jet lands ({track.Count} frames).");
+            double D(Fixed value) => value.Raw / (double)Fixed.ScaleRaw;
+            var ground = D(track[^1].Z);
+            double hardest = 0, touchdown = 0, standing = 0;
+            for (var index = 2; index < track.Count; index++)
+            {
+                var (sink, before) = (D(track[index].Z) - D(track[index - 1].Z), D(track[index - 1].Z) - D(track[index - 2].Z));
+                hardest = Math.Max(hardest, Math.Abs(sink - before));
+                if (D(track[index].Z) == ground && D(track[index - 1].Z) > ground) touchdown = -sink;
+                if (D(track[index].Z) > ground && track[index].X == track[index - 1].X && track[index].Y == track[index - 1].Y) standing++;
+            }
+            Check.That(hardest < 0.5, $"{rate}: the sink changes softly ({hardest:F3} units per frame between two frames).");
+            Check.That(touchdown < 0.6, $"{rate}: the wheels touch softly ({touchdown:F3} units per frame).");
+            Check.That(standing == 0, $"{rate}: the jet does not stand in the air ({standing} frames).");
+        }
+    }
+
     /// <summary><c>blockedBy</c>: a unit beside the mover, off 45 degrees and going its own way, holds nothing up: the two overlap for a moment, as in the original.</summary>
     public static void AUnitBesideAMoverIsNoObstacle()
     {

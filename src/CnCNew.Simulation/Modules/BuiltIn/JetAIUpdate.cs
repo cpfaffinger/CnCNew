@@ -91,6 +91,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private static readonly Fixed MinHelicopterApproachSpeedPerFrame = Fixed.One;
     /// <summary>The slowest landing speed of a winged aircraft.</summary>
     private static readonly Fixed MinLandingSpeedPerFrame = Fixed.One / Fixed.FromInt(2);
+    /// <summary><c>TINY_ACCEL</c> of <c>Locomotor::calcLiftToUseAtPt</c>.</summary>
+    private static readonly Fixed TinyLift = Fixed.FromDecimal(0.001m);
 
     private JetPhase _phase;
     private bool _allowAir = true;
@@ -116,8 +118,6 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private long _checkAirfieldTick;
     /// <summary>The climb speed of the height control, per logic frame of the original.</summary>
     private Fixed _verticalSpeed;
-    private Fixed _glideHeight;
-    private Fixed _glideLength;
     private ParkingInfo _leg;
     /// <summary>The step the states decided for the running logic frame of the original, flown in shares per tick; empty at 30 Hz, where a frame is a tick.</summary>
     private FlightFrameStep _frame;
@@ -914,13 +914,44 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         if (!parking.ReserveRunway(world, Entity.Id, true)) return; // the winged aircraft circles meanwhile (ShouldCircle)
-        // JetTakeoffOrLandingState: over the approach point onto the end of the runway, then the roll-out to its start; the height falls with the way left to the end of the runway.
-        _glideHeight = Fixed.Max(Fixed.Zero, Entity.Z - parking.ApronHeight(world, Entity.X, Entity.Y));
-        _glideLength = AirModules.Distance2D(Entity.X, Entity.Y, info.RunwayApproach.X, info.RunwayApproach.Y) + AirModules.Distance2D(info.RunwayApproach.X, info.RunwayApproach.Y, info.RunwayEnd.X, info.RunwayEnd.Y);
+        // JetTakeoffOrLandingState: over the approach point onto the end of the runway, then the roll-out to its start. The state changes in the frame of the clearance and the
+        // aircraft flies on: no frame of the flight stands still for it.
+        _verticalSpeed = Fixed.Zero;
         Enter(JetPhase.Landing);
         _path.Add(info.RunwayApproach);
         _path.Add(info.RunwayEnd);
         _path.Add(info.RunwayStart);
+        Land(world, parking);
+    }
+
+    /// <summary>
+    /// <c>Locomotor::calcLiftToUseAtPt</c> in the landing's ultra-accurate mode with <c>PRECISE_Z_POS</c> (<c>JetTakeoffOrLandingState::onEnter</c>): the height of the next point of the path is the goal, the
+    /// lift is limited by the locomotor's and brakes in time ("see how far we need to slow to dead stop"), and <c>PhysicsBehavior::update</c> adds gravity and puts the aircraft on the ground.
+    /// One step of a logic frame of the original, in units of that frame; <see cref="_verticalSpeed"/> is signed here.
+    /// </summary>
+    private void SinkTowards(IWorldServices world, LocomotorInfo flight, Fixed goalZ, Fixed ground)
+    {
+        FlightVerticalConstants(world.Time, flight, out var limitZ, out var grossLift);
+        var gravity = FlightFrames.GravityPerFrameSquared(world.Templates);
+        var speed = _verticalSpeed;
+        var brake = Fixed.Max(Fixed.Zero, grossLift + gravity) * Fixed.FromInt(2);
+        if (!speed.IsNegative) brake = -brake;
+        var acceleration = Fixed.Zero;
+        if (brake.Abs() > TinyLift)
+        {
+            var toGo = goalZ - Entity.Z;
+            // The original's brake distance, "the old, looks-incorrect-to-me-but-works calc".
+            if ((speed * speed / brake.Abs()).Abs() > toGo.Abs()) acceleration = brake;
+            // Absent, the limit is the original's 999999: no limit.
+            else if (limitZ > Fixed.Zero && speed.Abs() > limitZ) acceleration = limitZ - speed;
+            else acceleration = (toGo - speed) * Fixed.FromInt(2);
+        }
+        var lift = Fixed.Max(-grossLift, Fixed.Min(grossLift * Fixed.FromInt(3), acceleration - gravity));
+        _verticalSpeed = speed + lift + gravity;
+        Entity.Z += _verticalSpeed;
+        if (Entity.Z > ground) return;
+        Entity.Z = ground;
+        _verticalSpeed = Fixed.Zero;
     }
 
     private void Land(IWorldServices world, ParkingPlaceBehavior? parking)
@@ -957,6 +988,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         var target = _path[_pathIndex];
+        // Path::computeFlightDistToGoal: a point left behind on the way to the next one is passed; the aircraft does not go back for it.
+        if (_pathIndex == 0 && (Entity.X - target.X) * (_path[1].X - target.X) + (Entity.Y - target.Y) * (_path[1].Y - target.Y) > Fixed.Zero) target = _path[++_pathIndex];
         var minSpeed = Fixed.Max(slowest, MinLandingSpeedPerFrame);
         var speed = FlightFrameSpeed(world.Time);
         // loco->setMaxSpeed(loco->getMinSpeed()): the landing is flown at the minimum speed.
@@ -984,14 +1017,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             Entity.Y += (target.Y - Entity.Y) * step / distance;
         }
         var ground = parking.ApronHeight(world, Entity.X, Entity.Y);
-        if (airborne)
-        {
-            var remaining = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
-            if (_pathIndex == 0) remaining += AirModules.Distance2D(target.X, target.Y, _leg.RunwayEnd.X, _leg.RunwayEnd.Y);
-            var fraction = _glideLength > Fixed.Zero ? Fixed.Min(Fixed.One, remaining / _glideLength) : Fixed.Zero;
-            Entity.Z = ground + _glideHeight * fraction;
-        }
-        else Entity.Z = ground;
+        // ParkingPlaceBehavior::calcPPInfo: the approach point lies ApproachHeight above the end of the runway.
+        SinkTowards(world, flight, _pathIndex == 0 ? ground + parking.Data.ApproachHeight : ground, ground);
         world.MarkDirty(Entity);
         if (distance > Fixed.Max(step, Epsilon)) return;
         Entity.X = target.X;
@@ -1145,8 +1172,6 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         writer.Int("attackExpire", _attackExpireTick);
         writer.Int("checkAirfield", _checkAirfieldTick);
         writer.Fixed("verticalSpeed", _verticalSpeed);
-        writer.Fixed("glideHeight", _glideHeight);
-        writer.Fixed("glideLength", _glideLength);
         DescribeFlight(writer);
         _frame.Describe(writer, "frameStep");
         writer.BeginObject("leg");
@@ -1220,8 +1245,6 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _attackExpireTick = reader.Int("attackExpire");
         _checkAirfieldTick = reader.Int("checkAirfield");
         _verticalSpeed = reader.Fixed("verticalSpeed");
-        _glideHeight = reader.Fixed("glideHeight");
-        _glideLength = reader.Fixed("glideLength");
         LoadFlight(reader);
         _frame.Load(reader, "frameStep");
         var leg = reader.Object("leg");
