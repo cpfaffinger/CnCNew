@@ -1,16 +1,19 @@
 using CnCNew.Game.Shell;
 using Stride.Core.Mathematics;
 using Stride.Graphics;
+using Stride.Rendering;
+using Stride.Shaders;
+using Stride.Shaders.Compiler;
 
 namespace CnCNew.Client.Stride.Rendering;
 
 /// <summary>
 /// The two screen filters a mission script can switch on (<c>docs/SCRIPT-ENGINE.md</c> §7a), drawn over the finished world before the HUD: <c>CAMERA_BW_MODE_*</c> and <c>CAMERA_MOTION_BLUR_JUMP</c>.
 /// The original renders the scene into a texture and draws it back through a pixel shader (<c>ScreenBWFilter</c>, <c>ScreenMotionBlurFilter</c> in <c>W3DShaderManager.cpp</c>). This project has no custom
-/// shaders, so both are built from what a sprite batch offers: the back buffer is copied once and drawn back several times.
+/// shaders of its own on disk, so both are built from what a sprite batch offers: the back buffer is copied once and drawn back several times.
 /// <list type="bullet">
-/// <item><description>Grey-scale: the picture blended with its red channel drawn as mono, by the fade <c>t</c>: <c>(1 - t) * C + t * (R, R, R)</c>. The sprite batch's only swizzle is RRRR, so this is an approximation of the
-/// original's luminance weights 0.30 / 0.59 / 0.11 (reds come out lighter, blues darker).</description></item>
+/// <item><description>Grey-scale: the one pixel shader of this project, the source below compiled when it is first needed: <c>monochrome.pso</c> with the constants of <c>ScreenBWFilter::set</c>, the original's luminance
+/// 0.30 / 0.59 / 0.11 of the picture as it is displayed, blended by the fade <c>t</c>: <c>(1 - t) * C + t * (L, L, L)</c>. Should the compiler fail, the red channel stands in for the grey (<c>SwizzleMode.RRR1</c>).</description></item>
 /// <item><description>Motion blur: the copy zoomed into the centre by <c>sqrt(1 - count / 60 * 0.9)</c>, then up to 30 more layers, each zoomed a further 1 percent and blended at alpha 0x15 (or 2 percent and
 /// additive alpha 9 + (count - 30) / 5, plus 60 at the peak, for the saturating variant) - the same layer sums the original draws.</description></item>
 /// </list>
@@ -18,15 +21,36 @@ namespace CnCNew.Client.Stride.Rendering;
 /// </summary>
 internal sealed class ScreenFilters : IDisposable
 {
+    // streams.Color.a carries the fade: a sprite's colour is the one value a batch hands to its shader for free. The back buffer holds linear light, and the original weighs what is displayed.
+    private const string GreyShader = """
+        shader CnCNewGreyFilter<bool TSRgb> : SpriteBatchShader<TSRgb>
+        {
+            stage override float4 Shading()
+            {
+                float4 color = Texture0.Sample(Sampler, streams.TexCoord);
+                float3 displayed = pow(max(color.rgb, 0.0f), 1.0f / 2.2f);
+                float grey = pow(dot(displayed, float3(0.30f, 0.59f, 0.11f)), 2.2f);
+                return float4(lerp(color.rgb, float3(grey, grey, grey), streams.Color.a), 1.0f);
+            }
+        };
+        """;
+
     private readonly GraphicsDevice _device;
+    private readonly EffectSystem _effects;
     private readonly SpriteBatch _batch;
     private Texture? _copy;
+    private EffectInstance? _grey;
+    private bool _greyTried;
 
-    public ScreenFilters(GraphicsDevice device)
+    public ScreenFilters(GraphicsDevice device, EffectSystem effects)
     {
         _device = device;
+        _effects = effects;
         _batch = new SpriteBatch(device);
     }
+
+    /// <summary>What became of the grey-scale's shader, for the report; empty until it was needed.</summary>
+    public string GreyShaderState { get; private set; } = string.Empty;
 
     /// <summary>How many frames the filters changed the picture of (for the report).</summary>
     public long FramesFiltered { get; private set; }
@@ -82,17 +106,52 @@ internal sealed class ScreenFilters : IDisposable
         _batch.End();
     }
 
+    private EffectInstance? Grey()
+    {
+        if (_greyTried) return _grey;
+        _greyTried = true;
+        if (_device.ColorSpace != ColorSpace.Linear)
+        {
+            GreyShaderState = "red channel: the device is not in linear colour space";
+            return null;
+        }
+        try
+        {
+            var parameters = new CompilerParameters();
+            parameters.EffectParameters.Platform = GraphicsDevice.Platform;
+            parameters.EffectParameters.Profile = _device.Features.RequestedProfile;
+            var compiled = _effects.Compiler.Compile(new ShaderClassString("CnCNewGreyFilter", GreyShader, "true"), parameters);
+            if (compiled.HasErrors) throw new InvalidOperationException(compiled.ToText());
+            var result = compiled.Bytecode.WaitForResult();
+            if (result.CompilationLog.HasErrors || result.Bytecode is null) throw new InvalidOperationException(result.CompilationLog.ToText());
+            _grey = new EffectInstance(new Effect(_device, result.Bytecode) { Name = "CnCNewGreyFilter" });
+            GreyShaderState = "compiled";
+        }
+        catch (Exception problem) when (problem is not OutOfMemoryException) // A cut scene must not end the game over a filter, whatever the compiler lacks on this machine.
+        {
+            GreyShaderState = $"red channel: {problem.Message.ReplaceLineEndings(" ")}";
+        }
+        return _grey;
+    }
+
     private void DrawGrey(GraphicsContext context, RectangleF screen, SamplerState sampler, float amount)
     {
-        // The sprite batch can copy only the red channel into all three (SwizzleMode.RRRR), not mix the three: the grey is the red channel alone, as a photograph through a red filter (vegetation and water
-        // come out darker than with the original's 0.30 / 0.59 / 0.11 luminance). The fade blends the picture and its grey: (1 - t) * C + t * (R, R, R).
+        if (Grey() is { } grey)
+        {
+            _batch.Begin(context, SpriteSortMode.Deferred, BlendStates.Opaque, sampler, DepthStencilStates.None, null, grey);
+            _batch.Draw(_copy, screen, null, new Color4(1f, 1f, 1f, amount), 0f, Vector2.Zero);
+            _batch.End();
+            return;
+        }
+
+        // What a sprite batch can do alone: RRR1 keeps the alpha at one (RRRR squares the red through the additive blend and leaves the picture nearly black).
         var keep = 1f - amount;
         _batch.Begin(context, SpriteSortMode.Deferred, BlendStates.Opaque, sampler, DepthStencilStates.None);
         _batch.Draw(_copy, screen, null, new Color4(keep, keep, keep, 1f), 0f, Vector2.Zero);
         _batch.End();
 
         _batch.Begin(context, SpriteSortMode.Deferred, BlendStates.Additive, sampler, DepthStencilStates.None);
-        _batch.Draw(_copy, screen, null, new Color4(amount, amount, amount, 1f), 0f, Vector2.Zero, SpriteEffects.None, ImageOrientation.AsIs, 0f, default, SwizzleMode.RRRR);
+        _batch.Draw(_copy, screen, null, new Color4(amount, amount, amount, 1f), 0f, Vector2.Zero, SpriteEffects.None, ImageOrientation.AsIs, 0f, default, SwizzleMode.RRR1);
         _batch.End();
     }
 
@@ -133,6 +192,8 @@ internal sealed class ScreenFilters : IDisposable
     public void Dispose()
     {
         _copy?.Dispose();
+        _grey?.Effect.Dispose();
+        _grey?.Dispose();
         _batch.Dispose();
     }
 }

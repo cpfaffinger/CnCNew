@@ -176,6 +176,7 @@ dotnet run --project tools/CnCNew.CampaignTool -- script game/content --map MD_C
 dotnet run --project tools/CnCNew.PresentationTool -- object-audit game/content
 dotnet run --project tools/CnCNew.PresentationTool -- fx-audit game/content
 dotnet run --project tools/CnCNew.PresentationTool -- terrain-audit game/content
+dotnet run -c Release --project tools/CnCNew.PresentationTool -- camera-script game/content --map "Maps/MD_USA01/MD_USA01.map" [--seconds 90] [--every 30] [--waypoints A,B]
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir game/content --model-path Art/W3D/ABArFrcCmd.W3D
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "Maps/Alpine Assault/Alpine Assault.map" --content-dir game/content
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir game/content

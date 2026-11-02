@@ -186,6 +186,14 @@ internal static class MissionMovieTests
         var videoAt = Array.FindIndex(list.Commands.ToArray(), command => command is UiVideoDraw);
         TestHarness.Assert(videoAt == 1 && list.Commands[0] is UiImageDraw, "over the screen's picture, under its children");
 
+        // The skin of a first start has no picture to look for: it draws the root window as the canvas colour, and the movie must lie over that.
+        var modern = StartCampaign(data, Director(300, opened: _ => { }), CnCNew.Ui.Skins.UiSkin.Modern, new UiViewport(1280, 720)).BuildDrawList().Commands;
+        var modernAt = Array.FindIndex(modern.ToArray(), command => command is UiVideoDraw);
+        TestHarness.Assert(modernAt >= 0, "the modern skin draws the movie");
+        var cover = modern.Take(modernAt).Sum(command => command is UiFillRect { Rect: { Width: >= 1200, Height: >= 700 } } ? 1 : 0);
+        var above = modern.Skip(modernAt + 1).Count(command => command is UiFillRect { Rect: { Width: >= 639, Height: >= 359 }, Color.A: 255 } or UiImageDraw { Destination: { Width: >= 639, Height: >= 359 } });
+        TestHarness.Assert(cover == 1 && above == 0, $"over the canvas of the window ({cover} under it), and nothing of the screen covers it ({above} over it): {string.Join(" | ", modern.Take(modernAt + 3))}");
+
         movies.Update(1);
         movies.Update(1);
         shell.Update(1);
@@ -194,7 +202,10 @@ internal static class MissionMovieTests
         TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing, "Escape counts when it comes up");
         shell.HandleInput(new KeyEvent(0, KeyCode.Escape, false));
         shell.Update(0.01);
-        TestHarness.Assert(shell.Phase == ShellPhase.InMission && shell.DrainOutputs().OfType<StartMissionOutput>().Any(), "then the mission starts");
+        var started = shell.Phase == ShellPhase.InMission ? shell.DrainOutputs().OfType<StartMissionOutput>().SingleOrDefault() : null;
+        TestHarness.Assert(started is not null, "then the mission starts");
+        // Without a latency HAS_FINISHED_SPEECH and CAMERA_MOVEMENT_FINISHED are true at once, and a cut scene's scripts run ahead of what they wait for.
+        TestHarness.Assert(started!.Run.Session.Options.PresentationLatencyTicks == CnCNew.Game.Live.LiveMission.ClientPresentationLatencyFrames, "and it waits for its speech and its camera like one started by name");
 
         var ending = StartCampaign(data, Director(3, opened: _ => { }));
         ending.Movies!.Update(1);
@@ -211,10 +222,10 @@ internal static class MissionMovieTests
         TestHarness.Assert(without.Phase == ShellPhase.InMission, "until the voice length is over");
     }
 
-    private static GameShell StartCampaign(GameData data, MovieDirector movies)
+    private static GameShell StartCampaign(GameData data, MovieDirector movies, CnCNew.Ui.Skins.UiSkin? skin = null, UiViewport? viewport = null)
     {
         var environment = new FixedShellEnvironment(Path.Combine(Path.GetTempPath(), "cncnew-movie-tests-" + Guid.NewGuid().ToString("N")));
-        var shell = GameShell.Create(data, environment, viewport: new UiViewport(800, 600), skin: CnCNew.Ui.Skins.UiSkin.Original);
+        var shell = GameShell.Create(data, environment, viewport: viewport ?? new UiViewport(800, 600), skin: skin ?? CnCNew.Ui.Skins.UiSkin.Original);
         shell.Movies = movies;
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonUSA");

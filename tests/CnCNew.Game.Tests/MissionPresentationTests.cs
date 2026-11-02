@@ -29,6 +29,7 @@ internal static class MissionPresentationTests
     {
         var harness = new TestHarness(nameof(MissionPresentationTests));
         harness.Run("A scripted camera move completes at its real duration and unblocks CAMERA_MOVEMENT_FINISHED", CameraMoveCompletesOnItsRealDuration);
+        harness.Run("CAMERA_MOVEMENT_FINISHED waits for a zoom and a turn as well, and for the last of what runs", CameraMovementIsEveryMovement);
         harness.Run("Radar events and on-screen text are captured with real positions and resolved text", RadarAndCaptionOutputsAreCaptured);
         harness.Run("Selecting a named unit reaches NAMED_SELECTED; a UI interaction reaches FLAG", UiBridgeReachesTheEngine);
         harness.Run("A camera move pans a real RtsCamera once, not every frame; caption/placeholder text becomes draw commands", OverlayAndCameraApplication);
@@ -86,6 +87,31 @@ internal static class MissionPresentationTests
     }
 
     // ---------------------------------------------------------------------------------------------------- item 6: presentation playback
+
+    private static void CameraMovementIsEveryMovement()
+    {
+        var zoom = Script("Zoom", If("CONDITION_TRUE"), [
+            Do("ZOOM_CAMERA", Real(0.6m), Real(3), Real(0), Real(0)),
+            Do("MOVE_CAMERA_TO", Named(MapScriptParameterType.Waypoint, "Target"), Real(1), Real(0), Real(0), Real(0)),
+        ]);
+        var followUp = Script("FollowUp", If("CAMERA_MOVEMENT_FINISHED"), [Do("SET_FLAG", Named(MapScriptParameterType.Flag, "camera_done"), Bool(true))], oneShot: false);
+        var session = Start([zoom, followUp], [Waypoint("Target", 1, 100m, 100m)], MissionOptions.Standard with { PresentationLatencyTicks = 1_000_000 });
+        var director = new MissionPresentationDirector(session);
+        var ticksPerSecond = session.World.Time.TicksPerSecond;
+        void Run(long seconds)
+        {
+            for (var tick = 0L; tick < seconds * ticksPerSecond; tick++)
+            {
+                director.BeforeStep();
+                session.Step();
+                director.AfterStep();
+            }
+        }
+        Run(2);
+        TestHarness.Assert(!session.Engine.FlagValue("camera_done"), "the move is over after a second, the zoom is not (W3DView::isCameraMovementFinished)");
+        Run(2);
+        TestHarness.Assert(session.Engine.FlagValue("camera_done"), "the zoom's end ends the movement");
+    }
 
     private static void CameraMoveCompletesOnItsRealDuration()
     {

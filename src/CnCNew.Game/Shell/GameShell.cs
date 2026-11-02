@@ -885,7 +885,7 @@ public sealed class GameShell
     /// a mission that does not set it is still readable).</summary>
     internal void BeginMission(CampaignController controller)
     {
-        var run = controller.StartCurrentMission();
+        var run = controller.StartCurrentMission(presentationLatencyTicks: LiveMission.ClientPresentationLatencyFrames);
         _pendingMission = run;
         _pendingMissionController = controller;
         _briefingElapsed = 0;

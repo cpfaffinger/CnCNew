@@ -277,10 +277,9 @@ of its own beside them. **What is missing:** `SKIRMISH_SUPPLIES_VALUE_WITHIN_DIS
 the console report at the end names frames, world tick and session steps – equal in all measurement runs, so the script VM runs every tick. A loading screen or briefing belongs to the shell
 (`--shell`), `--mission` begins directly with tick 0 of the map.
 
-**Timing behaviour.** `--mission` starts with `PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks` (1,800 ticks = 60 s). The director reports the real end itself
-(`CompletePresentation`): camera moves after their script duration, speech/sound/movie after a placeholder duration of 3 s (there is no length specification per sound event), music immediately. The latency is only
-the limit after which the VM no longer waits, so that nothing hangs forever. **Open:** missions that the shell starts (`GameShell` → `CampaignController.StartCurrentMission()`) still run with
-latency 0 – `CAMERA_MOVEMENT_FINISHED`/`HAS_FINISHED_*` hold immediately there, the camera moves nevertheless (time-controlled sequences like those of `GC_ChemGeneral` are not affected by this).
+**Timing behaviour.** A mission of a client, by `--mission` as by the menus (`GameShell.BeginMission`), starts with `PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames` (60 s). The director reports the real end itself
+(`CompletePresentation`): camera movements after their script duration, speech/sound/movie after a placeholder duration of 3 s (there is no length specification per sound event), music immediately. The latency is only
+the limit after which the VM no longer waits, so that nothing hangs forever. `CAMERA_MOVEMENT_FINISHED` is `W3DView::isCameraMovementFinished`: no move, turn, zoom or pitch under way; a new move replaces the old one, a zoom or a pitch runs on beside it, and the director ends `<camera>` with the last of them. The menus started a mission with latency 0 until the owner's acceptance of 1 November 2026: `CAMERA_MOVEMENT_FINISHED` and `HAS_FINISHED_*` held at once and a cut scene's scripts ran ahead of what they wait for, in the very way a person starts a mission and in no check. A run without a host keeps latency 0, so the additional camera actions of the VM reach neither `CampaignTool` nor the manifests.
 
 **Stopped time (`FREEZE_TIME`/`UNFREEZE_TIME`, second session).** This is a simulation process, not a host process: `GameLogic::update` executes `ScriptEngine::UPDATE` and returns on
 `isTimeFrozenScript()` – objects, combat and the frame counter stand still, the scripts keep running (timers `m_counters[i].value--` per call, sequential scripts, `UNFREEZE_TIME` itself). Exactly that is what
@@ -294,11 +293,7 @@ a camera move) is not represented, no campaign map uses it.
 
 **What the director makes of the outputs** (`src/CnCNew.Game/Shell/MissionPresentation.cs`, without Stride; the client reads only this state):
 
-- **Camera** (`ApplyCameraTo(RtsCamera, seconds)`, per frame from `LiveGame.OnAdvanced`; 0 when paused): move to the waypoint over the script duration with soft ease-in and ease-out
-  (`ScriptActions::doMoveCameraTo` → `View::moveCameraTo`; the ease times of the script are replaced by a fixed S-curve), cut with viewing direction/zoom/pitch
-  (`doSetupCamera`), zoom as a factor of the default value and pitch as `m_FXPitch` (`doZoomCamera`, `doPitchCamera`, `cameraModFinalZoom/Pitch`; below 1 and even negative it moves the point looked at, above 1 the camera, `W3DView::buildCameraPosition`; Phase 58), rotation (`doRotateCamera`), look toward the waypoint
-  (`cameraModLookToward`; the sign of the camera angle is measured at the camera, not assumed), reset (`doResetCamera`), following a named object
-  (`doCameraFollowNamed`). Without an active script move the camera stays with the player.
+- **Camera** (`ApplyCameraTo(RtsCamera, seconds)`, per frame from `LiveGame.OnAdvanced`; 0 when paused): the scripts' requests wait with their tick and reach `RtsCamera.Script` (`ScriptedCamera`, the scripted half of `W3DView`, with `CameraPath`) in the order the scripts gave them; requests of different frames get the time between them, however late the frame is drawn, because each acts on what the one before left (`SETUP_CAMERA` is followed a frame later by `MOVE_CAMERA_TO` all through the intros). Without an active script move the camera stays with the player. What the original does, and what the port had to learn from it (see "The scripted camera" below).
 - **Input lock** (`DISABLE_INPUT`/`ENABLE_INPUT`, `ScriptActions::doDisableInput`): `MissionController` sets `MatchController.WorldInputEnabled`; everything except Esc (game menu) is discarded, the
   pointer does not scroll, on locking, selection, command modes and held keys are cleared. A victory or a defeat lifts the lock.
 - **Letterbox and fades:** `CAMERA_LETTERBOX_BEGIN/END` hide the command bar and draw two bars (`doLetterBoxMode`: `HideControlBar`), `CAMERA_FADE_ADD/SUBTRACT/MULTIPLY` a
@@ -321,13 +316,12 @@ Second session (all output types that campaign maps emit, see the tables below; 
 - **Camera** (`ApplyCameraTo`): `SCREEN_SHAKE(type 0..5)` calls `RtsCamera.Shake` with the `GameData` strength of the type (`ShakeSubtleIntensity` … `ShakeCineInsaneIntensity`, `CameraShakeIntensities`) at the look-at point
   (`W3DView::shake`: full strength, decaying with 0.75 per logic frame and reversing; the original draws the direction from the client random, here a golden-angle sequence); `MAP_SWITCH_BORDER(n)` sets
   `RtsCamera.ActiveBoundary` (the camera stays within the frame of this map boundary; a boundary that the map does not have is reported; the minimap keeps boundary 0); `CAMERA_LOOK_TOWARD_OBJECT` turns
-  to the position of the object and holds `duration + hold time` as a camera movement; `CAMERA_TETHER_NAMED` is approximated as following (play ignored).
+  to the object and stays on it for the hold (`rotateCameraTowardObject`); `CAMERA_FOLLOW_NAMED` and `CAMERA_TETHER_NAMED` are the lock of `W3DView::update` (see below).
 - **Screen filters** (`MissionPresentationDirector.PostEffects`, drawn by `ScreenFilters` in the Stride client above the finished world and below the HUD): `CAMERA_BW_MODE_BEGIN/END(frames)` ramps the
   grey share over the frames (`ScreenBWFilter::set`); `CAMERA_MOTION_BLUR_JUMP(waypoint, saturate)` is the counting automaton of `ScreenMotionBlurFilter::postRender`: +5 per logic frame up to 60 (12 frames), at the
   apex a cut of the camera to the waypoint (`TheTacticalView->lookAt`), then −5 down to 0 (zoom factor `sqrt(1 − counter/60 · 0.9)`, up to 30 further layers with 1 % zoom and alpha 0x15, with the
-  saturating variant 2 % and additive). One filter replaces the other (`setViewFilter`). **Approximations, not copies:** the grey veil is the **red channel** alone (`SwizzleMode.RRRR` is all that
-  the sprite batch offers in channel mixing; the original mixes 0.30/0.59/0.11), the image looks as if photographed through a red filter; the blur sums the layers over sprite drawings
-  of the copied image surface instead of over texture coordinates in the shader. Whether both look good can only be judged by a human (image sample below).
+  saturating variant 2 % and additive). One filter replaces the other (`setViewFilter`). The grey veil is `monochrome.pso` with the constants of `ScreenBWFilter::set`, 0.30/0.59/0.11 of the picture as it is displayed: the one pixel shader of this project, source in `ScreenFilters`, compiled by the running engine when it is first needed (the report's line says "grey shader compiled"; should the compiler fail, the red channel stands in with `SwizzleMode.RRR1` and the line says why). Until the acceptance of 1 November 2026 the filter drew `SwizzleMode.RRRR` through an additive blend: that swizzle puts red into alpha as well, so the picture came out as red squared, nearly black. **An approximation, not a copy:** the blur sums the layers over sprite drawings
+  of the copied image surface instead of over texture coordinates in the shader, and the world goes on under it where the original's `m_skipRender` holds the picture. Whether it looks good can only be judged by a human (image sample below).
 - **Objects** (`IMissionObjectEffects`, `LiveMission` → `FrameProjector`): `NAMED_FLASH`/`TEAM_FLASH` (house colour) and `…_WHITE` flash `seconds · 2` times every 15 logic frames (`Drawable::setFlashCount`,
   `DRAWABLE_FRAMES_PER_FLASH`), every flash is the tint envelope 0 rise/4 fall of the capture (`SelectionFlashTracker.StartScripted/Advance`), the colour unsaturated (`colorFlash(&color)`);
   `NAMED_CUSTOM_COLOR` replaces the house colour of an object (`FrameProjector.SetHouseColor`, value ARGB, 0 = back); that also affects the minimap dots, as in the original (`Radar.cpp`).
@@ -394,11 +388,29 @@ track), `PLAY_SOUND_EFFECT_AT 'Cin_CombatCycleMainLoop'` does not start (×1: th
 a consumer (×2). `MD_USA01` shows the stopped time: 3900 frames, but world tick 3223 – for 677 steps the world stood still while the grey veil and the camera move of the spy shot ran (the
 client reports 677 frames drawn through the filter). `GC_ChemGeneral` has the motion blur from tick 675 on: 23 filtered frames, as the counting automaton prescribes.
 
-Image sample (`--filmstrip`, PNGs viewed outside the repo): grey veil in `MD_USA01` (red-channel grey: snow and rock bright, water/vegetation dark – a spy camera impression, not a
-luminance image), ray blur onto the headquarters in `GC_ChemGeneral` at the time of the cut. **Not judged:** whether the blur equals that of the original (layer sum instead of shader), how the
-shaking of the camera looks in motion (single frames do not show a shift of a few pixels), and the sound (no hearing). **Noticed and not a subject of this session:** the first shot
-of `MD_USA01` (tick 0–400, `SETUP_CAMERA(CINE_CameraPos01, 0.2, -0.45, …)`) shows above the rock only the clear colour (cornflower blue) instead of the ground – whether the camera lies so low/flat there that the
-terrain in front of it is not drawn, or whether it is clipped, is **not investigated**; it is none of the outputs treated here and belongs to the camera findings.
+Image sample (`--filmstrip`, PNGs viewed outside the repo): grey veil in `MD_USA01` (since 2 November 2026 a luminance image), ray blur onto the headquarters in `GC_ChemGeneral` at the time of the cut, frames 678 to 702: the zoom into the old view, the white apex, the cut, the zoom out of the new one. **Not judged:** whether the blur equals that of the original (layer sum instead of shader), how the
+shaking of the camera looks in motion (single frames do not show a shift of a few pixels), and the sound (no hearing).
+
+### The scripted camera (2 November 2026; `src/CnCNew.Presentation/Camera/ScriptedCamera.cs`, `CameraPath.cs`, `RtsCamera.cs`)
+
+The owner's acceptance found the intro of `MD_USA01` "way off": for long stretches the camera stared at the sky or into a cliff. The director played camera requests through tweens against the player's camera; compared line by line with `W3DView.cpp` (EA's, which is the retail behaviour; GeneralsGameCode's `PRESERVE_RETAIL_SCRIPTED_CAMERA` keeps the same numbers) these were the differences, all of them gone:
+
+| What | The original | The port before |
+|---|---|---|
+| Ground level | `m_groundLevel` moves with a scripted move, in proportion to the distance, to the ground at its end (`setupWaypointPath`, `groundHeight[]`), and stays there afterwards; `m_cameraOffset.z` stays as `initHeightForMap` left it (the lines that would change it are commented out) | stood still, and the offset was computed from it |
+| Zoom | `m_zoom` itself. `ZOOM_CAMERA` goes to that very value; `SETUP_CAMERA` and `CAMERA_MOD_SET_FINAL_ZOOM` to a share of `(terrain around the place + 310) / m_cameraOffset.z` at the place the move ends (`cameraModFinalZoom`) | a share of 310 above the terrain under the pivot, clamped to the player's limits |
+| Pitch | `m_FXPitch`, no limit: 52 looks straight down at a rocket, -0.5 looks up past it | already right (Phase 58) |
+| The look of a cut | `cameraModLookToward`: the heading from the curve's point at each waypoint, written into `cameraAngle[]` | probed through the view, which turns over when the factor below turns negative |
+| Height settling | `didScriptedMovement`: `m_heightAboveGround` takes what the script reached, without a limit, and the zoom does not settle against the script; that also holds in the frame that ends a script | the zoom settled every frame |
+| Constraints | `m_cameraConstraint` is worked out once, and only a player's zoom, a new map or a new border drop it; every scripted position widens it ("assuming that the scripter knows what he is doing") | worked out from the current view for every call and clamped the script |
+| Ease | `ParabolicEase` with the script's times, for moves, zooms, pitches and turns | a fixed S-curve, except on the path |
+| Order | `SETUP_CAMERA` is `moveCameraTo` without a time, `cameraModLookToward`, `cameraModFinalPitch`, `cameraModFinalZoom`, one after the other; each acts on what the one before left | separate slots, resolved together per drawn frame |
+| A player | `lookAt` ends a move and a turn, `scrollBy` a turn, `setAngle`, `setPitch` and a player's zoom end everything | nothing |
+| Lock | `CAMERA_FOLLOW_NAMED`: 0.05 more of the way each frame, `m_groundLevel` the object's height, the heading of what flies less a quarter turn; `CAMERA_TETHER_NAMED`: half the way past a partition cell, inside it the script's play | centred on the object |
+
+The first shots show why this is one finding. `m_cameraOffset.z` of `MD_USA01` is 247.62 (ground 15.62 + `CameraHeight` 232). `SETUP_CAMERA(CINE_CameraMoveTo04, 0.1, 0, CINE_CameraLookAt04)` at ground 16.42 gives zoom 0.14, the eye 34.7 high and a level view down the road; `(CINE_CameraPos02, 1.2, 2, ...)` zoom 1.578 and 57 degrees down; `(CINE_RocketShotPos, 0.32, -0.5, ...)` at ground 71.6 looks up at the rocket on its pad. On high ground a low zoom puts the eye below `m_groundLevel`: `buildCameraTransform`'s factor `1 - groundLevel / sourcePos.Z` turns negative, the eye goes to the other side of the place looked at, and a negative pitch looks down. Clamping any of it turns those shots into views of the sky. The first shot of the intro, `(CINE_CameraPos01, 0.2, -0.45, ...)`, does look up, by 19 degrees: the cliff the bikes jump over, not the empty sky of the port before.
+
+`PresentationTool camera-script <content> --map <map> [--seconds N] [--every N] [--waypoints A,B]` prints these quantities per frame without a window; `tests/CnCNew.Presentation.Tests/ScriptedCameraTests.cs` holds them against the original's formula written out, and `MissionEffectsTests` the shots of `MD_USA01` with real data. `MD_USA01` at 30 and 60 Hz stands at the same place at the same original frame. **Deviations:** a frame of the original is 1/30 s where the original's camera counts 33 ms (a script's second about 1 % longer there), and a move advances by the time of a drawn frame so that it is as smooth as the picture; `m_timeMultiplier` (`CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `SET_VISUAL_SPEED_MULTIPLIER`) and `CAMERA_MOD_FREEZE_TIME` are not modelled, no campaign map uses them; a fade adds and subtracts as an alpha surface, not with the original's blend modes. **Not judged:** whether a person finds the shots to be the original's; no picture of the original was at hand, only its formulas. The flight along waypoints stands in `MD_GLA03`, the shakers in `MD_GLA01` and `MD_GLA02`, none of them in `MD_USA01`, which the acceptance item MISS-07 starts.
 
 **All output types of the 24 campaign maps** (`CampaignTool outputs <Inhalt> [--maps]`: static count of the passed-on action types in the scripts, plus the state from
 `MissionOutputCatalog`; measured in Phase 59: 91 types, 6,975 uses; **82 displayed, 2 handled by the simulation, 7 not displayed**; at Phase 16: 69, 2 and 21 of 92; before that 35 with and 57 without a consumer; the other passed-on types
@@ -489,7 +501,6 @@ occur in no campaign map and are only in the catalog):
 
 | `ScriptOutput` type | Uses | Maps |
 | --- | ---: | --- |
-| `CAMERA_MOD_FREEZE_ANGLE` | 1 | GC_ChinaBoss |
 | `DEBUG_MESSAGE_BOX` | 3 | GC_LaserGeneral, MD_GLA03, MD_GLA04 |
 | `DISABLE_BORDER_SHROUD` | 27 | 14 of 24 |
 | `DRAW_SKYBOX_BEGIN` | 24 | 14 of 24 |
@@ -516,7 +527,7 @@ occur in no campaign map and are only in the catalog):
   `BorderShroudEnabled`.
 - **Render options** (`OPTIONS_SET_OCCLUSION_MODE`, `OPTIONS_SET_PARTICLE_CAP_MODE`, `SET_FPS_LIMIT`): options of the original (markers for units behind buildings, dynamic particle limit,
   frame rate limit) that the client does not have or does not let scripts control.
-- **Camera and world** (`CAMERA_MOD_FREEZE_ANGLE`; `DEBUG_MESSAGE_BOX`). `WATER_CHANGE_HEIGHT` and `WATER_CHANGE_HEIGHT_OVER_TIME` are world changes since Phase 59 and no output any more (`docs/SIMULATION-CORE.md` §72).
+- **Camera and world** (`DEBUG_MESSAGE_BOX`). `WATER_CHANGE_HEIGHT` and `WATER_CHANGE_HEIGHT_OVER_TIME` are world changes since Phase 59 and no output any more (`docs/SIMULATION-CORE.md` §72).
 - **Displayed since Phase 59:** `MOVE_CAMERA_ALONG_WAYPOINT_PATH` flies the chain of links (`CameraPath`: `W3DView::moveCameraAlongWaypointPath`, curve through the middles of the legs, `ParabolicEase`, the stutter, the angle as the mean of two legs); `CAMERA_ADD_SHAKER_AT` adds a shaker (`RtsCamera.AddShaker`, `CameraShakeSystemClass`: the camera turns, it does not move, felt within the radius of the camera's own place, so most of what a script asks at a waypoint on the ground from a camera high above it shows nothing, in the original too; the random part comes from a private generator, the world never sees it); `CAMEO_FLASH` lays the `Cameo_push` overlay over a command button of the bar every 10 frames (`ControlBar::update`). The only campaign use names `NonCommand_GeneralsExperience`, which is the star and not one of `m_commandWindows`, so nothing flashes there, in the original neither.
 
 Tests: `tests/CnCNew.Game.Tests/MissionEffectsTests.cs` (catalog complete; script outputs → sound, objects, HUD with dummies, "displayed needs the consumer"; the clock runs while time is stopped;
@@ -530,7 +541,7 @@ checks the same in the real client (`docs/GAME-HUD.md` §17).
 **Finding while measuring (first session):** `MD_GLA03` ended the client in the first frame with an unhandled `InvalidDataException` – the model `cineexplbox` contains only a collision box and no mesh.
 `ModelAssetCache` now treats an unusable model like a missing one (reported once, counted, nothing drawn).
 
-**Still open (speech and camera):** no sound length (the subtitles exist, the English hides almost all of them) – `HAS_FINISHED_AUDIO` holds after 3 s, longer announcements overlap the next one; the ease times of the script for everything but the path; `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_MOD_SET_ROLLING_AVERAGE`, `CAMERA_SET_DEFAULT`,
+**Still open (speech and camera):** no sound length (the subtitles exist, the English hides almost all of them) – `HAS_FINISHED_AUDIO` holds after 3 s, longer announcements overlap the next one; `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_SET_DEFAULT`,
 `CAMERA_ENABLE_/DISABLE_SLAVE_MODE`, `CAMERA_MOVE_HOME`, `MOVE_CAMERA_TO_SELECTION` (used by no campaign map); the states of the script changes (command bar, house colours, selection lock,
 volumes) are host state and do **not** travel along when a mission is saved/loaded (`MissionSnapshot` knows only the simulation and the script VM): after loading the command bar applies again
 unchanged, until the script sets the state anew.
