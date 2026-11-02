@@ -94,6 +94,34 @@ internal static class SkinScenes
                     {
                         hud.Update(0.25);
                         Shot("hud", hud.BuildDrawList(width, height), hud.Tree);
+                        var own = live.World.Entities.Where(entity => entity.Owner == live.Human && entity.Template.IsKindOf("STRUCTURE")).Take(1).ToArray();
+                        if (own.Length > 0) hud.Input.Selection.Replace([own[0].Id]);
+                        hud.Update(0.25);
+                        Shot("hud-building", hud.BuildDrawList(width, height), hud.Tree);
+                        var units = live.World.Entities.Where(entity => entity.Owner == live.Human && !entity.Template.IsKindOf("STRUCTURE")).Select(entity => entity.Id).ToArray();
+                        hud.Input.Selection.Replace(units);
+                        hud.Update(0.25);
+                        Shot("hud-units", hud.BuildDrawList(width, height), hud.Tree);
+                        hud.Input.Selection.Clear();
+                        void ClickHud(string window)
+                        {
+                            var rect = hud.WindowRect(window) ?? throw new InvalidDataException($"Window '{window}' is missing.");
+                            var point = new Vector2(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
+                            hud.Process(new MouseMoveEvent(++time, point));
+                            hud.Process(new MouseButtonEvent(++time, MouseButton.Left, true, point));
+                            hud.Process(new MouseButtonEvent(++time, MouseButton.Left, false, point));
+                            hud.Process(new MouseMoveEvent(++time, new Vector2(width / 2, 10)));
+                            hud.Update(0.25);
+                        }
+                        ClickHud("ControlBar.wnd:ButtonGeneral");
+                        Shot("general", hud.BuildDrawList(width, height), hud.Tree);
+                        ClickHud("ControlBar.wnd:ButtonGeneral");
+                        ClickHud("ControlBar.wnd:PopupCommunicator");
+                        Shot("diplomacy", hud.BuildDrawList(width, height), hud.Tree);
+                        ClickHud("ControlBar.wnd:PopupCommunicator");
+                        ClickHud("ControlBar.wnd:ButtonOptions");
+                        Shot("quit-menu", hud.BuildDrawList(width, height), hud.Tree);
+                        ClickHud("QuitMenu.wnd:ButtonReturn");
                         hudShot = true;
                     }
                 }
@@ -122,6 +150,15 @@ internal static class SkinScenes
                 shell.HandleInput(new KeyEvent(++time, KeyCode.Escape, true));
                 Click("MainMenu.wnd:ButtonExit");
                 Shot("quit");
+                Click(shell.CurrentScreen.Tree.AllWindows.First(window => window.Name.EndsWith(":ButtonNo", StringComparison.Ordinal)).Name);
+                Click("MainMenu.wnd:ButtonSinglePlayer");
+                Click("MainMenu.wnd:ButtonChallenge");
+                Shot("difficulty");
+                Click("MainMenu.wnd:ButtonEasy");
+                Shot("challenge");
+                Click("ChallengeMenu.wnd:GeneralPosition0");
+                shell.Update(3.0);
+                Shot("challenge-general");
                 Directory.Delete(settings, recursive: true);
             }
         report.Add(failures == 0 ? "modern skin: R3 (a) and (b) met" : $"modern skin: {failures} finding(s) against R3");

@@ -119,8 +119,6 @@ internal static class SkinTests
             hud.Update(0.25);
             TestHarness.Assert(hud.Skin == skin, $"{skin}: the HUD takes the skin of the settings");
             Pin($"Hud-{skin.Id}", hud.BuildDrawList, baselines, updating);
-            var band = hud.BuildDrawList(1920, 1080).Commands.OfType<UiFillRect>().Count(fill => fill.Color == ModernLayout.Palette.Canvas);
-            TestHarness.Assert(skin.IsModern ? band == 2 : band == 0, $"{skin}: the band beside the command bar at 16:9 ({band} fills)");
 
             // The same HUD with a line in the message list and the money display's tooltip (Phase 39): the modern skin draws both in its type and palette.
             hud.Messages.ClientNote("a line of the message list");
@@ -138,6 +136,8 @@ internal static class SkinTests
             Pin($"HudTooltip-{skin.Id}", hud.BuildDrawList, baselines, updating);
         }
         TestHarness.Assert(baselines.Count == 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
+    }
+
     private static void ModernBarFillsTheWidth(GameData data)
     {
         var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
@@ -207,8 +207,6 @@ internal static class SkinTests
         private readonly CnCNew.Game.Shell.ShellTextSource _source = new(data.LoadText("English"));
 
         public bool Has(string label) => _source.TryResolve(label, out _);
-    }
-
     }
 
     private static void SettingsChooseTheSkin(GameData data)
