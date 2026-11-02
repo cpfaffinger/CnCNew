@@ -474,6 +474,7 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         var force = world.LogicRandom.Range(data.FlingForce, data.FlingForce + data.FlingForceVariance);
         var along = force * FixedTrig.Cos(pitch);
         var (x, y, z) = (along * FixedTrig.Cos(angle), along * FixedTrig.Sin(angle), force * FixedTrig.Sin(pitch));
+        physics.AllowToFall();
         physics.Launch(world, x, y, z, Fixed.Zero, Fixed.Zero, Fixed.Zero, rates: false, bounce: true, mass: Fixed.Zero, extraFriction: FlingFriction);
         physics.ClearTilt();
         Entity.Angle = FixedTrig.Atan2(y, x);

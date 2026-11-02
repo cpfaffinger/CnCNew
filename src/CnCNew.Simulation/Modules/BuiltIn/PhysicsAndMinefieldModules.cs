@@ -200,6 +200,11 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary><c>setAllowToFall(true)</c>: an object that sticks to the ground leaves it for this flight. "This flag is ALWAYS cleared once we hit the ground."</summary>
+    public void AllowToFall() => _allowToFall = true;
+
+    private bool _allowToFall;
+
     /// <summary><c>setAngles(orientation, 0, 0)</c>: the pitch and roll a flung object begins its flight with.</summary>
     public void ClearTilt() => (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
 
@@ -402,6 +407,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             _velocityZ += ground - z;
             if (_velocityZ > Fixed.Zero) _velocityZ = Fixed.Zero;
             z = ground;
+            _allowToFall = false;
             // "When a stunned object hits the ground the first time": STUNNED_FLAILING becomes STUNNED.
             if (_stunned)
             {
@@ -409,7 +415,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
                 _stunnedPose = true;
             }
         }
-        else if (stick) z = ground;
+        else if (stick && !_allowToFall) z = ground;
         if (bounced) (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
         if (bounced && _bounce) _accelZ += bounceZ;
 
@@ -505,6 +511,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         writer.Fixed("pitch", _pitch);
         writer.Fixed("roll", _roll);
         writer.Bool("bounce", _bounce);
+        if (_allowToFall) writer.Bool("allowToFall", true);
         writer.Bool("wasAirborne", _wasAirborne);
         writer.Bool("stunned", _stunned);
         if (_subStep == 0) return;
@@ -530,6 +537,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _pitch = reader.Fixed("pitch");
         _roll = reader.Fixed("roll");
         _bounce = reader.Bool("bounce");
+        _allowToFall = reader.Has("allowToFall");
         _wasAirborne = reader.Bool("wasAirborne");
         _stunned = reader.Bool("stunned");
         if (!reader.Has("flightSubStep")) return;
