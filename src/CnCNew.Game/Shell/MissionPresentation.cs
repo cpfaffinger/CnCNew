@@ -539,7 +539,7 @@ public sealed class MissionPresentationDirector
         if (elapsed < fade.Increase) value = fade.Min + (fade.Max - fade.Min) * (elapsed / (float)Math.Max(1, fade.Increase));
         else if (elapsed < fade.Increase + fade.Hold) value = fade.Max;
         else if (elapsed < fade.Increase + fade.Hold + fade.Decrease) value = fade.Max - (fade.Max - fade.Min) * ((elapsed - fade.Increase - fade.Hold) / (float)Math.Max(1, fade.Decrease));
-        else value = fade.Min;
+        else return null; // ScriptEngine::updateFades: "time is up", m_fade = FADE_NONE, whatever its minimum was.
         return (fade.White, (byte)Math.Clamp(MathF.Round(value * 255f), 0f, 255f));
     }
 

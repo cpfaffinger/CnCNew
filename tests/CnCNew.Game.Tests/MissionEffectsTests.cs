@@ -73,6 +73,7 @@ internal static class MissionEffectsTests
         harness.Run("The camera flies a waypoint chain, a shaker turns it, a cameo flash reaches the bar", CameraPathShakerAndFlash);
         harness.Run("The scripts' camera requests keep their order and the frames between them, however late they are drawn", CameraRequestsKeepTheirOrder);
         harness.Run("A followed object keeps the camera, and a move does not fight it", CameraFollowsANamedObject);
+        harness.Run("A fade that is over leaves nothing on the screen, whatever its minimum", FadeEnds);
         harness.Run("MAP_SWITCH_BORDER confines the camera to the border; a border the map lacks is reported", BorderSwitchConfinesTheCamera);
         harness.Run("The grey-scale and the motion blur follow the original's frame counts; the cut happens at the blur's apex", ScreenFiltersFollowTheOriginalFrameCounts);
         harness.Run("The superweapon list: a ready power is bold and flashes white every 15 frames, and the list ends in an ellipsis above the control bar", SuperweaponDrawRules);
@@ -344,6 +345,19 @@ internal static class MissionEffectsTests
         TestHarness.Assert(Vector2.Distance(camera.Pivot, new Vector2(100, 200)) < 0.01f && Math.Abs(camera.Zoom - 0.9f * largest) < 1e-3f, $"the move and its final zoom end together ({camera.Pivot}, {camera.Zoom})");
         var counts = director.Counts().ToDictionary(count => count.Action);
         TestHarness.Assert(counts["SETUP_CAMERA"].Displayed == 1 && counts["CAMERA_MOD_SET_FINAL_ZOOM"].Displayed == 1, "both count as displayed");
+    }
+
+    private static void FadeEnds()
+    {
+        var fade = Script("Fade", If("CONDITION_TRUE"), [Do("CAMERA_FADE_MULTIPLY", Real(0.5m), Real(0), Int(0), Int(3), Int(3))]);
+        var (map, fixture, terrain) = Mission([fade], null);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var director = new MissionPresentationDirector(session);
+        bool Covered() => director.BuildOverlayCommands(1280, 720).OfType<UiFillRect>().Any(fill => fill.Rect.Width == 1280);
+        StepFrame(session, director);
+        TestHarness.Assert(Covered(), "the fade is on the screen");
+        for (var frame = 0; frame < 10; frame++) StepFrame(session, director);
+        TestHarness.Assert(!Covered(), "ScriptEngine::updateFades ends it with FADE_NONE, not at its minimum");
     }
 
     private static void CameraFollowsANamedObject()
