@@ -386,6 +386,7 @@ internal sealed class SupplyWarehouseDockUpdate(SupplyWarehouseDockData data) : 
             _boxes++;
             return false;
         }
+        if (_boxes == 0) carrier.AnnounceEmptySource(world);
         world.MarkDirty(docker);
         world.MarkDirty(Entity);
         if (_boxes == 0 && data.DeleteWhenEmpty)

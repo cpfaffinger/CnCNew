@@ -636,6 +636,18 @@ public sealed partial class MatchController
             }
         }
         Match.RallyMarkers = rallyPlaces.ToImmutable();
+        if (Input.State.HasMouse && !PointerOverWindow && Input.Selection.Picker.Pick(world, Match.Human, view, Input.State.MousePosition) is { } over && !Input.Selection.Selected.Contains(over.Id)
+            && Input.Selection.Picker.TryProject(view, over, out var hovered))
+        {
+            var mine = over.Owner == Match.Human;
+            var seats = mine && over.Container is { ContainMax: > 0 } held ? ((int, int, int)?)(held.ContainMax, held.Contained.Count, held.Contained.Count(rider => world.FindEntity(rider)?.Template.IsKindOf("INFANTRY") == true)) : null;
+            selected.Add(new UnitMarker(over.Id, hovered.Center, hovered.Radius, over.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f, mine, world.AreEnemies(Match.Human, over.Owner), over.Template.IsKindOf("STRUCTURE"))
+            {
+                Hovered = true,
+                Ammo = mine ? world.AmmoPips(over) : null,
+                Seats = seats,
+            });
+        }
 
         // Standing attack, attack-move and guard orders of the selected own units: a line to the goal (the original draws none; kept as an aid, for the selection only).
         var orderLines = ImmutableArray.CreateBuilder<OrderLine>();

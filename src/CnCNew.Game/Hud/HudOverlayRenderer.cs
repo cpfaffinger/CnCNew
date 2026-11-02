@@ -72,7 +72,8 @@ public static class HudOverlayRenderer
         {
             var color = marker.IsOwn ? Own : marker.IsEnemy ? Enemy : Neutral;
             // A structure is marked by corner brackets round its screen footprint (the selection radius of a building is its bounding circle, far too large for a ring).
-            if (marker.IsStructure) Brackets(commands, StructureCenter(marker), StructureHalf(marker), color);
+            if (marker.Hovered) { }
+            else if (marker.IsStructure) Brackets(commands, StructureCenter(marker), StructureHalf(marker), color);
             else Ring(commands, marker.Center, MathF.Max(marker.Radius, 6f), 2f, color, RingSegments);
             HealthBar(commands, marker);
         }

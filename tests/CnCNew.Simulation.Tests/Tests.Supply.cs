@@ -89,6 +89,7 @@ static partial class Tests
           End
           Behavior = SupplyTruckAIUpdate AI01
             MaxBoxes = 2
+            SuppliesDepletedVoice = TestDepleted
             SupplyCenterActionDelay = 100
             SupplyWarehouseActionDelay = 100
             SupplyWarehouseScanDistance = 400.0
@@ -322,6 +323,19 @@ static partial class Tests
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(2 * BoxValue), "The ledger agrees.");
         Check.That(CountOf(world, "Cache") == 0, "The empty DeleteWhenEmpty warehouse was removed.");
         Check.That(CountOf(world, "Hauler") == 2, "Both haulers survive and end idle.");
+    }
+
+    public static void SupplyLastBoxAnnouncesTheEmptySource()
+    {
+        var world = SupplyWorld(out _, out var feeder);
+        feeder.Spawn(1, "Depot", x: -100);
+        feeder.Spawn(1, "Cache", x: 100);
+        feeder.Spawn(1, "Hauler", x: 0, y: 10);
+        world.Step();
+        var hauler = IdOf(world, "Hauler");
+        Check.That(world.Submit(new DockCommand(new PlayerId(1), 900, world.Tick, new EntityId(hauler), new EntityId(IdOf(world, "Cache")))).Accepted, "Dock order.");
+        var voices = RunCollecting(world, world.Frames(3000), SimEventKind.SuppliesDepleted);
+        Check.That(voices.Count == 1 && voices[0].Text == "TestDepleted" && voices[0].Entity.Value == hauler, $"The carrier that took the last box says so, once ({voices.Count}).");
     }
 
     /// <summary>DockCommand validation: unknown entity, foreign owner, non-mover, no dock module.</summary>

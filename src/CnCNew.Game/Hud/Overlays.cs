@@ -13,6 +13,9 @@ public sealed record SelectionBoxOverlay(bool Active, Vector2 Start, Vector2 Cur
 /// <summary>A selected (or single foreign, for-information) unit's on-screen marker: a selection circle and a health bar.</summary>
 public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, float HealthFraction, bool IsOwn, bool IsEnemy, bool IsStructure = false)
 {
+    /// <summary>Under the pointer and not selected: <c>getMousedOverDrawableID</c> shows the bar and the pips without the selection's ring.</summary>
+    public bool Hovered { get; init; }
+
     /// <summary><c>Drawable::drawAmmo</c>: the clip under the health bar of an object of the viewer's; null for none.</summary>
     public (int Total, int Full)? Ammo { get; init; }
 

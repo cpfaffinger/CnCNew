@@ -52,6 +52,10 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
                     if (weapon.FireSoundLoopFrames > 0) output[^1] = output[^1] with { LoopTicks = time.OriginalFrames(weapon.FireSoundLoopFrames) };
                 }
                 break;
+            case SimEventKind.SuppliesDepleted:
+                if (FxCatalog.IsAudible(simEvent.Text) && view.GetPose(simEvent.Entity) is { } gatherer)
+                    Add(output, tick, simEvent.Text, SoundCueKind.Voice, gatherer.Position, simEvent.Entity, gatherer.Owner, "SupplyTruckAIUpdate.gainOneBox");
+                break;
             case SimEventKind.RankGained:
                 if (catalog.MiscAudio.TryGetValue("UnitPromoted", out var promoted) && FxCatalog.IsAudible(promoted) && view.GetPose(simEvent.Entity) is { } raised)
                     Add(output, tick, promoted, SoundCueKind.Effect, raised.Position, simEvent.Entity, raised.Owner, "Object.onVeterancyLevelChanged");

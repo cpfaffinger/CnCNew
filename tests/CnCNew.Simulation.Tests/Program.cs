@@ -335,6 +335,7 @@ run.Test("Veterancy: experience scalar, weapon bonus upgrade, starting level and
 run.Test("Veterancy: veteran ArmorSet/WeaponSet selection by rank", Tests.VeterancyArmorAndWeaponSetSelection);
 run.Test("Supply economy: an unordered hauler stays idle", Tests.SupplyIdleHaulerEarnsNothing);
 run.Test("Supply economy: warehouse queue and DeleteWhenEmpty", Tests.SupplyQueueAndDeleteWhenEmpty);
+run.Test("Supply economy: the last box announces the empty source (gainOneBox)", Tests.SupplyLastBoxAnnouncesTheEmptySource);
 run.Test("Supply economy: DockCommand validation", Tests.SupplyDockCommandValidation);
 run.Test("Supply economy: AutoDepositUpdate rhythm, boost and neutral owners", Tests.SupplyAutoDeposit);
 run.Test("Supply economy: snapshot continuation and DockCommand replay round trip", Tests.SupplySnapshotAndReplay);

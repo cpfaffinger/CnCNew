@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
@@ -31,6 +32,9 @@ internal interface ISupplyCarrier
 
     /// <summary><c>gainOneBox</c>: false when the carrier is full.</summary>
     bool GainOneBox(int remainingInWarehouse);
+
+    /// <summary>The end of <c>gainOneBox</c>: "if I just took the last box, i will announce that this supply source is now empty", unless another source is close.</summary>
+    void AnnounceEmptySource(IWorldServices world);
 
     /// <summary><c>loseOneBox</c>: false when the carrier is empty.</summary>
     bool LoseOneBox();
@@ -68,7 +72,13 @@ public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long Cente
         ModuleConfigReader.Ticks(configuration, "SupplyCenterActionDelay", 0),
         ModuleConfigReader.Ticks(configuration, "SupplyWarehouseActionDelay", 0),
         ModuleConfigReader.Real(configuration, "SupplyWarehouseScanDistance", Fixed.FromInt(100)),
-        checked((int)ModuleConfigReader.Int(configuration, "UpgradedSupplyBoost", 0)));
+        checked((int)ModuleConfigReader.Int(configuration, "UpgradedSupplyBoost", 0)))
+    {
+        DepletedVoice = ModuleConfigReader.Find(configuration, "SuppliesDepletedVoice")?.Value.OriginalText.Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty,
+    };
+
+    /// <summary><c>SuppliesDepletedVoice</c>.</summary>
+    public string DepletedVoice { get; init; } = string.Empty;
 }
 
 /// <summary><c>DozerAIUpdateModuleData</c>: the AI's fields, <c>BoredTime</c> (parsed as a duration) and <c>BoredRange</c>.</summary>
@@ -428,6 +438,17 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
         if (_boxes >= data.MaxBoxes) return false;
         _boxes++;
         return true;
+    }
+
+    public void AnnounceEmptySource(IWorldServices world)
+    {
+        if (data.DepletedVoice.Length == 0) return;
+        if (SupplyNetwork.FindBestWarehouse(world, this) is { } next)
+        {
+            var (dx, dy) = (Entity.X - next.X, Entity.Y - next.Y);
+            if (SquaredReach.Of(data.ScanDistance / Fixed.FromInt(4)).Contains(dx * dx + dy * dy)) return;
+        }
+        world.Emit(SimEventKind.SuppliesDepleted, Entity.Id, EntityId.Invalid, data.DepletedVoice, 0);
     }
 
     public bool LoseOneBox()
