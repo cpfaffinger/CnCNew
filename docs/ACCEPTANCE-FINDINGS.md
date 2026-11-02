@@ -55,7 +55,7 @@ The causes are worth reading together: most of them are places where the port wa
 |---|---|---|---|
 | UNIT-02 | Tanks behind infantry stutter | A step that landed in a soldier's circle turned 45 degrees, and the path pulled it back | `4d4aa4f8`: the original's blocked movers, once per frame |
 | UNIT-19 | A jet lands with a hard vertical cut | The height was a straight line, and `Lift` read as 0 for every locomotor | `17532afa`, `6164c38b` |
-| SPEC-08 | The computer builds its supply centre inside the supply | Two boxes laid across each other have no corner inside the other, and the port lacked the original's preflight | `315ee20d` |
+| SPEC-08 | The computer builds its supply centre inside the supply | Two boxes laid across each other have no corner inside the other, and the port lacked the original's preflight | `315ee20d`. It costs the computer players income: 8 of the 16 pairings end within 25 minutes, 12 before, and 15 on the same state without this fix (`docs/SIMULATION-CORE.md` §77) |
 | UNIT-10 | The tank starts inside the ramp | The unit took the factory's height (`35d43449`, fixed); the rest is the original, which never reads a model for a height: the treads sink into the ramp by up to 4 units | Fixed in part, the rest a limit |
 
 ## The suite and the machine
