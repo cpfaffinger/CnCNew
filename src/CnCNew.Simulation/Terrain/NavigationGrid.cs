@@ -278,10 +278,11 @@ public sealed partial class NavigationGrid
             numerator += add;
             if (numerator >= denominator)
             {
-                // The minor step is a cell of its own: the walk never passes a corner diagonally.
+                // The minor step is a cell of its own: the walk never passes a corner diagonally. After the last cell it can leave the map: "if (to==NULL) return 0".
                 numerator -= denominator;
                 x += minorX;
                 y += minorY;
+                if (!Terrain.IsInside(x, y)) return false;
                 if (BlocksView(y * Terrain.CellsX + x, victimCell, excepted)) return true;
             }
             x += majorX;

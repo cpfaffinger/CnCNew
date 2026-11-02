@@ -74,6 +74,8 @@ static partial class Tests
         bool Blocked(NavigationGrid grid, int x1, int y1, params ulong[] excepted) => grid.IsAttackLineBlocked(F(5), F(55), F(x1), F(y1), excepted);
 
         var grid = new NavigationGrid(flat);
+        // The walk's last minor step can leave the map; a match on the map's edge ended here with an index out of range.
+        Check.That(!grid.IsAttackLineBlocked(F(85), F(85), F(5), F(5), []) && !grid.IsAttackLineBlocked(F(5), F(5), F(95), F(95), []) && !grid.IsAttackLineBlocked(F(35), F(85), F(95), F(15), []), "A line to a corner of the map stops at the map.");
         grid.AddFootprint(7, wall!, F(50), F(55), Fixed.Zero);
         Check.That(Blocked(grid, 95, 55), "A structure between attacker and victim blocks the line.");
         Check.That(!Blocked(grid, 95, 55, 7), "Not when it is one of the excepted (the attacker's own, the victim, a slaver, the container).");
