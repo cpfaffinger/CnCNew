@@ -94,6 +94,7 @@
     "SND-05": "Presentation.Tests FxTests: an upgrade granted by a module or a script is silent, a research is announced",
     "SPEC-09": "demo-spectator draws a new seed at every start; both manifests prove the same seed gives the same match",
     "UNIT-08": "scripts/audit-scenarios.ps1 -Scenario exits -Faction China; F-08 test: two Red Guards per order",
-    "UNIT-09": "scripts/audit-scenarios.ps1 -Scenario exits -Faction GLA"
+    "UNIT-09": "scripts/audit-scenarios.ps1 -Scenario exits -Faction GLA",
+    "UNIT-33": "PresentationTool scenario-audit acc-reverse (step scenes): 40 units back without turning, 180 degrees for the long way; Simulation.Tests ACarReversesToAGoalCloseBehindIt"
   }
 }
