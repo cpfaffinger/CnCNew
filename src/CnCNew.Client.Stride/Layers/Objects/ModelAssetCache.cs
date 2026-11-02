@@ -37,6 +37,7 @@ internal sealed class ModelAssetCache : IDisposable
         if (_assets.TryGetValue(modelName, out var cached)) return cached;
         if (_missing.Contains(modelName)) return null;
 
+        var start = FrameReport.Start();
         W3dModel model;
         try
         {
@@ -58,6 +59,7 @@ internal sealed class ModelAssetCache : IDisposable
 
         var asset = ModelAsset.Build(modelName, model, _services, _indices);
         _assets[modelName] = asset;
+        FrameReport.Model(start);
         return asset;
     }
 

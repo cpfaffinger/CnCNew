@@ -151,6 +151,13 @@ internal sealed class ModelAsset
         return built;
     }
 
+    /// <summary>Builds what this model needs in a team's colours, before an object of that team first shows it.</summary>
+    public void Prepare(ColorValue team)
+    {
+        var model = GetRigidModel(team);
+        for (var material = 0; material < model.Materials.Count; material++) GetTeamMaterial(material, team);
+    }
+
     /// <summary>
     /// The material to use for slot <paramref name="materialIndex"/> for a team, if it samples a ZHC texture or the object is in the fog (<paramref name="dimmed"/>: the same
     /// material darkened by <see cref="FogBrightness"/>, built lazily and cached); else null (use the shared one).

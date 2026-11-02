@@ -70,6 +70,9 @@ internal sealed class ObjectLayerCore : IWorldLayer
         {
             _frameLimit = frames;
         }
+
+        // A smoke test counts what it draws and has no frame to save; the report is what measures the preload.
+        if (!_smokeTest || FrameReport.Enabled) ModelPreload.Run(_assets, match);
     }
 
     public void Update(in WorldFrame frame)

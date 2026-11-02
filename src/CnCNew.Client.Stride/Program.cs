@@ -106,6 +106,7 @@ CnCNew.Client.Stride.ClientRuntime.NetOrderEvery = int.Parse(GetArgument(args, "
 // --net-stats: with --net-order-every N the stand-in clicks like a person (camera over a unit, the order button on the ground beside it), and the client measures
 // from the click to the first frame that shows it, to the execution and to the frame after it, and how evenly the picture moves (docs/MULTIPLAYER-FINDINGS.md section 2).
 CnCNew.Client.Stride.ClientRuntime.NetStatsEnabled = args.Contains("--net-stats", StringComparer.OrdinalIgnoreCase);
+CnCNew.Client.Stride.FrameReport.Enabled = args.Contains("--frame-report", StringComparer.OrdinalIgnoreCase);
 CnCNew.Client.Stride.ClientRuntime.NetStatsTrace = args.Contains("--net-stats-trace", StringComparer.OrdinalIgnoreCase);
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
 var inputScriptPath = GetArgument(args, "--input-script");
@@ -746,6 +747,7 @@ internal sealed class CnCNewGame(
             foreach (var line in _runtime.FinishInputScript()) Console.WriteLine(line);
             foreach (var line in _runtime.FinishNetStats()) Console.WriteLine(line);
             foreach (var line in _runtime.FinishSpectator()) Console.WriteLine(line);
+            foreach (var line in CnCNew.Client.Stride.FrameReport.Finish()) Console.WriteLine(line);
             UnresolvedInputSteps = _runtime.UnresolvedInputSteps;
         }
         _runtime?.Dispose();
@@ -815,6 +817,7 @@ internal sealed class CnCNewGame(
         base.Draw(gameTime);
         _runtime?.Draw(GraphicsContext, GraphicsDevice);
         _runtime?.NoteFrameCost(_updateMilliseconds, _costWatch.Elapsed.TotalMilliseconds);
+        CnCNew.Client.Stride.FrameReport.Frame(_updateMilliseconds, _costWatch.Elapsed.TotalMilliseconds);
         // --filmstrip DIR --every N: a PNG every N rendered frames (frame-00030.png ...), so a staged demo can be judged as a sequence without a window.
         if (filmstripDirectory is not null && filmstripEvery > 0 && _renderedFrames > 0 && _renderedFrames % filmstripEvery == 0 && _lastFilmFrame != _renderedFrames)
         {

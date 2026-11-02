@@ -69,6 +69,7 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
             return cached;
         }
 
+        var start = FrameReport.Start();
         using var stream = content.OpenRead(path);
         Texture texture;
         if (path.EndsWith(".tga", StringComparison.OrdinalIgnoreCase))
@@ -97,6 +98,7 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
         }
 
         _textures.Add(cacheKey, texture);
+        FrameReport.Texture(start);
         return texture;
     }
 
