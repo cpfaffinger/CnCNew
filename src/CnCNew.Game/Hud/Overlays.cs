@@ -21,7 +21,10 @@ public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, f
 }
 
 /// <summary>An animated icon over an object (<c>Drawable::drawDisabled</c>, <c>drawEnthusiastic</c>): the frame of this moment and its place on the screen.</summary>
-public sealed record UnitIcon(EntityId Entity, string Image, CnCNew.Ui.Layout.UiRect Place);
+public sealed record UnitIcon(EntityId Entity, string Image, CnCNew.Ui.Layout.UiRect Place)
+{
+    public byte Alpha { get; init; } = 255;
+}
 
 /// <summary><c>Drawable::drawConstructPercent</c>: how far an object under construction is, over its centre.</summary>
 public sealed record UnitLabel(EntityId Entity, Vector2 At, string Text)

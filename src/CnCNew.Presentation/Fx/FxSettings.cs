@@ -22,8 +22,17 @@ public sealed record ParticleBudget(
 /// The <c>GameData.ini</c> values the FX layer reads. Absent keys keep the <c>GlobalData::GlobalData</c> defaults; present keys that do
 /// not parse are reported through <see cref="FxCatalog.Diagnostics"/>.
 /// </summary>
+/// <summary>An <c>Anim2D</c> that stands in the world for a time and rises (<c>InGameUI::addWorldAnimation</c>).</summary>
+public sealed record WorldAnimationInfo(string Name, float Seconds, float RisePerSecond);
+
 public sealed record FxSettings(ParticleBudget Budget, ImmutableArray<float> ShakeIntensities, float MaxShakeIntensity, float MaxShakeRange)
 {
+    /// <summary><c>LevelGainAnimationName</c>, <c>LevelGainAnimationTime</c> and <c>LevelGainAnimationZRise</c>.</summary>
+    public WorldAnimationInfo LevelGain { get; init; } = new(string.Empty, 0f, 0f);
+
+    /// <summary><c>GetHealedAnimationName</c>, <c>GetHealedAnimationTime</c> and <c>GetHealedAnimationZRise</c>.</summary>
+    public WorldAnimationInfo Healed { get; init; } = new(string.Empty, 0f, 0f);
+
     public static FxSettings Default { get; } = new(new ParticleBudget(MaxParticles: 0), [0.5f, 1f, 2.5f, 5f, 8f, 12f], 10f, 150f);
 
     public float ShakeIntensity(ViewShakeType type) => ShakeIntensities[(int)type];
@@ -46,6 +55,8 @@ public sealed record FxSettings(ParticleBudget Budget, ImmutableArray<float> Sha
             if (Text(ShakeKeys[index]) is { } value) shakes[index] = read.Real(ShakeKeys[index], value, shakes[index]);
         var maxShake = Text("MaxShakeIntensity") is { } intensity ? read.Real("MaxShakeIntensity", intensity, settings.MaxShakeIntensity) : settings.MaxShakeIntensity;
         var range = Text("MaxShakeRange") is { } shakeRange ? read.Real("MaxShakeRange", shakeRange, settings.MaxShakeRange) : settings.MaxShakeRange;
-        return new FxSettings(budget, [..shakes], maxShake, range);
+        WorldAnimationInfo Animation(string key) => new(Text(key + "Name")?.Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty,
+            Text(key + "Time") is { } time ? read.Real(key + "Time", time, 0f) : 0f, Text(key + "ZRise") is { } rise ? read.Real(key + "ZRise", rise, 0f) : 0f);
+        return new FxSettings(budget, [..shakes], maxShake, range) { LevelGain = Animation("LevelGainAnimation"), Healed = Animation("GetHealedAnimation") };
     }
 }

@@ -405,6 +405,7 @@ public sealed partial class SimulationWorld : IWorldServices
         entity.WeaponBonusConditions = conditions;
         UpdateWeaponSet(entity);
         MarkDirty(entity);
+        if (newLevel > oldLevel && !entity.Template.IsKindOf("IGNORED_IN_GUI")) Emit(SimEventKind.RankGained, entity.Id, EntityId.Invalid, string.Empty, newLevel);
         if (newLevel > 0 && _templates.Upgrades.VeterancyUpgrade(newLevel) is var upgrade && !entity.CompletedUpgrades.Has(upgrade.Index))
             CompleteObjectUpgrade(entity, upgrade, entity.Owner);
     }

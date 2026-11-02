@@ -110,7 +110,7 @@ public static class HudOverlayRenderer
 
         if (!overlay.Icons.IsDefaultOrEmpty)
             foreach (var icon in overlay.Icons)
-                commands.Add(new UiImageDraw(icon.Image, icon.Place, WndColor.White, false, false));
+                commands.Add(new UiImageDraw(icon.Image, icon.Place, WndColor.White with { A = icon.Alpha }, false, false));
 
         if (!overlay.Labels.IsDefaultOrEmpty)
             foreach (var label in overlay.Labels)

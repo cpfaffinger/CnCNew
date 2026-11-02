@@ -114,7 +114,19 @@ public sealed record CrateCollideData(
         ModuleConfigReader.Bool(configuration, "BuildingPickup", false),
         ModuleConfigReader.Bool(configuration, "HumanOnly", false),
         ModuleConfigReader.Text(configuration, "PickupScience"),
-        ModuleConfigReader.Text(configuration, "ExecuteFX"));
+        ModuleConfigReader.Text(configuration, "ExecuteFX"))
+    {
+        ExecuteAnimation = ModuleConfigReader.Text(configuration, "ExecuteAnimation"),
+        ExecuteAnimationMilliseconds = (ModuleConfigReader.Real(configuration, "ExecuteAnimationTime", Fixed.Zero) * Fixed.FromInt(1000)).Floor(),
+        ExecuteAnimationZRise = ModuleConfigReader.Real(configuration, "ExecuteAnimationZRise", Fixed.Zero).Floor(),
+    };
+
+    /// <summary><c>m_executionAnimationTemplate</c>: what the crate leaves in the air where it stood.</summary>
+    public string ExecuteAnimation { get; init; } = string.Empty;
+
+    public long ExecuteAnimationMilliseconds { get; init; }
+
+    public long ExecuteAnimationZRise { get; init; }
 }
 
 /// <summary>
@@ -131,6 +143,8 @@ public abstract class CrateCollideBase(CrateCollideData crate) : SimModule, ICol
         if (!IsValidToExecute(world, other) || !ExecuteCrateBehavior(world, other)) return;
         if (crate.ExecuteFx.Length > 0) world.Emit(SimEventKind.FxRequested, other.Id, Entity.Id, crate.ExecuteFx, 0);
         world.RequestDestroy(Entity.Id);
+        // Time in the low bits, rise above them: the event has one number.
+        if (crate.ExecuteAnimation.Length > 0) world.Emit(SimEventKind.CrateAnimation, Entity.Id, other.Id, crate.ExecuteAnimation, crate.ExecuteAnimationZRise << 32 | crate.ExecuteAnimationMilliseconds);
     }
 
     public bool WouldLikeToCollideWith(IWorldServices world, Entity other) => IsValidToExecute(world, other);

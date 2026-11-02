@@ -127,6 +127,15 @@ public enum SimEventKind : byte
 
     /// <summary>A player's beacon stands (<c>GameLogic::onPlaceBeacon</c>): the player's allies are told, in text, sound and speech. <see cref="SimEvent.Entity"/> is the beacon.</summary>
     BeaconPlaced = 85,
+
+    /// <summary><c>Object::onVeterancyLevelChanged</c>: the object rose to level <see cref="SimEvent.Value"/>.</summary>
+    RankGained = 86,
+
+    /// <summary><c>AutoHealBehavior</c> with <c>SingleBurst</c>: this object was healed by a burst.</summary>
+    HealedInBurst = 87,
+
+    /// <summary><c>CrateCollide::onCollide</c>: the crate plays its <c>ExecuteAnimation</c> (<see cref="SimEvent.Text"/>); the value is <see cref="CrateAnimation"/>.</summary>
+    CrateAnimation = 88,
 }
 
 /// <summary>

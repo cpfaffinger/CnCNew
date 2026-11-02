@@ -659,6 +659,11 @@ internal static class HudTests
         Until(() => car.HasStatus(ObjectStatusBits.Index("IS_CARBOMB")), "and the car is a bomb");
         Advance(match, controller, 1);
         TestHarness.Assert(controller.Overlay.Icons.Any(icon => icon.Entity == car.Id), "the owner sees the bomb over the car (drawBombed)");
+        var recruit = Spawn("AmericaInfantryRanger", match.Human, -80, -120);
+        world.AddExperiencePoints(recruit, recruit.Template.ExperienceRequired[1] + 1);
+        Advance(match, controller, 2);
+        TestHarness.Assert(recruit.VeterancyLevel >= 1, "the ranger rose");
+        TestHarness.Assert(controller.Overlay.Icons.Count(icon => !icon.Entity.IsValid) >= 1, "a rise stands in the world over the unit (addWorldAnimation)");
 
         // Sabotage: an enemy building.
         var saboteur = Spawn("GLAInfantrySaboteur", match.Human, -60, 120);

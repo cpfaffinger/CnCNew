@@ -249,7 +249,7 @@ static partial class Tests
         world.Step();
         var second = world.Entities.Where(value => value.Template.Name == "Sleeper").Max(value => value.Id.Value);
         world.SetVeterancy(new EntityId(second), 1);
-        var veteran = Events(() => feeder.Kill(second)).Where(value => !value.StartsWith("UpgradeCompleted", StringComparison.Ordinal)).ToArray();
+        var veteran = Events(() => feeder.Kill(second)).Where(value => !value.StartsWith("UpgradeCompleted", StringComparison.Ordinal) && !value.StartsWith("RankGained", StringComparison.Ordinal)).ToArray();
         Check.That(veteran.Length == 2 && world.FindEntity(new EntityId(second)) is not null, "VeterancyLevels ALL -VETERAN excludes veterans: " + string.Join(" | ", veteran));
         feeder.Spawn(1, "Sleeper");
         world.Step();

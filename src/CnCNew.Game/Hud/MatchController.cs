@@ -582,6 +582,7 @@ public sealed partial class MatchController
         foreach (var ev in result.Events)
         {
             Messages.Observe(ev, Match.World, Match.Human);
+            WorldAnimationOf(ev);
             if (ev.Kind == SimEventKind.SupplyDeposited && Match.World.FindEntity(ev.Entity) is { } earner && earner.Owner == Match.Human) AddFloatingMoney(earner, ev.Value);
         }
         // InGameUI::update runs once per original frame: the lines fade on the game clock's 1/30 s grid, not per simulation tick.
@@ -705,9 +706,8 @@ public sealed partial class MatchController
             var disabled = !unit.EffectivelyDead && (unit.DisabledFlags(world.Tick) & IconDisables) != 0;
             var enthusiastic = !unit.EffectivelyDead && (bonuses & EnthusiasticBonus) != 0;
             var carBomb = unit.Owner == Match.Human && unit.HasStatus(CarBombStatus);
-            var plans = !unit.EffectivelyDead && PlayerHasPlans(world, unit) && world.QualifiesForBattlePlan(unit);
             var bomb = IsStickyBomb(unit) && unit.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StickyBombUpdate>().FirstOrDefault() is { Target.IsValid: true } sticky ? sticky : null;
-            if (!building && unit.VeterancyLevel == 0 && !disabled && !enthusiastic && !carBomb && !plans && bomb is null) continue;
+            if (!building && unit.VeterancyLevel == 0 && !disabled && !enthusiastic && !carBomb && bomb is null) continue;
             if (!Input.Selection.Picker.TryProject(view, unit, out var projected)) continue;
             var bar = MathF.Max(26f, projected.Radius * (drawable.IsStructure ? 1.1f : 1.7f));
             var (barLeft, barTop) = (projected.Center.X - bar / 2f, projected.Center.Y - MathF.Max(projected.Radius, 6f) - 11f);
@@ -722,15 +722,6 @@ public sealed partial class MatchController
             {
                 var size = Math.Max(12, (int)(bar * 0.3f));
                 icons.Add(new UnitIcon(unit.Id, lightning, new UiRect((int)barLeft, (int)barTop - size, size, size)));
-            }
-            if (plans)
-            {
-                // drawBattlePlans: the shield, the sword and the sights in a row along the health bar.
-                var size = Math.Max(10, (int)(bar * 0.3f));
-                var place = 0;
-                foreach (var (plan, name) in BattlePlanIcons)
-                    if (world.BattlePlansActive(unit.Owner, plan) > 0 && Animations.FrameAt(name, _clockMs, 0) is { } picture)
-                        icons.Add(new UnitIcon(unit.Id, picture, new UiRect((int)barLeft + size * place++, (int)barTop + size, size, size)));
             }
             if (carBomb && Animations.FrameAt("CarBomb", _clockMs, 0) is { } burning)
             {
@@ -751,6 +742,7 @@ public sealed partial class MatchController
         }
 
         FloatingMoneyLabels(labels);
+        DrawWorldAnimations(icons);
         var hint = DescribeHint(Input.Hint);
         return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, [..Messages.Log.Lines.Select(line => line.Text)], heals.ToImmutable(),
             waypointPaths.ToImmutable(), hints.ToImmutable(), ranks.ToImmutable(), icons.ToImmutable(), labels.ToImmutable());
@@ -1022,13 +1014,6 @@ public sealed partial class MatchController
     /// <summary><c>BOMB_ICON_EXTRA_OFFSET</c>.</summary>
     private const int BombIconOffset = 5;
 
-    private static readonly (CnCNew.Simulation.Modules.BuiltIn.BattlePlanKind Plan, string Icon)[] BattlePlanIcons =
-    [
-        (CnCNew.Simulation.Modules.BuiltIn.BattlePlanKind.Bombardment, "BattlePlanIcon_Bombard"),
-        (CnCNew.Simulation.Modules.BuiltIn.BattlePlanKind.HoldTheLine, "BattlePlanIcon_HoldTheLine"),
-        (CnCNew.Simulation.Modules.BuiltIn.BattlePlanKind.SearchAndDestroy, "BattlePlanIcon_SeekAndDestroy"),
-    ];
-
     // By template, so that the overlay does not walk the modules of every drawable in every frame.
     private readonly Dictionary<string, bool> _stickyBombs = [];
 
@@ -1037,9 +1022,6 @@ public sealed partial class MatchController
         if (_stickyBombs.TryGetValue(unit.Template.Name, out var known)) return known;
         return _stickyBombs[unit.Template.Name] = unit.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StickyBombUpdate>().Any();
     }
-
-    private static bool PlayerHasPlans(SimulationWorld world, CnCNew.Simulation.World.Entity unit)
-        => !unit.Owner.IsSystem && BattlePlanIcons.Any(icon => world.BattlePlansActive(unit.Owner, icon.Plan) > 0);
 
     /// <summary>The disables <c>drawDisabled</c> shows the lightning for.</summary>
     private const CnCNew.Simulation.World.DisabledMask IconDisables = CnCNew.Simulation.World.DisabledMask.Hacked | CnCNew.Simulation.World.DisabledMask.Paralyzed | CnCNew.Simulation.World.DisabledMask.Emp
@@ -1056,6 +1038,47 @@ public sealed partial class MatchController
         var (x, y) = ((float)earner.X.ToDecimal(), (float)earner.Y.ToDecimal());
         _floatingMoney.Add((new Vector3(x, y, Match.Heights.HeightAt(x, y)), _assets.Text.Format("GUI:AddCash", value), new WndColor(house.Red, house.Green, house.Blue, 230), Match.Clock.OriginalFrames));
     }
+
+    /// <summary><c>InGameUI::addWorldAnimation</c>, <c>WORLD_ANIM_FADE_ON_EXPIRE</c>: a picture that stands in the world, rises and fades in its last second.</summary>
+    private readonly List<(string Name, Vector3 Place, long Frame, long Frames, float RisePerFrame)> _worldAnimations = [];
+
+    private const long WorldAnimationFadeFrames = 30;
+
+    private void WorldAnimationOf(SimEvent ev)
+    {
+        var settings = Match.Data.Fx.Settings;
+        var info = ev.Kind switch
+        {
+            SimEventKind.RankGained => settings.LevelGain,
+            SimEventKind.HealedInBurst => settings.Healed,
+            SimEventKind.CrateAnimation => new CnCNew.Presentation.Fx.WorldAnimationInfo(ev.Text, (ev.Value & uint.MaxValue) / 1000f, ev.Value >> 32),
+            _ => null,
+        };
+        if (info is null || info.Name.Length == 0 || info.Seconds <= 0f || Match.World.FindEntity(ev.Entity) is not { } subject) return;
+        // Object::onVeterancyLevelChanged: "hideAnimationForStealth".
+        if (ev.Kind == SimEventKind.RankGained && subject.Owner != Match.Human && subject.HasStatus(StealthedStatus) && !subject.HasStatus(DetectedStatus) && !subject.HasStatus(DisguisedStatus)) return;
+        var z = (float)subject.Z.ToDecimal() + (ev.Kind == SimEventKind.CrateAnimation ? 0f : (float)subject.Template.GeometryHeight.ToDecimal());
+        _worldAnimations.Add((info.Name, new Vector3((float)subject.X.ToDecimal(), (float)subject.Y.ToDecimal(), z), Match.Clock.OriginalFrames, (long)MathF.Ceiling(info.Seconds * CnCNew.Data.OriginalFrame.PerSecond),
+            info.RisePerSecond / CnCNew.Data.OriginalFrame.PerSecond));
+    }
+
+    private void DrawWorldAnimations(ImmutableArray<UnitIcon>.Builder icons)
+    {
+        if (_worldAnimations.Count == 0) return;
+        var now = Match.Clock.OriginalFrames;
+        _worldAnimations.RemoveAll(animation => now >= animation.Frame + animation.Frames);
+        foreach (var (name, place, frame, frames, rise) in _worldAnimations)
+        {
+            var at = place + new Vector3(0f, 0f, rise * (now - frame));
+            if (Match.FxView.IsShrouded(at) || !Match.Camera.TryWorldToScreen(at, out var screen) || Animations.FrameAt(name, _clockMs, 0) is not { } picture || !_assets.Images.TryGet(picture, out var image)) continue;
+            var left = frame + frames - now;
+            var alpha = left < WorldAnimationFadeFrames ? (byte)(255 * left / WorldAnimationFadeFrames) : (byte)255;
+            icons.Add(new UnitIcon(default, picture, new UiRect((int)screen.X - image.Width / 2, (int)screen.Y - image.Height / 2, image.Width, image.Height)) { Alpha = alpha });
+        }
+    }
+
+    private static readonly int StealthedStatus = CnCNew.Simulation.Modules.ObjectStatusBits.Index("STEALTHED"), DetectedStatus = CnCNew.Simulation.Modules.ObjectStatusBits.Index("DETECTED"),
+        DisguisedStatus = CnCNew.Simulation.Modules.ObjectStatusBits.Index("DISGUISED");
 
     private void FloatingMoneyLabels(ImmutableArray<UnitLabel>.Builder labels)
     {

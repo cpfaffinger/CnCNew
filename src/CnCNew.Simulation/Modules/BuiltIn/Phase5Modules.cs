@@ -421,6 +421,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     {
         if (!_active) return SimulationTiming.SleepForever;
         foreach (var candidate in world.Entities)
+            if (Matches(world, candidate) && data.SingleBurst) world.Emit(SimEventKind.HealedInBurst, candidate.Id, Entity.Id, string.Empty, 0);
+        foreach (var candidate in world.Entities)
             if (Matches(world, candidate)) world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
         if (data.SingleBurst) { _active = false; return SimulationTiming.SleepForever; }
         // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
