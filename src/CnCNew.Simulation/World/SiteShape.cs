@@ -6,7 +6,8 @@ namespace CnCNew.Simulation.World;
 /// <summary>
 /// The ground plan of an object for <c>PartitionManager::geomCollidesWithGeom</c>: a rectangle, or a circle. Two circles touch by the sum of their radii. A circle against a rectangle is the
 /// square around it (<c>xy_collideTest_Rect_Circle</c>: "still not as accurate as is could be"), and two rectangles collide when a corner of one lies in the other
-/// (<c>xy_collideTest_Rect_Rect</c>) - so a cross of two long rectangles does not, as in the original.
+/// (<c>xy_collideTest_Rect_Rect</c>). Before the corners comes <c>z_collideTest_Nonsphere_Nonsphere</c>'s preflight "for close objects": middles closer than the smallest of the four radii collide,
+/// which is what catches two rectangles laid across each other; such a cross with its middles farther apart does not collide, as in the original.
 /// </summary>
 internal readonly struct SiteShape
 {
@@ -43,7 +44,9 @@ internal readonly struct SiteShape
             var (dx, dy) = (b._x - a._x, b._y - a._y);
             return SquaredReach.Of(a._major + b._major).Contains(dx * dx + dy * dy);
         }
-        return a.HasCornerIn(b) || b.HasCornerIn(a);
+        var (acrossX, acrossY) = (b._x - a._x, b._y - a._y);
+        var smallest = Fixed.Min(Fixed.Min(a._major, a._minor), Fixed.Min(b._major, b._minor));
+        return SquaredReach.Of(smallest).ContainsStrictly(acrossX * acrossX + acrossY * acrossY) || a.HasCornerIn(b) || b.HasCornerIn(a);
     }
 
     private bool HasCornerIn(in SiteShape other)

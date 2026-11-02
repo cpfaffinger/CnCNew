@@ -2213,6 +2213,7 @@ public sealed partial class SimulationWorld : IWorldServices
         StepAcquisition(tick);
         StepRepulsion(tick);
         StepContacts(tick);
+        StepBlockedMovers(tick);
         StepTurrets(tick);
         StepFiringTrackers(tick);
         DeliverEvents();
@@ -2258,6 +2259,7 @@ public sealed partial class SimulationWorld : IWorldServices
         StepAcquisition(tick);
         StepRepulsion(tick);
         StepContacts(tick);
+        StepBlockedMovers(tick);
         observer.PhaseEnded(TickPhase.Acquisition);
         observer.PhaseStarted(TickPhase.Turrets);
         StepTurrets(tick);

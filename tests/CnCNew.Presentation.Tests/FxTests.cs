@@ -367,7 +367,9 @@ public static partial class FxTests
         var random = new FxRandom(7);
         var before = random.State;
         Assert(FxRandomVariable.Constant(3f).Sample(random) == 3f && random.State == before, "CONSTANT low == high returns low without drawing");
-        Assert(new FxRandomVariable(2f, 2f, FxDistribution.Uniform).Sample(random) == 2f && random.State != before, "UNIFORM low == high still draws");
+        Assert(new FxRandomVariable(2f, 2f, FxDistribution.Uniform).Sample(random) == 2f && random.State == before, "UNIFORM low == high returns high without drawing (GetGameClientRandomValueReal)");
+        // FX-02: FallingShells has VelOrthoZ = 7.00 2.00; the spent casings of infantry rose up to 122 units instead of the 10 of the second value.
+        Assert(new FxRandomVariable(7f, 2f, FxDistribution.Uniform).Sample(random) == 2f && random.State == before, "UNIFORM with an inverted range is its second value, without drawing");
         var constantRange = new FxRandomVariable(1f, 2f, FxDistribution.Constant).Sample(random);
         Assert(constantRange is >= 1f and <= 2f, "CONSTANT low != high falls through to UNIFORM");
         Assert(new FxRandomVariable(1f, 2f, FxDistribution.Gaussian).Sample(random) == 0f, "GAUSSIAN is unimplemented in the reference: 0");

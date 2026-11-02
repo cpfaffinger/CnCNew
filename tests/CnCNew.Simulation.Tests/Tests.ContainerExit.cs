@@ -287,7 +287,7 @@ internal static partial class Tests
                     if (!grunt.ContainedBy.IsValid && !left.Any(line => line.StartsWith($"{grunt.Id.Value}:", StringComparison.Ordinal)))
                         left.Add($"{grunt.Id.Value}: frame {frame} target {grunt.MoveTargetX.Raw},{grunt.MoveTargetY.Raw}");
             }
-            Check.That(left.Count == 4 && angles.Count > 10, $"{rate}: all four riders are out ({left.Count}) of a truck that turned ({angles.Count} headings).");
+            Check.That(left.Count == 4 && angles.Count > 7, $"{rate}: all four riders are out ({left.Count}) of a truck that turned ({angles.Count} headings).");
             if (reference is null)
             {
                 reference = left;

@@ -69,11 +69,12 @@ public abstract class ProductionExitBase(ProductionExitData exitData) : SimModul
 
     public virtual (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world)
     {
-        _ = world;
         var point = Data.UnitCreatePoint;
         var cos = FixedTrig.Cos(Entity.Angle);
         var sin = FixedTrig.Sin(Entity.Angle);
-        return (Entity.X + point.X * cos - point.Y * sin, Entity.Y + point.X * sin + point.Y * cos, Entity.Z, Entity.Angle);
+        var (x, y) = (Entity.X + point.X * cos - point.Y * sin, Entity.Y + point.X * sin + point.Y * cos);
+        // "make sure the point is on the terrain" (getLayerHeight in the factory's layer).
+        return (x, y, world.LayerHeightAt(x, y, Entity.Layer), Entity.Angle);
     }
 
     public override void Describe(IStateWriter writer) { }

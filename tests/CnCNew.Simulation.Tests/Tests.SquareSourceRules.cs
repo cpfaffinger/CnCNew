@@ -49,6 +49,7 @@ static partial class Tests
         new("Simulation/Modules/BuiltIn/AirWeaponModules.cs", RuleSelfProduct, "scaled * scaled / factor * data.SpecialSpeedHeight", "the acceleration factor of the data times a fraction in [0, 1]"),
         new("Simulation/Modules/BuiltIn/FlightModules.cs", RuleSelfProduct, "Fixed.Sqrt(Fixed.One - dot * dot)", "the cosine between two unit vectors, clamped to ±0.99999 the line before"),
         new("Simulation/Modules/BuiltIn/JetAIUpdate.cs", RuleSelfProduct, "parking.Data.ApproachHeight * ratio * ratio", "a fraction in [0, 1]"),
+        new("Simulation/Modules/BuiltIn/JetAIUpdate.cs", RuleSelfProduct, "(speed * speed / brake.Abs())", "the sink of a landing per logic frame of the original, a few units"),
         // -- whole numbers, not fixed-point values
         new("Simulation/Scripting/ScriptEngine.ValueActions.cs", RuleSelfProduct, "if (dx * dx + dy * dy > radius * radius", "cells of the partition grid, integers"),
         new("Simulation/Terrain/VisionMap.cs", RuleSelfProduct, "private static long SquaredRadius(long reach)", "the saturating square of the vision circle test itself (machine words at 16 fraction bits)"),

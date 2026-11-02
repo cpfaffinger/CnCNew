@@ -86,6 +86,42 @@ static partial class Tests
             InitialHealth = 300.0
           End
         End
+        Object SiteTurnedDock
+          KindOf = SELECTABLE STRUCTURE IMMOBILE SUPPLY_SOURCE
+          Geometry = BOX
+          GeometryMajorRadius = 50.0
+          GeometryMinorRadius = 61.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+        End
+        Object SiteThinBar
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 120.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+        End
+        Object SiteBroadCenter
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 52.0
+          GeometryMinorRadius = 47.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+        End
         Object SiteCenter
           KindOf = SELECTABLE STRUCTURE CANNOT_BUILD_NEAR_SUPPLIES
           BuildCost = 100
@@ -170,6 +206,26 @@ static partial class Tests
     /// around the site; a factory keeps the way out of its door free. The same draws and places at 30, 60 and 120 Hz. Before, only the footprints of structures counted: an enemy soldier stood in the
     /// building, a unit in the footprint stayed there and a building could close a factory's door.
     /// </summary>
+    /// <summary>
+    /// The owner's finding SPEC-08: the AI built its supply center inside the supply dock. Two rectangles laid across each other have no corner in the other, and <c>z_collideTest_Nonsphere_Nonsphere</c>
+    /// answers that with its preflight ("Preflight for close objects"): a middle within the smallest radius collides, whatever the corners say.
+    /// </summary>
+    public static void BuildSiteSeesARectangleLaidAcrossAnother()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            var (world, feeder) = BuildSiteWorld(rate, TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "site"));
+            // The dock of Alpine Assault, turned by 45 degrees, and the Chinese supply center's ground plan.
+            feeder.Spawn(1, "SiteTurnedDock", owner: 0, x: 300, y: 300, angle: Fixed.FromDecimal(0.7854m));
+            world.Step();
+            Check.That(SiteCode(world, 287, 291, template: "SiteBroadCenter") == LegalBuildCode.ObjectsInTheWay, $"{rate}: 16 units from the dock's middle ({SiteCode(world, 287, 291, template: "SiteBroadCenter")}).");
+            Check.That(SiteCode(world, 300, 300, template: "SiteBroadCenter") == LegalBuildCode.ObjectsInTheWay, $"{rate}: on the dock's middle ({SiteCode(world, 300, 300, template: "SiteBroadCenter")}).");
+            // A thin bar across the dock: inside the smallest radius it collides; beyond it only the corners count, and neither has one in the other, as in the original.
+            Check.That(SiteCode(world, 303, 300, template: "SiteThinBar") == LegalBuildCode.ObjectsInTheWay, $"{rate}: the bar's middle within its minor radius ({SiteCode(world, 303, 300, template: "SiteThinBar")}).");
+            Check.That(SiteCode(world, 310, 300, template: "SiteThinBar") == LegalBuildCode.Ok, $"{rate}: the original's own limit stands ({SiteCode(world, 310, 300, template: "SiteThinBar")}).");
+        }
+    }
+
     public static void BuildSiteClearsItsGround()
     {
         string? reference = null;

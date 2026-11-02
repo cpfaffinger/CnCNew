@@ -23,8 +23,11 @@ public sealed class FxRandom(ulong seed)
     /// <summary>A value in [0, 1] (both inclusive) with 24 significant bits, like the reference's inclusive real range.</summary>
     public float NextUnit() => (NextUInt64() >> 40) * UnitScale;
 
-    /// <summary><c>GameClientRandomValueReal(low, high)</c>: inclusive on both ends.</summary>
-    public float NextReal(float low, float high) => low + (high - low) * NextUnit();
+    /// <summary>
+    /// <c>GameClientRandomValueReal(low, high)</c>: inclusive on both ends. <c>if (delta &lt;= 0.0f) return hi</c>, without a draw: 377 ranges of <c>ParticleSystem.ini</c> are written the wrong way
+    /// round (<c>VelOrthoZ = 7.00 2.00</c>) and mean their second value.
+    /// </summary>
+    public float NextReal(float low, float high) => low >= high ? high : low + (high - low) * NextUnit();
 
     /// <summary><c>GameClientRandomValue(low, high)</c>: an integer in [low, high], both inclusive.</summary>
     public int NextInt(int low, int high)
@@ -40,8 +43,8 @@ public enum FxDistribution { Constant, Uniform, Gaussian, Triangular, LowBias, H
 
 /// <summary>
 /// <c>GameClientRandomVariable</c>. <see cref="Sample"/> follows <c>GameClientRandomVariable::getValue</c> exactly: a CONSTANT with
-/// <c>low == high</c> returns <c>low</c> without drawing; a CONSTANT with <c>low != high</c> falls through to UNIFORM; UNIFORM draws
-/// even when <c>low == high</c>; the other distributions are unimplemented in the reference and return 0 (the parser reports them).
+/// <c>low == high</c> returns <c>low</c> without drawing; a CONSTANT with <c>low != high</c> falls through to UNIFORM; UNIFORM is
+/// <see cref="FxRandom.NextReal"/>; the other distributions are unimplemented in the reference and return 0 (the parser reports them).
 /// </summary>
 public readonly record struct FxRandomVariable(float Low, float High, FxDistribution Distribution)
 {
