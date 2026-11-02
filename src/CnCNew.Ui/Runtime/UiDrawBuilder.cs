@@ -274,7 +274,10 @@ public sealed partial class UiWindowTree
             var state = StateOf(window);
             DrawBackground(window, Set(window, WndDrawDataKind.Enabled), window.Rect);
             var edit = UiGadgetGeometry.ComboEdit(window);
-            DrawBackground(window, Set(window, WndDrawDataKind.ComboBoxEditBoxEnabled, state), edit);
+            // The edit box is a text entry (W3DGadgetTextEntryImageDraw): left end, repeating centre, right end. Its entry 0 alone is the left end's gradient.
+            var editSet = Set(window, WndDrawDataKind.ComboBoxEditBoxEnabled, state);
+            if ((window.Status & WndStatus.Image) != 0) ThreePiece(edit, editSet[0].Image, editSet[2].Image, editSet[1].Image, true);
+            else Box(edit, editSet[0]);
             if (combo.Data.IsEditable) EditText(window, combo.Edit, edit, false);
             else if (combo.SelectedIndex >= 0)
             {

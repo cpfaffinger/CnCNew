@@ -26,9 +26,6 @@ public sealed class OptionsScreen : ShellScreen
     private static readonly ImmutableArray<(int Width, int Height)> ResolutionChoices =
         [.. Resolutions.Standard.Select(r => (r.Width, r.Height)).OrderBy(r => r.Width).ThenBy(r => r.Height)];
 
-    /// <summary>The original layers the options menu over the main menu (<c>getOptionsLayout</c>, <c>runInit</c>, <c>hide(FALSE)</c>): no shell push, the main menu is not shut down.</summary>
-    public override bool HidesScreensBelow => false;
-
     private GameSettings _working;
     private ImmutableArray<(int Width, int Height)> _resolutionEntries;
 
@@ -164,6 +161,7 @@ public sealed class OptionsScreen : ShellScreen
             Name = MoreOptionsButton,
             Rect = rect with { Left = 632 - rect.Width, Top = 21, Right = 632, Bottom = 21 + rect.Height },
             Callbacks = defaults.Callbacks with { System = "OptionsMoreSystem" },
+            GroupCentered = true,
         };
         return new CnCNew.Ui.Wnd.WndLayout("OptionsMore.wnd", 2, new CnCNew.Ui.Wnd.WndLayoutCallbacks(null, null, null), CnCNew.Ui.Wnd.WndDefaults.None, [button], [],
             ImmutableSortedDictionary<string, int>.Empty);
