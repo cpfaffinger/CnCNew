@@ -476,6 +476,19 @@ public sealed class CommandModeController
                 Selection.Replace(world.Entities.Where(entity => entity.Owner == Player && EntityPicker.IsMassSelectable(entity)
                                                                  && entity.Template.Name.Equals(button.Object, StringComparison.OrdinalIgnoreCase)).Select(entity => entity.Id));
                 return ActivationResult.Issued;
+            // GUI_COMMAND_SPECIAL_POWER_CONSTRUCT: a building at the cursor, and the power is used where it is put down (handleSpecialPowerConstructCommand).
+            case GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut:
+            {
+                var source = SpecialPowerSource(world, button, sources);
+                if (source is null) return ActivationResult.NoSource;
+                Cancel();
+                Mode = CommandModeKind.Placement;
+                _button = button;
+                _builder = source.Id;
+                _sources = [source.Id];
+                _placementAngle = Settings.PlacementViewAngle?.Invoke(button.Object) ?? 0f;
+                return ActivationResult.EnteredMode;
+            }
             case GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut:
             {
                 var source = SpecialPowerSource(world, button, sources);
@@ -535,7 +548,7 @@ public sealed class CommandModeController
     {
         if (!world.SpecialPowers.TryGet(button.SpecialPower, out var power)) return null;
         bool Carries(Entity entity) => entity.Modules.OfType<ISpecialPowerModule>().Any(module => module.PowerIndex == power.Index);
-        IEnumerable<Entity> pool = button.Kind == GuiCommandKind.SpecialPowerFromShortcut
+        IEnumerable<Entity> pool = button.Kind is GuiCommandKind.SpecialPowerFromShortcut or GuiCommandKind.SpecialPowerConstructFromShortcut
             ? world.Entities.Where(entity => entity.Owner == Player && SimulationQueries.IsAlive(entity)).OrderBy(entity => entity.Id.Value)
             : sources;
         var carriers = pool.Where(Carries).ToList();
@@ -752,8 +765,11 @@ public sealed class CommandModeController
 
     private PlacementGhost MakeGhost(SimulationWorld world, Vector3 position, bool anchored)
     {
-        var issue = SimulationQueries.CheckPlacement(world, Player, world.FindEntity(_builder), _button!.Object,
-            SimulationQueries.ToFixed(position.X), SimulationQueries.ToFixed(position.Y), SimulationQueries.ToFixed(_placementAngle));
+        // What a power puts down has no builder that must reach the place, and costs nothing.
+        var (x, y, angle) = (SimulationQueries.ToFixed(position.X), SimulationQueries.ToFixed(position.Y), SimulationQueries.ToFixed(_placementAngle));
+        var issue = _button!.Kind is GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut
+            ? SimulationQueries.CheckPowerPlacement(world, world.FindEntity(_builder), _button.Object, x, y, angle)
+            : SimulationQueries.CheckPlacement(world, Player, world.FindEntity(_builder), _button.Object, x, y, angle);
         return new PlacementGhost(_button.Object, position, _placementAngle, issue == PlacementIssue.None, issue, anchored);
     }
 
@@ -787,6 +803,13 @@ public sealed class CommandModeController
         }
         var (builder, template) = (_builder, _button!.Object);
         var (x, y, angle) = (SimulationQueries.ToFixed(anchor.X), SimulationQueries.ToFixed(anchor.Y), SimulationQueries.ToFixed(_placementAngle));
+        if (_button.Kind is GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut)
+        {
+            var power = _button.SpecialPower;
+            var used = Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, builder, power, SpecialPowerTargetKind.Location, EntityId.Invalid, x, y));
+            Cancel();
+            return used.Accepted;
+        }
         Orders.Clear(builder);
         var result = Issue((sequence, tick) => new ConstructCommand(Player, sequence, tick, builder, template, x, y, angle));
         Cancel();

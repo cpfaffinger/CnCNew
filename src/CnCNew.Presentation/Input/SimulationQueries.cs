@@ -156,6 +156,18 @@ public static class SimulationQueries
         if (!CanBuildTemplate(world, player, builder, template)) return PlacementIssue.CannotConstruct;
         if (!PrerequisitesSatisfied(world, player, template)) return PlacementIssue.MissingPrerequisite;
         if (world.MoneyOf(player) < template.BuildCost) return PlacementIssue.InsufficientFunds;
+        return SiteIssue(world, builder, template, x, y, angle);
+    }
+
+    /// <summary>The place of what a special power puts down (<c>SPECIAL_POWER_CONSTRUCT</c>): no builder, no money, only the site. <paramref name="source"/> is the power's carrier.</summary>
+    public static PlacementIssue CheckPowerPlacement(SimulationWorld world, Entity? source, string templateName, Fixed x, Fixed y, Fixed angle)
+    {
+        if (source is null || !world.Templates.TryGet(templateName, out var template)) return PlacementIssue.UnknownTemplate;
+        return SiteIssue(world, source, template, x, y, angle);
+    }
+
+    private static PlacementIssue SiteIssue(SimulationWorld world, Entity builder, CnCNew.Simulation.Templates.ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+    {
         return world.CheckBuildSite(builder, template, x, y, angle) switch
         {
             LegalBuildCode.Ok => PlacementIssue.None,

@@ -420,9 +420,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (world.Tick < entity.ReadyTickOf(slot)) return State(ButtonAvailability.NotReady, ButtonReason.Reloading);
                 return State(ButtonAvailability.Available, ButtonReason.None);
             }
-            case GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut:
+            case GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut or GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut:
             {
-                var source = button.Kind == GuiCommandKind.SpecialPowerFromShortcut ? MostReadyCarrier(world, player, power!) : entity;
+                var source = button.Kind is GuiCommandKind.SpecialPowerFromShortcut or GuiCommandKind.SpecialPowerConstructFromShortcut ? MostReadyCarrier(world, player, power!) : entity;
                 var module = source?.Modules.OfType<ISpecialPowerModule>().FirstOrDefault(candidate => candidate.PowerIndex == power!.Index);
                 if (module is null) return State(ButtonAvailability.Hidden, ButtonReason.UnknownReference);
                 if (power!.RequiredScience >= 0 && !world.PlayerSciences(player).Has(power.RequiredScience)) return State(ButtonAvailability.Restricted, ButtonReason.MissingScience);

@@ -61,6 +61,7 @@ internal static class HudTests
         harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
         harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
+        harness.Run("The sneak attack: a press puts the tunnel at the cursor and the power is used where it is put down", () => SneakAttack(data));
         harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
         return harness.Failures;
@@ -520,6 +521,35 @@ internal static class HudTests
             Advance(match, controller, 60);
             TestHarness.Assert(moves == 1 && Vector2.Distance(SimulationQueries.GroundOf(dozer), start) > 1f, $"alternate {alternate}: the {order} button on open ground moves the dozer ({moves} moves)");
         }
+    }
+
+    private static void SneakAttack(GameData data)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionGLA", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        Advance(match, controller, (int)match.World.Time.OriginalFrames(4));
+        match.World.GrantScience(match.Human, "SCIENCE_SneakAttack");
+        foreach (var module in match.World.Entities.SelectMany(entity => entity.Modules).OfType<CnCNew.Simulation.Modules.ISpecialPowerModule>()) module.SetReadyFrame(0);
+        Advance(match, controller, 2);
+        controller.BuildDrawList(1280, 720);
+        var power = controller.Powers.FirstOrDefault(button => button.Button.Name == "Command_SneakAttackFromShortcut");
+        TestHarness.Assert(power is { IsEnabled: true }, $"the sneak attack is on the bar and ready ({string.Join(", ", controller.Powers.Select(button => button.Button.Name + ":" + button.Availability + ":" + button.Reason))}; over {match.IsOver}, faction {match.World.FactionOf(match.Human)?.Name}, set {match.World.FactionOf(match.Human)?.PowerShortcutSet}, own {match.World.Entities.Count(entity => entity.Owner == match.Human)}, tick {match.World.Tick})");
+        var commands = controller.Input.Commands;
+        TestHarness.Assert(commands.Activate(match.World, power!.Button, []) == ActivationResult.EnteredMode && commands.Mode == CommandModeKind.Placement, "a press puts the tunnel at the cursor");
+        var center = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var reasons = new List<string>();
+        for (var attempt = 0; attempt < 16 && commands.Mode == CommandModeKind.Placement; attempt++)
+        {
+            var (x, y) = ((float)center.X.ToDecimal() + (attempt % 4 - 2) * 90f, (float)center.Y.ToDecimal() + (attempt / 4 - 2) * 90f);
+            if (!match.Camera.TryWorldToScreen(new Vector3(x, y, match.Heights.HeightAt(x, y)), out var screen)) continue;
+            commands.PlacementPress(match.World, match.Camera, screen);
+            commands.PlacementRelease(match.World, match.Camera, screen);
+            reasons.Add(commands.Ghost?.Reason.ToString() ?? "-");
+        }
+        TestHarness.Assert(commands.Mode != CommandModeKind.Placement, $"it is put down ({string.Join(", ", reasons)})");
+        Advance(match, controller, (int)match.World.Time.WholeSecondsToTicks(5));
+        TestHarness.Assert(match.World.Entities.Any(entity => entity.Owner == match.Human && entity.Template.Name.Contains("SneakAttack", StringComparison.Ordinal)), $"and the tunnel comes up ({center.Template.Name})");
     }
 
     private static void PowerBar(GameData data)
