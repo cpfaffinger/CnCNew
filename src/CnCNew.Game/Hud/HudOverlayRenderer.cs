@@ -108,6 +108,19 @@ public static class HudOverlayRenderer
             foreach (var icon in overlay.HealIcons)
                 HealIcon(commands, icon, clockMilliseconds);
 
+        if (!overlay.Icons.IsDefaultOrEmpty)
+            foreach (var icon in overlay.Icons)
+                commands.Add(new UiImageDraw(icon.Image, icon.Place, WndColor.White, false, false));
+
+        if (!overlay.Labels.IsDefaultOrEmpty)
+            foreach (var label in overlay.Labels)
+                commands.Add(new UiTextDraw(label.Text, null, LabelFont, WndColor.White, new WndColor(0, 0, 0, 255), (int)label.At.X, (int)label.At.Y, UiTextAlignment.Center, new UiRect((int)label.At.X - 120, (int)label.At.Y - 8, 240, 18)));
+
+        if (!overlay.Ranks.IsDefaultOrEmpty)
+            foreach (var rank in overlay.Ranks)
+                if (rank.Level is >= 1 and <= 3)
+                    commands.Add(new UiImageDraw($"SCVeter{rank.Level}", new UiRect((int)MathF.Round(rank.At.X) + 1, (int)MathF.Round(rank.At.Y) + 1, RankSize, RankSize), WndColor.White, false, false));
+
         return commands.ToImmutable();
     }
 
@@ -173,7 +186,28 @@ public static class HudOverlayRenderer
         var health = Math.Clamp(marker.HealthFraction, 0f, 1f);
         var filled = (int)MathF.Round(width * health);
         if (filled > 0) commands.Add(new UiFillRect(new UiRect((int)MathF.Floor(left), (int)MathF.Floor(top), filled, 5), HealthColor(health)));
+        var row = (int)MathF.Floor(top) + 7;
+        if (marker.Ammo is { } ammo)
+        {
+            for (var pip = 0; pip < ammo.Total; pip++)
+                commands.Add(new UiImageDraw(pip < ammo.Full ? "SCPAmmoFull" : "SCPAmmoEmpty", new UiRect((int)MathF.Floor(left) + pip * (AmmoPipWidth + 1), row, AmmoPipWidth, AmmoPipHeight), WndColor.White, false, false));
+            row += AmmoPipHeight + 1;
+        }
+        // "If empty, don't show nothin'."
+        if (marker.Seats is { Full: > 0 } seats)
+            for (var pip = 0; pip < seats.Total; pip++)
+            {
+                var place = new UiRect((int)MathF.Floor(left) + pip * (AmmoPipWidth + 1), row, AmmoPipWidth, SeatPipHeight);
+                if (pip < seats.Full) commands.Add(new UiImageDraw("SCPPipFull", place, pip < seats.Infantry ? InfantrySeat : VehicleSeat, false, false));
+                else commands.Add(new UiImageDraw("SCPPipEmpty", place, WndColor.White, false, false));
+            }
     }
+
+    private static readonly UiFont LabelFont = new("Arial", 12, true);
+
+    private const int AmmoPipWidth = 5, AmmoPipHeight = 10, SeatPipHeight = 12, RankSize = 16;
+    private static readonly WndColor InfantrySeat = new(0, 255, 0, 255);
+    private static readonly WndColor VehicleSeat = new(0, 0, 255, 255);
 
     // The projected centre of a building is its bounding sphere's centre, above the footprint on screen; the brackets hug the visible footprint a little below it.
     private static Vector2 StructureCenter(UnitMarker marker) => new(marker.Center.X, marker.Center.Y + marker.Radius * 0.22f);

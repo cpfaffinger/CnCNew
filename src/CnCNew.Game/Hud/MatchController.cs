@@ -608,7 +608,13 @@ public sealed partial class MatchController
             if (Input.Selection.Picker.TryProject(view, entity, out var projected))
             {
                 var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
-                selected.Add(new UnitMarker(entity.Id, projected.Center, projected.Radius, health, entity.Owner == Match.Human, world.AreEnemies(Match.Human, entity.Owner), entity.Template.IsKindOf("STRUCTURE")));
+                var mine = entity.Owner == Match.Human;
+                var seats = mine && entity.Container is { ContainMax: > 0 } held ? ((int, int, int)?)(held.ContainMax, held.Contained.Count, held.Contained.Count(rider => world.FindEntity(rider)?.Template.IsKindOf("INFANTRY") == true)) : null;
+                selected.Add(new UnitMarker(entity.Id, projected.Center, projected.Radius, health, entity.Owner == Match.Human, world.AreEnemies(Match.Human, entity.Owner), entity.Template.IsKindOf("STRUCTURE"))
+                {
+                    Ammo = mine ? world.AmmoPips(entity) : null,
+                    Seats = seats,
+                });
             }
             if (SimulationQueries.ProductionOf(entity) is { } production)
             {
@@ -681,9 +687,39 @@ public sealed partial class MatchController
             heals.Add(new HealIconMarker(drawable.Entity, new Vector2(projected.Center.X, projected.Center.Y - projected.Radius), MathF.Max(24f, projected.Radius * 1.8f), kind));
         }
 
+        // Drawable::drawIconUI runs for every drawable. The veterancy comes last there, so that it shows over the pips; a construction's percent shows on dead things too.
+        var ranks = ImmutableArray.CreateBuilder<VeterancyMarker>();
+        var icons = ImmutableArray.CreateBuilder<UnitIcon>();
+        var labels = ImmutableArray.CreateBuilder<UnitLabel>();
+        foreach (var drawable in IconUiEnabled ? Match.Frame.Drawables : ImmutableArray<CnCNew.Presentation.Objects.DrawableInstance>.Empty)
+        {
+            if (!drawable.Entity.IsValid || world.FindEntity(drawable.Entity) is not { } unit) continue;
+            var building = unit.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction) && !unit.HasStatus(SoldStatus);
+            var bonuses = unit.WeaponBonusConditions;
+            var disabled = !unit.EffectivelyDead && (unit.DisabledFlags(world.Tick) & IconDisables) != 0;
+            var enthusiastic = !unit.EffectivelyDead && (bonuses & EnthusiasticBonus) != 0;
+            if (!building && unit.VeterancyLevel == 0 && !disabled && !enthusiastic) continue;
+            if (!Input.Selection.Picker.TryProject(view, unit, out var projected)) continue;
+            var bar = MathF.Max(26f, projected.Radius * (drawable.IsStructure ? 1.1f : 1.7f));
+            var (barLeft, barTop) = (projected.Center.X - bar / 2f, projected.Center.Y - MathF.Max(projected.Radius, 6f) - 11f);
+            if (building) labels.Add(new UnitLabel(unit.Id, new Vector2(projected.Center.X, projected.Center.Y), _assets.Text.Format("CONTROLBAR:UnderConstructionDesc", (decimal)(unit.ConstructionShare.ToDecimal() * 100m))));
+            if (unit.EffectivelyDead || unit.Template.IsKindOf("IGNORED_IN_GUI")) continue;
+            if (enthusiastic && Animations.FrameAt((bonuses & SubliminalBonus) != 0 ? "Subliminal" : "Enthusiastic", _clockMs, unit.Id.Value) is { } frame)
+            {
+                var size = (int)(bar * (drawable.IsStructure || drawable.Visual.IsKindOf("HUGE_VEHICLE") ? 1f : drawable.Visual.IsKindOf("VEHICLE") ? 0.75f : 0.5f));
+                icons.Add(new UnitIcon(unit.Id, frame, new UiRect((int)(barLeft + bar * 0.25f - size * 0.5f), (int)(barTop + 5f + size * 0.25f), size, size)));
+            }
+            if (disabled && Animations.FrameAt("Disabled", _clockMs, 0) is { } lightning)
+            {
+                var size = Math.Max(12, (int)(bar * 0.3f));
+                icons.Add(new UnitIcon(unit.Id, lightning, new UiRect((int)barLeft, (int)barTop - size, size, size)));
+            }
+            if (unit.VeterancyLevel > 0) ranks.Add(new VeterancyMarker(unit.Id, new Vector2(projected.Center.X + bar / 2f, barTop), unit.VeterancyLevel));
+        }
+
         var hint = DescribeHint(Input.Hint);
         return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, [..Messages.Log.Lines.Select(line => line.Text)], heals.ToImmutable(),
-            waypointPaths.ToImmutable(), hints.ToImmutable());
+            waypointPaths.ToImmutable(), hints.ToImmutable(), ranks.ToImmutable(), icons.ToImmutable(), labels.ToImmutable());
 
         Vector3 OnGround(Vector2 point) => new(point.X, point.Y, Match.Heights.HeightAt(point.X, point.Y));
     }
@@ -942,6 +978,19 @@ public sealed partial class MatchController
         if (Input.Selection.Selected.ToArray() is not [var only] || Match.World.FindEntity(only) is not { } entity) return null;
         return Match.Data.Visuals.TryGet(entity.Template.Name, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _) ? image : null;
     }
+
+    private static readonly int SoldStatus = CnCNew.Simulation.Modules.ObjectStatusBits.Index("SOLD");
+    private static readonly uint EnthusiasticBonus = BonusBit("ENTHUSIASTIC"), SubliminalBonus = BonusBit("SUBLIMINAL");
+    private static uint BonusBit(string name) => CnCNew.Data.Definitions.NameTablesPhase5.WeaponBonusCondition.TryIndexOf(name, out var index) ? 1u << index : throw new InvalidOperationException(name);
+
+    /// <summary>The disables <c>drawDisabled</c> shows the lightning for.</summary>
+    private const CnCNew.Simulation.World.DisabledMask IconDisables = CnCNew.Simulation.World.DisabledMask.Hacked | CnCNew.Simulation.World.DisabledMask.Paralyzed | CnCNew.Simulation.World.DisabledMask.Emp
+        | CnCNew.Simulation.World.DisabledMask.Subdued | CnCNew.Simulation.World.DisabledMask.Underpowered;
+
+    private Anim2DTable? _animations;
+
+    /// <summary><c>Animation2D.ini</c>.</summary>
+    private Anim2DTable Animations => _animations ??= Anim2DTable.Load(Match.Data.Content);
 
     private ImmutableDictionary<string, string>? _upgradeImages;
 

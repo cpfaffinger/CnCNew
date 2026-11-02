@@ -140,6 +140,19 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>The weapon may be aimed at this victim at all: it targets its kind and would do damage (or is unresistable, which "is allowed to do zero damage").</summary>
+    /// <summary><c>Object::getAmmoPipShowingInfo</c>: the clip of the first weapon of the set that shows one; null for none.</summary>
+    public (int Total, int Full)? AmmoPips(Entity entity)
+    {
+        if (ActiveWeaponSet(entity) is not { } set) return null;
+        for (var slot = 0; slot < WeaponSlot.Count; slot++)
+        {
+            if (!set.HasWeapon(slot)) continue;
+            var weapon = _templates.Weapons[set.Weapons[slot]];
+            if (weapon.ShowsAmmoPips && weapon.ClipSize > 0) return (weapon.ClipSize, Math.Clamp(entity.ClipOf(slot), 0, weapon.ClipSize));
+        }
+        return null;
+    }
+
     /// <summary><c>WeaponSet::isAnyWithinTargetPitch</c>: what an order for one slot asks of the whole set.</summary>
     private bool AnyWithinTargetPitch(Entity source, WeaponSetInfo set, Entity victim)
     {

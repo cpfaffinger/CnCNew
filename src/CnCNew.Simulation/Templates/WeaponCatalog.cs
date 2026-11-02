@@ -58,6 +58,9 @@ public sealed record WeaponInfo(
     /// <summary><c>DamageStatusType</c> as a bit of the status table: what a weapon of <c>DAMAGE_STATUS</c> puts on its victim; -1 for none.</summary>
     public int DamageStatusBit { get; init; } = -1;
 
+    /// <summary><c>ShowsAmmoPips</c>: the clip of this weapon is shown over the object.</summary>
+    public bool ShowsAmmoPips { get; init; }
+
     /// <summary><c>LeechRangeWeapon</c>: once the attack has begun, its range holds no more ("essentially grants the weapon unlimited range for the remainder of the attack").</summary>
     public bool LeechRange { get; init; }
 
@@ -384,6 +387,7 @@ public sealed class WeaponCatalog
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
                 ProjectileCollideMask = collide,
                 LeechRange = Flag("LeechRangeWeapon"),
+                ShowsAmmoPips = Flag("ShowsAmmoPips"),
                 MinTargetPitch = minPitch,
                 MaxTargetPitch = maxPitch,
                 PitchLimited = minPitch > -FixedTrig.Pi || maxPitch < FixedTrig.Pi,

@@ -11,7 +11,23 @@ public sealed record SelectionBoxOverlay(bool Active, Vector2 Start, Vector2 Cur
 }
 
 /// <summary>A selected (or single foreign, for-information) unit's on-screen marker: a selection circle and a health bar.</summary>
-public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, float HealthFraction, bool IsOwn, bool IsEnemy, bool IsStructure = false);
+public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, float HealthFraction, bool IsOwn, bool IsEnemy, bool IsStructure = false)
+{
+    /// <summary><c>Drawable::drawAmmo</c>: the clip under the health bar of an object of the viewer's; null for none.</summary>
+    public (int Total, int Full)? Ammo { get; init; }
+
+    /// <summary><c>Drawable::drawContained</c>: the seats under the health bar, the infantry first; null for none.</summary>
+    public (int Total, int Full, int Infantry)? Seats { get; init; }
+}
+
+/// <summary>An animated icon over an object (<c>Drawable::drawDisabled</c>, <c>drawEnthusiastic</c>): the frame of this moment and its place on the screen.</summary>
+public sealed record UnitIcon(EntityId Entity, string Image, CnCNew.Ui.Layout.UiRect Place);
+
+/// <summary><c>Drawable::drawConstructPercent</c>: how far an object under construction is, over its centre.</summary>
+public sealed record UnitLabel(EntityId Entity, Vector2 At, string Text);
+
+/// <summary><c>Drawable::drawVeterancy</c>: the chevrons at the end of where the health bar would sit, for every object in view with a rank.</summary>
+public sealed record VeterancyMarker(EntityId Entity, Vector2 At, int Level);
 
 /// <summary>Which of the original's three healing animations (<c>Animation2D.ini</c>: <c>StructureHeal</c> wrench, <c>VehicleHeal</c> wrench, <c>DefaultHeal</c> cross) a healed object shows.</summary>
 public enum HealIconKind { Default, Structure, Vehicle }
@@ -55,7 +71,10 @@ public sealed record HudOverlay(
     ImmutableArray<string> Ticker,
     ImmutableArray<HealIconMarker> HealIcons = default,
     ImmutableArray<WaypointPathOverlay> WaypointPaths = default,
-    ImmutableArray<OrderHintMarker> OrderHints = default)
+    ImmutableArray<OrderHintMarker> OrderHints = default,
+    ImmutableArray<VeterancyMarker> Ranks = default,
+    ImmutableArray<UnitIcon> Icons = default,
+    ImmutableArray<UnitLabel> Labels = default)
 {
     public static readonly HudOverlay Empty = new(SelectionBoxOverlay.None, [], [], [], PlacementGhostOverlay.None, null, [], []);
 }
