@@ -4781,3 +4781,25 @@ Reference values after sections 75 and 76 and the event of an upgrade (`Complete
 **The sixteen pairings: 8 decided within their 25 minutes, 12 before.** The cause is measured, not assumed: the merged state without the preflight of `SiteShape.Collide` decides 15 of 16. The computer players' supply center stood in the dock, 16 units from its middle; it now stands where the original's walk of `AIPlayer::buildBySupplies` puts the first legal spot, about 171 units away, and every truck drives that far. The quick wins of the earlier state were the defect the owner reported (SPEC-08). The balance is not judged.
 
 **A restored world must see what the continuous one saw.** The pass of section 75.2 took its reach from `_widestMobile`, which remembers units long dead and which a restored world does not have, and a box reaches beyond its circle: D3 parted at tick 31,029 on the merged state. The reach is per pair and from the templates. No package saw it alone.
+
+## 78. What a program found while the owner's acceptance waited (Phase 56, F-107, F-108)
+
+### 78.1 F-108: subdual damage
+
+`ActiveBody` answered every subdual type with "no effect", so the microwave tank, the ECM tank and all 373 bodies with a `SubdualDamageCap` did nothing, and no check had ever fired one. Now as `ActiveBody::attemptDamage`, `internalAddSubdualDamage`, `onSubdualChange` and `SubdualDamageHelper`: the amount leaves the health alone and adds up to the cap; an object that holds as much as it has health is `DISABLED_SUBDUED`, and its riders go idle (a subdued internet center holds its hackers until it is free); the damage wears off by `SubdualDamageHealAmount` every `SubdualDamageHealRate`, and every hit puts the next step off by the whole rate. A body without a cap takes none, and a weapon of such a type is worth nothing against it (`estimateDamage`), so the unit does not aim it there. A subdued object does not act (`Object::isAbleToAttack`). A missile that is subdued is jammed and stays jammed (`MissileAIUpdate::projectileNowJammed`): it loses its victim, flies to a place up to `DistanceScatterWhenJammed` from it (two integer draws of the logic stream) and shows `JAMMED`. The original gives every object a sleeping helper; this world keeps a list of those that are awake, in the order of their ids (`SimulationWorld.Subdual.cs`), and a restored world rebuilds it from the bodies.
+
+### 78.2 F-107: the Chinook's combat drop
+
+The button `Command_CombatDrop` of every America Chinook led nowhere: `GuiCommandKind.CombatDrop` was parsed and no command existed. `CombatDropCommand` (**`CommandTypes.Version` 23, replay 22**) is `MSG_COMBATDROP_AT_OBJECT` and `_AT_LOCATION` to a group. `ChinookAIUpdate` flies to the place or the building at its height or `MinDropHeight` above the building, whichever is higher (`ChinookMoveToBldgState`, with the end judged in height too), loses its supplies, and hangs a rope from every pair of bones `RopeStartNN` and `RopeEndNN`, as many as `NumRopes` allows (`ChinookCombatDropState`; the bones are in `ModelGeometry.Ropes`, so the world fingerprint moves). A rope runs out under gravity up to `RopeDropSpeed` and, with `WaitForRopesToDrop`, takes nobody before it hangs; then every `PerRopeDelayMin` to `PerRopeDelayMax` a rider with `CAN_RAPPEL` goes down it at `RappelSpeed` (`AIRappelState`, shown as `RAPPELLING`). Another order ends the drop; a Chinook that dies drops whoever hangs. On a building the rappeller kills up to two enemies inside (`killEnemiesInContainer`); with two dead it dies too, otherwise it goes in, or is put on the ground beside a full building. What may be dropped into is `ActionManager::canEnterObject` with `COMBATDROP_INTO`: anything with a container that is not a faction structure, not subdued and not sold. **Named differences:** no `findPositionAround` for a drop at a place (the walk's own adjustment does it); `DISABLED_HELD` of the Chinook is not set, it simply has no order; the ropes are tracers of the data's width and colour, without wobble (`W3DRopeDraw`).
+
+### 78.3 What falls lands on a deck
+
+The open ends of section 68.7, see there.
+
+### 78.4 A disabled object looks disabled
+
+`StatusTintTracker` is `Drawable::update`'s ladder of `TINT_STATUS_*`: dark over 30 frames for everything but held, a script's disable and unmanned, blue over 150 while subdual damage is on the object. Until now a building without power or an EMPed vehicle showed nothing at all. Not built: the lightning icon `ICON_DISABLED`, and animations that stop (`Drawable::isAnimatingDisabled`).
+
+### 78.5 The GLA player that stood still
+
+`docs/SKIRMISH-AI.md` §7c.

@@ -227,3 +227,20 @@ against 5/2/3, GLA-America 0/10/0 against 0/10/0.
 **What it says:** with the fix GLA builds its economy and lasts - a quarter of its matches now reach the 25-minute limit undecided - but it wins no more often (12
 against 15); where the base GLA won, it won early (on Alpine Assault against China six times) before its missing economy mattered. The fix corrects a defect of the AI's
 builder choice; whether its balance is wanted is the owner's question with D-34 (and D-9). Not measured: 30 and 120 Hz, the eight-player maps beyond the one case.
+
+## 7c. The GLA player that stood still (Phase 56)
+
+The owner's report left the pairings at 8 of 16 decided, and the first reading was that the computer had stalled. It had not: `ai-survey --seeds 4 --minutes 45` at `fc464d62` decides 58 of 64, and Alpine Assault America against China is 26 units to 1 when the 25 minutes end. What the same table showed instead: GLA won 4 of 32, its first barracks came after 115 s against 43 to 53 s, and on Death Valley it had none at all and was gone after 4.5 minutes, with 10,000 credits unspent.
+
+Four causes, seen in a throwaway log: its only worker stayed reserved as a scout for 60 s after it had arrived (the reservation of D-34); it was sent only to the spot in front of the source, never to a legal spot it had not seen, so a walk that found only unseen spots failed three times and put the stash at the base, 539 units from its supply; a second builder was asked for only after the first building stood, and the worker is both; and the army and the buildings behind the first goal spent what the stash costs.
+
+Thresholds committed before the fix (`docs/handoffs/HANDOFF-PHASE56.md`), the same survey after it:
+
+| | before | after | threshold |
+| --- | --- | --- | --- |
+| first barracks of GLA, median | 115 s | **29 s** | T1 at most 60 s: met |
+| GLA matches without a barracks | 5 of 32 | **0** | T2 none: met |
+| decided of 64 within 45 minutes | 58 | 57 | T3 at least 58: **missed by one** |
+| GLA wins of 32 | 4 | 6 | T4 at least 8: **missed by two** |
+
+The matches GLA loses last longer: the shortest went from 261 s to 506 s. America against China is untouched. The balance is not judged (D-9); that T4 missed says only that having an economy does not make GLA win.

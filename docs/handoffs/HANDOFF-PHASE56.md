@@ -28,7 +28,7 @@ The built-in AI stays the default (no. 9 of Phase 23), and it may be better than
 1. The computer's economy after SPEC-08: is "8 of 16 decided" a stalled AI or only a short clock? Measure, then fix what is really wrong.
 2. The two open ends of the bridges: what falls from the air lands under a deck, and the cursor does not pick a deck.
 3. The menus' rest of Phase 29: back into a running match, a watcher's way with the choice of fog, a button to remove a member, the start position box.
-4. F-23's model states the simulation can now set, and F-33: the export without the original's program files.
+4. F-23's model states the simulation can now set, and F-33: the export without the original's program files. **Added on the way:** a sweep of what the source says is not simulated found subdual damage (F-108) and the combat drop (F-107), both built.
 5. The cosmetic leftovers of the report, the cost of `StepBlockedMovers` and of the launch table, `scripts/perf-profile.ps1`, the clean room.
 6. The open goals of `accepted.json`: move to `byMachine` what a program can prove.
 

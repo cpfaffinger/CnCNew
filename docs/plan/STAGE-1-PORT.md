@@ -304,6 +304,8 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-104 | A jet's landing was a straight line of height ending in a corner, with a frame standing in the air and a step back to the approach point | `JetTakeoffOrLandingState`, `Locomotor::calcLiftToUseAtPt`, `Path::computeFlightDistToGoal` | the owner's acceptance (UNIT-19) | **done** (§75.4) |
 | F-105 | A produced unit began at its factory's height instead of the ground of its place | `DefaultProductionExitUpdate::exitObjectViaDoor` | the owner's acceptance (UNIT-10) | **done** (§75.5); that a tank drives through the ramp of the model at the height of the terrain is the original |
 | F-106 | A random range written the wrong way round was drawn between its values (377 ranges of `ParticleSystem.ini`; the casings of infantry rose 122 units instead of 10) | `GetGameClientRandomValueReal` | the owner's acceptance (FX-02) | **done** (§75.7) |
+| F-107 | The Chinook's combat drop did not exist: its button led nowhere | `ChinookCombatDropState`, `ChinookMoveToBldgState`, `AIRappelState`, `ActionManager::canEnterObject` | Phase 56 (a sweep of what the source names as not simulated) | **done** (Phase 56, `docs/SIMULATION-CORE.md` §78.2) |
+| F-108 | Subdual damage did nothing: the microwave and ECM tanks disabled nobody, no missile could be jammed | `ActiveBody::attemptDamage`, `SubdualDamageHelper`, `MissileAIUpdate::projectileNowJammed` | Phase 56 (the same sweep) | **done** (Phase 56, §78.1) |
 | F-33 | Installer: Steam outside the default path untested; export contains the original program files; manifest hash Windows-only; client not self-contained | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog
