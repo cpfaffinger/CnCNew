@@ -13,7 +13,12 @@ namespace CnCNew.Simulation.Templates;
 /// mirroring <c>Player::Player()</c>) and issuing ordinary <c>SpawnCommand</c>s for the starting building/units.
 /// </summary>
 public sealed record FactionInfo(string Name, Fixed StartMoney, ScienceMask IntrinsicSciences, string StartingBuilding, ImmutableArray<string> StartingUnits, bool IsObserver, bool PlayableSide, string Side = "", int IntrinsicSciencePurchasePoints = 0,
-    string ScienceSetRank1 = "", string ScienceSetRank3 = "", string ScienceSetRank8 = "", string BeaconName = "");
+    string ScienceSetRank1 = "", string ScienceSetRank3 = "", string ScienceSetRank8 = "", string BeaconName = "")
+{
+    /// <summary><c>SpecialPowerShortcutCommandSet</c> and <c>SpecialPowerShortcutWinName</c>: the bar of the player's special powers.</summary>
+    public string PowerShortcutSet { get; init; } = string.Empty;
+    public string PowerShortcutLayout { get; init; } = string.Empty;
+}
 
 /// <summary>Every <c>PlayerTemplate</c> definition, keyed by name (<c>FactionAmerica</c>, <c>FactionChina</c>, the per-general variants, <c>FactionObserver</c>, <c>FactionCivilian</c>).</summary>
 public sealed class FactionCatalog
@@ -55,7 +60,11 @@ public sealed class FactionCatalog
             factions.Add(new FactionInfo(definition.OriginalName, startMoney, sciences.MaskOf(intrinsicNames), startingBuilding, startingUnits.ToImmutable(), isObserver, playableSide, side,
                 Field("IntrinsicSciencePurchasePoints")?.Value.Value is long points ? checked((int)points) : 0,
                 Field("PurchaseScienceCommandSetRank1")?.Value.OriginalText.Trim() ?? string.Empty, Field("PurchaseScienceCommandSetRank3")?.Value.OriginalText.Trim() ?? string.Empty,
-                Field("PurchaseScienceCommandSetRank8")?.Value.OriginalText.Trim() ?? string.Empty, Field("BeaconName")?.Value.OriginalText.Trim() ?? string.Empty));
+                Field("PurchaseScienceCommandSetRank8")?.Value.OriginalText.Trim() ?? string.Empty, Field("BeaconName")?.Value.OriginalText.Trim() ?? string.Empty)
+            {
+                PowerShortcutSet = Field("SpecialPowerShortcutCommandSet")?.Value.OriginalText.Trim() ?? string.Empty,
+                PowerShortcutLayout = Field("SpecialPowerShortcutWinName")?.Value.OriginalText.Trim() ?? string.Empty,
+            });
         }
         return new FactionCatalog(factions.ToImmutable());
     }

@@ -228,6 +228,27 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         return set is null || set.Equals("NONE", StringComparison.OrdinalIgnoreCase) ? null : set;
     }
 
+    /// <summary>
+    /// <c>ControlBar::populateSpecialPowerShortcut</c>: the buttons of the player's power set that it can use, in their order. A power nobody of the player's carries, and one that needs a science or an
+    /// upgrade it has not got, is not shown ("commands that require sciences we don't have are hidden so they never show up").
+    /// </summary>
+    public ImmutableArray<CommandBarButton> PowerShortcuts(SimulationWorld world, PlayerId player, string setName)
+    {
+        if (setName.Length == 0 || !Catalog.TryGetSet(setName, out var set)) return [];
+        var anyone = world.Entities.FirstOrDefault(entity => entity.Owner == player && SimulationQueries.IsAlive(entity));
+        if (anyone is null) return [];
+        var buttons = ImmutableArray.CreateBuilder<CommandBarButton>();
+        var hotkeys = new HashSet<char>();
+        for (var index = 0; index < CommandSetInfo.MaxSlots; index++)
+        {
+            if (ButtonOf(set, index) is not { } button) continue;
+            var state = Evaluate(world, player, anyone, button);
+            if (state.Availability == ButtonAvailability.Hidden || state.Reason is ButtonReason.MissingScience or ButtonReason.MissingUpgrade) continue;
+            buttons.Add(Make(index + 1, button, state, [anyone.Id], hotkeys));
+        }
+        return buttons.ToImmutable();
+    }
+
     public CommandBarView Build(SimulationWorld world, SelectionModel selection)
     {
         var player = selection.LocalPlayer;

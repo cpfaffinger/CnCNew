@@ -105,6 +105,7 @@ public sealed partial class MatchController
         _tree.FindByName("ControlBar.wnd:ObserverPlayerInfoWindow")?.SetHidden(true);
         _tree.FindByName("ControlBar.wnd:ObserverPlayerListWindow")?.SetHidden(true);
         _tree.Register("ControlBarSystem", OnControlBarSystem);
+        AddPowerBar();
         AddGeneralsWindow();
         AddDiplomacyWindow();
 
@@ -441,6 +442,7 @@ public sealed partial class MatchController
         if (uiEvent.Kind is not (UiEventKind.ButtonSelected or UiEventKind.ButtonSelectedRight)) return;
         ButtonClicked?.Invoke();
         var name = uiEvent.Source;
+        if (PressPower(name)) return;
         if (SlotOf(name, "ControlBar.wnd:ButtonCommand") is { } slot && slot >= 1 && slot <= CommandBarModel.GridSlots)
         {
             // ControlBar::processContextSensitiveButtonClick: a button that is pressed stops flashing.
@@ -1089,6 +1091,7 @@ public sealed partial class MatchController
         _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(portrait is null);
         _tree.FindByName("ControlBar.wnd:CameoWindow")?.SetEnabledImage0(portrait);
         ShowUpgradeCameos(portrait is not null);
+        RefreshPowerBar();
         _showsSideLogo = portrait is null && view.Queue.IsEmpty;
     }
 
@@ -1159,6 +1162,7 @@ public sealed partial class MatchController
             var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
         }
+        AddPowerCameos(commands, cooldown);
         AddGeneralsCameos(commands);
         return commands.ToImmutable();
     }
