@@ -183,6 +183,12 @@ building that dies and is removed within one tick has its place in the event and
 - The analysis is kept in memory with the score screen; it is not written beside the replay - the list computes it again from the file.
 - The modern skin of the screens is S3-M5.
 
+## 8c. The score screen's "Tactical Analysis" (the owner's acceptance, 2 November 2026)
+
+The owner: "no tactical analysis is displayed". The panel of that name on `ScoreScreen.wnd` is the original's War School: `StaticTextWarSchool` over `ListboxWarschoolAdvice`, which `ScoreScreen.cpp` fills in a skirmish with one tip of `AcademyStats::calculateAcademyAdvice`, drawn at random from the tips that apply. The port's list stayed empty, and the button "Analysis" led away from it. `CnCNew.Game.Analysis.TacticalAdvice` fills it from this analysis, without new state in the simulation: first a line of what happened (time, collected, spent, destroyed against lost, when the army was largest), then at most two of the game's own `ACADEMY:` texts, in the order of the original's tiers instead of at random, so that the same match gives the same words. Asked are the questions the analysis can answer: no income at all, fewer than two workers, more than ten minutes without enough power, no upgrade, no science, no power used, nothing captured. Not asked: drag selection, control groups, the radar, a strategy centre's plan, a hero (the original's other tips need counters this analysis has not). A match without an analysis (a mission, a match of the original AI) leaves the list empty, as before. The lines are wrapped at the list's width.
+
+The six pages (section 4) stay where the numbers are. The modern skin's pages: `docs/UI-MODERN.md` section 16.
+
 ## 8b. Phase 38: the header line, the chart titles, and the modern skin
 
 Drawing the analysis screen in both skins for the readability check of `docs/UI-MODERN.md` found two defects of Phase 36, each fixed in a commit of its own with its hashes:

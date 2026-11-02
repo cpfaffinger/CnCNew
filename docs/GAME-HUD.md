@@ -640,13 +640,15 @@ hosted server: the connection line, a chat line to all and one to the allies, a 
 
 ## 22. Phase 38: the HUD in the modern skin
 
-`MatchController` takes its skin from the settings' `display.skin` (the client passes the skin of its menus, or of `--skin`). In the **modern skin** the command bar keeps
-its art (the scheme images of `ControlBarScheme.ini`, cameos, portraits) and gets the skin's type (`UiSkin.Derive(..., keepArt: true)`); it is laid out anchored with
-`UiScaleOptions.KeepBandAspect`, so the bar keeps its proportions at the height's scale, centred at the bottom, and the band beside it is drawn in the skin's canvas colour
-from the bar's top line down (`BarBand`) - the world view ends at the same line across the width. The in-game menu (`QuitMenu.wnd`) is derived like the shell's dialogs.
+`MatchController` takes its skin from the settings' `display.skin` (the client passes the skin of its menus, or of `--skin`). In the **modern skin** the command bar is a band across
+the whole width at every aspect ratio (`ModernControlBar`, `docs/UI-MODERN.md` section 17): the radar at the left edge, the commands and the portrait at the right edge, each at the window's uniform scale,
+and the selection plate between them taking what the width adds. The scheme's art is not drawn; cameos, portraits and the small buttons keep their pictures and get the skin's type
+(`UiSkin.Derive(..., keepArt: true)`). The in-game menu (`QuitMenu.wnd`) is derived like the shell's dialogs.
 The network indicators (`NetHud.Skin`) and the observer HUD (`SpectatorHud`) take the skin's palette and type scale; the message list, the tooltips and the superweapon
 clocks keep the original's style in both skins. In the original skin nothing changed: the HUD draw list hash and every network HUD hash are the same. Pinned: the HUD of
 a match in both skins in six resolutions (`baselines/skin-screens.txt`), the network indicators in the modern skin (`baselines/net-hud-modern.txt`, 138).
+
+**Tooltips stay** (both skins, HUD-02): one that is up stands where it came until another window is under the pointer. **The radar's frame** is drawn in every frame (HUD-07). **A disabled cameo** is grey when it is restricted, dark when it cannot be paid for, in colour under its clock when it is not ready (`W3DGadgetPushButtonImageDraw`). No selection box is drawn while a building is placed or a target is asked for (INPUT-05).
 
 The settings' `display.aspect` reaches the camera: `keepVertical` sets `RtsCamera.KeepVerticalView` (the vertical field of view of 4:3 at every aspect: more to the sides);
 the default keeps the original's horizontal field of view, as the camera always did.
