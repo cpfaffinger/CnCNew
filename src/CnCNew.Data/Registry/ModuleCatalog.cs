@@ -634,7 +634,7 @@ public static class ModuleCatalog
             new("MobileGarrison", FieldType.Opaque, Source: "GarrisonContain.h"),
             new("HealObjects", FieldType.Bool, Source: "GarrisonContain.h"),
             new("TimeForFullHeal", FieldType.DurationMs, Source: "GarrisonContain.h"),
-            new("InitialRoster", FieldType.Opaque, Source: "GarrisonContain.h"),
+            new("InitialRoster", FieldType.CountedReference, ReferenceKind: DefinitionKind.Object, Source: "GarrisonContain.h"),
             new("ImmuneToClearBuildingAttacks", FieldType.Bool, Source: "GarrisonContain.h"),
             new("IsEnclosingContainer", FieldType.Bool, Source: "GarrisonContain.h"),
         ]);

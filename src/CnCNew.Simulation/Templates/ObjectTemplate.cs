@@ -18,6 +18,14 @@ public sealed record ModuleSpec(string Name, string Tag, IModuleBinding Binding,
 /// </summary>
 public sealed record PrerequisiteLine(bool IsScience, ImmutableArray<string> Alternatives);
 
+/// <summary><c>LocomotorPriority</c>: where a unit walks in a column of its group.</summary>
+public enum LocomotorPriority
+{
+    Back,
+    Middle,
+    Front,
+}
+
 /// <summary>The terrain classes a locomotor may cross (<c>Locomotor::Surfaces</c>, <c>LocomotorSurfaceType</c>).</summary>
 [Flags]
 public enum LocomotorSurfaces
@@ -49,6 +57,9 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
 
     /// <summary><c>m_turnPivotOffset</c>: the point on the object's axis it turns about, in shares of its bounding circle's radius (-1 the rear, 0 the centre, 1 the front).</summary>
     public Fixed TurnPivotOffset { get; init; }
+
+    /// <summary><c>GroupMovementPriority</c>: where a unit walks in the column of its group (<c>friend_moveInfantryToPos</c>).</summary>
+    public LocomotorPriority MovePriority { get; init; } = LocomotorPriority.Middle;
 
     /// <summary><c>m_minTurnSpeed</c>, units per logic frame of the original.</summary>
     public Fixed MinTurnSpeedPerFrame { get; init; }
@@ -938,6 +949,13 @@ public sealed class TemplateCatalog
                 StickToGround = definition.Fields.LastOrDefault(field => field.Name.Equals("StickToGround", StringComparison.OrdinalIgnoreCase))?.Value.Value is true,
                 IsWheeled = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().ToUpperInvariant() is "FOUR_WHEELS" or "MOTORCYCLE",
                 TurnPivotOffset = Fixed.FromDecimal(Signed("TurnPivotOffset")),
+                MovePriority = definition.Fields.LastOrDefault(field => field.Name.Equals("GroupMovementPriority", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().ToUpperInvariant() switch
+                {
+                    null or "MOVES_MIDDLE" => LocomotorPriority.Middle,
+                    "MOVES_BACK" => LocomotorPriority.Back,
+                    "MOVES_FRONT" => LocomotorPriority.Front,
+                    var other => throw new InvalidDataException($"Locomotor '{definition.OriginalName}': unknown GroupMovementPriority '{other}'."),
+                },
                 MinTurnSpeedPerFrame = SimulationRate.Original.Time.PerSecondToPerTick(Get("MinTurnSpeed")),
                 AirborneTargetingHeight = definition.Fields.Any(field => field.Name.Equals("AirborneTargetingHeight", StringComparison.OrdinalIgnoreCase)) ? Fixed.FromDecimal(Get("AirborneTargetingHeight")) : Fixed.MaxValue,
                 PenaltyDamageState = penaltyState,

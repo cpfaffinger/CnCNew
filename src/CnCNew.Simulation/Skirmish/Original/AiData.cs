@@ -28,6 +28,7 @@ public sealed class AiData
     [
         "StructureSeconds", "TeamSeconds", "Wealthy", "Poor", "StructuresWealthyRate", "StructuresPoorRate", "TeamsWealthyRate", "TeamsPoorRate", "TeamResourcesToStart",
         "MaxRecruitRadius", "SkirmishBaseDefenseExtraDistance", "RotateSkirmishBases", "SupplyCenterSafeRadius", "RebuildDelayTimeSeconds",
+        "MinInfantryForGroup", "MinVehiclesForGroup", "MinDistanceForGroup", "DistanceRequiresGroup",
     ];
 
     /// <summary>The other keys of the same table: valid, read elsewhere or not at all.</summary>
@@ -35,15 +36,15 @@ public sealed class AiData
     [
         "GuardInnerModifierAI", "GuardOuterModifierAI", "GuardInnerModifierHuman", "GuardOuterModifierHuman", "GuardChaseUnitsDuration", "GuardEnemyScanRate", "GuardEnemyReturnScanRate",
         "AlertRangeModifier", "AggressiveRangeModifier", "AttackPriorityDistanceModifier", "ForceIdleMSEC", "ForceSkirmishAI", "AttackUsesLineOfSight", "EnableRepulsors", "RepulsedDistance",
-        "WallHeight", "AttackIgnoreInsignificantBuildings", "SkirmishGroupFudgeDistance", "MinInfantryForGroup", "MinVehiclesForGroup", "MinDistanceForGroup", "DistanceRequiresGroup",
+        "WallHeight", "AttackIgnoreInsignificantBuildings", "SkirmishGroupFudgeDistance",
         "InfantryPathfindDiameter", "VehiclePathfindDiameter", "AIDozerBoredRadiusModifier", "AICrushesInfantry", "MaxRetaliationDistance", "RetaliationFriendsRadius",
-        "MinClumpDensity", "MinDistanceForGroup", "MaxRetaliateDistance", "UseLocoDistanceRatio",
+        "MinClumpDensity", "MaxRetaliateDistance", "UseLocoDistanceRatio",
     ];
 
     private AiData() { }
 
     /// <summary><c>TAiData::TAiData</c>: the values of a game whose definitions have no <c>AIData</c> block (synthetic fixtures); side data and build lists are empty.</summary>
-    public static AiData Defaults { get; } = new() { SupplyCenterSafeRadius = Fixed.FromInt(250), RebuildDelaySeconds = DefaultRebuildWait };
+    public static AiData Defaults { get; } = new() { SupplyCenterSafeRadius = Fixed.FromInt(250), RebuildDelaySeconds = DefaultRebuildWait, DistanceRequiresGroup = Fixed.FromInt(500), MinVehiclesForGroup = 3 };
 
     /// <summary><c>TAiData::TAiData</c>: <c>m_rebuildDelaySeconds(10)</c>.</summary>
     private const int DefaultRebuildWait = 10;
@@ -62,6 +63,17 @@ public sealed class AiData
     public bool RotateSkirmishBases { get; private init; }
     public Fixed SupplyCenterSafeRadius { get; private init; }
     public int RebuildDelaySeconds { get; private init; }
+
+    /// <summary><c>m_minInfantryForGroup</c>, <c>m_minVehiclesForGroup</c>: the fewest that go as a column (<c>friend_moveInfantryToPos</c>, <c>friend_moveVehicleToPos</c>).</summary>
+    public int MinInfantryForGroup { get; private init; } = 3;
+
+    public int MinVehiclesForGroup { get; private init; } = 4;
+
+    /// <summary><c>m_minDistanceForGroup</c>: how far a group has to go at the least to go as a column.</summary>
+    public Fixed MinDistanceForGroup { get; private init; } = Fixed.FromInt(100);
+
+    /// <summary><c>m_distanceRequiresGroup</c>: from this far on a group goes as a column whatever it is.</summary>
+    public Fixed DistanceRequiresGroup { get; private init; }
     public ImmutableArray<AiSideInfo> Sides { get; private init; } = [];
     public ImmutableSortedDictionary<string, ImmutableArray<AiBuildListEntry>> BuildLists { get; private init; } = ImmutableSortedDictionary<string, ImmutableArray<AiBuildListEntry>>.Empty;
 
@@ -113,13 +125,15 @@ public sealed class AiData
         }
         Fixed Real(string key) => scalars.TryGetValue(key, out var text) ? Number(text, key) : throw new InvalidDataException($"AIData: required key '{key}' is missing.");
         int Whole(string key) => checked((int)Real(key).Floor());
+        int Optional(string key, int value) => scalars.ContainsKey(key) ? Whole(key) : value;
         return new AiData
         {
             StructureSeconds = Real("StructureSeconds"), TeamSeconds = Real("TeamSeconds"), Wealthy = Whole("Wealthy"), Poor = Whole("Poor"),
             StructuresWealthyRate = Real("StructuresWealthyRate"), StructuresPoorRate = Real("StructuresPoorRate"), TeamsWealthyRate = Real("TeamsWealthyRate"), TeamsPoorRate = Real("TeamsPoorRate"),
             TeamResourcesToStart = Real("TeamResourcesToStart"), MaxRecruitRadius = Real("MaxRecruitRadius"), SkirmishBaseDefenseExtraDistance = Real("SkirmishBaseDefenseExtraDistance"),
             RotateSkirmishBases = scalars.TryGetValue("RotateSkirmishBases", out var rotate) && Flag(rotate, "RotateSkirmishBases"),
-            SupplyCenterSafeRadius = Real("SupplyCenterSafeRadius"), RebuildDelaySeconds = Whole("RebuildDelayTimeSeconds"),
+            SupplyCenterSafeRadius = Real("SupplyCenterSafeRadius"), RebuildDelaySeconds = Whole("RebuildDelayTimeSeconds"), MinInfantryForGroup = Optional("MinInfantryForGroup", 3), MinVehiclesForGroup = Optional("MinVehiclesForGroup", 4),
+            MinDistanceForGroup = Fixed.FromInt(Optional("MinDistanceForGroup", 100)), DistanceRequiresGroup = Fixed.FromInt(Optional("DistanceRequiresGroup", 0)),
             Sides = sides.ToImmutable(), BuildLists = lists.ToImmutable(), ReferenceObjects = ReadReferenceObjects(graph),
             UnreadKeys = [..scalars.Keys.Where(key => Array.IndexOf(ReadKeys, key) < 0)],
         };

@@ -32,13 +32,8 @@ static partial class Tests
         var middleY = soldiers.Aggregate(Fixed.Zero, (sum, soldier) => sum + soldier.Y) / Fixed.FromInt(soldiers.Length);
         Check.That(soldiers.All(soldier => (soldier.X - Fixed.FromInt(250)).Abs() < Fixed.FromInt(60) && (soldier.Y - Fixed.FromInt(200)).Abs() < Fixed.FromInt(60)),
             $"The team walked to the waypoint ({string.Join("; ", soldiers.Select(soldier => $"{soldier.X}, {soldier.Y}"))}).");
-        for (var index = 0; index < square.Length; index++)
-        {
-            var (x, y, name) = square[index];
-            var soldier = soldiers[index];
-            Check.That((soldier.X > middleX) == (x > 120m) && (soldier.Y > middleY) == (y > 200m),
-                $"{name} keeps its side of the square ({soldier.X}, {soldier.Y} around {middleX}, {middleY}).");
-        }
+        // One order for the team: the four go in a column of three lanes, and do not all make for the one point.
+        Check.That(soldiers.Select(soldier => soldier.Y.Floor()).Distinct().Count() >= 3, $"The team stands in lanes ({string.Join("; ", soldiers.Select(soldier => $"{soldier.X}, {soldier.Y}"))}).");
         Check.That(session.Engine.Diagnostics.Count == 0, "No diagnostic: " + string.Join("; ", session.Engine.Diagnostics.Keys));
     }
 

@@ -80,6 +80,7 @@ public static class LocomotorSchema
             Real("WanderWidthFactor"),
             Real("WanderAboutPointRadius"),
             new FieldSchema("Surfaces", FieldType.Flags, Table: NameTablesPhase5.LocomotorSurface, Source: Table),
+            new FieldSchema("GroupMovementPriority", FieldType.Text, Source: Table),
             new FieldSchema("StickToGround", FieldType.Bool, Source: Table),
             new FieldSchema("LocomotorWorksWhenDead", FieldType.Bool, Source: Table),
         ]);

@@ -2641,15 +2641,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GarrisonContain/InitialRoster",
-      "count": 2,
-      "owners": [
-        "GarrisonContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GarrisonContain/MobileGarrison",
       "count": 3,
       "owners": [
@@ -2895,15 +2886,6 @@
       "category": "deferred-field",
       "name": "Locomotor/FrontWheelTurnAngle",
       "count": 49,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "Locomotor/GroupMovementPriority",
-      "count": 28,
       "owners": [
         "Locomotor"
       ],

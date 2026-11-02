@@ -39,8 +39,9 @@ public sealed partial class SimulationWorld
     /// nothing (<c>removeGoal</c> for every member first). Every unit then walks one path to a place that is its own from the start.
     /// <para>
     /// A click into the group's own area gathers it instead (<see cref="GathersAtClick"/>, <c>groupTightenToPosition</c>).
-    /// Not built: the column moves of far-away infantry and vehicles along one group path (<c>friend_moveInfantryToPos</c>, <c>friend_moveVehicleToPos</c>), formations the player
-    /// set (<c>friend_moveFormationToPos</c>), the path-cost test of an adjusted cell (<c>checkForAdjust</c> with <c>groupDest</c>) and the delayed mood check of stealth units.
+    /// A group that goes far, or a large one, goes as columns first (<see cref="MoveColumns"/>). <c>groupAttackMoveToPosition</c> is none of this: every member is sent to the point itself.
+    /// Not built: formations the player set (<c>friend_moveFormationToPos</c>), the path-cost test of an adjusted cell (<c>checkForAdjust</c> with <c>groupDest</c>) and the delayed mood
+    /// check of stealth units.
     /// </para>
     /// </summary>
     private void ExecuteGroupMove(GroupMoveCommand order)
@@ -69,8 +70,14 @@ public sealed partial class SimulationWorld
             var byDistance = a.DistanceSquared.CompareTo(b.DistanceSquared);
             return byDistance != 0 ? byDistance : a.Unit.Id.Value.CompareTo(b.Unit.Id.Value);
         });
-        var (centreX, centreY) = (members[0].X, members[0].Y);
         var gather = order.FromPlayer && !order.Attack && GathersAtClick(order.X, order.Y);
+        if (!gather && !order.Attack) MoveColumns(order);
+        if (members.Count == 0)
+        {
+            _groupPending.Clear();
+            return;
+        }
+        var (centreX, centreY) = (members[0].X, members[0].Y);
         var helicopters = 0;
         foreach (var (unit, standsX, standsY, _) in members)
         {
@@ -83,8 +90,8 @@ public sealed partial class SimulationWorld
                 offsetX = offsetX * longest / length;
                 offsetY = offsetY * longest / length;
             }
-            var x = order.X + offsetX;
-            var y = order.Y + offsetY;
+            var x = order.Attack ? order.X : order.X + offsetX;
+            var y = order.Attack ? order.Y : order.Y + offsetY;
             if (gather) (x, y) = unit.Template.IsKindOf("PRODUCED_AT_HELIPAD") ? HelicopterPlace(order.X, order.Y, helicopters++) : (order.X, order.Y);
             _groupPending.Remove(unit.Id.Value);
             if (IsGroundMover(unit)) FindDestination(unit, ref x, ref y, true);

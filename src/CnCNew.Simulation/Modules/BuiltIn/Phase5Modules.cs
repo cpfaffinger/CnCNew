@@ -1040,12 +1040,71 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _exitRallyY = rallyY;
     }
 
+    // The points of the unit's lane in a column of its group, the last one its goal; gone with any other order.
+    private ImmutableArray<PathPoint> _column = [];
+    private bool _columnPlanned;
+
+    /// <summary><c>aiFollowPath</c> for a unit of a column (<c>AIGroup::friend_moveInfantryToPos</c>): a move to the last point that passes the others on its way.</summary>
+    public void OrderFollowColumn(IWorldServices world, ImmutableArray<PathPoint> points, bool fromPlayer)
+    {
+        OrderMove(world, points[^1].X, points[^1].Y, fromPlayer);
+        _column = points;
+        _columnPlanned = false;
+    }
+
+    /// <summary>
+    /// The path along the lane: <c>AIFollowPathState</c> walks from point to point, with a path of its own for each leg. The lanes lie in ground that is six cells wide, so nearly every leg is a straight
+    /// line, and a leg is searched only where it is not. Planned again (the footprints changed, or the goal moved) the unit goes on after the point it stands closest to.
+    /// </summary>
+    private void PlanColumn(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor)
+    {
+        InvalidatePath();
+        _pathValid = true;
+        _pathObstacles = navigation.ObstacleSum;
+        _pathComplete = true;
+        var first = 0;
+        if (_columnPlanned)
+        {
+            var nearest = Fixed.MaxValue;
+            for (var index = 0; index < _column.Length - 1; index++)
+            {
+                var (dx, dy) = (_column[index].X - Entity.X, _column[index].Y - Entity.Y);
+                var squared = dx * dx + dy * dy;
+                if (squared >= nearest) continue;
+                nearest = squared;
+                first = index + 1;
+            }
+        }
+        _columnPlanned = true;
+        var (fromX, fromY, fromLayer) = (Entity.X, Entity.Y, Entity.Layer);
+        for (var index = first; index < _column.Length; index++)
+        {
+            var last = index == _column.Length - 1;
+            var (x, y, layer) = last ? (Entity.MoveTargetX, Entity.MoveTargetY, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)) : (_column[index].X, _column[index].Y, _column[index].Layer);
+            if (fromLayer == layer && navigation.StraightWalkClear(fromX, fromY, x, y, locomotor.Surfaces, layer)) _path.Add(new PathPoint(x, y, layer));
+            else
+            {
+                var leg = navigation.FindPath(fromX, fromY, x, y, locomotor.Surfaces, fromLayer, layer);
+                if (leg.Status != PathStatus.Found)
+                {
+                    if (!last) continue;
+                    _pathComplete = false;
+                }
+                _path.AddRange(leg.Points);
+            }
+            (fromX, fromY, fromLayer) = (x, y, layer);
+        }
+        world.RequestClearPath(Entity);
+    }
+
     /// <summary>
     /// The exit path is one order (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>): whatever replaces or stops its move - another move, a dock, a builder task, an attack the world
     /// drives, a stop - ends it, door point and second leg included. Only the arrival at the end of the first leg goes on to the rally point.
     /// </summary>
     private void EndExitPath()
     {
+        _column = [];
+        _columnPlanned = false;
         _exitRallyPending = false;
         _viaPending = false;
         _exitFrom = EntityId.Invalid;
@@ -2615,6 +2674,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         }
         if (_pathWait == PathWait.None && (!_pathValid || _pathObstacles != navigation.ObstacleSum))
         {
+            if (!_column.IsDefaultOrEmpty)
+            {
+                PlanColumn(world, navigation, locomotor);
+                return true;
+            }
             if (!_pathValid) { _path.Clear(); _pathIndex = 0; }
             world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false, _pathGroup, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)));
             _pathWait = PathWait.Plan;
@@ -2647,10 +2711,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     }
 
     /// <summary>The nodes of the path the object follows.</summary>
-    internal IReadOnlyList<PathPoint> PathNodes => _path;
+    public IReadOnlyList<PathPoint> PathNodes => _path;
 
     private void PlanPath(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor, bool air)
     {
+        if (!air && !_column.IsDefaultOrEmpty)
+        {
+            PlanColumn(world, navigation, locomotor);
+            return;
+        }
         InvalidatePath();
         _pathValid = true;
         _pathObstacles = navigation.ObstacleSum;
@@ -2822,6 +2891,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             writer.Fixed("exitRallyX", _exitRallyX);
             writer.Fixed("exitRallyY", _exitRallyY);
         }
+        if (!_column.IsDefaultOrEmpty)
+        {
+            writer.Bool("columnPlanned", _columnPlanned);
+            writer.BeginArray("column");
+            foreach (var point in _column)
+            {
+                writer.BeginObject(null);
+                writer.Fixed("x", point.X);
+                writer.Fixed("y", point.Y);
+                if (point.Layer != 0) writer.Int("layer", point.Layer);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         if (_viaPending)
         {
             writer.Fixed("viaX", _viaX);
@@ -2895,6 +2978,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _exitRallyPending = reader.Has("exitRallyX");
         _exitRallyX = _exitRallyPending ? reader.Fixed("exitRallyX") : Fixed.Zero;
         _exitRallyY = _exitRallyPending ? reader.Fixed("exitRallyY") : Fixed.Zero;
+        _column = reader.Has("column") ? [.. reader.Array("column").Select(item => new PathPoint(item.Fixed("x"), item.Fixed("y"), item.Has("layer") ? checked((int)item.Int("layer")) : 0))] : [];
+        _columnPlanned = reader.Has("columnPlanned") && reader.Bool("columnPlanned");
         _viaPending = reader.Has("viaX");
         _viaX = _viaPending ? reader.Fixed("viaX") : Fixed.Zero;
         _viaY = _viaPending ? reader.Fixed("viaY") : Fixed.Zero;

@@ -263,6 +263,10 @@ run.Test("Phase 57: a bomb flies on from its plane (TransportContain::onRemoving
 run.Test("Phase 57: an idle weapon fills its clip (AutoReloadWhenIdle)", Tests.IdleWeaponFillsItsClip);
 run.Test("Phase 57: overkill weighs a death (getProbabilityModifier)", Tests.OverkillWeighsADeath);
 run.Test("Phase 57: wheels turn only while they move (moveTowardsPositionWheels)", Tests.WheelsTurnOnlyWhileTheyMove);
+run.Test("Phase 58: a garrison comes with its roster (onObjectCreated)", Tests.AGarrisonComesWithItsRoster);
+run.Test("Phase 58: a group goes in columns (friend_moveInfantryToPos, friend_moveVehicleToPos)", Tests.AGroupGoesInColumns);
+run.Test("Phase 58: a column goes round what stands in its way", Tests.AColumnGoesRoundWhatStandsInItsWay);
+run.Test("Phase 58: a ground path wants its width (findGroundPath)", Tests.AGroundPathWantsItsWidth);
 run.Test("Phase 41 (F-55c): a unit that needs a line of sight does not fire through a structure (outOfWeaponRangeObject)", Tests.AttackNeedsAClearView);
 run.Test("Phase 41 (F-55d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight)", Tests.AcquisitionPassesBlockedCandidates);
 run.Test("Phase 41 (F-55e): the approach of an attack goes where it can fire (findAttackPath)", Tests.ApproachGoesWhereItCanFire);

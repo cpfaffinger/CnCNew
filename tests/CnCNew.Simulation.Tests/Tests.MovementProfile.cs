@@ -177,13 +177,14 @@ static partial class Tests
     /// <summary>A group of runners standing together and ordered to one place shares one search: the followers walk the leader's path and every runner arrives.</summary>
     public static void MovementBudgetSharesTheGroupPath()
     {
-        (int X, int Y)[] together = [(50, 50), (62, 50), (74, 50), (50, 62), (62, 62), (74, 62)];
+        // A pair: from three on a group goes as a column, on the ground path of the group (docs/SIMULATION-CORE.md §80).
+        (int X, int Y)[] together = [(50, 50), (62, 50)];
         var (world, _, _, _, runners) = MovementWorld(MovementBudget, together);
         Check.That(world.Submit(new GroupMoveCommand(new PlayerId(1), 1000, world.Tick, [..runners.Select(runner => runner.Id)], Fixed.FromInt(2000), Fixed.FromInt(100), false)).Accepted, "The group order is accepted.");
         var arrived = new HashSet<uint>();
         for (var tick = 0; tick < world.Frames(900) && arrived.Count < runners.Length; tick++)
             foreach (var simEvent in world.Step().Events) if (simEvent.Kind == SimEventKind.MoveArrived) arrived.Add(simEvent.Entity.Value);
-        Check.That(world.PathStats.Shared >= 4, $"The followers share the leader's search ({world.PathStats.Shared} shared of {world.PathStats.Requests} requests).");
+        Check.That(world.PathStats.Shared >= 1, $"The follower shares the leader's search ({world.PathStats.Shared} shared of {world.PathStats.Requests} requests).");
         Check.That(arrived.Count == runners.Length, $"Every runner of the group arrived ({arrived.Count} of {runners.Length}).");
     }
 

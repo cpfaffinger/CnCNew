@@ -307,6 +307,11 @@ public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, b
     /// <summary><c>ImmuneToClearBuildingAttacks</c> (default no): no weapon that clears a garrison kills the riders of this building (F-60, clearing a garrison).</summary>
     public bool ImmuneToClearBuildingAttacks { get; init; }
 
+    /// <summary><c>InitialRoster</c>: what the garrison comes with (<c>GarrisonContain::onObjectCreated</c>): the caboose full of terrorists.</summary>
+    public string InitialRoster { get; init; } = string.Empty;
+
+    public int InitialRosterCount { get; init; }
+
     public static GarrisonContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "ContainMax", -1)),
@@ -315,6 +320,8 @@ public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, b
     {
         IsEnclosingContainer = ModuleConfigReader.Bool(configuration, "IsEnclosingContainer", true),
         ImmuneToClearBuildingAttacks = ModuleConfigReader.Bool(configuration, "ImmuneToClearBuildingAttacks", false),
+        InitialRoster = (ModuleConfigReader.Find(configuration, "InitialRoster")?.Value.Value as CountedReference)?.Reference.Name ?? string.Empty,
+        InitialRosterCount = (ModuleConfigReader.Find(configuration, "InitialRoster")?.Value.Value as CountedReference)?.Count ?? 0,
     };
 }
 
@@ -345,8 +352,14 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     /// </summary>
     public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => (world.DisabledFlagsOf(Entity) & DisabledMask.Subdued) == 0;
 
+    private readonly List<EntityId> _pendingRoster = [];
+
     public override void OnSpawn(IWorldServices world)
-        => NextWake = data.HealObjects ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+    {
+        NextWake = data.HealObjects ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        for (var index = 0; index < data.InitialRosterCount; index++) ContainChainModules.RequestPayload(world, Entity, data.InitialRoster, _pendingRoster);
+        if (_pendingRoster.Count > 0) NextWake = world.Tick + SimulationTiming.SleepNone;
+    }
 
     public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
@@ -646,6 +659,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         var before = Riders.Count;
         PruneDead(world);
         if (Riders.Count != before) RecalcControllingPlayer(world);
+        var waiting = _pendingRoster.Count > 0 && ContainChainModules.EnterPayload(world, Entity, _pendingRoster);
         // matchObjectsToGarrisonPoints, once per logic frame of the original, in the first tick of the building's own frame (the rider's acquisition decides there too).
         var ticks = world.Time.TicksPerOriginalFrame;
         if (data.IsEnclosingContainer && Riders.Count > 0 && (ticks == TickOrder.Next || (world.Tick - Entity.SpawnTick) % ticks == 0)) world.MatchGarrisonPoints(Entity, this);
@@ -655,7 +669,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
                 var rider = world.FindEntity(riderId);
                 if (rider?.Body is not null) HealOne(world, rider);
             }
-        return data.HealObjects || (data.IsEnclosingContainer && Riders.Count > 0) ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return waiting || data.HealObjects || (data.IsEnclosingContainer && Riders.Count > 0) ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
@@ -687,6 +701,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
             writer.EndObject();
         }
         writer.EndArray();
+        ContainChainModules.DescribePending(writer, _pendingRoster);
         // Written only while a rider stands at a point or a station: a building without such riders keeps its state.
         if (_pointsInUse > 0)
         {
@@ -729,6 +744,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
             Riders.Add(id);
             _containedSinceTick[id.Value] = entry.Int("since");
         }
+        ContainChainModules.LoadPending(reader, _pendingRoster);
         Array.Clear(_pointRider);
         Array.Clear(_pointTarget);
         _pointsInUse = 0;
