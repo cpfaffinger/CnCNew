@@ -556,7 +556,7 @@ Reference: `Weapon.cpp` (`WeaponTemplate::fireWeaponTemplate`, `dealDamageIntern
    `DamageDealtAtSelfPosition` puts the damage on the shooter position. If the shooter no longer exists, as in the original **no**
    `RadiusDamageAffects` filters apply. `WeaponSpeed ≤ 0` (three damageless retail weapons; the original divides by zero) hits immediately.
 3. **With a projectile object:** The object of the template `ProjectileObject` is created at the end of the shot tick (spawn queue, §4 of the core description) on the
-   launch bone of the barrel in turn, turned with the turret and the shooter (`Weapon::calcProjectileLaunchPosition`, `docs/SIMULATION-CORE.md` §75; a template without launch
+   launch bone of the barrel in turn, turned with the turret and the shooter (`Weapon::calcProjectileLaunchPosition`, `docs/SIMULATION-CORE.md` §76; a template without launch
    bones, and a rider in its container, at the geometry centre) with its owner; immediately after its
    `OnSpawn` calls its projectile module (`IProjectileModule`) receives weapon, launcher, victim (none with scatter), target point and the
    weapon bonus conditions of the launcher (`m_extraBonusFlags`). Until then the start data are in the spawn queue entry (snapshot and hash).
@@ -586,7 +586,7 @@ sums forward differences in binary32, not reproducible); start and end point are
 `BezFwdIterator` leaves the point at the origin, the orientation reads behind the array) flies directly to the end point. The highest terrain is sampled every half cell
 (`estimateTerrainExtremesAlongLine` runs over partition cells); an end point outside the map destroys the projectile.
 
-**`MissileAIUpdate`** (guided missiles) with the part of its AI, its THRUST locomotor and its physics a missile uses (`docs/SIMULATION-CORE.md` §75.3):
+**`MissileAIUpdate`** (guided missiles) with the part of its AI, its THRUST locomotor and its physics a missile uses (`docs/SIMULATION-CORE.md` §76.3):
 
 | State | Behaviour |
 | --- | --- |

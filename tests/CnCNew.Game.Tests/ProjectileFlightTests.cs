@@ -13,7 +13,7 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Game.Tests;
 
 /// <summary>
-/// The flight of the shipped projectiles (docs/SIMULATION-CORE.md §75; findings UNIT-12, FX-04, FX-05 of the owner's acceptance report), with the launch bones of the real models: the Tomahawk
+/// The flight of the shipped projectiles (docs/SIMULATION-CORE.md §76; findings UNIT-12, FX-04, FX-05 of the owner's acceptance report), with the launch bones of the real models: the Tomahawk
 /// leaves its rack 70 degrees up, climbs, cruises and comes down on the target; a rocket trooper turns to its victim and his rocket leaves along that line; a shell leaves the muzzle
 /// of a turret turned toward the target. Numbers instead of an eye: the eye is the owner's.
 /// </summary>

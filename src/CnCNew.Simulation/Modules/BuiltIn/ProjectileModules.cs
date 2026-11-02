@@ -560,7 +560,7 @@ public static class MissileFrames
 }
 
 /// <summary>
-/// <c>MissileAIUpdate.cpp</c> with the part of its <c>AIUpdateInterface</c>, its <c>Locomotor</c> and its <c>PhysicsBehavior</c> a missile uses (docs/SIMULATION-CORE.md §75):
+/// <c>MissileAIUpdate.cpp</c> with the part of its <c>AIUpdateInterface</c>, its <c>Locomotor</c> and its <c>PhysicsBehavior</c> a missile uses (docs/SIMULATION-CORE.md §76):
 /// <list type="number">
 /// <item><description><b>Launch</b> (<c>projectileFireAtObjectOrPosition</c>): the missile looks along the x axis of the launch matrix, raised by <c>2 · max(0, dz) / max(1, xy distance)</c>, and
 /// takes the launcher's velocity and <c>InitialVelocity</c> along that line. It coasts until <c>IgnitionDelay</c> is over.</description></item>

@@ -11,7 +11,7 @@ using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
-/// <summary>Where a projectile starts and how it flies (docs/SIMULATION-CORE.md §75): the launch bone turned with the turret and the launcher, the barrels in turn.</summary>
+/// <summary>Where a projectile starts and how it flies (docs/SIMULATION-CORE.md §76): the launch bone turned with the turret and the launcher, the barrels in turn.</summary>
 static partial class Tests
 {
     private static IReadOnlyDictionary<string, string> LaunchFiles() => new Dictionary<string, string>(ProjectileFiles())

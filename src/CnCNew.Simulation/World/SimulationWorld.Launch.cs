@@ -4,7 +4,7 @@ using CnCNew.Simulation.Templates;
 namespace CnCNew.Simulation.World;
 
 /// <summary>
-/// Where a projectile starts and which way it points (<c>Weapon::calcProjectileLaunchPosition</c>, <c>Weapon::positionProjectileForLaunch</c>, docs/SIMULATION-CORE.md §75): the launch bone of
+/// Where a projectile starts and which way it points (<c>Weapon::calcProjectileLaunchPosition</c>, <c>Weapon::positionProjectileForLaunch</c>, docs/SIMULATION-CORE.md §76): the launch bone of
 /// the barrel the slot has come to, turned with the turret that carries the slot - pitched about its pitch bone, then turned about its angle bone - and with the object's heading. The
 /// original also takes the object's tilt on the ground, which the simulation does not have (a named difference).
 /// </summary>
