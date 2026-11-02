@@ -324,6 +324,28 @@ static class InputTests
           End
         End
 
+        Object QueuedTank
+          KindOf = SELECTABLE VEHICLE
+          VisionRange = 100.0
+          ShroudClearingRange = 100.0
+          Geometry = CYLINDER
+          GeometryMajorRadius = 6.0
+          GeometryMinorRadius = 6.0
+          GeometryHeight = 6.0
+          CommandSet = TankCommandSet
+          Locomotor = SET_NORMAL GroundLoco
+          Body = ActiveBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = ProductionUpdate Prod01
+          End
+        End
+
         Object Tank
           KindOf = SELECTABLE VEHICLE
           VisionRange = 100.0
@@ -1023,6 +1045,13 @@ static class InputTests
         Assert(controller.Hover(world, view, Screen(170, 90)) is { Action: ContextAction.SetRallyPoint, Cursor: CursorKind.SetRallyPoint }, "a producer and the ground: rally point");
         Assert(Issued(() => controller.IssueContext(world, view, Screen(170, 90))) is [SetRallyPointCommand rally] && rally.Producer == barracks.Id
                && rally.X == Fixed.FromInt(170) && rally.Y == Fixed.FromInt(90), "SetRallyPointCommand");
+        // The owner's INPUT-01: the patch gives units an upgrade queue, and a queue is no factory (AUTO_RALLYPOINT, InGameUI.cpp).
+        arena.Spawn("QueuedTank", Me, 170, 110);
+        arena.Step();
+        var queued = arena.Find("QueuedTank", Me, 170, 110);
+        selection.Replace([queued.Id]);
+        Assert(controller.Hover(world, view, Screen(170, 90)) is { Action: ContextAction.Move }, "a unit with a queue and the ground: it moves");
+        Assert(Issued(() => controller.IssueContext(world, view, Screen(170, 90))).All(command => command is not SetRallyPointCommand), "a unit sets no rally point");
         selection.Replace([plant.Id]);
         Assert(controller.Hover(world, view, Screen(170, 20)) is { Action: ContextAction.Invalid, Cursor: CursorKind.GenericInvalid }, "a lone non-producing structure cannot move");
         Assert(Issued(() => controller.IssueContext(world, view, Screen(170, 20))).Count == 0 && controller.DrainFeedback().Any(value => value.Kind == FeedbackKind.InvalidOrder), "invalid click: feedback only");

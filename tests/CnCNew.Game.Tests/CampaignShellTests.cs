@@ -43,8 +43,18 @@ internal static class CampaignShellTests
             harness.Run("Main menu -> USA -> difficulty reaches a real mission with its real briefing text", () => RealCampaignFlow(contentDir));
             harness.Run("The Generals' Challenge: the menu, its load screen with movies, the win and loss, the record", () => ChallengeWay(contentDir));
             harness.Run("The skirmish setup shows the record, and a decided match counts", () => SkirmishRecord(contentDir));
+            harness.Run("A challenge's map started by its name plays the challenge's side", () => DirectStart(contentDir));
         }
         return harness.Failures;
+    }
+
+    /// <summary>The owner's MISS-04: <c>--mission</c> on a <c>GC_</c> map named nobody, and the viewer was an enemy with the map uncovered.</summary>
+    private static void DirectStart(string contentDir)
+    {
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
+        var (side, faction) = CnCNew.Game.Campaign.ChallengeSides.OfDirectStart(data, "Maps/GC_ChemGeneral/GC_ChemGeneral.map");
+        TestHarness.Assert(side.Length > 0 && faction.Length > 0, $"the challenge's side and faction: '{side}', '{faction}'");
+        TestHarness.Assert(CnCNew.Game.Campaign.ChallengeSides.OfDirectStart(data, "Maps/MD_USA01/MD_USA01.map") == (string.Empty, string.Empty), "a map of a campaign knows its own side");
     }
 
     private static string? ContentDir(string[] args)

@@ -219,6 +219,10 @@ power plant damaged twice - fire and smoke at its bones; a barracks set on fire 
 their exhaust; `Model = NULL` loads no model; a rocket buggy - dust only once it drives. Counters: `AttachedEffects.Stats`, `MissingBoneNames` (the power plant's damaged
 models lack bones their states name - the original then puts those systems at the origin too). **Not seen by a human.**
 
+### A bone on a turret (the owner's finding, 1 November 2026)
+
+A bone read from the rest pose stands where it would stand with the turret facing forward. The owner saw every muzzle flash and every flame keep to the hull. `ModelBoneTable.FindPosed` poses the model with the turret's yaw and pitch (`TurretPose`, carried by `ProjectedEntity`), `AttachedEffects.PosedBones` reads the bones of a state through it, and `FxExecutor.WeaponFired` hands the bone's matrix on as the primary transform (`IFxWorldView.GetWeaponMuzzleTransform`), so a flash also points where the barrel points. `AttachedEffectsTests` turns a Crusader's turret by a quarter and reads both.
+
 ## Sound cues
 
 `SoundCue(Tick, EventName, Kind, Position?, Entity, Player, Volume, Priority, Origin)` with `Kind` Effect, Voice, Eva,

@@ -288,6 +288,10 @@ repeats the single steps in `Tick`, like the skirmish AI; every repeated command
 `AttackMarker` (at the target), `EnterMarker`, `InvalidOrder`, `Unsupported` (with a designation) and `Rejected` (with the `CommandRejection` of the simulation).
 The five markers become visible command markers through `OrderHintBook` (§12); the three rejections stay text and sound.
 
+### 6a. What sets a rally point (the owner's finding, 1 November 2026)
+
+A right click on the ground sets a rally point only for objects of kind `AUTO_RALLYPOINT` (`InGameUI.cpp`). "Has a production queue" was the test before, and the patch gives units a queue for their upgrades, so a right click parked them. `InputTests` keeps a `QueuedTank` for that. The marker is the original's model (`PlacementPreview.RallyMarker`, turned by the downwind angle), not a polygon of the HUD. A hot key sounds like a click: `GameInputController.CommandHotkeyPressed` reaches `GameAudio.OnCommandHotkey`, `GUIClick` or `GUIClickDisabled`.
+
 ## 7. Placement
 
 `DOZER_CONSTRUCT` chooses the first selected builder that is not busy and opens the placement mode. The ghost follows the cursor;

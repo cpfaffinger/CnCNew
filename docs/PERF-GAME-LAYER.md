@@ -430,3 +430,11 @@ Quiet re-measurement of the game layer: nothing else on the machine, `dotnet bui
 `sync-perf` run above twice (the final hashes and – with `--digest` – the checksums must be the same, the means should scatter by a few
 percent) and replace the table in §4. Before a change to `FrameProjector`, `FogOfWarGrid`, `FxExecutor` or
 `LiveGame.SyncAfterTick`: `--digest` before and after; a different checksum is a different presentation.
+
+## 8. The client's frames (`--frame-report`)
+
+`--frame-report` prints what a run's frames took and, for every frame of at least 25 ms, how much of it was update and draw, how many models and textures it read, and whether a collection fell into it. It answers the owner's "micro lags" (WORLD-06): a model read when its object first appeared stopped that frame for 15 to 40 ms. Building them a little in every frame (2 ms a frame, a thread decoding ahead) only moved the stops to the start of the match: on the loaded machine a model cost 9 ms on average and up to 216 ms on the main thread, and the 99 % value went from 17 to 32 ms.
+
+`ModelPreload` reads the models of the sides that play, and what belongs to nobody's side and has kind `PRELOAD`, while the load screen stands, as `GameClient::preloadAssets` does; the world's team colours are prepared with them. A smoke test skips it unless it reports, so a check keeps its time.
+
+Measured on a quiet machine (China against GLA, Alpine Assault, seed 7, 7,200 frames of 1280 x 720, a spectator): 1,078 models in 6.0 s before the match; frames median 3.5 ms, 99 % 9.2 ms; after the first frames 3 of at least 25 ms in four minutes, none of them loading. Before, on the loaded machine: 29 such frames, 14 of them loading; the same run with the preload there had 73, 3 of them loading, so what the load adds is not the models. What stays is the first frames of a match (the first calls of code paths and the models of the map's own scenery) and single long ticks.

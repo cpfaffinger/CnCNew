@@ -180,6 +180,7 @@ dotnet run -c Release --project tools/CnCNew.PresentationTool -- camera-script g
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir game/content --model-path Art/W3D/ABArFrcCmd.W3D
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "Maps/Alpine Assault/Alpine Assault.map" --content-dir game/content
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir game/content
+dotnet src/CnCNew.Client.Stride/bin/Release/net10.0-windows/win-x64/CnCNew.Client.Stride.dll --smoke-test --frames 7200 --frame-report --mute --content-dir game/content --match "<map>" --faction A --opponent B --spectate --seed 7   (what long frames did instead of drawing)
 dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only RateEquivalence --rate-report <file outside the repo>
 dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --tick-rate 30|60|120 [--content-dir game/content]
 dotnet run -c Release --project tests/CnCNew.Game.Tests -- --content-dir game/content --tick-rate 30|60|120

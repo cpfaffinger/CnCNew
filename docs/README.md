@@ -163,6 +163,7 @@ Of this, the preparatory work is built (Phases 18 to 23); the multiplayer part i
 | [DEMO-FINDINGS.md](DEMO-FINDINGS.md) | Findings of the tech demos by a human, visual checklists |
 | [DEMO-SCENARIOS.md](DEMO-SCENARIOS.md) | Staged demos for auditing |
 | [ACCEPTANCE.md](ACCEPTANCE.md) | Acceptance by a human, driven by `pwsh scripts/acceptance.ps1` |
+| [ACCEPTANCE-FINDINGS.md](ACCEPTANCE-FINDINGS.md) | The owner's first acceptance: each finding with its cause and fix, and what is a limit |
 
 ## Phase briefs (`handoffs/`)
 
