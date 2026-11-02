@@ -209,7 +209,7 @@ sufficient: it knows neither identification nor expected export and writes platf
 If `RuntimeContentImporter.ImporterVersion` changes, the description must be rewritten; `install`
 rejects a description for another importer version.
 
-Expected export of the master: 25,608 runtime files, `content-manifest.json` 27,087,727 bytes, SHA-256
+Expected export of the plain master (`--original`; the product adds the patch, `docs/PATCH-LAYER.md`): 25,507 runtime files, `content-manifest.json` SHA-256 `290c76880b17469a0acf677b5eba63431c7af88979152981f9b306279f32ece0`. Before F-33 it was 25,608 runtime files, `content-manifest.json` 27,087,727 bytes, SHA-256
 `b1f8b14cd5cb005afd16237759c9020a8c3f2402874d24d2ff204e61c620fbab` (importer 2.0.0).
 
 Tests: `dotnet run --project tests/CnCNew.Import.Tests` (synthetic installation with a hand-built

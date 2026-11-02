@@ -1,6 +1,6 @@
 # Acceptance by a human: catalogue, guided run, pre-check
 
-As of 2 November 2026: the owner's first report covered all 115 goals (`docs/ACCEPTANCE-FINDINGS.md`). 77 are accepted by a person, 16 proved by a program, 22 are open: those the report failed and a person must judge again. The
+As of 2 November 2026, after Phase 56: the catalogue has 120 goals; the owner's first report covered 115 of them (`docs/ACCEPTANCE-FINDINGS.md`). 77 are accepted by a person, 17 proved by a program, 26 are open: those the report failed and a person must judge again, and the five goals of Phase 56's new scenes that judge a look or a sound. The
 project owner looked at the running game twice for a few minutes and each time found real defects that every test had passed (`docs/DEMO-FINDINGS.md`). This document
 is the template for the acceptance: one catalogue of items, one scene per item that can be started by its id, a script that leads through them and records the
 verdicts, a picture page that needs nobody at the keyboard, and the reading of an agent before – which is **not** an acceptance.

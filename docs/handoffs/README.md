@@ -86,7 +86,8 @@ phase number is 32.
 | **53** | [HANDOFF-PHASE53.md](HANDOFF-PHASE53.md) | **Stages 3, 4** | The decisions that are a default: D-8, D-19, D-21, D-22, D-23 (interval), D-25, D-26, D-30, D-34 | **done** by machine (31 October 2026) |
 | 54 | [HANDOFF-PHASE54.md](HANDOFF-PHASE54.md) | S1-M11 | Terrain bridges: the walkable deck, damage, repair, the model (F-20) | **done** by machine (31 October 2026) |
 | 55 | [HANDOFF-PHASE55.md](HANDOFF-PHASE55.md) | S1-M11 | What the picture lacks: shadows, sky, weather, the shell map; the release candidate | **done** by machine (1 November 2026) |
-| 56 | [HANDOFF-PHASE56.md](HANDOFF-PHASE56.md) | S1-M11, S3-M1, S4-M5 | What needs no person, while the owner's next acceptance waits | in progress |
+| 56 | [HANDOFF-PHASE56.md](HANDOFF-PHASE56.md) | S1-M11, S3-M1, S4-M5 | What needs no person, while the owner's next acceptance waits | **done** by machine (2 November 2026): §78 |
+| 57 | [HANDOFF-PHASE57.md](HANDOFF-PHASE57.md) | S1-M11 | What the data still names and nobody reads, what the original shows and the port does not (F-111) | current |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 

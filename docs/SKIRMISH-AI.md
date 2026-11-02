@@ -236,11 +236,11 @@ Four causes, seen in a throwaway log: its only worker stayed reserved as a scout
 
 Thresholds committed before the fix (`docs/handoffs/HANDOFF-PHASE56.md`), the same survey after it:
 
-| | before | after | threshold |
-| --- | --- | --- | --- |
-| first barracks of GLA, median | 115 s | **29 s** | T1 at most 60 s: met |
-| GLA matches without a barracks | 5 of 32 | **0** | T2 none: met |
-| decided of 64 within 45 minutes | 58 | 57 | T3 at least 58: **missed by one** |
-| GLA wins of 32 | 4 | 6 | T4 at least 8: **missed by two** |
+| | before | after the fix | at the end of Phase 56 | threshold |
+| --- | --- | --- | --- | --- |
+| first barracks of GLA, median | 115 s | 29 s | **29 s** | T1 at most 60 s: met |
+| GLA matches without a barracks | 5 of 32 | 0 | **0** | T2 none: met |
+| decided of 64 within 45 minutes | 58 | 57 | **62** | T3 at least 58: met |
+| GLA wins of 32 | 4 | 6 | **9** | T4 at least 8: met |
 
-The matches GLA loses last longer: the shortest went from 261 s to 506 s. America against China is untouched. The balance is not judged (D-9); that T4 missed says only that having an economy does not make GLA win.
+The column "after the fix" missed T3 by one and T4 by two; the rest of the phase met them. No code of the AI changed between the two columns; what did is the weapons (rockets, poison clouds and beams work now, F-109, F-110), clips and payloads. The move is not broken down by cause. The matches GLA loses last longer: the shortest went from 261 s to 486 s. GLA wins against China (9 of 16) and never against America (0 of 16). The balance is not judged (D-9).

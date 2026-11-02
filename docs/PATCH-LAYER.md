@@ -52,7 +52,7 @@ token the original ignores (`compatibility-ignored-tokens`). `StatusBitsUpgrade`
 ## 3. Measured (31 October 2026, patch commit `6c7f40d6af6a4babb77a33a4502ec7656446c13e`)
 
 - 600 source files, 110,778,867 bytes; not taken: the sounds of other languages, 59 files of other language bundles and `Data/Autorun.str`, the repository's notes.
-- The export: 25,663 runtime files (the original's 25,608), **547 replaced and 55 added**, content manifest 27,447,222 bytes. An installation over a known directory takes
+- The export: 25,562 runtime files (the original's 25,507; F-33 took the original's program files out of both), **547 replaced and 55 added**, content manifest 27,342,823 bytes, SHA-256 `e1b15ea597dda40a31c1ed8e46f0f8b5ee1d86847eb0b3f6f110adf9cfbbc37e`. An installation over a known directory takes
   100 s; `describe-patch` 170 s.
 - Compatibility baseline 674 entries (`baselines/compatibility.json`, the one baseline since the patch is the content).
 

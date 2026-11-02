@@ -4841,3 +4841,10 @@ A list of the keys of the compatibility baseline that no code names found these;
 
 `FireOCL` was typed nowhere: every poison cloud, radiation field and firestorm of the shipped data stayed out, because those weapons do nothing but make an object. `SimulationWorld.FireWeaponAt` now makes the list at the object that fires, as `WeaponTemplate::fireWeaponTemplate` does before the scatter; a weapon that is fired by what it hits (a missile's historic bonus, a death weapon) makes it there. The test of the firestorm of Phase 56 had used a weapon of damage in its place and passed; the machine check of the scene `acc-firestorm` found it, which is why the five new scenes have checks of their own (`AcceptanceAudit`) and why that scene flies five MiGs: `HistoricBonusCount` is 8 within three seconds.
 
+### 78.9 The reference values after Phase 56
+
+One manifest commit for the whole phase (`4fcce5f7`), because the causes were built together and the manifests measure the sum: the retail reference match a stalemate at tick 108,000, `C3FB39E1275D5E16` / `1D2E841743B7288D`; stress test unchanged, `9EE9F730D124C3BD` / `5611A72EDB7D52F2`; **11 of 16 pairings decided** (8 before; eight changed their outcome); every mission keeps its outcome and tick; world fingerprint `AF720C62C9DBAC82`; compatibility baseline **657**; `CommandTypes.Version` **23**, replay **22**; the export 25,562 runtime files, the original's 25,507, importer 2.1.0.
+
+### 78.10 The line that left the map
+
+`NavigationGrid.IsAttackLineBlocked`, since Phase 41: the walk's last minor step comes after the victim's cell and can leave the map, and the port indexed the cell. `Pathfinder::iterateCellsAlongLine` asks `getCell`, which answers `NULL`, and returns 0. A unit that looked along a line ending on the map's edge ended the match with an index out of range; beyond the right edge the index wrapped into the next row without an error. The performance profile found it, because the eight-player run of the binaries of `fc464d62` stopped at it. The walk stops at the map now, as the original's does. No field of either manifest moved.

@@ -373,6 +373,12 @@ other speeds. The runs with equal final hashes: `medium-2p` 264.0 -> 268.7 µs (
 the same 400 searches and the same checksum of the paths (`8661CB620181BEC5`, 9,280,831 cells), 58.2 ns per cell at `d8039f7` and 54.3 ns at `ed12ad0` - the search
 that can pause costs nothing in one piece.
 
+## 6e. Phase 56 (2 November 2026): the profile against `fc464d62`
+
+`scripts/perf-profile.ps1` with the binaries of `fc464d62` and of `71ae8b24` one after the other. The phase changed the matches, so the skirmish runs compare other games, and the table says what a tick costs, not that a tick got dearer. 8 players on Twilight Flame, 30 game minutes: 588.1 against 602.3 µs per tick, 99 % 2.19 against 1.87 ms, maximum 57 against 55 ms, 10,170 against 14,752 bytes per tick, 31.9-fold catch-up speed. The phase `DelayedDamage`, where `StepBlockedMovers` now runs, goes from 0.2 to 4 to 26 µs per tick: that is its cost. The first run of `MD_USA05` over 300 s read 1,467 against 1,778 µs; by direct switch, twice each, it is 1,510 / 1,500 against 1,496 / 1,520 µs: the 21 % were the machine, and that is the reason this document asks for a direct switch.
+
+The binaries of `fc464d62` did not finish the 8-player run: `IsAttackLineBlocked` left the map (`docs/SIMULATION-CORE.md` §78.10). The figures above are that commit with the one bound added.
+
 ## 7. Preliminary, not measured quietly
 
 Everything in this section dates from 6 October 2026, state `b6b7454` plus tool, **from a machine on which
