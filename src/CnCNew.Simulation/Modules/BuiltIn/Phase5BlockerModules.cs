@@ -251,10 +251,7 @@ public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule,
 /// <summary>
 /// <c>SlowDeathBehavior.h</c>'s 13 keys. Mechanically modeled: the shared <c>DieMuxData</c> filter, the weighted
 /// sibling lottery (<c>ProbabilityModifier</c>) and the sink/destruction delay timers that end in an actual
-/// <c>RequestDestroy</c>, and the per-phase <c>FX</c>/<c>OCL</c>/<c>Weapon</c> lists (<see cref="SlowDeathPhases"/>, <c>doPhaseStuff</c>). Not modeled (typed but Opaque/unapplied — all presentation or physics):
-/// <c>SinkRate</c>/<c>DestructionAltitude</c> (the visual sinking-into-ground animation),
-/// <c>FlingForce</c>/<c>FlingPitch</c> and their
-/// variances (a physics impulse on death — no <c>PhysicsBehavior</c> yet). <c>ModifierBonusPerOverkillPercent</c> needs
+/// <c>RequestDestroy</c>, the sinking into the ground, the fling into the air and the per-phase <c>FX</c>/<c>OCL</c>/<c>Weapon</c> lists (<see cref="SlowDeathPhases"/>, <c>doPhaseStuff</c>). <c>ModifierBonusPerOverkillPercent</c> needs
 /// the actual damage dealt at the killing blow, which <see cref="IWorldServices.OnEntityDied"/> does not carry yet
 /// (phase 4's <c>IDieModule.OnDie</c> was never wired for it) — a further, explicitly deferred refinement.
 /// </summary>
@@ -262,6 +259,17 @@ public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long
 {
     /// <summary>The effect lists, creation lists and weapons of the three phases (<c>m_fx</c>, <c>m_ocls</c>, <c>m_weapons</c>); empty when the module names none.</summary>
     public SlowDeathPhases Phases { get; init; } = SlowDeathPhases.None;
+
+    /// <summary><c>SinkRate</c> (<c>parseVelocityReal</c>): units per logic frame of the original the object goes into the ground from its sink frame on.</summary>
+    public Fixed SinkPerFrame { get; init; }
+
+    /// <summary><c>FlingForce</c>: above zero the object is thrown into the air at its death.</summary>
+    public Fixed FlingForce { get; init; }
+    public Fixed FlingForceVariance { get; init; }
+
+    /// <summary><c>FlingPitch</c> in radians.</summary>
+    public Fixed FlingPitch { get; init; }
+    public Fixed FlingPitchVariance { get; init; }
 
     public static SlowDeathData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
@@ -272,6 +280,11 @@ public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long
         ModuleConfigReader.Ticks(configuration, "DestructionDelayVariance", 0))
     {
         Phases = SlowDeathPhases.Parse(configuration),
+        SinkPerFrame = ModuleConfigReader.Real(configuration, "SinkRate", Fixed.Zero) / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond),
+        FlingForce = ModuleConfigReader.Real(configuration, "FlingForce", Fixed.Zero),
+        FlingForceVariance = ModuleConfigReader.Real(configuration, "FlingForceVariance", Fixed.Zero),
+        FlingPitch = ModuleConfigReader.Radians(configuration, "FlingPitch"),
+        FlingPitchVariance = ModuleConfigReader.Radians(configuration, "FlingPitchVariance"),
     };
 }
 
@@ -383,9 +396,18 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
     private long _midpointTick;
     private bool _midpointDone;
     private long _nextWake = -1;
+    private long _sinkTick;
+    private bool _flung;
+    private bool _bounced;
 
     public override string ModuleName => "SlowDeathBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
+
+    /// <summary>The model condition <c>EXPLODED_FLAILING</c>: flung and not yet on the ground.</summary>
+    public bool ShowsFlailing => _flung && !_bounced;
+
+    /// <summary>The model condition <c>EXPLODED_BOUNCING</c>: flung and down.</summary>
+    public bool ShowsBouncing => _flung && _bounced;
 
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.ProbabilityModifier, 1);
@@ -397,10 +419,11 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _activated = true;
         if (SlowDeathClock.HulksHurry(world, Entity))
         {
+            _sinkTick = world.Tick + world.Time.OriginalFrames(1);
             _destructionTick = world.Tick + SlowDeathClock.HurriedDestruction(world);
             _midpointTick = world.Tick + SlowDeathClock.HurriedMidpoint(world);
             _midpointDone = false;
-            world.WakeAt(Entity, this, _midpointTick);
+            Wake(world);
             data.Phases.Do(world, Entity, SlowDeathPhase.Initial);
             return;
         }
@@ -408,34 +431,93 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         // The variances are drawn in logic frames of the original and then scaled: the same draw at every rate, and the result stays on the 30 Hz grid.
         var sink = data.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.SinkDelayVarianceTicks);
         var destruction = data.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.DestructionDelayVarianceTicks);
-        _ = sink; // the sinking-into-ground animation is presentation only; only the destruction timer is modeled.
         // beginSlowDeath: the midpoint is drawn between 35 % and 65 % of the destruction delay, in logic frames of the original like the two variances - the third draw,
         // made for every slow death whether or not a phase has anything to play.
         var (low, high) = SlowDeathPhases.MidpointBounds(world.Time.ToOriginalFrames(destruction));
         var midpoint = world.Time.DrawFrames(world.LogicRandom, world.Time.OriginalFrames(low), world.Time.OriginalFrames(high));
         // The update that first looks at either timer is the one a frame after the death (the reference sleeps for the smallest of them, at least to the next frame).
+        _sinkTick = world.Tick + world.Time.AtLeastOneFrame(sink);
         _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
         _midpointTick = world.Tick + world.Time.AtLeastOneFrame(midpoint);
         _midpointDone = false;
-        world.WakeAt(Entity, this, Math.Min(_midpointTick, _destructionTick));
+        Fling(world);
+        Wake(world);
         data.Phases.Do(world, Entity, SlowDeathPhase.Initial);
     }
 
+    private void Wake(IWorldServices world) => world.WakeAt(Entity, this, _flung ? world.Tick + world.Time.OriginalFrames(1) : NextDue);
+
+    private long NextDue
+    {
+        get
+        {
+            var due = _midpointDone ? _destructionTick : Math.Min(_midpointTick, _destructionTick);
+            return data.SinkPerFrame > Fixed.Zero ? Math.Min(due, _sinkTick) : due;
+        }
+    }
+
     /// <summary>
-    /// <c>SlowDeathBehavior::update</c>: the midpoint phase once its frame has come, then - at the destruction frame - the final phase and the removal of the object; both in
-    /// one update when they fall together. The module sleeps between the two (the sinking of the reference's update is presentation), and every answer is the rest of the
-    /// next timer (docs/DEFECT-LOST-WAKE.md).
+    /// <c>beginSlowDeath</c>'s fling, three draws after the module's timers and before the initial phase's lists: a force of <c>FlingForce</c> at a pitch of <c>FlingPitch</c> in a random
+    /// direction, the object turned that way, at least a little above the ground, and its ground friction reduced. <c>ExtraBounciness</c> is written by the original and read by nobody.
+    /// An object without a physics module is not flung. The original's look at what the body hit on its way down (a body caught in a tree) is not built: the port's flight meets nothing.
+    /// </summary>
+    private void Fling(IWorldServices world)
+    {
+        if (data.FlingForce <= Fixed.Zero) return;
+        // "Just in case this is a stingersoldier or other HELD object, lets set them free so they will fly with their own physics during slow death."
+        if ((world.DisabledFlagsOf(Entity) & DisabledMask.Held) != DisabledMask.None && Entity.ModuleArray.OfType<ISlavedModule>().FirstOrDefault() is { } slave) slave.OnSlaverDie(world);
+        if (Entity.ModuleArray.OfType<PhysicsBehavior>().FirstOrDefault() is not { } physics) return;
+        Entity.CompleteFrame(world.Tick);
+        if (Entity.Z - world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer) < Fixed.One) Entity.Z += Fixed.One;
+        var angle = world.LogicRandom.Range(-FixedTrig.Pi, FixedTrig.Pi);
+        var pitch = world.LogicRandom.Range(data.FlingPitch, data.FlingPitch + data.FlingPitchVariance);
+        var force = world.LogicRandom.Range(data.FlingForce, data.FlingForce + data.FlingForceVariance);
+        var along = force * FixedTrig.Cos(pitch);
+        var (x, y, z) = (along * FixedTrig.Cos(angle), along * FixedTrig.Sin(angle), force * FixedTrig.Sin(pitch));
+        physics.Launch(world, x, y, z, Fixed.Zero, Fixed.Zero, Fixed.Zero, rates: false, bounce: true, mass: Fixed.Zero, extraFriction: FlingFriction);
+        physics.ClearTilt();
+        Entity.Angle = FixedTrig.Atan2(y, x);
+        _flung = true;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>"Reduce his ground friction a bit": -3 * <c>SECONDS_PER_LOGICFRAME_REAL</c>.</summary>
+    private static readonly Fixed FlingFriction = Fixed.FromDecimal(-0.1m);
+
+    /// <summary>
+    /// <c>SlowDeathBehavior::update</c>: a flung object's timers wait while it is in the air, the object sinks from its sink frame on, the midpoint phase comes once its frame has
+    /// come, then - at the destruction frame - the final phase and the removal of the object; both in one update when they fall together. The module sleeps between its timers while
+    /// nothing flies or sinks, and every answer is the rest of the next timer (docs/DEFECT-LOST-WAKE.md). The original disables a sinking object to stop its physics
+    /// ("so that we can control the sink"); here the flight is ended, and nothing else reads the state of a dead object.
     /// </summary>
     public long Update(IWorldServices world)
     {
         if (!_activated) return SimulationTiming.SleepForever;
+        var frame = world.Time.OriginalFrames(1);
+        if (_flung && !_bounced)
+        {
+            _sinkTick += frame;
+            _midpointTick += frame;
+            _destructionTick += frame;
+            var (x, y, z) = Entity.FrameEnd(world.Tick);
+            if (z <= world.LayerHeightAt(x, y, Entity.Layer)) _bounced = true;
+            world.MarkDirty(Entity);
+        }
+        var sinking = data.SinkPerFrame > Fixed.Zero && world.Tick >= _sinkTick;
+        if (sinking)
+        {
+            foreach (var module in Entity.ModuleArray)
+                if (module is PhysicsBehavior physics) physics.EndFlight(world);
+            Entity.Z -= data.SinkPerFrame;
+            world.MarkDirty(Entity);
+        }
         if (!_midpointDone && world.Tick >= _midpointTick)
         {
             _midpointDone = true;
             world.MarkDirty(Entity);
             data.Phases.Do(world, Entity, SlowDeathPhase.Midpoint);
         }
-        if (world.Tick < _destructionTick) return (_midpointDone ? _destructionTick : Math.Min(_midpointTick, _destructionTick)) - world.Tick;
+        if (world.Tick < _destructionTick) return sinking || (_flung && !_bounced) ? frame : NextDue - world.Tick;
         data.Phases.Do(world, Entity, SlowDeathPhase.Final);
         world.RequestDestroy(Entity.Id);
         return SimulationTiming.SleepForever;
@@ -450,6 +532,9 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         if (!_activated) return;
         writer.Int("midpointTick", _midpointTick);
         if (_midpointDone) writer.Bool("midpointDone", true);
+        writer.Int("sinkTick", _sinkTick);
+        if (_flung) writer.Bool("flung", true);
+        if (_bounced) writer.Bool("bounced", true);
     }
 
     public override void Load(IStateReader reader)
@@ -459,6 +544,9 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _nextWake = reader.Int("nextWake");
         _midpointTick = reader.Has("midpointTick") ? reader.Int("midpointTick") : 0;
         _midpointDone = reader.Has("midpointDone") && reader.Bool("midpointDone");
+        _sinkTick = reader.Has("sinkTick") ? reader.Int("sinkTick") : 0;
+        _flung = reader.Has("flung");
+        _bounced = reader.Has("bounced");
     }
 }
 

@@ -200,6 +200,24 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary><c>setAngles(orientation, 0, 0)</c>: the pitch and roll a flung object begins its flight with.</summary>
+    public void ClearTilt() => (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
+
+    /// <summary>The object stops flying where it is now: what a held object's physics does in the original. The frame it is covering is finished first.</summary>
+    public void EndFlight(IWorldServices world)
+    {
+        if (!_flying) return;
+        Entity.CompleteFrame(world.Tick);
+        _flying = false;
+        Entity.InPhysicsFlight = false;
+        _bounce = false;
+        _subStep = 0;
+        (_velocityX, _velocityY, _velocityZ) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        (_accelX, _accelY, _accelZ) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        (_yawRate, _pitchRate, _rollRate) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        world.MarkDirty(Entity);
+    }
+
     /// <summary>The mass the forces divide by: the module's, or the one a debris nugget set (<c>setMass</c>).</summary>
     private Fixed Mass => _mass > Fixed.Zero ? _mass : data.Mass > Fixed.Zero ? data.Mass : Fixed.One;
 

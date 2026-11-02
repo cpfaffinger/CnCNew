@@ -542,6 +542,9 @@ run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDro
 run.Test("Projectiles: a shell meets what stands in its way", Tests.ProjectilesMeetWhatStandsInTheirWay);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
+run.Test("Slow death: a body is flung and sinks", Tests.ABodyIsFlungAndSinks);
+run.Test("Slow death: a hulk sinks from its sink frame", Tests.AHulkSinksFromItsSinkFrame);
+run.Test("Slow death: a flung body survives a save", Tests.AFlungBodySurvivesASave);
 run.Test("Structures: OCL updates, dynamic shroud, floating, checkpoints, enemy-near, firestorms", Tests.StructuresWorldEffects);
 run.Test("Structures: weapon bonus beacons and cost modifiers", Tests.StructuresWeaponBonusAndCostModifier);
 run.Test("Structures: a broken dam sends the flood wave", Tests.StructuresDamMakesTheWaveFlood);

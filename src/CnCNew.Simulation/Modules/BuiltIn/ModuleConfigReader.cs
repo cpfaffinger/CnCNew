@@ -20,6 +20,10 @@ internal static class ModuleConfigReader
     public static ImmutableArray<(string First, string Second)> Pairs(RatedModuleConfiguration configuration, string name)
         => [..All(configuration, name).Select(field => field.Value.Value is ImmutableArray<string> { Length: 2 } tokens ? (tokens[0], tokens[1]) : throw Unexpected(configuration, field))];
 
+    /// <summary>An <c>INI::parseAngleReal</c> key in radians.</summary>
+    public static Fixed Radians(RatedModuleConfiguration configuration, string name)
+        => Find(configuration, name)?.Value.Value is Angle angle ? SimulationTiming.DegreesToRadians(angle.Degrees) : SimulationTiming.DegreesToRadians(Real(configuration, name, Fixed.Zero).ToDecimal());
+
     public static Fixed Real(RatedModuleConfiguration configuration, string name, Fixed fallback)
     {
         var field = Find(configuration, name);

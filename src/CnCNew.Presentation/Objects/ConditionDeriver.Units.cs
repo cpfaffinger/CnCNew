@@ -25,6 +25,8 @@ public static class UnitFlags
     public static readonly ModelConditionFlag Splatted = ModelConditions.Parse("SPLATTED");
     public static readonly ModelConditionFlag SecondLife = ModelConditions.Parse("SECOND_LIFE");
     public static readonly ModelConditionFlag StunnedFlailing = ModelConditions.Parse("STUNNED_FLAILING");
+    public static readonly ModelConditionFlag ExplodedFlailing = ModelConditions.Parse("EXPLODED_FLAILING");
+    public static readonly ModelConditionFlag ExplodedBouncing = ModelConditions.Parse("EXPLODED_BOUNCING");
     public static readonly ModelConditionFlag Stunned = ModelConditions.Parse("STUNNED");
     public static readonly ModelConditionFlag ContinuousFireSlow = ModelConditions.Parse("CONTINUOUS_FIRE_SLOW");
     public static readonly ModelConditionFlag ContinuousFireMean = ModelConditions.Parse("CONTINUOUS_FIRE_MEAN");
@@ -77,6 +79,10 @@ public static partial class ConditionDeriver
                     // Object::attemptDamage's shock wave and PhysicsBehavior::update (F-63): STUNNED_FLAILING from the shock until a stunned landing, STUNNED after it.
                     if (physics.ShowsFlailing) set = set.With(UnitFlags.StunnedFlailing);
                     if (physics.ShowsStunned) set = set.With(UnitFlags.Stunned);
+                    break;
+                case SlowDeathBehavior death when death.ShowsFlailing || death.ShowsBouncing:
+                    // beginSlowDeath's fling: EXPLODED_FLAILING until the body is down, EXPLODED_BOUNCING after it.
+                    set = set.With(death.ShowsFlailing ? UnitFlags.ExplodedFlailing : UnitFlags.ExplodedBouncing);
                     break;
                 case BattleBusSlowDeathBehavior bus when bus.HasLanded(world):
                     set = set.With(UnitFlags.SecondLife);
