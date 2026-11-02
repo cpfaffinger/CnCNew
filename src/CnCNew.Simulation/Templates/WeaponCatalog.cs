@@ -105,6 +105,9 @@ public sealed record WeaponInfo(
     public Fixed ScatterRadiusVsInfantry { get; init; }
     public string DetonationFx { get; init; } = string.Empty;
     public string DetonationOcl { get; init; } = string.Empty;
+
+    /// <summary><c>FireOCL</c>: the creation list of a shot, at the object that fires it (<c>WeaponTemplate::fireWeaponTemplate</c>). A weapon that is fired by what it hits with makes its cloud or fire there.</summary>
+    public string FireOcl { get; init; } = string.Empty;
     public bool DamageDealtAtSelfPosition { get; init; }
 
     /// <summary><c>MissileCallsOnDie</c> (<c>m_dieOnDetonate</c>): a detonating missile kills itself with <c>DEATH_DETONATED</c> so its die modules run.</summary>
@@ -404,6 +407,7 @@ public sealed class WeaponCatalog
                 ShockWaveTaperOff = Length("ShockWaveTaperOff"),
                 DetonationFx = Name("ProjectileDetonationFX"),
                 DetonationOcl = Name("ProjectileDetonationOCL"),
+                FireOcl = Name("FireOCL"),
                 DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),
                 DieOnDetonate = Flag("MissileCallsOnDie"),
                 AntiGround = Flag("AntiGround"),

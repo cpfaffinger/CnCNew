@@ -36,6 +36,12 @@ static partial class Tests
           PrimaryDamageRadius = 5.0
           AttackRange = 500.0
           DelayBetweenShots = 0
+          FireOCL = OCL_Cloud
+        End
+        ObjectCreationList OCL_Cloud
+          CreateObject
+            ObjectNames = CollWall
+          End
         End
         Weapon PatternGun
           PrimaryDamage = 7
@@ -159,6 +165,8 @@ static partial class Tests
             Hit(0);
             for (var step = 0; step < world.Frames(5); step++) world.Step();
             Check.That(Hurt() == Fixed.FromInt(43), $"{rate}: the third hit at that place sets off the storm ({Hurt()}).");
+            // FireOCL: the shot makes its object at what fires it; it is what a poison cloud, a radiation field and a firestorm are.
+            Check.That(world.Entities.Count(entity => entity.Template.Name == "CollWall" && entity.X == shooter.X && entity.Y == shooter.Y) == 1, $"{rate}: the storm's weapon made its creation list.");
             Hit(0);
             Hit(0);
             for (var step = 0; step < world.Frames(120); step++) world.Step();
