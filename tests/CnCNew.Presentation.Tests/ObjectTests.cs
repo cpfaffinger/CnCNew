@@ -611,6 +611,8 @@ static partial class ObjectTests
         Check.That(ids.SequenceEqual([scout, bunker, enemyScout]), $"The viewer sees its own and visible enemy objects, not the hidden bunker ({string.Join(",", ids)}).");
 
         Submit(world, sequence => new KillCommand(PlayerId.System, sequence, world.Tick, scout));
+        // What the scout saw stays seen for UnlookPersistDuration.
+        for (var i = 0L; i < world.Time.WholeSecondsToTicks(6); i++) world.Step();
         Settle();
         projector.Advance(world);
         var frame = projector.Project(1f).Drawables;
@@ -693,6 +695,8 @@ static partial class ObjectTests
         Check.That(projector.Project(1f).Drawables.Single(drawable => drawable.IsStatic).Fogged == false && projector.FoggedScenery == 0, "Scenery in sight is not dimmed.");
 
         Submit(world, sequence => new KillCommand(PlayerId.System, sequence, world.Tick, scout));
+        // What the scout saw stays seen for UnlookPersistDuration.
+        for (var i = 0L; i < world.Time.WholeSecondsToTicks(6); i++) world.Step();
         Settle();
         projector.Advance(world);
         Check.That(names().SequenceEqual(["Pine"]), "Once explored, the scenery stays drawn when the viewer loses sight of it (fog, not shroud).");
