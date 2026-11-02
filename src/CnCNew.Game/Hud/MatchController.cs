@@ -592,8 +592,9 @@ public sealed partial class MatchController
         var view = Match.Camera;
 
         var box = SelectionBoxOverlay.None;
-        if (Input.State.HasMouse && Input.State.IsDragging(MouseButton.Left) && Input.State.PressPosition(MouseButton.Left) is { } start)
+        if (Input.Commands.Mode == CommandModeKind.None && Input.State.HasMouse && Input.State.IsDragging(MouseButton.Left) && Input.State.PressPosition(MouseButton.Left) is { } start)
             box = new SelectionBoxOverlay(true, start, Input.State.MousePosition);
+        // Only the plain pointer draws a box: a drag while a building is placed turns the building, and a pending target takes clicks (OnGesture never selects in either mode).
 
         var selected = ImmutableArray.CreateBuilder<UnitMarker>();
         var rally = ImmutableArray.CreateBuilder<RallyPointMarker>();

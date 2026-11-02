@@ -58,6 +58,9 @@ internal static class HudTests
         harness.Run("Diplomacy: the communicator button shows the players of a skirmish, with side, team and state", () => DiplomacyWindow(data));
         harness.Run("Beacons: the button of a match of a server, a place, the limit, the delete key, and nothing for an enemy", () => BeaconButton(data));
         harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
+        harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
+        harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
+        harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
         return harness.Failures;
     }
@@ -214,6 +217,71 @@ internal static class HudTests
         Click(controller, ref time, MouseButton.Left, Center("GeneralsExpPoints.wnd:ButtonExit"));
         Advance(match, controller, 1);
         TestHarness.Assert(!controller.IsGeneralsWindowOpen, "the window's button closes it");
+    }
+
+    private static void NoSelectionBoxWhilePlacing(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        var from = new Vector2(400, 200);
+        controller.Process(new MouseMoveEvent(time += 16, from));
+        controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, from));
+        controller.Process(new MouseMoveEvent(time += 16, from + new Vector2(120, 90)));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Overlay.SelectionBox.Active, "the plain pointer drags a box");
+        controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, false, from + new Vector2(120, 90)));
+
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var slot = FindConstructSlot(match, controller.CommandBar);
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}") ?? throw new InvalidOperationException("button window missing");
+        Click(controller, ref time, MouseButton.Left, new Vector2(rect.CenterX, rect.CenterY));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "the construct button enters placement mode");
+        controller.Process(new MouseMoveEvent(time += 16, from));
+        controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, from));
+        controller.Process(new MouseMoveEvent(time += 16, from + new Vector2(120, 90)));
+        Advance(match, controller, 1);
+        TestHarness.Assert(!controller.Overlay.SelectionBox.Active, "the drag that turns a building shows no box (INPUT-05)");
+    }
+
+    private static void DisabledCameosShowWhy(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var images = controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().ToArray();
+        var restricted = Enumerable.Range(1, CommandBarModel.GridSlots).Select(slot => controller.CommandBar[slot]).Where(button => button is { Availability: ButtonAvailability.Restricted } && button.Button.ButtonImage.Length > 0).ToArray();
+        TestHarness.Assert(restricted.Length > 0, "a dozer at the start has something it cannot build yet");
+        foreach (var button in restricted)
+            TestHarness.Assert(images.Any(image => image.Image == button!.Button.ButtonImage && image.Grayscale), $"{button!.Button.Name} is drawn grey (SHELL-03)");
+        var open = Enumerable.Range(1, CommandBarModel.GridSlots).Select(slot => controller.CommandBar[slot]).First(button => button is { Availability: ButtonAvailability.Available } && button.Button.ButtonImage.Length > 0)!;
+        TestHarness.Assert(images.Any(image => image.Image == open.Button.ButtonImage && !image.Grayscale && image.Tint == CnCNew.Ui.Wnd.WndColor.White), $"{open.Button.Name} keeps its colours");
+    }
+
+    private static void TheRadarFrameFollowsTheCamera(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        Advance(match, controller, 1);
+        (float, float) FrameCorner()
+        {
+            var commands = controller.BuildDrawList(1280, 720).Commands;
+            var radar = commands.IndexOf(commands.OfType<UiCustomDraw>().Single(draw => draw.Callback == "W3DLeftHUDDraw"));
+            TestHarness.Assert(commands[radar + 1] is UiPushClip && commands.Skip(radar + 2).Take(4).All(command => command is UiLineDraw) && commands[radar + 6] is UiPopClip, "four lines lie over the radar");
+            var line = (UiLineDraw)commands[radar + 2];
+            return (line.X0, line.Y0);
+        }
+        var before = FrameCorner();
+        match.Camera.CenterOn(match.Camera.Pivot + new Vector2(120, 80));
+        var after = FrameCorner();
+        TestHarness.Assert(before != after, $"the frame moves with the camera in the next drawn frame, without a tick and without the radar's picture (HUD-07): {before} -> {after}");
     }
 
     /// <summary>
