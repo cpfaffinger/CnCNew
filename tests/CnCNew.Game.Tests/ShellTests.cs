@@ -257,10 +257,10 @@ internal static class ShellTests
         TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "back on the main menu, which starts over on its root group (MainMenuInit runs again)");
         TestHarness.Assert(shell.Stack.Count == 1 && shell.BuildDrawList().Dump() == shell.CurrentScreen.BuildDrawList().Dump(), "the main menu draws alone again");
 
-        // options and the quit box are layered over the main menu
+        // The options take the screen (the owner's finding SKIN-03; the original lays them over the main menu), the quit box is layered over it.
         Click(shell, "MainMenu.wnd:ButtonOptions");
         TestHarness.Assert(shell.CurrentScreen is OptionsScreen, "options are open");
-        OverlayKeepsBelow("options", main);
+        TestHarness.Assert(shell.Stack[0] == main && shell.BuildDrawList().Dump() == shell.CurrentScreen.BuildDrawList().Dump(), "options: only they are drawn, the main menu waits on the stack below");
         Click(shell, "OptionsMenu.wnd:ButtonBack");
         Click(shell, "MainMenu.wnd:ButtonExit");
         TestHarness.Assert(shell.CurrentScreen is MessageBoxScreen, "the quit box is open");

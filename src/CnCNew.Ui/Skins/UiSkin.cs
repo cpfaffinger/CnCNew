@@ -126,7 +126,7 @@ public abstract class UiSkin
 
         public override UiScaleOptions ShellScale(UiScaleOptions original) => original with { Mode = CnCNew.Ui.Layout.UiScaleMode.Anchor };
 
-        public override UiScaleOptions HudScale(UiScaleOptions original) => original with { Mode = CnCNew.Ui.Layout.UiScaleMode.Anchor, KeepBandAspect = true };
+        public override UiScaleOptions HudScale(UiScaleOptions original) => original with { Mode = CnCNew.Ui.Layout.UiScaleMode.Anchor };
 
         public override WndLayout Derive(WndLayout layout, WndHeaderTemplateTable templates, bool keepArt = false)
             => ModernLayout.Derive(layout, templates, Style, keepArt);

@@ -680,6 +680,8 @@ draws it), text size (100, 125, 150 %), sound device (the system's default or a 
 its key, read only. Accept saves; with a new skin or text size the main menu and the options are built again in the new look. Back or Escape leaves without saving. No
 line of a layout is written down for it.
 
+**Since the owner's acceptance** (`docs/UI-MODERN.md` sections 16 and 18): the options hide what lies below them in both skins, the modern skin's panels are translucent over the shell map, and the score screen's panel "Tactical Analysis" is filled. Its list, `ListboxWarschoolAdvice`, is what the original fills from `AcademyStats`; here `CnCNew.Game.Analysis.TacticalAdvice` asks the same questions of the match's analysis: a line of what happened, then at most two of the game's `ACADEMY:` texts in the order of the original's tiers, which draws one at random. A question the analysis cannot answer (a drag selection, a radar) is not asked. The button "Analysis" leads to the six pages.
+
 **Pinned:** every screen hash of the shell is pinned once more in the modern skin (`baselines/screens-modern.txt`, 54), the options and More options in both skins in
 `baselines/skin-screens.txt`; a scripted person (`scripts/shell/skin-person.txt`) switches the skin and walks the shell without a window (`SkinTests`) and in the window
 client (`scripts/check-skins.ps1`). Not judged by a human: whether the modern menus are better to read and use.

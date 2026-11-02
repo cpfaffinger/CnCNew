@@ -83,8 +83,16 @@ public sealed partial class UiWindowTree
             _hoverSince = Now;
             if (target is not null) Enter(target);
         }
-        // Mouse::createStreamMessages shows a tooltip once the pointer has been still for the delay: moving hides it again.
-        if (x != _hoverX || y != _hoverY) _hoverSince = Now;
+        // Mouse::createStreamMessages shows a tooltip once the pointer has been still for the delay. A tooltip that is up stays where it is while the pointer moves over its window
+        // (the control bar's description of a button stands still in the original as well); only another window ends it. Before it is up, every move starts the delay again.
+        if (x != _hoverX || y != _hoverY)
+        {
+            if (_tooltipWindow is null || (DisabledWindowAt(x, y) ?? target) != _tooltipWindow)
+            {
+                _tooltipWindow = null;
+                _hoverSince = Now;
+            }
+        }
         _hoverX = x;
         _hoverY = y;
         return target is not null;
@@ -303,7 +311,7 @@ public sealed partial class UiWindowTree
         var combo = window.ComboBox!;
         if (combo.IsOpen && UiGadgetGeometry.ComboDropDown(window).Contains(x, y))
         {
-            var index = combo.TopIndex + (y - window.Rect.Bottom) / UiGadgetGeometry.RowHeight(window);
+            var index = UiGadgetGeometry.ComboRowAt(window, y);
             if (index >= 0 && index < combo.Entries.Count) SelectComboEntry(window, index);
             CloseCombo();
             return;
@@ -316,6 +324,10 @@ public sealed partial class UiWindowTree
         if (combo.IsOpen) CloseCombo();
         else OpenCombo(window);
     }
+
+    /// <summary>The row of the open drop-down under the pointer; -1 outside it.</summary>
+    internal int DropDownRowUnderPointer(UiWindow window)
+        => _pointerInside && UiGadgetGeometry.ComboDropDown(window).Contains(_hoverX, _hoverY) ? UiGadgetGeometry.ComboRowAt(window, _hoverY) : -1;
 
     private void OpenCombo(UiWindow window)
     {

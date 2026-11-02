@@ -73,8 +73,6 @@ internal sealed class TerrainLayer : IWorldLayer
     private double _nextMinimap;
     private bool _minimapDirty = true;
     private IReadOnlyList<MinimapDot> _dots = [];
-    private IReadOnlyList<System.Numerics.Vector2>? _footprintOverride;
-    private System.Numerics.Vector2[] _lastFootprint = [];
     private int _dotSize = 2;
     private long _gpuBytes;
 
@@ -201,24 +199,19 @@ internal sealed class TerrainLayer : IWorldLayer
             if (moved || draw.Batch.Animated) draw.VertexBuffer.SetData(frame.CommandList, draw.Batch.Vertices);
         }
 
-        if (frame.TotalSeconds >= _nextMinimap)
-        {
-            var footprint = _footprintOverride?.ToArray() ?? match.Camera.GroundFootprint();
-            if (_minimapDirty || !footprint.AsSpan().SequenceEqual(_lastFootprint)) RefreshMinimap(frame.CommandList, frame.TotalSeconds, match);
-        }
+        if (frame.TotalSeconds >= _nextMinimap && _minimapDirty) RefreshMinimap(frame.CommandList, frame.TotalSeconds, match);
     }
 
     /// <summary>
-    /// Replaces the entity dots and the camera footprint of the minimap and recomposes it immediately. <paramref name="dots"/> are world
-    /// positions with a colour (hide enemies in fog before passing them); <paramref name="cameraFootprint"/> defaults to the match camera's
-    /// ground footprint. Without a call, the minimap shows terrain, fog and the camera footprint only and refreshes at 4 Hz on changes.
+    /// Replaces the entity dots of the minimap and recomposes it immediately. <paramref name="dots"/> are world positions with a colour (hide enemies in fog before passing
+    /// them). Without a call, the minimap shows terrain and fog only and refreshes at 4 Hz on changes. The camera's frame is not part of the picture: the HUD draws it over the
+    /// radar in every frame, because the camera moves in every frame.
     /// </summary>
-    public void UpdateMinimap(CommandList commandList, IReadOnlyList<MinimapDot> dots, IReadOnlyList<System.Numerics.Vector2>? cameraFootprint = null, int dotSize = 2)
+    public void UpdateMinimap(CommandList commandList, IReadOnlyList<MinimapDot> dots, int dotSize = 2)
     {
         ArgumentNullException.ThrowIfNull(dots);
         var match = _match ?? throw new InvalidOperationException("The terrain layer is not attached.");
         _dots = dots;
-        _footprintOverride = cameraFootprint;
         _dotSize = dotSize;
         RefreshMinimap(commandList, _nextMinimap, match);
     }
@@ -297,8 +290,7 @@ internal sealed class TerrainLayer : IWorldLayer
 
     private void RefreshMinimap(CommandList commandList, double totalSeconds, LiveGame match)
     {
-        var footprint = _footprintOverride?.ToArray() ?? match.Camera.GroundFootprint();
-        var rgba = match.Minimap.Compose(match.Fog, _dots, footprint, _dotSize);
+        var rgba = match.Minimap.Compose(match.Fog, _dots, null, _dotSize);
         MinimapTexture.SetData(commandList, rgba);
         if (Environment.GetEnvironmentVariable("CNCNEW_TERRAIN_DUMP") is { Length: > 0 } dump)
         {
@@ -307,7 +299,6 @@ internal sealed class TerrainLayer : IWorldLayer
             PngDump.WriteRgba(Path.Combine(dump, "terrain.png"), match.Minimap.Width, match.Minimap.Height, match.Minimap.TerrainRgba.ToArray());
             PngDump.WriteGray(Path.Combine(dump, "fog.png"), match.Fog.CellsX + 2, match.Fog.CellsY + 2, _fogLevels);
         }
-        _lastFootprint = footprint;
         _nextMinimap = totalSeconds + MinimapInterval;
         _minimapDirty = false;
     }

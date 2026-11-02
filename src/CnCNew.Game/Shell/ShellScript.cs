@@ -185,14 +185,14 @@ public sealed class ShellScript
                 var height = UiGadgetGeometry.RowHeight(window);
                 var drop = UiGadgetGeometry.ComboDropDown(window);
                 // An entry the open box does not show is scrolled to with the wheel over the box, a notch at a time, as a person would.
-                for (var notch = 0; notch < 64 && (index < combo.TopIndex || window.Rect.Bottom + (index - combo.TopIndex) * height + height / 2 >= drop.Bottom); notch++)
+                for (var notch = 0; notch < 64 && (index < combo.TopIndex || drop.Y + (index - combo.TopIndex) * height + height / 2 >= drop.Bottom); notch++)
                 {
                     var top = combo.TopIndex;
                     Send(shell, new MouseWheelEvent(Now(), index < combo.TopIndex ? 1 : -1, new Vector2(drop.X + drop.Width / 3, drop.Y + drop.Height / 2)));
                     if (combo.TopIndex == top) break;
                 }
                 var row = index - combo.TopIndex;
-                var y = window.Rect.Bottom + row * height + height / 2;
+                var y = drop.Y + row * height + height / 2;
                 if (row < 0 || y >= drop.Bottom) return Fail(shell, step, $"entry {index} is not among the rows the open box shows, and the wheel does not bring it there");
                 Click(shell, drop.X + drop.Width / 3, y);
                 if (combo.SelectedIndex != index) return Fail(shell, step, $"shows entry {combo.SelectedIndex} afterwards");

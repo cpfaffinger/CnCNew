@@ -429,6 +429,9 @@ public sealed class GameShell
         tree.Dispatch();
     }
 
+    /// <summary>A text field of the top screen has the keyboard focus: the host must deliver characters (<see cref="TextInputEvent"/>), which a window does only when asked to.</summary>
+    public bool WantsTextInput => _stack.Count > 0 && CurrentScreen.Tree.Focus is { } focus && (focus.TextEntry is not null || focus.ComboBox is { Data.IsEditable: true });
+
     private static UiKey MapKey(KeyCode key) => key switch
     {
         KeyCode.Enter or KeyCode.KeypadEnter => UiKey.Enter,

@@ -39,6 +39,8 @@ uniformly with borders and the HUD anchored (`docs/UI-VANILLA-FIT.md`). Three wa
 
 ## 3. The command bar at 16:9
 
+**Replaced by section 17** after the owner's acceptance of 1 November 2026: a bar in proportion left a black rectangle at either side and read as a fixed width. What follows is the decision of Phase 38.
+
 The original stretches the command bar to the width of the screen (icons 1.33 times wider at 16:9). **The modern skin keeps its
 proportions:** the bar is placed at the uniform scale by the height of the window, centred at the bottom, and the band to its left and
 right is filled with the skin's panel colour from the bar's top line to the bottom edge, so the world view ends at the same line across the
@@ -239,3 +241,47 @@ empty space. The original: 1 (this project's own "More options" label at 800 x 6
   `campaign-screens.txt` and `campaign-screens-modern.txt`, 30 hashes each (the two shell screens once, the mission's HUD per rate, because it is a picture of a real
   mission). The opening cinematic of `MD_USA01` runs longer than 50 s; the test gives it up to 15,000 drawn frames.
 - **Not done:** the scripted person still does not walk the campaign; nobody has looked at the tooltip or the message list in the modern skin.
+
+## 16. The owner's findings: panels, gadgets, columns (2 November 2026)
+
+The first acceptance by a person (`CnCNew-acceptance-report-2026-11-01`) said of the sub-menus: "no transparency", "the columns and cells are not properly designed", "dropdown menu and sliders are strange". What was decided:
+
+- **The battle behind the menus shows through.** A full-screen backdrop is no longer the opaque canvas but `ModernLayout.Scrim` (the canvas colour at alpha 96), and a group is a translucent panel (`Panel`, alpha 214) with a soft edge of three outlines. Without a shell map the same windows lie on the black of the cleared picture, so the pictures of the tests look darker than the game. The score screen has the shell map behind it in the modern skin too (`UpdateShellMap`); in the original skin it stays the blank window of the original. A dialog over another screen (`ModernScreens.IsDialog`) is nearly opaque (alpha 245), because what lies behind it is text. Blending is linear: a little of a light colour goes a long way, which is why every second row is `ModernLayout.Row` (60, 74, 94 at alpha 40) and not a white of low alpha.
+- **Every gadget of the skin is drawn by a function of its own** (`UiDrawBuilder.Flat.cs`, for windows whose definition carries a `WndFlatRole`; the windows of the original skin never reach it): a button with an accent bar at its left edge under the pointer, a check box with a real tick, a combo box as a field with a chevron and its text in the middle of the field, a drop-down with rows that have air, a row under the pointer, a thin position bar, and the place above the box when the screen ends below it; a slider as a thin track with the part up to the value in the accent and an 8 x 20 unit thumb on it; a list with rows with air, every second row lighter, a rule between columns and a selected row with the accent at its left edge; fields that touch in the layout stand as cells with a gap, because a field draws a unit inside its window.
+- **`UiGadgetGeometry` knows the flat gadgets**, so what is drawn is what answers: row height, drop-down place and the slider's thumb are the same numbers for the pointer and the picture.
+- **A screen stays together.** In a wide window the anchored scale sent every group to its nearest edge, which spread the buttons of the score screen, put the replay list's "Analysis" and the options' "More options" outside their panels and spaced the five medals of solo play 259, 495, 500 and 258 pixels apart (SHELL-06). Now every group of a screen but the main menu's column stays in the middle (`WndWindow.GroupCentered`, `UiScaler.Centered`); the main menu keeps its column at the edge and only its row of medals in the middle.
+- **Geometry of its own for single screens** (`ModernScreens`, only numbers of this project in the layout's 800 x 600): the skirmish setup's headings stand over their columns on one line, the score screen has one set of columns for headings, pictures and rows with every second row filled, its "Tactical Analysis" stands over its list. This is way (a) of section 2 for the few screens that need it: the windows keep their names, parents and behaviour.
+- **What was chrome in one picture:** the general's window (`GeneralsExpPoints.wnd`) was one picture with its whole frame; it is a panel now, and a button with a label is chrome whatever its draw data say (it was taken for a picture and lost its frame). The world map of the Generals' Challenge is not chrome: the medals stand on the countries. It moves from the backdrop into the screen's frame (`WndFlatRole.Picture`), cut to it, slightly translucent, with the title on a band of the panel colour.
+- **Colours of the game as text:** a player's colour stays what it is on the map, but as text on a dark panel it is lifted towards white until it has 4.5:1 (`ModernLayout.Readable`): the score table, the lines of the analysis.
+- **The analysis** (REPLAY-01): the pages stand as a row of tabs with the current one in the accent, every chart on a card of its own with a heavier base line, ticks on the time axis, the last value of each line marked, the legend once under the cards. The original skin's page is unchanged.
+
+**What the picture tests do not show:** a picture of `UiRenderTool --skins` has no battle behind it. The translucency was judged in the window client over the shell map (1280 x 720, PrintWindow), at the skirmish setup, the options, solo play, the direct connect screen and the lobby. `UiRenderTool` flattens the alpha of its PNG now: a picture viewer laid translucent fills over white, which is why the panels of Phase 38's pictures looked light grey and those of the game did not.
+
+## 17. The command bar: a band across the whole width
+
+The owner (SKIN-02, HUD-06): "it does not properly stretch at resolution, it seems to be a fixed width and has left and right a black rectangle". **`ModernControlBar` replaces section 3.** The bar fills the width of the window at every aspect ratio and nothing of it is stretched art:
+
+- **The band** runs from a line at 438 of 600 to the bottom edge, in the skin's canvas colour, with one line and a band of the panel colour at its top. The scheme's art is not drawn at all.
+- **Two sides at one scale.** Everything is placed at the window's uniform scale (`Scale`). The radar with its four small buttons stands at the left edge, the command buttons, the portrait and the production queue at the right edge. The windows of `ControlBar.wnd` stay the windows the HUD drives: `Place` gives each its screen rectangle (`SetScreenRect`), so clicks, tests and scripts find them by name.
+- **What the width adds goes to the selection plate** between the two sides: for one object its name and health, for several the count and a picture of every kind with its number. At 4:3 and narrower the two sides meet and there is no plate; at 21:9 the plate is wider and nothing else changes. Below 80 units the plate is left out.
+- **The strip above** holds the under-attack lamp, the money, the power bar across all the rest (a bar is a value: it may be as long as there is room), the numbers used and produced at its end, and the general's button.
+- **The general's button** is a cell of the skin with the rank in words and, as a thin bar along its bottom edge, the way to the next rank; it has the accent when points wait. This replaces the experience bar of the art and the scheme's button picture, and the portrait moves 34 units towards the edge into the room that leaves.
+- **Every place of the command grid has its well**, so the fourteen cells read as a grid when a selection fills only some of them.
+- The pictures of the bar stay the game's: cameos, portraits, the side's logo, the radar and the four small buttons.
+
+Measured by picture at 800 x 600, 1280 x 720, 1920 x 1080 (`UiRenderTool --skins`: `hud`, `hud-building`, `hud-units`). `keepBandAspect` of Phase 38 is gone.
+
+## 18. Defects of both skins found on the way
+
+| Finding | Cause | What was done |
+|---|---|---|
+| SKIN-03 "gradients in select boxes" | A combo box drew entry 0 of its edit box over the whole box; entry 0 is the left end of a text entry | Three pieces, like `W3DGadgetTextEntryImageDraw` (original skin only: the modern skin has no pictures there) |
+| SKIN-03 main buttons stay in the options | `OptionsMenu` lay over the main menu, as in the original (`getOptionsLayout`, `hide(FALSE)`) | The options hide what lies below, in both skins. **A deviation from the original in the original skin**, at the owner's word: the panel cut the buttons in half |
+| SHELL-04 sliders offset | The thumb hung 10 units below the window's top edge (`HORIZONTAL_SLIDER_THUMB_POSITION`), which in the original's image slider no one sees, because the boxes are the picture; the flat slider showed it under its bar | The flat thumb stands on its track; the original's geometry is unchanged |
+| HUD-02 tooltip rebuilds | Every move of a pixel restarted the delay | A tooltip that is up stays at its place until another window is under the pointer; before it is up, a move still restarts the delay. The text can change under it (a medal of the skirmish setup's honours) |
+| HUD-07 radar outline lags | The frame was part of the radar's picture, composed four times a second | The picture holds terrain, fog and dots; the frame is lines of every drawn frame (`AddRadarOutline`, and the viewer's own frame in the spectator HUD) |
+| INPUT-05 box during placement | The HUD drew a box for any drag | Only the plain pointer draws one |
+| SHELL-03 no grey | The cameo was laid over the disabled button in full colour | `Restricted` draws grey, `CantAfford` dark (144), `NotReady` in colour under its clock, as `W3DGadgetPushButtonImageDraw`. `UiImageDraw.Grayscale`: the renderer makes a grey copy of the page on the CPU, since its pages are block-compressed and it has no second shader. The general's window uses it too |
+| HUD-09 no text entry | The client never turned Stride's text input on: a real keyboard gave keys and no characters, while a script types characters directly, which is why no check ever saw it | `FollowTextFocus`: on while a text field or the chat line has the focus, and on anew after a press, because Stride's mouse takes the focus back with every press. Checked with characters posted to the hidden edit control in the window client; **no real keyboard could be used on this machine** (the session has no input desktop) |
+| MISS-09 briefing history | Captions are sentences and the list did not wrap them | Wrapped at the list's width as `GadgetListBoxAddEntryText` does |
+| SHELL-03 no tactical analysis | The panel's list was never filled | `TacticalAdvice` (docs/MATCH-ANALYSIS.md) |

@@ -118,9 +118,13 @@ public sealed partial class MatchController
         if (BriefingHistory is { } history)
         {
             // Each new line in the next of the two message colours (getMessageColor(numEntries % 2)).
+            // GadgetListBoxAddEntryText wraps an entry at the column's width: a caption is a sentence, far wider than the list.
+            var list = _diplomacyBriefing;
+            var width = UiGadgetGeometry.ListContent(list).Width - 2 * list.Transform.X.Length(UiGadgetGeometry.TextInset);
             for (; _briefingShown < history.Count; _briefingShown++)
             {
-                _diplomacyBriefing.AddListRow(new UiListRow([history[_briefingShown]], _briefingShown % 2 == 0 ? TextStyle.Settings.MessageColor1 : TextStyle.Settings.MessageColor2));
+                var color = _briefingShown % 2 == 0 ? TextStyle.Settings.MessageColor1 : TextStyle.Settings.MessageColor2;
+                foreach (var line in CnCNew.Ui.Rendering.UiSentenceLayout.Layout(history[_briefingShown], list.Font, _textMeasure, width, false).Lines) list.AddListRow(new UiListRow([line.Text], color));
             }
             return;
         }
@@ -163,10 +167,13 @@ public sealed partial class MatchController
             var alive = !world.IsPlayerDefeated(slot.Player);
             var color = Match.Colors.Of(slot.Player);
             rows.Add(new DiplomacyRow(slot.Player, name, side, _assets.Text.Get(team), _assets.Text.Get(gone ? "GUI:PlayerGone" : alive ? "GUI:PlayerAlive" : "GUI:PlayerDead"),
-                new WndColor(color.Red, color.Green, color.Blue, 255), gone ? GoneColor : alive ? AliveColor : DeadColor, connection, connection is { } id && Net!.IsMuted(id)));
+                Readable(new WndColor(color.Red, color.Green, color.Blue, 255)), gone ? GoneColor : alive ? AliveColor : DeadColor, connection, connection is { } id && Net!.IsMuted(id)));
         }
         return rows.ToImmutable();
     }
+
+    /// <summary>A player's colour as text: the modern skin lifts a dark one until it reads on its panel.</summary>
+    private WndColor Readable(WndColor color) => Skin.IsModern ? CnCNew.Ui.Skins.ModernLayout.Readable(color) : color;
 
     private static string StrengthLabel(int strength) => strength switch
     {

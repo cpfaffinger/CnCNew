@@ -663,6 +663,7 @@ internal sealed class ClientRuntime : IDisposable
                         dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(new Vector2(blip.X, blip.Y), new CnCNew.Presentation.Terrain.Rgba32(255, 255, 255, 255)));
                 running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
             }
+            FollowTextFocus(input, running.Match?.Net?.ChatOpen == true, fixedSeconds, events);
             if (_shell is not null && running.Host.Match is LiveMatch ordered) GiveStandInOrder(ordered);
             // --net-pause-at-tick T: the stand-in asks for a pause at that tick and ends it two seconds later.
             if (NetPauseAtTick > 0 && running.Host.Match is LiveMatch { Remote: not null } pausing)
@@ -697,10 +698,30 @@ internal sealed class ClientRuntime : IDisposable
             foreach (var inputEvent in events) _shell.HandleInput(inputEvent);
             _shell.Update(seconds);
             foreach (var output in _shell.DrainOutputs()) Carry(output);
+            FollowTextFocus(input, _running is null && _shell.WantsTextInput, fixedSeconds, events);
             StepNetLoad();
             if (_running is null) UpdateShellMap(gameTime, width, height, fixedSeconds);
         }
         _audio.Update(seconds);
+    }
+
+    private bool _textInput;
+
+    /// <summary>
+    /// Characters reach the game only while Stride's text input is on (<see cref="global::Stride.Input.ITextInputDevice"/>: a hidden edit control takes the keyboard focus, as for Stride's
+    /// own <c>EditText</c>); without it a real keyboard gives keys and never a <see cref="global::Stride.Input.TextInputEvent"/>, and no entry field takes a letter. It is on while a text
+    /// field has the focus. Stride's mouse takes the keyboard focus back to the window with every press (<c>MouseWinforms</c>), so a press while a field stays focused turns it on anew. A run that
+    /// takes no device input (<paramref name="fixedSeconds"/>, a scripted person) leaves the window's focus alone.
+    /// </summary>
+    private void FollowTextFocus(InputManager input, bool wanted, double? fixedSeconds, List<CnCNew.Presentation.Input.InputEvent> events)
+    {
+        if (fixedSeconds is not null || _shellScript is not null || input.TextInput is not { } device) return;
+        var pressed = wanted && _textInput && events.Any(item => item is CnCNew.Presentation.Input.MouseButtonEvent { IsDown: true });
+        if (wanted == _textInput && !pressed) return;
+        if (pressed) device.DisableTextInput();
+        _textInput = wanted;
+        if (wanted) device.EnabledTextInput();
+        else device.DisableTextInput();
     }
 
     /// <summary>Where the user's own maps lie: <c>--user-maps</c>, or the original's directory under the documents (<c>GlobalData::getPath_UserData</c>).</summary>
@@ -717,7 +738,8 @@ internal sealed class ClientRuntime : IDisposable
     /// </summary>
     private void UpdateShellMap(GameTime gameTime, int width, int height, double? fixedSeconds)
     {
-        if (!ShellMapEnabled || _shell is not { Phase: ShellPhase.Menus } || _netLoad is not null)
+        // The modern skin's panels are translucent, on the score screen too: the battle goes on behind them (the original's score screen has a blank window behind it).
+        if (!ShellMapEnabled || _shell is not { Phase: ShellPhase.Menus or ShellPhase.Results } || (_shell.Phase == ShellPhase.Results && !_shell.Skin.IsModern) || _netLoad is not null)
         {
             StopShellMap();
             return;

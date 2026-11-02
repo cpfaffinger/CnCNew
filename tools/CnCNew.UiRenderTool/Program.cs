@@ -215,8 +215,15 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         commandList.Clear(target, new Stride.Core.Mathematics.Color4(0, 0, 0, 1));
         renderer.Draw(GraphicsContext, list, width, height);
         var path = Path.Combine(outputDirectory, $"{name}.png");
+        // A translucent fill leaves alpha in the render target, which a picture viewer would lay over white; the window's back buffer shows no such thing.
+        using (var image = target.GetDataAsImage(commandList))
         using (var stream = File.Create(path))
-            target.Save(commandList, stream, ImageFileType.Png);
+        {
+            var pixels = image.PixelBuffer[0].GetPixels<byte>();
+            for (var alpha = 3; alpha < pixels.Length; alpha += 4) pixels[alpha] = 255;
+            image.PixelBuffer[0].SetPixels(pixels);
+            image.Save(stream, ImageFileType.Png);
+        }
         var stats = renderer.LastFrame;
         manifest.Add($"{name}.png {width}x{height} commands={list.Commands.Length} {stats.Format()}");
         Console.WriteLine($"  captured {name}.png ({stats.Format()})");

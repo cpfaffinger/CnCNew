@@ -55,6 +55,8 @@ internal sealed class UiImageTextures(GraphicsDevice device, ContentFileSystem c
 {
     private readonly Dictionary<string, Page?> _pages = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UiImageSprite?> _sprites = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, UiImageSprite?> _graySprites = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Page> _grayPages = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Texture> _rotated = [];
     private readonly SortedSet<string> _sizeMismatches = new(StringComparer.Ordinal);
 
@@ -102,6 +104,40 @@ internal sealed class UiImageTextures(GraphicsDevice device, ContentFileSystem c
             sprite = new UiImageSprite(page.Texture, new RectangleF(image.Left * sx, image.Top * sy, (image.Right - image.Left) * sx, (image.Bottom - image.Top) * sy));
         }
         _sprites.Add(image.Name, sprite);
+        return sprite;
+    }
+
+    /// <summary>
+    /// The image in the luminance of its colours (<c>Render2DClass::Enable_Grayscale</c>): a grey copy of its page, made when it is first asked for. The page is decoded on the CPU for
+    /// this, because its texture is block-compressed and the renderer has no second shader.
+    /// </summary>
+    public UiImageSprite? ResolveGray(MappedImage image, out string failure)
+    {
+        if (_graySprites.TryGetValue(image.Name, out var cached))
+        {
+            failure = cached is null ? image.TextureFile : "";
+            return cached;
+        }
+        var sprite = Resolve(image, out failure);
+        if (sprite is { } colored && MappedImageTextures.Candidates(image.TextureFile, Language).FirstOrDefault(content.Exists) is { } path)
+        {
+            if (!_grayPages.TryGetValue(image.TextureFile, out var page))
+            {
+                using var stream = content.OpenRead(path);
+                var decoded = path.EndsWith(".tga", StringComparison.OrdinalIgnoreCase) ? TgaReader.Read(stream) : DdsReader.Read(stream);
+                var rgba = decoded.RgbaPixels.ToArray();
+                UiImagePixels.ToLuminance(rgba);
+                _grayPages[image.TextureFile] = page = new Page(Texture.New2D(device, decoded.Width, decoded.Height, Format(), rgba, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable), decoded.Width, decoded.Height, rgba);
+            }
+            if (image.IsRotated)
+            {
+                var texture = Texture.New2D(device, image.Width, image.Height, Format(), UiImagePixels.UprightRotated(image, page.Width, page.Height, page.Rgba!), TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
+                _rotated.Add(texture);
+                sprite = new UiImageSprite(texture, null);
+            }
+            else sprite = new UiImageSprite(page.Texture, colored.Source);
+        }
+        _graySprites.Add(image.Name, sprite);
         return sprite;
     }
 
@@ -168,7 +204,10 @@ internal sealed class UiImageTextures(GraphicsDevice device, ContentFileSystem c
         foreach (var page in _pages.Values) page?.Texture.Dispose();
         foreach (var texture in _rotated) texture.Dispose();
         _pages.Clear();
+        foreach (var page in _grayPages.Values) page.Texture.Dispose();
         _sprites.Clear();
+        _graySprites.Clear();
+        _grayPages.Clear();
         _rotated.Clear();
     }
 

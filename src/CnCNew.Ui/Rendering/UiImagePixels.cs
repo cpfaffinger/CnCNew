@@ -50,6 +50,17 @@ public static class UiImagePixels
         return result;
     }
 
+    /// <summary>Replaces the colour of every RGBA pixel by its luminance (ITU-R 601 weights); alpha stays.</summary>
+    public static void ToLuminance(byte[] rgba)
+    {
+        ArgumentNullException.ThrowIfNull(rgba);
+        for (var offset = 0; offset + 3 < rgba.Length; offset += 4)
+        {
+            var luminance = (byte)((rgba[offset] * 299 + rgba[offset + 1] * 587 + rgba[offset + 2] * 114 + 500) / 1000);
+            rgba[offset] = rgba[offset + 1] = rgba[offset + 2] = luminance;
+        }
+    }
+
     /// <summary>The texel rectangle of an unrotated image on its page.</summary>
     public static (int X, int Y, int Width, int Height) SourceRect(MappedImage image)
         => (image.Left, image.Top, image.Right - image.Left, image.Bottom - image.Top);

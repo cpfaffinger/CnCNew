@@ -1,3 +1,4 @@
+using CnCNew.Game.Analysis;
 using CnCNew.Ui.Runtime;
 
 namespace CnCNew.Game.Shell.Screens;
@@ -25,6 +26,8 @@ public sealed class ScoreScreenScreen : ShellScreen
         Tree.Register("ScoreScreenInput", OnInput);
 
         W("ButtonBuddy").SetEnabled(false);
+        // A skirmish has no buddies (ScoreScreen.cpp hides the button); the modern skin leaves out what cannot be pressed.
+        if (shell.Skin.IsModern) W("ButtonBuddy").SetHidden(true);
         W("ButtonSaveReplay").SetText(CnCNew.Game.Replays.ReplayText.AnalysisButton);
         W("ButtonSaveReplay").SetEnabled(result.Analysis is not null || shell.PlayedReplay is not null);
         W("TextEntryChat").SetHidden(true);
@@ -37,7 +40,9 @@ public sealed class ScoreScreenScreen : ShellScreen
             SetRowHidden(row, !hasPlayer);
             if (!hasPlayer) continue;
             var entry = result.Rows[row];
-            W($"StaticTextPlayer{row}").SetText(entry.Player.Name);
+            W($"StaticTextPlayer{row}").SetText(result.Analysis?.PlayerOf(entry.Player.Id.Value) is { } named ? AnalysisCharts.LabelOf(named) : entry.Player.Name);
+            if (shell.Skin.IsModern && result.Analysis?.PlayerOf(entry.Player.Id.Value) is { } colored)
+                W($"StaticTextPlayer{row}").SetTextColor(CnCNew.Ui.Skins.ModernLayout.Readable(new CnCNew.Ui.Wnd.WndColor((byte)AnalysisPalette.Red(colored.ColorRgb), (byte)AnalysisPalette.Green(colored.ColorRgb), (byte)AnalysisPalette.Blue(colored.ColorRgb), 255)));
             var tally = entry.Tally;
             W($"StaticTextUnitsBuilt{row}").SetText(tally is null ? "-" : tally.UnitsBuilt.ToString());
             W($"StaticTextUnitsLost{row}").SetText(tally is null ? "-" : tally.UnitsLost.ToString());
@@ -49,8 +54,22 @@ public sealed class ScoreScreenScreen : ShellScreen
             W($"StaticTextObserver{row}").SetHidden(true);
             W($"GameWindowWinner{row}").SetHidden(!entry.IsWinner);
         }
+        if (result.Analysis is { } analysis) ShowTacticalAnalysis(analysis);
         // ScoreScreenInit (skirmish): the rows appear one after the other and the numbers count up. Started last, because COUNTUP reads the numbers set above.
         Transitions?.SetGroup("ScoreScreenShow");
+    }
+
+    /// <summary>The panel "Tactical Analysis" (<c>ListboxWarschoolAdvice</c>, <see cref="TacticalAdvice"/>); the panel's title stands on the list's first lines in the layout.</summary>
+    private void ShowTacticalAnalysis(MatchAnalysis analysis)
+    {
+        var list = W("ListboxWarschoolAdvice");
+        var measure = Tree.Services.TextMeasure;
+        var width = UiGadgetGeometry.ListContent(list).Width - 2 * list.Transform.X.Length(UiGadgetGeometry.TextInset);
+        if (!Shell.Skin.IsModern)
+            for (var line = 0; line * UiGadgetGeometry.RowHeight(list) < W("StaticTextWarSchool").Rect.Bottom - list.Rect.Y; line++) list.AddListRow(new UiListRow(string.Empty));
+        foreach (var advice in TacticalAdvice.For(analysis, null, Text))
+            foreach (var line in CnCNew.Ui.Rendering.UiSentenceLayout.Layout(advice, list.Font, measure, width, false).Lines)
+                list.AddListRow(new UiListRow(line.Text));
     }
 
     private static readonly string[] RowFieldPrefixes =

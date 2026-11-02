@@ -186,6 +186,13 @@ public sealed class SpectatorHud
         _minimap = new UiRect(radarFrame.X + 2, radarFrame.Y + 2, radarFrame.Width - 4, radarFrame.Height - 4);
         commands.Add(new UiCustomDraw("W3DLeftHUDDraw", "Spectator:Radar", _minimap));
         commands.Add(new UiPushClip(_minimap));
+        var own = _match.Camera.GroundFootprint();
+        for (var corner = 0; corner < own.Length; corner++)
+        {
+            var from = MinimapScreen(own[corner]);
+            var to = MinimapScreen(own[(corner + 1) % own.Length]);
+            commands.Add(new UiLineDraw(from.X, from.Y, to.X, to.Y, 1f, WndColor.White));
+        }
         for (var index = 0; index < controller.Cameras.Length; index++)
         {
             var color = ColorOf(controller.Cameras[index].Player);

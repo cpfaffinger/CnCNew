@@ -50,6 +50,7 @@ public sealed partial class MatchController
     private readonly CommandButtonDescription _descriptions;
     private readonly UiWindowTree _tree;
     private readonly UiWindow _controlBarRoot;
+    private readonly ModernControlBar? _modernBar;
     private readonly UiWindow _quitMenuRoot;
     private readonly UiWindow _leftHud;
     private readonly UiScaleOptions _scaleOptions;
@@ -94,9 +95,11 @@ public sealed partial class MatchController
         _tree = new UiWindowTree(viewport, _scaleOptions, services);
         _tree.TooltipOverride = CommandButtonTooltip;
 
-        // The modern skin keeps the bar's art and changes its type (docs/UI-MODERN.md section 3); the in-game menu is drawn like the shell's dialogs.
+        // The modern skin keeps the bar's pictures (cameos, portraits, the small buttons) and changes their type; the band around them is its own (ModernControlBar). The in-game menu is drawn like the shell's dialogs.
         var controlBarRoots = _tree.AddLayout(Skin.Derive(_assets.ControlBar, _assets.HeaderTemplates, keepArt: true));
         _controlBarRoot = controlBarRoots.Single(window => window.Name == "ControlBar.wnd:ControlBarParent");
+        _modernBar = Skin.IsModern ? new ModernControlBar(_tree, _controlBarRoot, Skin) : null;
+        if (_modernBar is not null) _tree.FindByName("ControlBar.wnd:ButtonGeneral")?.SetEnabledImage0(null);
         _leftHud = _tree.FindByName("ControlBar.wnd:LeftHUD") ?? throw new InvalidOperationException("ControlBar.wnd has no LeftHUD window.");
         // The retail file leaves the observer panels visible; this HUD is for the human player only.
         _tree.FindByName("ControlBar.wnd:ObserverPlayerInfoWindow")?.SetHidden(true);
@@ -318,16 +321,42 @@ public sealed partial class MatchController
         // LeftHUDInput: without a radar (or with it hidden) the window eats the input; the click does not reach the world.
         if (!rect.Contains((int)screen.X, (int)screen.Y) || !Match.RadarOn) return false;
         var minimap = Match.Minimap;
-        var scale = Math.Min(rect.Width / (float)minimap.Width, rect.Height / (float)minimap.Height);
-        var drawWidth = minimap.Width * scale;
-        var drawHeight = minimap.Height * scale;
-        var offsetX = rect.X + (rect.Width - drawWidth) / 2f;
-        var offsetY = rect.Y + (rect.Height - drawHeight) / 2f;
-        var px = (screen.X - offsetX) / scale;
-        var py = (screen.Y - offsetY) / scale;
+        var (scale, offset) = MinimapFit(rect);
+        var px = (screen.X - offset.X) / scale;
+        var py = (screen.Y - offset.Y) / scale;
         if (px < 0 || py < 0 || px >= minimap.Width || py >= minimap.Height) return false;
         world = minimap.PixelToWorld(new Vector2(px, py));
         return true;
+    }
+
+    /// <summary>The scale and the top-left corner of the minimap inside its window, the aspect-preserving rule the client draws it with.</summary>
+    private (float Scale, Vector2 Offset) MinimapFit(UiRect rect)
+    {
+        var minimap = Match.Minimap;
+        var scale = Math.Min(rect.Width / (float)minimap.Width, rect.Height / (float)minimap.Height);
+        return (scale, new Vector2(rect.X + (rect.Width - minimap.Width * scale) / 2f, rect.Y + (rect.Height - minimap.Height * scale) / 2f));
+    }
+
+    /// <summary>
+    /// The camera's footprint on the radar as lines of this frame: the radar's picture is composed four times a second, and the frame must follow the camera, which moves in
+    /// every drawn frame. Drawn over the radar's window; the client's picture no longer holds it.
+    /// </summary>
+    private void AddRadarOutline(ImmutableArray<UiDrawCommand>.Builder commands, UiRect rect)
+    {
+        if (!Match.RadarOn) return;
+        var (scale, offset) = MinimapFit(rect);
+        var minimap = Match.Minimap;
+        var clip = new UiRect((int)MathF.Floor(offset.X), (int)MathF.Floor(offset.Y), (int)MathF.Ceiling(minimap.Width * scale), (int)MathF.Ceiling(minimap.Height * scale));
+        var footprint = Match.Camera.GroundFootprint();
+        var thickness = MathF.Max(1f, MathF.Round(rect.Height / 170f));
+        commands.Add(new UiPushClip(clip));
+        for (var corner = 0; corner < footprint.Length; corner++)
+        {
+            var from = offset + minimap.WorldToPixel(footprint[corner]) * scale;
+            var to = offset + minimap.WorldToPixel(footprint[(corner + 1) % footprint.Length]) * scale;
+            commands.Add(new UiLineDraw(from.X, from.Y, to.X, to.Y, thickness, WndColor.White));
+        }
+        commands.Add(new UiPopClip());
     }
 
     private void OnInputUiRequest(MetaAction action)
@@ -565,8 +594,9 @@ public sealed partial class MatchController
         var world = Match.World;
         var view = Match.Camera;
 
+        // Only the plain pointer draws a box: a drag while a building is placed turns the building, and a pending target takes clicks (OnGesture never selects in either mode).
         var box = SelectionBoxOverlay.None;
-        if (Input.State.HasMouse && Input.State.IsDragging(MouseButton.Left) && Input.State.PressPosition(MouseButton.Left) is { } start)
+        if (Input.Commands.Mode == CommandModeKind.None && Input.State.HasMouse && Input.State.IsDragging(MouseButton.Left) && Input.State.PressPosition(MouseButton.Left) is { } start)
             box = new SelectionBoxOverlay(true, start, Input.State.MousePosition);
 
         var selected = ImmutableArray.CreateBuilder<UnitMarker>();
@@ -728,6 +758,7 @@ public sealed partial class MatchController
         if (width < 1 || height < 1) throw new ArgumentOutOfRangeException(nameof(width), "The viewport needs at least 1x1 pixels.");
         if (_tree.Viewport.Width != width || _tree.Viewport.Height != height) _tree.SetViewport(new UiViewport(width, height), _scaleOptions);
 
+        _modernBar?.Place();
         RefreshDynamicWindows();
         RefreshGeneralsWindow();
         RefreshBeaconButton();
@@ -738,7 +769,7 @@ public sealed partial class MatchController
         // The scheme art is drawn by two marker windows of the control bar (W3DCommandBarBackgroundDraw, W3DCommandBarForegroundDraw): the background under the windows that
         // follow the marker, the foreground over those before it. The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons)
         // lies between the 3D scene and the control bar chrome.
-        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BarBand(width, height)).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
+        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BarChrome()).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
             .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         // InGameUI::postDraw: the message lines lie over the windows.
         if (OwnsMessageList && !Messages.Log.IsEmpty) commands = commands.AddRange(MissionTextOverlay.Messages(Messages.Log, TextStyle, _scaleOptions, _textMeasure, width, height));
@@ -749,19 +780,21 @@ public sealed partial class MatchController
         return baseList with { Commands = commands };
     }
 
-    /// <summary>
-    /// The modern skin keeps the command bar in proportion (docs/UI-MODERN.md section 3): where the window is wider than the bar, the band beside it is the skin's
-    /// canvas colour from the bar's top line down, so the world view ends at the same line across the whole width. Nothing in the original skin (the bar fills the width).
-    /// </summary>
-    private ImmutableArray<UiDrawCommand> BarBand(int width, int height)
+    /// <summary>The band of the modern skin under the bar's windows (<see cref="ModernControlBar"/>); nothing while a mission has hidden the bar, and nothing in the original skin, whose art the marker windows draw.</summary>
+    private ImmutableArray<UiDrawCommand> BarChrome() => _modernBar is { } bar && !_controlBarRoot.IsHidden ? bar.Chrome() : [];
+
+    /// <summary>What the selection plate of the modern bar shows.</summary>
+    private ModernSelection? SelectionForPlate()
     {
-        if (!Skin.IsModern) return [];
-        var bar = _controlBarRoot.Rect;
-        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>(2);
-        var color = Skin.Style.Palette.Canvas;
-        if (bar.X > 0) commands.Add(new UiFillRect(new UiRect(0, bar.Y, bar.X, height - bar.Y), color));
-        if (bar.Right < width) commands.Add(new UiFillRect(new UiRect(bar.Right, bar.Y, width - bar.Right, height - bar.Y), color));
-        return commands.ToImmutable();
+        var entities = Input.Selection.Selected.Select(Match.World.FindEntity).Where(entity => entity is not null).Select(entity => entity!).ToArray();
+        if (entities.Length == 0) return null;
+        var first = entities[0];
+        var health = first.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
+        if (entities.Length == 1) return new ModernSelection(_descriptions.DisplayName(first.Template.Name), 1, health, []);
+        var kinds = ImmutableArray.CreateBuilder<(string, int)>();
+        foreach (var group in entities.GroupBy(entity => entity.Template.Name, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
+            if (Match.Data.Visuals.TryGet(group.Key, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _)) kinds.Add((image, group.Count()));
+        return new ModernSelection(entities.Length.ToString(CultureInfo.InvariantCulture) + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable());
     }
 
     /// <summary>
@@ -792,19 +825,24 @@ public sealed partial class MatchController
     /// </summary>
     private ImmutableArray<UiDrawCommand> ResolveControlBarCallbacks(ImmutableArray<UiDrawCommand> commands)
     {
-        if (_scheme is not { } scheme) return commands;
-        var result = ImmutableArray.CreateBuilder<UiDrawCommand>(commands.Length + scheme.ImageParts.Length);
+        var result = ImmutableArray.CreateBuilder<UiDrawCommand>(commands.Length + (_scheme?.ImageParts.Length ?? 0) + 6);
         foreach (var command in commands)
         {
             switch (command)
             {
-                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" }:
+                case UiCustomDraw { Callback: "W3DLeftHUDDraw" } radar:
+                    result.Add(radar);
+                    AddRadarOutline(result, radar.Rect);
+                    break;
+                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" or "W3DCommandBarForegroundDraw" } when _modernBar is not null:
+                    break;
+                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" } when _scheme is { } scheme:
                     AddSchemeParts(result, scheme, scheme.BackgroundParts);
                     break;
-                case UiCustomDraw { Callback: "W3DCommandBarForegroundDraw" }:
+                case UiCustomDraw { Callback: "W3DCommandBarForegroundDraw" } when _scheme is { } scheme:
                     AddSchemeParts(result, scheme, scheme.ForegroundParts);
                     break;
-                case UiCustomDraw { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" } rightHud:
+                case UiCustomDraw { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" } rightHud when _scheme is { } scheme:
                     if (_showsSideLogo && SchemeImage(scheme.RightHudImage) is { } logo) result.Add(new UiImageDraw(logo, rightHud.Rect, WndColor.White, false, false));
                     break;
                 default:
@@ -853,7 +891,7 @@ public sealed partial class MatchController
         Button("ControlBar.wnd:ButtonIdleWorker", scheme.WorkerImages);
         Button("ControlBar.wnd:ButtonPlaceBeacon", scheme.BeaconImages);
         Button("ControlBar.wnd:PopupCommunicator", scheme.ChatImages);
-        Button("ControlBar.wnd:ButtonGeneral", scheme.GeneralImages);
+        if (_modernBar is null) Button("ControlBar.wnd:ButtonGeneral", scheme.GeneralImages);
         // ControlBar::setUpDownImages: the toggle of a control bar that is up shows the "down" images; it has no disabled image.
         Button("ControlBar.wnd:ButtonLarge", scheme.ToggleDownImages, withDisabled: false);
         if (_tree.FindByName("ControlBar.wnd:WinUAttack") is { } glow)
@@ -912,7 +950,7 @@ public sealed partial class MatchController
         // puts it at the scheme's money rectangle. The layout file keeps a placeholder text and a 100x100 rectangle at the top left.
         _tree.FindByName("ControlBar.wnd:MoneyDisplay")?.SetText(_assets.Text.Format("GUI:ControlBarMoneyDisplay", (int)Hud.Money.ToDecimal()));
         // ControlBarScheme::init puts the money window, the power window (the bar is drawn there, and its description pops up there) and the bar's own buttons at the scheme's rectangles.
-        if (_scheme is { } placed) PlaceSchemeWindows(placed);
+        if (_scheme is { } placed && _modernBar is null) PlaceSchemeWindows(placed);
         _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
@@ -959,6 +997,8 @@ public sealed partial class MatchController
         return SuperweaponTimers.Draw(lines, player => { var house = Match.Colors.Of(player); return new WndColor(house.Red, house.Green, house.Blue, 255); }, Match.Clock.OriginalFrames, width, height, _controlBarRoot.Rect.Y, _textMeasure, TextStyle, _scaleOptions);
     }
 
+    private static readonly WndColor CantAffordTint = new(144, 144, 144, 255);
+
     private ImmutableArray<UiDrawCommand> BuildDynamicCommands()
     {
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
@@ -969,8 +1009,9 @@ public sealed partial class MatchController
             var button = CommandBar[slot];
             if (button is null || button.Availability == ButtonAvailability.Hidden) continue;
             var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
+            // W3DGadgetPushButtonImageDraw: a disabled button that is merely not ready keeps its colours under the clock, one the player cannot pay for is dark (0x90), any other grey.
             if (button.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(button.Button.ButtonImage, out _))
-                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, WndColor.White, false, false));
+                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, button.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false) { Grayscale = button.Availability == ButtonAvailability.Restricted });
             // W3DGadgetPushButtonImageDraw: WIN_STATUS_FLASHING lays the pushed overlay over the cameo.
             if (_flashing.Contains(button.Button.Name) && _assets.Images.TryGet("Cameo_push", out _)) commands.Add(new UiImageDraw("Cameo_push", rect, WndColor.White, false, false));
             if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)
@@ -993,7 +1034,16 @@ public sealed partial class MatchController
             }
         }
 
-        if (_scheme is { } scheme)
+        if (_modernBar is { } modern)
+        {
+            if (!_controlBarRoot.IsHidden)
+            {
+                commands.AddRange(modern.Power(Hud.EnergyProduction, Hud.EnergyConsumption, _textMeasure, _scaleOptions.TextScale));
+                commands.AddRange(modern.Selection(SelectionForPlate(), _textMeasure, _scaleOptions.TextScale));
+                if (Generals is { } general) commands.AddRange(modern.General(_assets.Text.Get("SCIENCE:Rank" + general.RankLevel.ToString(CultureInfo.InvariantCulture)), general.ProgressPercent, StarBlinks && _starFlash, _textMeasure, _scaleOptions.TextScale));
+            }
+        }
+        else if (_scheme is { } scheme)
         {
             var powerRect = SchemeRectOnScreen(scheme, scheme.PowerBar);
             var powerColor = Hud.Underpowered ? new WndColor(220, 40, 40, 255) : new WndColor(40, 200, 60, 255);
