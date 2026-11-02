@@ -10,13 +10,25 @@ namespace CnCNew.Client.Stride.Layers.Objects;
 /// </summary>
 internal static class ModelPreload
 {
+    private const double PumpIntervalMs = 100;
+
     public static void Run(ModelAssetCache assets, LiveGame match)
     {
+        // A server drops a member it has not heard from for 10 s, and this takes that long on a busy machine; a match that already runs cannot wait for it at all.
+        var remote = (match as LiveMatch)?.Remote;
+        if (remote?.Client.Phase == CnCNew.Net.ClientPhase.InMatch) return;
         var start = Stopwatch.GetTimestamp();
+        var pumped = start;
         var models = ModelsOf(match);
         var teams = match.Players.Select(player => match.Colors.Of(player.Id)).Distinct().ToArray();
         foreach (var model in models)
         {
+            if (remote is not null && Stopwatch.GetElapsedTime(pumped).TotalMilliseconds >= PumpIntervalMs)
+            {
+                remote.Pump();
+                pumped = Stopwatch.GetTimestamp();
+            }
+
             if (assets.Get(model) is not { } asset) continue;
             foreach (var team in teams) asset.Prepare(team);
         }
