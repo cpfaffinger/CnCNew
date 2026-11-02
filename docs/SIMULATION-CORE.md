@@ -4827,3 +4827,9 @@ A list of the keys of the compatibility baseline that no code names found these;
 **A wheeled unit reverses** (`CanMoveBackwards`, `moveTowardsPositionWheels`): at rest, with its goal behind it and at most five radii of way left. Over a longer way the original makes a three-point turn; the port's mover turns on the spot, as it does for every other unit.
 
 **Toppling and disguise show their effects** (`ToppleStartFX`, `ToppleDoneFX`, `CrushingFX`, `DisguiseFX`, `DisguiseRevealFX`).
+
+**A look goes on** (`UnlookPersistDuration`, `Object::look`, `queueUndoShroudReveal`): an object looks from where it stood when it entered its partition cell of `PartitionCellSize`, not from where it stands; when it enters another one, or its sight or its viewers change, or it dies, that look goes on for five seconds. Looks and the queue are saved with the world. The port's refresh keeps its own rhythm of three frames (`VisionIntervalFrames`), so a look is taken up to three frames after the crossing.
+
+**A transport comes with its payload** (`InitialPayload`, `TransportContain::createPayload`): the key was read for a bike's rider only, so a Troop Crawler came out of the factory without its eight Red Guards. The riders exist a frame after the transport and sit in it a frame later, as the bike's rider does. The keys of the catalogue are typed now.
+
+**A second life wears its armour** (`ArmorSet Conditions = SECOND_LIFE`).
