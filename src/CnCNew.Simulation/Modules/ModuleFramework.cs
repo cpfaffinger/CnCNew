@@ -54,6 +54,12 @@ public interface IWorldServices
     /// <summary><c>Pathfinder::updateLayer</c>: the object goes onto the layer if it is close enough to it, else onto the ground.</summary>
     void UpdateLayer(Entity entity, int layer);
 
+    /// <summary>The object's <c>SubdualDamageHelper</c> wakes up (<c>notifySubdualDamage</c>).</summary>
+    void BeginSubdualHealing(Entity entity);
+
+    /// <summary><c>ContainModuleInterface::orderAllPassengersToIdle</c>: the riders of a subdued container stop what they attack.</summary>
+    void OrderRidersToIdle(Entity container);
+
     /// <summary><c>Object::setLayer</c>.</summary>
     void SetLayer(Entity entity, int layer);
 

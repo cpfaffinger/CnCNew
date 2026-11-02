@@ -224,6 +224,7 @@ public sealed partial class SimulationWorld
             HackedUntil = reader.Has("hackedUntil") ? reader.Int("hackedUntil") : 0,
             ParalyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0,
             Underpowered = reader.Has("underpowered") && reader.Bool("underpowered"),
+            Subdued = reader.Has("subdued") && reader.Bool("subdued"),
             ScriptDisableMask = reader.Has("scriptDisableMask") ? checked((byte)reader.Int("scriptDisableMask")) : (byte)0,
             OwnAttitude = reader.Has("attitude") ? checked((int)reader.Int("attitude")) : null,
             RepulsorUntil = reader.Has("repulsorUntil") ? reader.Int("repulsorUntil") : 0,

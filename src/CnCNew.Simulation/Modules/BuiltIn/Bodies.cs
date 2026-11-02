@@ -9,8 +9,6 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
 /// Body configuration. Defaults (all zero) equal the <c>ActiveBodyModuleData</c> constructor of the reference.
-/// The subdual fields are validated and kept, but subdual damage itself is not simulated in phase 4 (it belongs to the
-/// disabled-state system of phase 5): bodies report <see cref="DamageOutcome.NoEffect"/> for subdual damage types.
 /// </summary>
 public sealed record BodyData(Fixed MaxHealth, Fixed InitialHealth, Fixed SubdualDamageCap, long SubdualHealTicks, Fixed SubdualHealAmount) : ModuleData
 {
@@ -44,6 +42,11 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
 
     private readonly string _name;
     private readonly Fixed _initialHealth;
+    private readonly Fixed _subdualCap;
+    private readonly long _subdualHealTicks;
+    private readonly Fixed _subdualHealAmount;
+    /// <summary>The tick of the next step of <c>SubdualDamageHelper</c>; every hit puts it off by the whole rate.</summary>
+    private long _nextSubdualHeal;
 
     public ActiveBody(BodyData data, string name = "ActiveBody")
     {
@@ -52,12 +55,24 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         Health = data.InitialHealth;
         PreviousHealth = data.InitialHealth;
         _initialHealth = data.InitialHealth;
+        _subdualCap = data.SubdualDamageCap;
+        _subdualHealTicks = data.SubdualHealTicks;
+        _subdualHealAmount = data.SubdualHealAmount;
     }
 
     public override string ModuleName => _name;
     public Fixed Health { get; protected set; }
     public Fixed MaxHealth { get; protected set; }
     public Fixed PreviousHealth { get; protected set; }
+
+    /// <summary><c>m_currentSubdualDamage</c>.</summary>
+    public Fixed SubdualDamage { get; private set; }
+
+    /// <summary><c>ActiveBody::isSubdued</c>: as much subdual damage as the body has health.</summary>
+    public bool IsSubdued => MaxHealth <= SubdualDamage;
+
+    /// <summary><c>ActiveBody::canBeSubdued</c>: what is a fighter's estimate of a subdual weapon against this body worth (<c>estimateDamage</c>).</summary>
+    public bool CanBeSubdued => _subdualCap > Fixed.Zero;
 
     /// <summary><c>ActiveBody::calcDamageState</c>'s result, kept current by <see cref="InternalChangeHealth"/> exactly like the reference's <c>setCorrectDamageState</c> call inside <c>internalChangeHealth</c>.</summary>
     public int DamageState { get; private set; }
@@ -132,8 +147,20 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
             KillGarrisoned(world, info);
             return DamageOutcome.NoEffect;
         }
-        if (DamageTypes.IsSubdual(info.DamageType) || info.DamageType is DamageTypes.KillPilot or DamageTypes.Status)
-            return DamageOutcome.NoEffect;
+        if (DamageTypes.IsSubdual(info.DamageType))
+        {
+            if (!CanBeSubdued || amount <= Fixed.Zero) return DamageOutcome.NoEffect;
+            AddSubdualDamage(world, amount);
+            if (_subdualHealTicks > 0)
+            {
+                _nextSubdualHeal = world.Tick + _subdualHealTicks;
+                world.BeginSubdualHealing(Entity);
+            }
+            RecordDamage(world, info);
+            world.MarkDirty(Entity);
+            return DamageOutcome.Applied;
+        }
+        if (info.DamageType is DamageTypes.KillPilot or DamageTypes.Status) return DamageOutcome.NoEffect;
         // ActiveBody::attemptDamage: the body's damage scalar (the strategy center's hold-the-line plan) applies to everything but unresistable damage.
         if (info.DamageType != DamageTypes.Unresistable) amount *= world.DamageScalarOf(Entity);
         if (amount <= Fixed.Zero && !info.Kill) return DamageOutcome.NoEffect;
@@ -177,6 +204,35 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
     /// only by a damage whose source exists - and, when the recorded source exists too, only by one from a vehicle, infantry or faction structure ("we prefer the one that tells
     /// who the attacker is"). Then the victim's player learns it was attacked when the recorded source exists (<c>Player::setAttackedBy</c>). (F-52)
     /// </summary>
+    /// <summary><c>internalAddSubdualDamage</c> and <c>onSubdualChange</c>: at the cap and no further, and the object is disabled or set free when the line to its health is crossed.</summary>
+    private void AddSubdualDamage(IWorldServices world, Fixed delta)
+    {
+        var was = IsSubdued;
+        SubdualDamage = Fixed.Min(SubdualDamage + delta, _subdualCap);
+        var now = IsSubdued;
+        if (was == now) return;
+        if (Entity.Template.IsKindOf("PROJECTILE"))
+        {
+            // "There is no coming back from being jammed."
+            if (now)
+                foreach (var module in Entity.ModuleArray)
+                    if (module is MissileAIUpdate missile) missile.ProjectileNowJammed(world);
+            return;
+        }
+        Entity.Subdued = now;
+        if (now) world.OrderRidersToIdle(Entity);
+    }
+
+    /// <summary><c>SubdualDamageHelper::update</c>, in the rate of the data: false when the body has none left.</summary>
+    internal bool StepSubdualHealing(IWorldServices world, long tick)
+    {
+        if (tick < _nextSubdualHeal) return true;
+        _nextSubdualHeal = tick + _subdualHealTicks;
+        AddSubdualDamage(world, -_subdualHealAmount);
+        world.MarkDirty(Entity);
+        return SubdualDamage > Fixed.Zero;
+    }
+
     private void RecordDamage(IWorldServices world, in DamageInfo info)
     {
         var replace = true;
@@ -237,6 +293,11 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         writer.Fixed("maxHealth", MaxHealth);
         writer.Fixed("previousHealth", PreviousHealth);
         writer.Int("damageState", DamageState);
+        if (SubdualDamage != Fixed.Zero)
+        {
+            writer.Fixed("subdualDamage", SubdualDamage);
+            writer.Int("nextSubdualHeal", _nextSubdualHeal);
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -245,6 +306,11 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         MaxHealth = reader.Fixed("maxHealth");
         PreviousHealth = reader.Fixed("previousHealth");
         DamageState = checked((int)reader.Int("damageState"));
+        if (reader.Has("subdualDamage"))
+        {
+            SubdualDamage = reader.Fixed("subdualDamage");
+            _nextSubdualHeal = reader.Int("nextSubdualHeal");
+        }
     }
 }
 

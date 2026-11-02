@@ -386,7 +386,7 @@ public sealed partial class SimulationWorld
     /// (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held rider still looks for victims and fires.
     /// </summary>
     private bool MayAct(Entity entity, long tick)
-        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.IsDisabledByTime(tick)
+        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.IsDisabledByTime(tick) && !entity.Subdued
            && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
 
     /// <summary>
@@ -511,6 +511,15 @@ public sealed partial class SimulationWorld
         }
 
         return true;
+    }
+
+    /// <inheritdoc cref="IWorldServices.OrderRidersToIdle"/>
+    public void OrderRidersToIdle(Entity container)
+    {
+        if (container.Container is not { } contain) return;
+        foreach (var id in contain.Contained)
+            if (FindEntity(id) is { Acquisition: { Victim.IsValid: true } state } rider && Array.Find(rider.ModuleArray, module => module is AIUpdateInterface) is AIUpdateInterface ai)
+                EndEngagement(rider, ai, state);
     }
 
     private void EndEngagement(Entity entity, AIUpdateInterface ai, AcquisitionState state)

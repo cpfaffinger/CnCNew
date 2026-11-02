@@ -125,6 +125,8 @@ public sealed partial class SimulationWorld
     {
         var template = victim.Template;
         if (template.IsKindOf("SHRUBBERY")) return weapon.DeathType == DeathTypes.Burned ? Fixed.One : Fixed.Zero;
+        // ActiveBody::estimateDamage: "Subdual damage can't affect you if you can't be subdued."
+        if (DamageTypes.IsSubdual(weapon.DamageType) && victim.Body is Modules.BuiltIn.ActiveBody { CanBeSubdued: false }) return Fixed.Zero;
         // getContain() is the first contain module of the object.
         if (weapon.DamageType == SniperDamageType && template.IsKindOf("STRUCTURE") && victim.Modules.OfType<Modules.IContainerModule>().FirstOrDefault() is { ContainCount: 0 }) return Fixed.Zero;
         // estimateDamage: DAMAGE_KILL_GARRISONED only against riders it can clear (1, a nonzero value), nothing otherwise.

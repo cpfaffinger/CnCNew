@@ -139,6 +139,8 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         if (world.Tick < _hackedUntil) return SimulationTiming.SleepNone;
+        // A subdued internet center sends its hackers idle, and they go back to work when it is free (onSubdualChange: "any unit inside an internet center is a hacker").
+        if (Entity.ContainedBy.IsValid && world.FindEntity(Entity.ContainedBy) is { Subdued: true }) return SimulationTiming.SleepNone;
         // The parent's idle test, not ours: a hacker that holds a pending order is never idle.
         if (_state == HackState.None && _hasPending && IsIdle)
         {

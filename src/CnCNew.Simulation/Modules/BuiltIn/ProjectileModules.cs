@@ -491,7 +491,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 /// <summary>
 /// <c>MissileAIUpdateModuleData</c> in simulation units: velocities per tick, durations in ticks, the lock distance defaults to 75, the kill-self
 /// delay to 3 ticks (the reference constructor). <c>DistanceToTargetBeforeDiving</c> ends the preferred height of a cruise missile (<see cref="MissileData.DiveDistance"/>);
-/// <c>DistanceScatterWhenJammed</c>, the reaction to ECM jamming, does not exist here (typed, not applied). <c>GarrisonHitKill*</c> act as a shell's do
+/// <c>DistanceScatterWhenJammed</c> is how far a jammed missile strays (<see cref="MissileAIUpdate.ProjectileNowJammed"/>). <c>GarrisonHitKill*</c> act as a shell's do
 /// (<see cref="DumbProjectileData"/>, <c>MissileAIUpdate::projectileHandleCollision</c>): when an armed missile reaches its victim and that is a garrisoned building.
 /// </summary>
 public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks, long IgnitionDelayTicks, Fixed InitialVelocity, Fixed DistanceToTravelBeforeTurning,
@@ -504,6 +504,9 @@ public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks,
     public ImmutableArray<string> GarrisonHitKillRequiredKindOf { get; init; } = [];
     public ImmutableArray<string> GarrisonHitKillForbiddenKindOf { get; init; } = [];
     public string GarrisonHitKillFx { get; init; } = string.Empty;
+
+    /// <summary><c>DistanceScatterWhenJammed</c>.</summary>
+    public int ScatterWhenJammed { get; init; } = 75;
 
     public static MissileData Parse(RatedModuleConfiguration configuration)
     {
@@ -526,6 +529,7 @@ public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks,
             GarrisonHitKillRequiredKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillRequiredKindOf")?.Names ?? [],
             GarrisonHitKillForbiddenKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillForbiddenKindOf")?.Names ?? [],
             GarrisonHitKillFx = ModuleConfigReader.Text(configuration, "GarrisonHitKillFX"),
+            ScatterWhenJammed = ModuleConfigReader.Real(configuration, "DistanceScatterWhenJammed", Fixed.FromInt(75)).Floor() is var scatter ? checked((int)scatter) : 75,
         };
         MissileFrames.Register(data, configuration.Time, velocity);
         return data;
@@ -854,6 +858,25 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _goal = new Point3(flare.X, flare.Y, flare.Z);
         _originalTarget = _goal;
     }
+
+    /// <summary><c>MissileAIUpdate::projectileNowJammed</c>: the missile loses its victim and flies on to a place near it, drawn with its <c>JAMMED</c> state.</summary>
+    public void ProjectileNowJammed(IWorldServices world)
+    {
+        if (Jammed) return;
+        Jammed = true;
+        var target = _tracking && world.FindEntity(_victim) is { } victim ? new Point3(victim.X, victim.Y, victim.Z) : _goal;
+        // GameLogicRandomValue takes integers.
+        var x = target.X + Fixed.FromInt(world.LogicRandom.Range(-data.ScatterWhenJammed, data.ScatterWhenJammed));
+        var y = target.Y + Fixed.FromInt(world.LogicRandom.Range(-data.ScatterWhenJammed, data.ScatterWhenJammed));
+        _goal = new Point3(x, y, world.LayerHeightAt(x, y, world.HighestLayerFor(x, y, target.Z)));
+        _originalTarget = _goal;
+        _tracking = false;
+        _victim = EntityId.Invalid;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>MODELCONDITION_JAMMED</c>.</summary>
+    public bool Jammed { get; private set; }
 
     /// <summary><c>doIgnitionState</c>: arm, request the ignition effect, start the fuel clock, attack without turning.</summary>
     private void Ignite(IWorldServices world)
@@ -1203,6 +1226,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         writer.UInt("conditions", _conditions);
         writer.Bool("armed", _armed);
         writer.Bool("tracking", _tracking);
+        if (Jammed) writer.Bool("jammed", true);
         writer.Int("fuelExpiration", _fuelExpiration == long.MaxValue ? -1 : _fuelExpiration);
         writer.Fixed("noTurnDistanceLeft", _noTurnDistanceLeft);
         DumbProjectileBehavior.WritePoint(writer, "previous", _previous);
@@ -1252,6 +1276,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _conditions = checked((uint)reader.UInt("conditions"));
         _armed = reader.Bool("armed");
         _tracking = reader.Bool("tracking");
+        Jammed = reader.Has("jammed") && reader.Bool("jammed");
         var fuel = reader.Int("fuelExpiration");
         _fuelExpiration = fuel < 0 ? long.MaxValue : fuel;
         _noTurnDistanceLeft = reader.Fixed("noTurnDistanceLeft");

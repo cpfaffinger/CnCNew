@@ -341,7 +341,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     /// <summary>
     /// <c>GarrisonContain::isPassengerAllowedToFire</c>: "a GarrisonContain always lets people shoot out" - whatever the data's flag says and whatever the rider is - unless the
-    /// building is <c>DISABLED_SUBDUED</c>. Nothing in this simulation sets <c>DISABLED_SUBDUED</c> yet (there is no subdual damage), so the test never refuses here today.
+    /// building is <c>DISABLED_SUBDUED</c>.
     /// </summary>
     public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => (world.DisabledFlagsOf(Entity) & DisabledMask.Subdued) == 0;
 

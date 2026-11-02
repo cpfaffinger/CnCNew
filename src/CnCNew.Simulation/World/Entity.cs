@@ -266,6 +266,9 @@ public sealed class Entity
     /// <summary><c>DISABLED_UNDERPOWERED</c>: a <c>POWERED</c> object of a player in a brown-out (<c>Player::onPowerBrownOutChange</c>).</summary>
     public bool Underpowered { get; internal set; }
 
+    /// <summary><c>DISABLED_SUBDUED</c>: the body holds as much subdual damage as it has health (<see cref="Modules.BuiltIn.ActiveBody.IsSubdued"/>).</summary>
+    public bool Subdued { get; internal set; }
+
     /// <summary>Whether the object's disabled edge is up (<see cref="SimulationWorld"/>'s <c>onDisabledEdge</c>); derived, rebuilt when a snapshot is restored.</summary>
     internal bool DisabledEdge { get; set; }
 
@@ -303,6 +306,7 @@ public sealed class Entity
         if (HackedUntil > tick) mask |= DisabledMask.Hacked;
         if (ParalyzedUntil > tick) mask |= DisabledMask.Paralyzed;
         if (Underpowered) mask |= DisabledMask.Underpowered;
+        if (Subdued) mask |= DisabledMask.Subdued;
         if ((ScriptDisableMask & ScriptHeld) != 0) mask |= DisabledMask.Held;
         if ((ScriptDisableMask & ScriptDisabled) != 0) mask |= DisabledMask.ScriptDisabled;
         return mask;
@@ -438,6 +442,7 @@ public sealed class Entity
         if (HackedUntil != 0) writer.Int("hackedUntil", HackedUntil);
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);
+        if (Subdued) writer.Bool("subdued", true);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
         if (OwnAttitude is { } attitude) writer.Int("attitude", attitude);
         if (RepulsorUntil != 0) writer.Int("repulsorUntil", RepulsorUntil);
