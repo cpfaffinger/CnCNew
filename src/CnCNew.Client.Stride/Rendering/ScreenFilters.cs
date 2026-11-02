@@ -127,7 +127,7 @@ internal sealed class ScreenFilters : IDisposable
             _grey = new EffectInstance(new Effect(_device, result.Bytecode) { Name = "CnCNewGreyFilter" });
             GreyShaderState = "compiled";
         }
-        catch (Exception problem) when (problem is InvalidOperationException or ArgumentException or NotSupportedException)
+        catch (Exception problem) when (problem is not OutOfMemoryException) // A cut scene must not end the game over a filter, whatever the compiler lacks on this machine.
         {
             GreyShaderState = $"red channel: {problem.Message.ReplaceLineEndings(" ")}";
         }
