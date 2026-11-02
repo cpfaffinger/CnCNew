@@ -440,10 +440,12 @@ static partial class Tests
             // Save points in frames of the original plus an offset inside the frame: base building, team building, the first fight, late.
             long[] frames = [1, 37, 151, 420, 800, 1_333];
             var copies = new List<(ScriptedSkirmishSession Restored, long Tick)>();
+            var soldiers = 0;
             for (var index = 0; index < frames.Length; index++)
             {
                 var tick = session.World.Time.OriginalFrames(frames[index]) + index % perFrame;
                 while (session.World.Tick < tick && !session.IsOver) session.Step();
+                soldiers = Math.Max(soldiers, session.World.Entities.Count(entity => entity.Template.Name.EndsWith("Soldier", StringComparison.Ordinal)));
                 var saved = session.Save();
                 var restored = ScriptedSkirmishSession.Restore(saved, fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
                 Check.That(restored.StateHash() == session.StateHash(), $"{rate}: restored at tick {tick} (offset {index % perFrame} inside its frame) the session hashes the same.");
@@ -474,7 +476,7 @@ static partial class Tests
             var before = session.StateHash();
             session.World.AddSciencePoints(new PlayerId(1), 1);
             Check.That(session.StateHash() != before, $"{rate}: a change of the world changes the session hash.");
-            Check.That(session.World.Entities.Count(entity => entity.Template.Name.EndsWith("Soldier", StringComparison.Ordinal)) >= 2 && session.Engine.HasAiPlayers, "The match had teams to save.");
+            Check.That(soldiers >= 2 && session.Engine.HasAiPlayers, $"The match had teams to save ({soldiers} soldiers).");
         }
     }
 

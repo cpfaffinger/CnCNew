@@ -1610,12 +1610,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_goal == goal.Id && !Entity.HasMoveTarget) _goal = EntityId.Invalid;
     }
 
+    /// <summary>The tick in which this object decided its logic frame of the original: the first share of a step, or the first tick of a frame it stands through (waiting for its path).</summary>
+    private bool DecidedThisTick(IWorldServices world)
+        => _frameTicksLeft == Math.Max(_stride, 1) - 1 || (_frameTicksLeft == 0 && world.Time.BeginsFrameOf(Entity, world.Tick));
+
     private void UpdateEnter(IWorldServices world)
     {
         var container = world.FindEntity(_enterTarget);
         // Whether the container is still there is looked at once per logic frame of the original of this object, like every other look at another object: a container that
         // dies in the phases after the updates is found dead by the next 30 Hz step, not by the next tick of the same frame.
-        if (Entity.HasMoveTarget && _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
+        if (Entity.HasMoveTarget && !DecidedThisTick(world)) return;
         if (container is null || container.DestroyRequested || container.EffectivelyDead)
         {
             _enterTarget = EntityId.Invalid;
@@ -1644,7 +1648,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             // bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
             // Decided where the 30 Hz step decides it (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md): in the tick that decided a
             // logic frame's step, with both where that frame ends; the boarder is put there and goes in, in the first tick of the frame like a move that ends.
-            if (container.Template.IsKindOf("STRUCTURE") || _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
+            if (container.Template.IsKindOf("STRUCTURE") || !DecidedThisTick(world)) return;
             var touch = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
             var (endX, endY, _) = Entity.FrameEnd(world.Tick);
             var (insideX, insideY, _) = container.FrameEnd(world.Tick);
@@ -1796,7 +1800,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var brakingDistance = locomotor.Braking > Fixed.Zero ? speed * speed / (braking * Fixed.FromInt(2)) : Fixed.Zero;
         var remaining = distance;
         if (distance <= brakingDistance && _pathIndex < _path.Count - 1) remaining += TailLength();
-        var goalSpeed = remaining <= brakingDistance ? minSpeed : CappedFrameSpeed(topSpeed);
+        var cruise = CappedFrameSpeed(topSpeed);
+        var held = !air && HeldBehindAMover(world, ref cruise);
+        var goalSpeed = remaining <= brakingDistance ? minSpeed : cruise;
         if (FixedTrig.AngleDifference(Entity.Angle, desired).Abs() > MisalignedAngle)
         {
             goalSpeed = Fixed.Min(goalSpeed, minSpeed);
@@ -1806,13 +1812,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         speed = speed < goalSpeed
             ? Fixed.Min(goalSpeed, speed + acceleration)
             : Fixed.Max(goalSpeed, speed - braking);
+        // Locomotor::locoUpdate_moveTowardsPosition: "stop if we are about to run into the blocking object" (scrubVelocity2D), not by the brakes.
+        if (held) speed = Fixed.Min(speed, cruise);
         SetFrameSpeed(speed);
+        var aroundMovers = held && _blockedFrames > BlockedRepathFrames;
         // Standing units on the way (a dozer at work, a halted group) are unknown to the static path: plan once around them instead of rubbing along them while the local avoidance
         // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per second; a plan that no longer reaches the goal is dropped and the old path kept.
-        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && speed > Fixed.Zero && _pathWait == PathWait.None)
+        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && (speed > Fixed.Zero || aroundMovers) && _pathWait == PathWait.None)
         {
             // Look-ahead: the travel of about 25 logic frames of the original (a walking infantry sees 17 units, a fast vehicle 60).
-            var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * speed * BlockerLookAhead, FixedTrig.Sin(Entity.Angle) * speed * BlockerLookAhead);
+            // AIInternalMoveToState::update: blocked for two seconds, the path is computed again; the port's paths do not see units, so it is told the ones around.
+            var ahead = aroundMovers ? world.MoversInTheWay(Entity) : world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * speed * BlockerLookAhead, FixedTrig.Sin(Entity.Angle) * speed * BlockerLookAhead);
+            if (aroundMovers) _blockedFrames = 0;
             if (ahead.Count > 0)
             {
                 if (world.PathsQueued && !_viaPending)
@@ -2038,6 +2049,56 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary>"Never replanned": further back than any replan interval. A sentinel (also the snapshot's default), not a time.</summary>
     private long _blockerReplanTick = -1000;
+
+    /// <summary><c>m_blockedFrames</c>: the logic frames of the original this unit has been held up behind another on the move.</summary>
+    private long _blockedFrames;
+
+    /// <summary><c>m_isBlocked</c>, found when the last logic frame of the original ended (<see cref="SetBlocked"/>).</summary>
+    private bool _isBlocked;
+
+    /// <summary><c>m_curMaxBlockedSpeed</c>, per logic frame of the original.</summary>
+    private Fixed _curMaxBlockedSpeed = Fixed.MaxValue;
+
+    internal long BlockedFrames => _blockedFrames;
+
+    /// <summary><c>processCollision</c>'s answer of the frame that ended.</summary>
+    internal void SetBlocked(IWorldServices world, bool blocked, Fixed limit)
+    {
+        if (blocked == _isBlocked && limit == _curMaxBlockedSpeed) return;
+        (_isBlocked, _curMaxBlockedSpeed) = (blocked, limit);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>m_bumpSpeedLimit</c>, per logic frame of the original; <see cref="Fixed.MaxValue"/> is <c>FAST_AS_POSSIBLE</c>.</summary>
+    private Fixed _bumpSpeedLimit = Fixed.MaxValue;
+
+    /// <summary><c>getNumFramesBlocked() &gt; 2*LOGICFRAMES_PER_SECOND</c> of <c>AIInternalMoveToState::update</c>.</summary>
+    private const long BlockedRepathFrames = 2 * SimulationRate.OriginalFramesPerSecond;
+
+    private static readonly Fixed BumpDecay = Fixed.FromDecimal(0.95m), BumpRecovery = Fixed.FromDecimal(1.05m), BumpFloor = Fixed.FromDecimal(0.2m);
+
+    /// <summary>
+    /// <c>AIUpdateInterface::doLocomotor</c> on a path. Held up behind a unit on its way the mover takes that unit's speed and falls back from it by a twentieth per logic frame of the original
+    /// (<c>m_bumpSpeedLimit</c>); free again it comes back from at least a fifth of its speed by as much. True while it is held up and <paramref name="speed"/> is its limit.
+    /// </summary>
+    private bool HeldBehindAMover(IWorldServices world, ref Fixed speed)
+    {
+        var blocked = _isBlocked;
+        if (!blocked && _blockedFrames == 0 && _bumpSpeedLimit == Fixed.MaxValue) return false;
+        world.MarkDirty(Entity);
+        _blockedFrames = blocked ? _blockedFrames + 1 : 0;
+        if (blocked && speed > _curMaxBlockedSpeed)
+        {
+            _bumpSpeedLimit = Fixed.Min(_bumpSpeedLimit, _curMaxBlockedSpeed) * BumpDecay;
+            speed = _bumpSpeedLimit;
+            return true;
+        }
+        if (_bumpSpeedLimit == Fixed.MaxValue) return false;
+        _bumpSpeedLimit = Fixed.Max(_bumpSpeedLimit, speed * BumpFloor) * BumpRecovery;
+        if (_bumpSpeedLimit >= speed) _bumpSpeedLimit = Fixed.MaxValue;
+        else speed = _bumpSpeedLimit;
+        return false;
+    }
 
     // In ticks of the world's rate, resolved once on the first move (a module is created and restored without a world); derived, not state.
     private long _blockerReplanInterval;
@@ -2546,6 +2607,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             writer.Fixed("exitY", _exitY);
         }
         if (_blockerReplanTick > -1000) writer.Int("blockerReplanTick", _blockerReplanTick);
+        if (_blockedFrames != 0) writer.Int("blockedFrames", _blockedFrames);
+        if (_isBlocked) writer.Fixed("curMaxBlockedSpeed", _curMaxBlockedSpeed);
+        if (_bumpSpeedLimit != Fixed.MaxValue) writer.Fixed("bumpSpeedLimit", _bumpSpeedLimit);
         if (_frameSpeed != Fixed.Zero) writer.Fixed("frameSpeed", _frameSpeed);
         if (_moveHoldUntil != 0) writer.Int("moveHoldUntil", _moveHoldUntil);
         if (_frameTicksLeft > 0)
@@ -2613,6 +2677,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;
         _exitY = reader.Has("exitY") ? reader.Fixed("exitY") : Fixed.Zero;
         _blockerReplanTick = reader.Has("blockerReplanTick") ? reader.Int("blockerReplanTick") : -1000;
+        _blockedFrames = reader.Has("blockedFrames") ? reader.Int("blockedFrames") : 0;
+        _isBlocked = reader.Has("curMaxBlockedSpeed");
+        _curMaxBlockedSpeed = _isBlocked ? reader.Fixed("curMaxBlockedSpeed") : Fixed.MaxValue;
+        _bumpSpeedLimit = reader.Has("bumpSpeedLimit") ? reader.Fixed("bumpSpeedLimit") : Fixed.MaxValue;
         _frameSpeed = reader.Has("frameSpeed") ? reader.Fixed("frameSpeed") : Fixed.Zero;
         _moveHoldUntil = reader.Has("moveHoldUntil") ? reader.Int("moveHoldUntil") : 0;
         _frameTicksLeft = reader.Has("frameTicksLeft") ? checked((int)reader.Int("frameTicksLeft")) : 0;

@@ -1,0 +1,142 @@
+using CnCNew.Simulation.Modules.BuiltIn;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
+using CnCNew.Simulation.World;
+
+/// <summary>
+/// The owner's acceptance of 1 November 2026, motion and placement (docs/SIMULATION-CORE.md §75): each a test that fails on the code before its fix, at 30, 60 and 120 Hz.
+/// </summary>
+static partial class Tests
+{
+    private static IReadOnlyDictionary<string, string> MotionFiles() => new Dictionary<string, string>(SyntheticFixture.Files)
+    {
+        ["Data/INI/Object/MotionFixture.ini"] = """
+        Locomotor MotionTread
+          Surfaces = GROUND
+          TurnRate = 180.0
+          Speed = 30.0
+          Acceleration = 300.0
+          Braking = 300.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+        End
+        Locomotor MotionFoot
+          Surfaces = GROUND
+          TurnRate = 720.0
+          Speed = 18.0
+          Acceleration = 300.0
+          Braking = 300.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+        End
+        Object MotionTank
+          KindOf = SELECTABLE VEHICLE
+          Geometry = BOX
+          GeometryMajorRadius = 15.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 10.0
+          BuildCost = 10
+          BuildTime = 1
+          Locomotor = SET_NORMAL MotionTread
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object MotionFactory
+          KindOf = STRUCTURE IMMOBILE
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = ProductionUpdate Prod01
+            MaxQueueEntries = 3
+          End
+          Behavior = DefaultProductionExitUpdate Exit01
+            UnitCreatePoint = X:-70.0 Y:0.0 Z:0.0
+            NaturalRallyPoint = X:-90.0 Y:0.0 Z:0.0
+          End
+        End
+        Object MotionMan
+          KindOf = SELECTABLE INFANTRY
+          Geometry = CYLINDER
+          GeometryMajorRadius = 6.0
+          GeometryHeight = 10.0
+          Locomotor = SET_NORMAL MotionFoot
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """,
+    };
+
+    /// <summary>The widest change of a walker's direction between two logic frames of the original, in radians, and its largest step aside.</summary>
+    private static (double Turn, double Aside) WatchLine(SimulationWorld world, Entity unit, int factor, long frames, int lineY)
+    {
+        double turn = 0, aside = 0;
+        var last = (X: unit.X, Y: unit.Y);
+        double? heading = null;
+        for (var frame = 0; frame < frames; frame++)
+        {
+            for (var tick = 0; tick < factor; tick++) world.Step();
+            var (dx, dy) = ((unit.X - last.X).Raw / (double)Fixed.ScaleRaw, (unit.Y - last.Y).Raw / (double)Fixed.ScaleRaw);
+            last = (unit.X, unit.Y);
+            aside = Math.Max(aside, Math.Abs((unit.Y - Fixed.FromInt(lineY)).Raw / (double)Fixed.ScaleRaw));
+            if (Math.Abs(dx) + Math.Abs(dy) < 1e-6) { heading = null; continue; }
+            var now = Math.Atan2(dy, dx);
+            if (heading is { } before) turn = Math.Max(turn, Math.Abs(Math.IEEERemainder(now - before, 2 * Math.PI)));
+            heading = now;
+        }
+        return (turn, aside);
+    }
+
+    /// <summary>
+    /// UNIT-02: a tank behind infantry that walks the same way stuttered: the bounded avoidance shoved its step aside by 45 degrees, the path pulled it back, frame after frame.
+    /// <c>AIUpdateInterface::processCollision</c> holds it behind the soldier at his speed instead (<c>calculateMaxBlockedSpeed</c>, <c>m_bumpSpeedLimit</c>).
+    /// </summary>
+    public static void TankBehindInfantryFollowsWithoutAStutter()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, MotionFiles(), TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "motion"));
+            feeder.Spawn(1, "MotionTank", owner: 1, x: 40, y: 300);
+            feeder.Spawn(1, "MotionMan", owner: 1, x: 72, y: 300);
+            for (var tick = 0; tick < factor; tick++) world.Step();
+            var tank = world.Entities.Single(value => value.Template.Name == "MotionTank");
+            var man = world.Entities.Single(value => value.Template.Name == "MotionMan");
+            Check.That(feeder.SetMoveTarget(1, tank.Id.Value, 500, 300).Accepted && feeder.SetMoveTarget(1, man.Id.Value, 500, 300).Accepted, $"{rate}: both are ordered along the line.");
+            var (turn, aside) = WatchLine(world, tank, factor, 600, 300);
+            Check.That(aside < 0.01, $"{rate}: the tank stays on its line ({aside:F3} units aside).");
+            Check.That(turn < 0.01, $"{rate}: the tank does not change direction ({turn:F3} rad between two frames).");
+            Check.That(man.X - tank.X < Fixed.FromInt(25), $"{rate}: the tank has caught up with the soldier ({(man.X - tank.X).Raw / Fixed.ScaleRaw}).");
+            Check.That(man.X > tank.X, $"{rate}: and stays behind him, on his line.");
+            var perFrame = tank.Speed.Raw * factor / (double)Fixed.ScaleRaw;
+            Check.That(perFrame <= 0.75, $"{rate}: it drives at his 0.6 units per frame, not its own 1.0 ({perFrame:F3}).");
+        }
+    }
+
+    /// <summary><c>blockedBy</c>: a unit beside the mover, off 45 degrees and going its own way, holds nothing up: the two overlap for a moment, as in the original.</summary>
+    public static void AUnitBesideAMoverIsNoObstacle()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, MotionFiles(), TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "motion"));
+            feeder.Spawn(1, "MotionTank", owner: 1, x: 40, y: 300);
+            feeder.Spawn(1, "MotionMan", owner: 1, x: 72, y: 318);
+            for (var tick = 0; tick < factor; tick++) world.Step();
+            var tank = world.Entities.Single(value => value.Template.Name == "MotionTank");
+            var man = world.Entities.Single(value => value.Template.Name == "MotionMan");
+            Check.That(feeder.SetMoveTarget(1, tank.Id.Value, 500, 300).Accepted && feeder.SetMoveTarget(1, man.Id.Value, 500, 318).Accepted, $"{rate}: both are ordered along their lines.");
+            var (turn, aside) = WatchLine(world, tank, factor, 300, 300);
+            Check.That(aside < 0.01 && turn < 0.01, $"{rate}: the tank passes the soldier beside it ({aside:F3} units aside, {turn:F3} rad).");
+            Check.That(tank.X > man.X, $"{rate}: and overtakes him.");
+        }
+    }
+}

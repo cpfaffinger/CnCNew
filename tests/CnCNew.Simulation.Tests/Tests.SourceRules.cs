@@ -136,6 +136,7 @@ static partial class Tests
     private static readonly (string File, string Constant, string Reason)[] FramesConstantExceptions =
     [
         ("Modules/BuiltIn/CleanupAndSpyModules.cs", "RescanWaitMaxFrames", "upper bound of a draw in frames (GameLogicRandomValue(0, 3)); the drawn value is scaled with OriginalFrames on the next line"),
+        ("Modules/BuiltIn/Phase5Modules.cs", "BlockedRepathFrames", "compared with the count of a unit's decisions, one per logic frame of the original at every rate"),
         ("Modules/BuiltIn/Phase5Modules.cs", "GoalSpotCheckFrames", "a modulus of the world's frame number (Time.FramesIn), which counts frames of the original at every rate"),
         ("Scripting/ScriptEngine.Phase13.cs", "SupplyScanFrames", "AIPlayer::isSupplySourceAttacked's window, compared with frame numbers of the world (Time.FramesIn), which count frames of the original at every rate"),
         ("Modules/BuiltIn/ProjectileModules.cs", "RescanMaxFrames", "upper bound of a draw in frames; the drawn value is scaled with OriginalFrames"),

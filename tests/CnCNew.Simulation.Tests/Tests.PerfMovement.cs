@@ -153,7 +153,7 @@ static partial class Tests
             var limit = moverRadius + ReferenceBoundingCircle(other);
             var ddx = other.X - x;
             var ddy = other.Y - y;
-            if (ddx * ddx + ddy * ddy < limit * limit) return true;
+            if (ddx * ddx + ddy * ddy < limit * limit && !world.IsNoObstacleOnTheMove(mover, other)) return true;
         }
         return false;
     }

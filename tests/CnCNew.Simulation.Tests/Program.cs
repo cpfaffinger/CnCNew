@@ -102,6 +102,8 @@ run.Test("Phase 50 (F-83): the bomb truck in disguise", Tests.AbilityDisguisesAV
 run.Test("Phase 50 (F-18): a supply center keeps its distance to the supplies", Tests.BuildSiteKeepsItsDistanceToSupplies);
 run.Test("Phase 50 (F-18): the objects under a building site", Tests.BuildSiteClearsItsGround);
 run.Test("Acceptance (SPEC-08): a building site sees a rectangle laid across another", Tests.BuildSiteSeesARectangleLaidAcrossAnother);
+run.Test("Acceptance (UNIT-02): a tank behind infantry follows without a stutter", Tests.TankBehindInfantryFollowsWithoutAStutter);
+run.Test("Acceptance (UNIT-02): a unit beside a mover is no obstacle", Tests.AUnitBesideAMoverIsNoObstacle);
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
 run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlliesMakeWayForAHarvester);
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);

@@ -213,9 +213,164 @@ public sealed partial class SimulationWorld
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
             var ddy = other.Y - y;
-            if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) return true;
+            if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy) && !IsNoObstacleOnTheMove(mover, other)) return true;
         }
         return false;
+    }
+
+    // ------------------------------------------------------------------------------------------------ a unit on the move in the way
+
+    private static readonly Fixed SharedDirection = Fixed.FromDecimal(0.25m);
+    private static readonly Fixed SamePlaceSquared = Fixed.FromDecimal(0.01m);
+    private static readonly Fixed HeadOnLimit = FixedTrig.HalfPi / Fixed.FromInt(2);
+    private static readonly Fixed GoalIgnoresBlockers = Fixed.FromInt(CnCNew.Simulation.Terrain.TerrainMap.CellSize);
+
+    /// <summary>The other unit is on its way, seen where the frame it has begun ends (at 30 Hz: not on its last step when it had its turn in this tick).</summary>
+    private bool IsOnTheMove(Entity other)
+        => other.HasMoveTarget && !(_firstFrameTicks != TickOrder.Next && other.AheadTick + TickOrder.Next >= _tick && AiOf(other) is { IsArrivingWithThisFrame: true });
+
+    /// <summary>
+    /// A unit on the move is no obstacle the step goes round: <c>AIUpdateInterface::processCollision</c> lets the two overlap, and the mover takes the speed of one it follows
+    /// (<see cref="StepBlockedMovers"/>). Only one that comes towards the mover stays in the way: the original answers that with <c>aiMoveAwayFromUnit</c>, here the step goes round it.
+    /// </summary>
+    public bool IsNoObstacleOnTheMove(Entity mover, Entity other)
+    {
+        if (!IsOnTheMove(other)) return false;
+        var (x, y, _) = other.FrameEnd(_tick);
+        var angle = other.FrameEndAngle(_tick);
+        return !BlockedBy(mover, mover.X, mover.Y, mover.Angle, other, x, y, angle, 0) || IsMovingAwayFrom(mover.X, mover.Y, x, y, angle);
+    }
+
+    /// <summary>The first check of <c>calculateMaxBlockedSpeed</c>, the other way round: not "running into us".</summary>
+    private static bool IsMovingAwayFrom(Fixed moverX, Fixed moverY, Fixed otherX, Fixed otherY, Fixed otherAngle)
+        => (otherX - moverX) * FixedTrig.Cos(otherAngle) + (otherY - moverY) * FixedTrig.Sin(otherAngle) >= Fixed.Zero;
+
+    /// <summary><c>Object::canCrushOrSquish</c> as far as a moving unit needs it: "just run over them".</summary>
+    private bool CanRunOver(Entity mover, Entity other)
+        => mover.Template.CrusherLevel > other.Template.CrushableLevel && RelationshipOf(mover.Owner, other.Owner) != Relationship.Allies;
+
+    /// <summary><c>AIUpdateInterface::hasHigherPathPriority</c>: dozers before vehicles before infantry, then the unit in front, then the lower id.</summary>
+    private static bool HasHigherPathPriority(Entity mover, Fixed x, Fixed y, Fixed angle, Entity other, Fixed otherX, Fixed otherY, Fixed otherAngle)
+    {
+        var (dozer, hisDozer) = (mover.Template.IsKindOf("DOZER"), other.Template.IsKindOf("DOZER"));
+        if (dozer != hisDozer) return dozer;
+        if (mover.Template.IsKindOf("VEHICLE") && other.Template.IsKindOf("INFANTRY")) return true;
+        if (mover.Template.IsKindOf("INFANTRY") && other.Template.IsKindOf("VEHICLE")) return false;
+        var (ourX, ourY) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
+        var (hisX, hisY) = (FixedTrig.Cos(otherAngle), FixedTrig.Sin(otherAngle));
+        if (ourX * hisX + ourY * hisY <= Fixed.Zero) return mover.Id.Value < other.Id.Value;
+        var ahead = (ourX + hisX) * (otherX - x) + (ourY + hisY) * (otherY - y);
+        return ahead != Fixed.Zero ? ahead < Fixed.Zero : mover.Id.Value < other.Id.Value;
+    }
+
+    /// <summary><c>AIUpdateInterface::blockedBy</c> for another unit on the move: only what lies ahead of the mover within 45 degrees, and on its own way too, holds it up.</summary>
+    private bool BlockedBy(Entity mover, Fixed x, Fixed y, Fixed angle, Entity other, Fixed otherX, Fixed otherY, Fixed otherAngle, long framesBlocked)
+    {
+        if ((mover.MoveTargetX - x).Abs() < GoalIgnoresBlockers && (mover.MoveTargetY - y).Abs() < GoalIgnoresBlockers) return false;
+        if (CanRunOver(mover, other)) return false;
+        if (other.Template.Locomotor is { } locomotor && (locomotor.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0) return false;
+        var (ourX, ourY) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
+        var (hisX, hisY) = (FixedTrig.Cos(otherAngle), FixedTrig.Sin(otherAngle));
+        var sameWay = ourX * hisX + ourY * hisY;
+        if (mover.Template.IsKindOf("INFANTRY") && other.Template.IsKindOf("INFANTRY") && sameWay <= SharedDirection) return false;
+        var (dx, dy) = (x - otherX, y - otherY);
+        var distance = dx * dx + dy * dy;
+        if (distance < SamePlaceSquared) return HasHigherPathPriority(mover, x, y, angle, other, otherX, otherY, otherAngle);
+        if (framesBlocked > SimulationRate.OriginalFramesPerSecond && sameWay <= Fixed.Zero) return false;
+        var collision = FixedTrig.AngleDifference(angle, FixedTrig.Atan2(-dy, -dx)).Abs();
+        if (collision > FixedTrig.HalfPi) return false;
+        if (collision <= HeadOnLimit) return true;
+        if (sameWay <= Fixed.Zero) return false;
+        if (FixedTrig.AngleDifference(otherAngle, FixedTrig.Atan2(dy, dx)).Abs() <= HeadOnLimit) return false;
+        // "See if we're running into each other."
+        var (nextX, nextY) = (dx + ourX - hisX, dy + ourY - hisY);
+        return distance > nextX * nextX + nextY * nextY && !HasHigherPathPriority(mover, x, y, angle, other, otherX, otherY, otherAngle);
+    }
+
+    /// <summary>
+    /// <c>PartitionManager::update</c> and <c>AIUpdateInterface::processCollision</c>: once per logic frame of the original, when every object has moved, each unit on the move learns whether a unit on
+    /// its own way holds it up (the ground plans overlap, the other lies ahead and moves on) and how fast it may then drive; its next frame's decision reads that. In one pass, at the frame's end, so
+    /// no unit sees another at a moment of its own, at any rate.
+    /// </summary>
+    private void StepBlockedMovers(long tick)
+    {
+        if (!Time.IsOriginalFrameBoundary(tick + TickOrder.Next)) return;
+        var stride = Time.TicksPerOriginalFrame;
+        var mobiles = _mobiles;
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var mover = mobiles[index];
+            if (AiOf(mover) is not { } ai) continue;
+            // Under way: an order given in the last tick of a frame above 30 Hz is the next frame's, in which a unit that turns on the spot has no speed yet either.
+            var moving = mover.HasMoveTarget && !mover.EffectivelyDead && !mover.ContainedBy.IsValid && mover.Template.Locomotor is { } locomotor && (locomotor.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) == 0
+                && ai.SpeedPerOriginalFrame(stride) > Fixed.Zero;
+            var blocked = false;
+            var limit = Fixed.MaxValue;
+            if (moving && !ai.IgnoresCollisions(tick)) blocked = HeldBehindAMover(mover, ai, stride, out limit);
+            ai.SetBlocked(this, blocked, limit);
+        }
+    }
+
+    private bool HeldBehindAMover(Entity mover, AIUpdateInterface ai, int stride, out Fixed limit)
+    {
+        limit = Fixed.MaxValue;
+        var blocked = false;
+        var goal = ai.IgnoredObstacle;
+        var (x, y, _) = mover.FrameEnd(_tick);
+        var angle = mover.FrameEndAngle(_tick);
+        var reach = Magnitude(CircleRadius(mover)) + _widestMobile + ScanSlack;
+        var ours = new SiteShape(mover.Template, x, y, angle);
+        var mobiles = _mobiles;
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var other = mobiles[index];
+            var (otherX, otherY, _) = other.FrameEnd(_tick);
+            if (Magnitude(otherX - x) > reach || Magnitude(otherY - y) > reach) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || !other.HasMoveTarget || OnAnotherLevel(mover, other)) continue;
+            var otherAngle = other.FrameEndAngle(_tick);
+            if (!SiteShape.Collide(ours, new SiteShape(other.Template, otherX, otherY, otherAngle)) || !BlockedBy(mover, x, y, angle, other, otherX, otherY, otherAngle, ai.BlockedFrames)) continue;
+            // Running into us: the step goes round it (IsNoObstacleOnTheMove).
+            if (!IsMovingAwayFrom(x, y, otherX, otherY, otherAngle)) continue;
+            // "let them get their path"
+            if (AiOf(other) is not { WaitingForPath: false } otherAi) continue;
+            var speed = otherAi.SpeedPerOriginalFrame(stride);
+            if (speed == Fixed.Zero) continue;
+            blocked = true;
+            limit = Fixed.Min(limit, MaxBlockedSpeed(x, y, angle, otherX, otherY, otherAngle, speed));
+        }
+        return blocked;
+    }
+
+    /// <summary><c>AIUpdateInterface::calculateMaxBlockedSpeed</c>: as fast as the other moves away from the mover, in the direction the mover drives towards it.</summary>
+    private static Fixed MaxBlockedSpeed(Fixed x, Fixed y, Fixed angle, Fixed otherX, Fixed otherY, Fixed otherAngle, Fixed otherSpeed)
+    {
+        var (toX, toY) = (otherX - x, otherY - y);
+        var length = Fixed.Sqrt(toX * toX + toY * toY);
+        if (length == Fixed.Zero) return Fixed.Zero;
+        (toX, toY) = (toX / length, toY / length);
+        var away = (toX * FixedTrig.Cos(otherAngle) + toY * FixedTrig.Sin(otherAngle)) * otherSpeed;
+        var towards = toX * FixedTrig.Cos(angle) + toY * FixedTrig.Sin(angle);
+        return towards <= Fixed.Zero ? Fixed.MaxValue : Fixed.Max(Fixed.Zero, away) / towards;
+    }
+
+    /// <inheritdoc cref="IWorldServices.MoversInTheWay"/>
+    public IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> MoversInTheWay(Entity mover)
+    {
+        var circles = _stationaryCircles;
+        circles.Clear();
+        var moverRadius = CircleRadius(mover);
+        var around = Fixed.FromInt(150);
+        var mobiles = _mobiles;
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var other = mobiles[index];
+            if (other.Id == mover.Id || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other)) continue;
+            if (other.Template.Locomotor is { } locomotor && (locomotor.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0) continue;
+            var (otherX, otherY, _) = other.FrameEnd(_tick);
+            if (FurtherThan(otherX, mover.X, around) || FurtherThan(otherY, mover.Y, around)) continue;
+            circles.Add((otherX, otherY, CircleRadius(other) + moverRadius + StandingBlockerMargin));
+        }
+        return circles;
     }
 
     // ------------------------------------------------------------------------------------------------ above 30 Hz
@@ -304,7 +459,7 @@ public sealed partial class SimulationWorld
             if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
             var ddx = otherX - x;
             var ddy = otherY - y;
-            if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) return true;
+            if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy) && !IsNoObstacleOnTheMove(mover, other)) return true;
         }
         return false;
     }

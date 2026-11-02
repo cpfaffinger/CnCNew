@@ -435,6 +435,9 @@ public interface IWorldServices
     /// </summary>
     IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy);
 
+    /// <summary>The units around a mover that has followed another for two seconds, as circles a path search goes round (the world's own buffer, valid until the next call).</summary>
+    IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> MoversInTheWay(Entity mover);
+
     /// <summary>
     /// <c>Pathfinder::adjustDestination</c>, reduced to what a unit leaving its factory needs: the goal (<paramref name="x"/>, <paramref name="y"/>) itself when
     /// <paramref name="mover"/> could stand there, else the nearest free place in rows across the direction of travel from (<paramref name="fromX"/>, <paramref name="fromY"/>) -
