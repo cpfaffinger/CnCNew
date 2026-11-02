@@ -63,6 +63,9 @@ public sealed class FxExecutor
 
     /// <summary>Who supplies the projectile streams of a frame (<see cref="AttachedEffects"/>); null: none.</summary>
     public Func<ImmutableArray<StreamInstance>>? ProjectileStreams { get; set; }
+
+    /// <summary>The ropes of a combat drop, drawn as tracers.</summary>
+    public Func<ImmutableArray<TracerInstance>>? Ropes { get; set; }
     public ParticleWorld Particles { get; }
     public DecalBuffer Decals { get; }
     public FxRandom Random => _random;
@@ -359,7 +362,7 @@ public sealed class FxExecutor
     public FxFrame Capture(Func<Vector3, float, bool>? isVisible = null)
     {
         var frame = new FxFrame(Frame, Particles.Capture(isVisible),
-            [.._tracers.Select(tracer => tracer.ToInstance())],
+            [.._tracers.Select(tracer => tracer.ToInstance()), ..Ropes?.Invoke() ?? []],
             [.._lights.Select(light => light.ToInstance())],
             Decals.Snapshot(), [.._rays], [.._shakes]) { ProjectileStreams = ProjectileStreams?.Invoke() ?? [] };
         _rays.Clear();

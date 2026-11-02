@@ -81,6 +81,12 @@ internal static class ModelGeometryTests
         });
 
 
+        harness.Run("Model geometry: the ropes of a Chinook (ChinookCombatDropState::onEnter)", () =>
+        {
+            var ropes = data.Templates.Geometry.Ropes;
+            TestHarness.Assert(ropes.TryGetValue("AmericaVehicleChinook", out var chinook) && chinook.Length >= 2 && chinook.All(rope => rope.Start is not null && rope.End is not null), $"the America Chinook has its rope bones ({ropes.Count} objects)");
+        });
+
         harness.Run("Model geometry: the exit bones of the door containers (OpenContain::exitObjectViaDoor)", () =>
         {
             var exits = data.Templates.Geometry.ExitPaths;

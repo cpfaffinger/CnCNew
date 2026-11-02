@@ -463,7 +463,34 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         foreach (var key in ended) _streams.Remove(key);
         if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame);
         _streamFrame = frame.ToImmutable();
+        UpdateRopes(world);
     }
+
+    /// <summary><c>W3DRopeDraw</c>: the ropes of a combat drop, straight down from their bones and as long as they have run out.</summary>
+    private void UpdateRopes(SimulationWorld world)
+    {
+        var ropes = ImmutableArray.CreateBuilder<TracerInstance>();
+        foreach (var item in _ordered)
+        {
+            if (world.FindEntity(item.Entity) is not { } entity) continue;
+            foreach (var module in entity.Modules)
+            {
+                if (module is not CnCNew.Simulation.Modules.BuiltIn.AIUpdateInterface { Ropes.Count: > 0 } ai) continue;
+                foreach (var rope in ai.Ropes)
+                    ropes.Add(new TracerInstance(new Vector3(FixedConvert.ToSingle(rope.TopX), FixedConvert.ToSingle(rope.TopY), FixedConvert.ToSingle(rope.TopZ)), -Vector3.UnitZ,
+                        MathF.Min(FixedConvert.ToSingle(rope.Length), FixedConvert.ToSingle(rope.MaxLength)), RopeWidth, RopeColor, 1f, 0f, long.MaxValue));
+            }
+        }
+        _ropeFrame = ropes.ToImmutable();
+    }
+
+    /// <summary><c>RopeWidth</c> and <c>RopeColor</c> of the shipped Chinooks.</summary>
+    private const float RopeWidth = 0.5f;
+    private static readonly Vector3 RopeColor = Vector3.Zero;
+    private ImmutableArray<TracerInstance> _ropeFrame = [];
+
+    /// <summary>The ropes of the last update, for the frame.</summary>
+    public ImmutableArray<TracerInstance> Ropes => _ropeFrame;
 
     /// <summary>The beams of the abilities at work (<c>SpecialAbilityUpdate::initLaser</c>, <c>LaserUpdate</c>): from the unit's bone, or the unit, to the centre of its target; a band like a stream. The Black Lotus's data stream is one of them.</summary>
     private void AddLasers(SimulationWorld world, IFxWorldView view, ImmutableArray<StreamInstance>.Builder frame)
