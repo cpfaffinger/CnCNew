@@ -46,7 +46,7 @@ internal static class InstallTests
         Assert(!text.Contains('\\') && !text.Contains(root, StringComparison.OrdinalIgnoreCase) && !text.Contains(Path.GetFileName(root), StringComparison.OrdinalIgnoreCase),
             "The description contains a backslash or a machine path.");
         Assert(master.SteamAppId == 4242, "The Steam app id was not read from steam_appid.txt.");
-        Assert(master.Files.Select(file => file.Path).SequenceEqual(["Art/Textures/Test.dds", "Fixture.big", "Readme.txt", "alpha/lower.txt", "steam_appid.txt"]),
+        Assert(master.Files.Select(file => file.Path).SequenceEqual(["Art/Textures/Test.dds", "Fixture.big", "Readme.ini", "alpha/lower.ini", "steam_appid.txt"]),
             "Paths are not relative, forward-slashed and in ordinal order: " + string.Join(", ", master.Files.Select(file => file.Path)));
         Assert(master.FileCount == 5 && master.TotalBytes == master.Files.Sum(file => file.Bytes) && master.HarmlessExtraFiles.Count == 0, "Counts of the description are wrong.");
         Assert(master.Files.All(file => file.Sha256.Length == 64 && file.Sha256 == file.Sha256.ToLowerInvariant()), "Hashes must be lower-case SHA-256.");
@@ -57,13 +57,14 @@ internal static class InstallTests
         await RuntimeContentImporter.ImportAsync(game, imported);
         var manifest = await File.ReadAllBytesAsync(Path.Combine(imported, "content-manifest.json"));
         Assert(master.ExpectedExport.ContentManifestBytes == manifest.LongLength && master.ExpectedExport.ContentManifestSha256 == Hex(manifest) &&
-               master.ExpectedExport.RuntimeFileCount == 5, "The recorded export differs from the import (the archive entry and four loose files).");
+               master.ExpectedExport.RuntimeFileCount == 4, "The recorded export differs from the import (the archive entry and three loose files).");
+        Assert(!File.Exists(Path.Combine(imported, InstallationInspector.SteamAppIdFile)), "What only the original's program reads is no part of the export (F-33).");
 
         Throws<InvalidDataException>(() => InstallationMasterSerializer.Read(Encoding.UTF8.GetBytes(text.Replace("\"id\"", "\"identity\"", StringComparison.Ordinal))), "unknown property");
         Throws<InvalidDataException>(() => InstallationMasterSerializer.Read(Encoding.UTF8.GetBytes(text.Replace("\"fileCount\": 5", "\"fileCount\": 6", StringComparison.Ordinal))), "wrong count");
         var noAppId = Path.Combine(root, "no-app-id");
         Directory.CreateDirectory(noAppId);
-        File.WriteAllText(Path.Combine(noAppId, "Readme.txt"), "x");
+        File.WriteAllText(Path.Combine(noAppId, "Readme.ini"), "x");
         await ThrowsAsync<InvalidDataException>(() => InstallationInspector.DescribeAsync(noAppId), "missing steam_appid.txt");
         return master;
     }
@@ -76,23 +77,23 @@ internal static class InstallTests
 
         var modded = Path.Combine(root, "modded");
         CopyDirectory(game, modded);
-        File.Delete(Path.Combine(modded, "alpha", "lower.txt"));                                       // missing
+        File.Delete(Path.Combine(modded, "alpha", "lower.ini"));                                       // missing
         File.Move(Path.Combine(modded, "Fixture.big"), Path.Combine(modded, "Fixture.big.bak"));     // renamed
-        File.WriteAllText(Path.Combine(modded, "Readme.txt"), "A changed text.");                    // same size, other content
+        File.WriteAllText(Path.Combine(modded, "Readme.ini"), "A changed text.");                    // same size, other content
         File.WriteAllBytes(Path.Combine(modded, "Art", "Textures", "Test.dds"), new byte[7]);        // other size
         File.WriteAllBytes(Path.Combine(modded, "900_Mod.big"), [1, 2, 3]);                          // extra
         File.WriteAllText(Path.Combine(modded, "steam.log"), "log");                                 // extra, harmless only by rule
 
         var result = await InstallationInspector.CheckAsync(modded, master);
         Assert(!result.IsIdentical && result.DifferenceCount == 6, $"Expected six differences, found {result.DifferenceCount}.");
-        Assert(result.Missing.Select(file => file.Path).SequenceEqual(["alpha/lower.txt"]), "Missing file not detected.");
+        Assert(result.Missing.Select(file => file.Path).SequenceEqual(["alpha/lower.ini"]), "Missing file not detected.");
         Assert(result.Renamed.SequenceEqual([new RenamedFile("Fixture.big", "Fixture.big.bak")]), "Renamed file not detected.");
-        Assert(result.Changed.Select(file => file.Path).SequenceEqual(["Art/Textures/Test.dds", "Readme.txt"]), "Changed files not detected.");
+        Assert(result.Changed.Select(file => file.Path).SequenceEqual(["Art/Textures/Test.dds", "Readme.ini"]), "Changed files not detected.");
         Assert(result.Changed[0].ActualSha256 is null && result.Changed[0].ActualBytes == 7, "A size difference must be reported as such.");
         Assert(result.Changed[1].ActualSha256 is { Length: 64 } && result.Changed[1].ActualBytes == result.Changed[1].ExpectedBytes, "A content difference at equal size must carry the hash.");
         Assert(result.Extra.Select(file => file.Path).SequenceEqual(["900_Mod.big", "steam.log"]) && result.HarmlessExtra.Count == 0, "Extra files not detected.");
         var report = result.FormatReport();
-        foreach (var expected in new[] { "missing: alpha/lower.txt", "renamed: Fixture.big is now Fixture.big.bak", "changed: Readme.txt", "changed: Art/Textures/Test.dds",
+        foreach (var expected in new[] { "missing: alpha/lower.ini", "renamed: Fixture.big is now Fixture.big.bak", "changed: Readme.ini", "changed: Art/Textures/Test.dds",
                      "extra:   900_Mod.big", "extra:   steam.log", "Verify integrity of game files", "Remove mods", "6 difference(s)" })
             Assert(report.Contains(expected, StringComparison.Ordinal), $"The report does not say '{expected}':\n{report}");
 
@@ -144,7 +145,7 @@ internal static class InstallTests
         var target = Path.Combine(root, "target");
         Directory.CreateDirectory(target); // an empty directory is acceptable
         var installed = await GameInstaller.InstallAsync(game, target, master);
-        Assert(installed.Outcome == InstallOutcome.Installed && installed.Succeeded && installed.CopiedFiles == 5, $"Fresh installation failed: {installed.Outcome} {installed.Message}");
+        Assert(installed.Outcome == InstallOutcome.Installed && installed.Succeeded && installed.CopiedFiles == 4, $"Fresh installation failed: {installed.Outcome} {installed.Message}");
         Assert(Snapshot(game).SequenceEqual(before), "The installation changed the game directory (file list, sizes or timestamps).");
 
         var content = Path.Combine(target, GameInstaller.ContentDirectoryName);
@@ -160,7 +161,7 @@ internal static class InstallTests
                !recordText.Contains(Path.GetFileName(root), StringComparison.OrdinalIgnoreCase), "The install record is not canonical or contains a machine path.");
         var record = InstallRecord.TryRead(target) ?? throw new InvalidOperationException("The install record cannot be read.");
         Assert(record == installed.Record && record.Verified && record.Product == "CnCNew" && record.MasterId == "fake-master" && record.SteamAppId == 4242 &&
-               record.RuntimeFileCount == 5 && record.ContentManifestSha256 == master.ExpectedExport.ContentManifestSha256 &&
+               record.RuntimeFileCount == 4 && record.ContentManifestSha256 == master.ExpectedExport.ContentManifestSha256 &&
                record.ProductVersion.Length != 0 && record.ProductCommit.Length != 0, "The install record is wrong: " + recordText);
         Assert(record.Write().SequenceEqual(recordBytes), "The install record does not survive reading and writing.");
 
@@ -172,7 +173,7 @@ internal static class InstallTests
             "The second run changed the installation.");
 
         // Repair: a missing file, a changed file of equal size and a foreign file; an own file beside the content stays.
-        File.Delete(Path.Combine(content, "Readme.txt"));
+        File.Delete(Path.Combine(content, "Readme.ini"));
         var texture = Path.Combine(content, "Art", "Textures", "Test.dds");
         var damaged = File.ReadAllBytes(texture);
         damaged[^1] ^= 0xFF;
@@ -180,9 +181,9 @@ internal static class InstallTests
         File.WriteAllText(Path.Combine(content, "stray.tmp"), "stray");
         File.WriteAllText(Path.Combine(target, "notes.txt"), "kept");
         var repaired = await GameInstaller.InstallAsync(game, target, master);
-        Assert(repaired.Outcome == InstallOutcome.Repaired && repaired.MissingRuntimeFiles.SequenceEqual(["Readme.txt"]) &&
+        Assert(repaired.Outcome == InstallOutcome.Repaired && repaired.MissingRuntimeFiles.SequenceEqual(["Readme.ini"]) &&
                repaired.ChangedRuntimeFiles.SequenceEqual(["Art/Textures/Test.dds"]) && repaired.ExtraRuntimeFiles.SequenceEqual(["stray.tmp"]) &&
-               repaired.CopiedFiles == 2 && repaired.ReusedFiles == 3, $"Repair reported wrongly: {repaired.Message}");
+               repaired.CopiedFiles == 2 && repaired.ReusedFiles == 2, $"Repair reported wrongly: {repaired.Message}");
         Assert((await GameInstaller.VerifyExportAsync(content, master)).Count == 0 && !File.Exists(Path.Combine(content, "stray.tmp")), "The repair did not restore the known export.");
         Assert((await GameInstaller.InstallAsync(game, target, master)).Outcome == InstallOutcome.AlreadyComplete, "A repaired installation must be complete.");
 
@@ -191,7 +192,7 @@ internal static class InstallTests
         File.WriteAllText(Path.Combine(content, "content-manifest.json"), "{");
         Assert((await GameInstaller.VerifyExportAsync(content, master)).Count != 0, "A broken manifest must be a problem.");
         var resumed = await GameInstaller.InstallAsync(game, target, master);
-        Assert(resumed.Outcome == InstallOutcome.Repaired && resumed.CopiedFiles == 5 && InstallRecord.TryRead(target) is { Verified: true }, "An interrupted installation was not completed.");
+        Assert(resumed.Outcome == InstallOutcome.Repaired && resumed.CopiedFiles == 4 && InstallRecord.TryRead(target) is { Verified: true }, "An interrupted installation was not completed.");
         Assert(Snapshot(game).SequenceEqual(before), "Repairing changed the game directory.");
 
         // A master written for another importer version is not applied.
@@ -214,13 +215,13 @@ internal static class InstallTests
     // The patch's files come from a commit or a checkout (docs/PATCH-LAYER.md); whichever way, a file is taken only with its recorded size and hash.
     private static async Task PatchIsFetchedChecked(string game, InstallationMaster master, string root)
     {
-        var blob = "the patched text\nits second line\n"u8.ToArray();
-        var file = new MasterFile("alpha/lower.txt", blob.LongLength, Hex(blob));
+        var blob = "; the patched text\n; its second line\n"u8.ToArray();
+        var file = new MasterFile("alpha/lower.ini", blob.LongLength, Hex(blob));
         var fetched = 0;
         Task<byte[]> Serve(Uri address, CancellationToken cancellation)
         {
             Interlocked.Increment(ref fetched);
-            Assert(address.AbsoluteUri == "https://raw.githubusercontent.com/owner/patch/abc/edited/alpha/lower.txt", $"The file is asked for at {address}.");
+            Assert(address.AbsoluteUri == "https://raw.githubusercontent.com/owner/patch/abc/edited/alpha/lower.ini", $"The file is asked for at {address}.");
             return Task.FromResult(blob);
         }
 
@@ -237,7 +238,7 @@ internal static class InstallTests
         var installed = await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Download: Serve));
         Assert(installed.Outcome == InstallOutcome.Installed && fetched == 1, "The installation fetches the patch's file.");
         var content = Path.Combine(target, GameInstaller.ContentDirectoryName);
-        Assert(File.ReadAllBytes(Path.Combine(content, "alpha", "lower.txt")).SequenceEqual(blob), "The patch's file is the content.");
+        Assert(File.ReadAllBytes(Path.Combine(content, "alpha", "lower.ini")).SequenceEqual(blob), "The patch's file is the content.");
         Assert(!Directory.Exists(Path.Combine(target, GameInstaller.PatchDirectoryName)), "The patch's files are gone when the installation is verified.");
         Assert(InstallRecord.TryRead(target)?.PatchSource == "owner/patch abc", "The record names the patch.");
         Assert((await GameInstaller.VerifyExportAsync(content, patch.ExpectedExport)).Count == 0 && (await GameInstaller.VerifyExportAsync(content, master)).Count != 0, "The export is the patched one, not the plain one.");
@@ -248,12 +249,12 @@ internal static class InstallTests
         // A checkout may hold CRLF where the blob has LF, and another text is never taken from it.
         var checkout = Path.Combine(root, "patch-checkout", "alpha");
         Directory.CreateDirectory(checkout);
-        File.WriteAllBytes(Path.Combine(checkout, "lower.txt"), Encoding.ASCII.GetBytes(Encoding.ASCII.GetString(blob).Replace("\n", "\r\n", StringComparison.Ordinal)));
-        File.Delete(Path.Combine(content, "alpha", "lower.txt"));
+        File.WriteAllBytes(Path.Combine(checkout, "lower.ini"), Encoding.ASCII.GetBytes(Encoding.ASCII.GetString(blob).Replace("\n", "\r\n", StringComparison.Ordinal)));
+        File.Delete(Path.Combine(content, "alpha", "lower.ini"));
         var repaired = await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Path.Combine(root, "patch-checkout"), Serve));
-        Assert(repaired.Outcome == InstallOutcome.Repaired && fetched == 1 && File.ReadAllBytes(Path.Combine(content, "alpha", "lower.txt")).SequenceEqual(blob), "A checkout with CRLF gives the blob.");
-        File.WriteAllText(Path.Combine(checkout, "lower.txt"), "another text");
-        File.Delete(Path.Combine(content, "alpha", "lower.txt"));
+        Assert(repaired.Outcome == InstallOutcome.Repaired && fetched == 1 && File.ReadAllBytes(Path.Combine(content, "alpha", "lower.ini")).SequenceEqual(blob), "A checkout with CRLF gives the blob.");
+        File.WriteAllText(Path.Combine(checkout, "lower.ini"), "another text");
+        File.Delete(Path.Combine(content, "alpha", "lower.ini"));
         await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Path.Combine(root, "patch-checkout"), Serve));
         Assert(fetched == 2, "A checkout with another text is passed over for the commit.");
 
@@ -302,8 +303,8 @@ internal static class InstallTests
         Directory.CreateDirectory(Path.Combine(game, "Art", "Textures"));
         Directory.CreateDirectory(Path.Combine(game, "alpha"));
         File.WriteAllBytes(Path.Combine(game, "steam_appid.txt"), "4242\n\0"u8.ToArray());
-        File.WriteAllText(Path.Combine(game, "Readme.txt"), "A synthetic xx.");
-        File.WriteAllText(Path.Combine(game, "alpha", "lower.txt"), "ordinal order puts lower case after upper case");
+        File.WriteAllText(Path.Combine(game, "Readme.ini"), "; A synthetic x");
+        File.WriteAllText(Path.Combine(game, "alpha", "lower.ini"), "; ordinal order puts lower case after upper case");
         File.WriteAllBytes(Path.Combine(game, "Art", "Textures", "Test.dds"), CreateDds(1));
         CreateArchive(Path.Combine(game, "Fixture.big"), "Window/Test.wnd", "FILE_VERSION = 2;\nWINDOW { IMAGE = Art/Textures/Test.dds; }"u8.ToArray());
     }
