@@ -113,6 +113,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void NoteShotFired(Entity source, WeaponInfo weapon, int slot, EntityId victim)
     {
+        if (weapon.LeechRange && source.Acquisition is { } attack) attack.LeechRange = true;
         var state = source.Firing;
         state?.ClearPreAttack();
         // Only weapons with stages, or with a wind-up that depends on the shots at the victim, need the counters; for every other weapon an object without counters stays without.

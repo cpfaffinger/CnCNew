@@ -78,7 +78,14 @@ public sealed record StealthData(
         ModuleConfigReader.Bool(configuration, "DisguisesAsTeam", false),
         ModuleConfigReader.Ticks(configuration, "DisguiseTransitionTime", 0),
         ModuleConfigReader.Ticks(configuration, "DisguiseRevealTransitionTime", 0),
-        ModuleConfigReader.Real(configuration, "RevealDistanceFromTarget", Fixed.Zero));
+        ModuleConfigReader.Real(configuration, "RevealDistanceFromTarget", Fixed.Zero))
+    {
+        DisguiseFx = ModuleConfigReader.Text(configuration, "DisguiseFX"),
+        DisguiseRevealFx = ModuleConfigReader.Text(configuration, "DisguiseRevealFX"),
+    };
+
+    public string DisguiseFx { get; init; } = string.Empty;
+    public string DisguiseRevealFx { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -150,6 +157,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     private void ChangeDisguise(IWorldServices world)
     {
         _disguised = _toDisguise;
+        var fx = _disguised ? data.DisguiseFx : data.DisguiseRevealFx;
+        if (fx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, fx, 0, Entity.X, Entity.Y, Entity.Z);
         if (_disguised) Entity.Status |= 1UL << DisguisedBit;
         else Entity.Status &= ~(1UL << DisguisedBit);
         world.MarkDirty(Entity);

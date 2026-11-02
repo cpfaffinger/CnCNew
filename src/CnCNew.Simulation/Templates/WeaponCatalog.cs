@@ -48,6 +48,9 @@ public sealed record WeaponInfo(
 
     public Fixed ScatterTargetScalar { get; init; }
 
+    /// <summary><c>LeechRangeWeapon</c>: once the attack has begun, its range holds no more ("essentially grants the weapon unlimited range for the remainder of the attack").</summary>
+    public bool LeechRange { get; init; }
+
     /// <summary><c>ProjectileCollidesWith</c>: what the projectile meets on its way, besides what it was fired at.</summary>
     public int ProjectileCollideMask { get; init; } = CollideStructures;
 
@@ -357,6 +360,7 @@ public sealed class WeaponCatalog
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
                 ProjectileCollideMask = collide,
+                LeechRange = Flag("LeechRangeWeapon"),
                 HistoricBonusCount = Field("HistoricBonusCount")?.Value.Value is long historicCount ? checked((int)historicCount) : Field("HistoricBonusCount")?.Value.Value is decimal historicNumber ? (int)historicNumber : 0,
                 HistoricBonusFrames = decimal.TryParse(Name("HistoricBonusTime").Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var historicTime) ? (long)(historicTime * CnCNew.Data.OriginalFrame.PerSecond / 1000m) : 0,
                 HistoricBonusRadius = Field("HistoricBonusRadius") is null ? Fixed.Zero : Length("HistoricBonusRadius"),

@@ -149,6 +149,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool WithinWeaponRange(Entity source, WeaponInfo weapon, Entity victim)
     {
+        if (weapon.LeechRange && source.Acquisition is { LeechRange: true }) return true;
         // Above 30 Hz both objects are read where the logic frame of the original they have begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
         // answer is the one the 30 Hz step gives after the whole step of both, in every tick of that frame, instead of flipping somewhere inside it.
         var (victimX, victimY, victimZ) = _firstFrameTicks != TickOrder.Next ? victim.FrameEnd(_tick) : (victim.X, victim.Y, victim.Z);

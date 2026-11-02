@@ -243,7 +243,17 @@ public sealed record StructureToppleData(
         ModuleConfigReader.Ticks(configuration, "MaxToppleDelay", 0),
         ModuleConfigReader.Real(configuration, "StructuralIntegrity", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "StructuralDecay", Fixed.One),
-        ModuleConfigReader.Text(configuration, "CrushingWeaponName"));
+        ModuleConfigReader.Text(configuration, "CrushingWeaponName"))
+    {
+        ToppleStartFx = ModuleConfigReader.Text(configuration, "ToppleStartFX"),
+        ToppleDoneFx = ModuleConfigReader.Text(configuration, "ToppleDoneFX"),
+        CrushingFx = ModuleConfigReader.Text(configuration, "CrushingFX"),
+    };
+
+    /// <summary><c>ToppleStartFX</c>, <c>ToppleDoneFX</c>, <c>CrushingFX</c>. <c>ToppleDelayFX</c> and its random bursts before the fall are not played.</summary>
+    public string ToppleStartFx { get; init; } = string.Empty;
+    public string ToppleDoneFx { get; init; } = string.Empty;
+    public string CrushingFx { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -335,6 +345,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
                 if (world.Tick >= _toppleFrame)
                 {
                     _state = State.Toppling;
+                    if (data.ToppleStartFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.ToppleStartFx, 0, Entity.X, Entity.Y, Entity.Z);
                     _structuralIntegrity = data.StructuralIntegrity;
                     _angleFine = StartAngleFine; // the reference's literal starting value 0.001 (StructureToppleUpdate ctor): a tiny nudge so sin(angle) below is not permanently zero.
                     _framePhase.Reset();
@@ -379,6 +390,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
             _velocityFine -= _angleFine - flat;
             _angleFine = flat;
             ApplyCrushingDamage(world, Fixed.Zero);
+            if (data.ToppleDoneFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.ToppleDoneFx, 0, Entity.X, Entity.Y, Entity.Z);
             _state = State.WaitingForDone;
             // Done comes with the update one frame of the original later: the first one after this tick at 30 Hz.
             _doneAtTick = world.Tick + world.Time.TicksPerOriginalFrame - TickOrder.Next;
@@ -419,7 +431,10 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     private void DamageLine(IWorldServices world, WeaponInfo weapon, Fixed along, Fixed facingWidth)
     {
         foreach (var (x, y) in DamageLineTargets(Entity.X, Entity.Y, _directionX, _directionY, along, facingWidth))
+        {
             world.FireWeaponAt(Entity, weapon, null, x, y, world.GroundHeightAt(x, y));
+            if (data.CrushingFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.CrushingFx, 0, x, y, world.GroundHeightAt(x, y));
+        }
     }
 
     /// <summary>

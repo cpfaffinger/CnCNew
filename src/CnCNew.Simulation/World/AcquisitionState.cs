@@ -65,9 +65,13 @@ internal sealed class AcquisitionState
 
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
+    /// <summary><c>Weapon::m_leechWeaponRangeActive</c>: a leech-range weapon has fired or begun its wind-up in this attack.</summary>
+    public bool LeechRange;
+
     public void ClearVictim()
     {
         Victim = EntityId.Invalid;
+        LeechRange = false;
         Forced = false;
         Neutral = false;
         Ordered = false;
@@ -78,6 +82,7 @@ internal sealed class AcquisitionState
 
     public void Describe(IStateWriter writer)
     {
+        if (LeechRange) writer.Bool("leechRange", true);
         writer.BeginObject("acquisition");
         writer.UInt("victim", Victim.Value);
         if (Ordered)
@@ -116,7 +121,7 @@ internal sealed class AcquisitionState
 
     public static AcquisitionState Load(IStateReader reader)
     {
-        var state = new AcquisitionState { Victim = new EntityId(checked((uint)reader.UInt("victim"))) };
+        var state = new AcquisitionState { Victim = new EntityId(checked((uint)reader.UInt("victim"))), LeechRange = reader.Has("leechRange") && reader.Bool("leechRange") };
         if (reader.Has("ordered"))
         {
             state.Ordered = reader.Bool("ordered");
