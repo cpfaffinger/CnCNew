@@ -195,7 +195,7 @@ public sealed class ObjectTemplate
 
     /// <summary><c>ThingTemplate::isBridge</c>: a landmark bridge, whose box is its deck.</summary>
     public bool IsBridge { get; }
-    private bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
+    internal bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
 
     /// <summary><c>GeometryInfo::getBoundingCircleRadius</c> (<c>calcBoundingStuff</c>): the corner distance of a box, the major radius of a cylinder or sphere.</summary>
     public Fixed BoundingCircleRadius => IsBox ? Fixed.Sqrt(GeometryMajorRadius * GeometryMajorRadius + GeometryMinorRadius * GeometryMinorRadius) : GeometryMajorRadius;

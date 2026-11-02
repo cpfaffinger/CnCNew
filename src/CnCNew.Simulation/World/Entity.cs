@@ -126,6 +126,10 @@ public sealed class Entity
     /// <summary>Bits of the object status table (<see cref="ObjectStatusBits"/>).</summary>
     public ulong Status { get; internal set; }
 
+    /// <summary><c>StatusDamageHelper::m_statusToHeal</c> and the tick it goes (0: none).</summary>
+    internal int StatusDamageBit { get; set; }
+    internal long StatusDamageUntil { get; set; }
+
     /// <summary>0 regular, 1 veteran, 2 elite, 3 heroic.</summary>
     public int VeterancyLevel { get; internal set; }
 
@@ -446,6 +450,11 @@ public sealed class Entity
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);
         if (Subdued) writer.Bool("subdued", true);
+        if (StatusDamageUntil != 0)
+        {
+            writer.Int("statusDamageBit", StatusDamageBit);
+            writer.Int("statusDamageUntil", StatusDamageUntil);
+        }
         if (ScatterTargetsUnused is { } scatter)
         {
             writer.BeginArray("scatterUnused");

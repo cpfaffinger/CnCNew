@@ -542,6 +542,8 @@ run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDro
 run.Test("Projectiles: a shell meets what stands in its way", Tests.ProjectilesMeetWhatStandsInTheirWay);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
+run.Test("Weapons: a weapon looks at the pitch of its victim", Tests.AWeaponLooksAtThePitchOfItsVictim);
+run.Test("Weapons: the designator marks its target", Tests.TheDesignatorMarksItsTarget);
 run.Test("Slow death: a body is flung and sinks", Tests.ABodyIsFlungAndSinks);
 run.Test("Slow death: a hulk sinks from its sink frame", Tests.AHulkSinksFromItsSinkFrame);
 run.Test("Slow death: a flung body survives a save", Tests.AFlungBodySurvivesASave);

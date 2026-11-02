@@ -89,11 +89,13 @@ internal sealed class FiringState
 /// <c>CONTINUOUS_FIRE_MEAN</c>, after more than <c>ContinuousFireTwo</c> <c>CONTINUOUS_FIRE_FAST</c> (exclusive, not cumulative); the weapon's <c>WeaponBonus</c> lines for those
 /// conditions (the Gattling weapons: <c>RATE_OF_FIRE</c> 200 % and 400 %) then shorten the delay between its shots. A change of victim within <c>ContinuousFireCoast</c> of the next
 /// possible shot keeps the count; once that time has passed without a shot the stage drops straight to none (showing <c>CONTINUOUS_FIRE_SLOW</c> for a second).
-/// The looping fire sound, <c>AutoReloadWhenIdle</c> and the <c>TARGET_FAERIE_FIRE</c> bonus of the reference's tracker are not part of this.
+/// The looping fire sound and <c>AutoReloadWhenIdle</c> of the reference's tracker are not part of this.
 /// </summary>
 public sealed partial class SimulationWorld
 {
     private const uint ContinuousFireMean = 1u << WeaponBonusTable.ContinuousFireMeanCondition;
+    private static readonly uint TargetFaerieFire = 1u << WeaponBonusTable.TargetFaerieFireCondition;
+    private static readonly int FaerieFireBit = Modules.ObjectStatusBits.Index("FAERIE_FIRE");
     private const uint ContinuousFireFast = 1u << WeaponBonusTable.ContinuousFireFastCondition;
 
     /// <summary>Ids (ascending) of the objects whose tracker has a cooldown timer running.</summary>
@@ -113,6 +115,13 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void NoteShotFired(Entity source, WeaponInfo weapon, int slot, EntityId victim)
     {
+        // "We shoot faster at guys marked thusly."
+        var marked = FindEntity(victim) is { } target && target.HasStatus(FaerieFireBit);
+        if (marked != ((source.WeaponBonusConditions & TargetFaerieFire) != 0))
+        {
+            source.WeaponBonusConditions ^= TargetFaerieFire;
+            MarkDirty(source);
+        }
         if (weapon.LeechRange && source.Acquisition is { } attack) attack.LeechRange = true;
         var state = source.Firing;
         state?.ClearPreAttack();

@@ -22,6 +22,7 @@ public sealed partial class SimulationWorld
     private void ProcessDisabledEdges(long next)
     {
         StepSubdualHealing(next);
+        StepStatusDamage(next);
         for (var index = 0; index < _dirty.Count; index++) RefreshDisabledEdge(_dirty[index], next);
         for (var index = _disabledObjects.Count - 1; index >= 0; index--)
             if (index < _disabledObjects.Count) RefreshDisabledEdge(_disabledObjects[index], next);
@@ -46,9 +47,11 @@ public sealed partial class SimulationWorld
     {
         _disabledObjects.Clear();
         _subdualHealing.Clear();
+        _statusDamaged.Clear();
         foreach (var entity in _entities.Values)
         {
             if (entity.Body is ActiveBody { SubdualDamage.Raw: > 0 }) _subdualHealing[entity.Id.Value] = entity;
+            if (entity.StatusDamageUntil != 0) _statusDamaged[entity.Id.Value] = entity;
             var flags = DisabledFlagsAt(entity, _tick);
             entity.DisabledEdge = flags != DisabledMask.None;
             entity.PowerPauseTypes = flags & ~DisabledMask.Held;

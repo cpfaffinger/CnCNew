@@ -52,7 +52,11 @@ public static class DeathTypes
     public static bool IsValid(int type) => type >= 0 && type < Count;
 }
 
-public readonly record struct DamageInfo(EntityId Source, Fixed Amount, int DamageType, int DeathType, bool Kill);
+public readonly record struct DamageInfo(EntityId Source, Fixed Amount, int DamageType, int DeathType, bool Kill)
+{
+    /// <summary><c>m_damageStatusType</c>: the bit of the status table a hit of <see cref="DamageTypes.Status"/> sets.</summary>
+    public int StatusBit { get; init; } = -1;
+}
 
 public enum DamageOutcome : byte
 {

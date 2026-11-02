@@ -256,6 +256,11 @@ public sealed partial class SimulationWorld
         // Weapon slot state exists exactly for objects whose weapon sets hold more than one weapon; any other shape is a snapshot of different data.
         if (reader.Has("weaponSlots") != template.HasMultipleWeaponSlots)
             throw new InvalidDataException($"Entity {entity.Id} ('{template.Name}') {(template.HasMultipleWeaponSlots ? "lacks" : "carries")} weapon slot state its template {(template.HasMultipleWeaponSlots ? "needs" : "does not have")}.");
+        if (reader.Has("statusDamageUntil"))
+        {
+            entity.StatusDamageBit = checked((int)reader.Int("statusDamageBit"));
+            entity.StatusDamageUntil = reader.Int("statusDamageUntil");
+        }
         if (reader.Has("scatterUnused"))
             entity.ScatterTargetsUnused = [..reader.Array("scatterUnused").Select(slot => slot.Text("indices").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(index => int.Parse(index, System.Globalization.CultureInfo.InvariantCulture)).ToList())];
         if (template.HasMultipleWeaponSlots) entity.WeaponSlots = WeaponSlotState.Load(reader.Object("weaponSlots"), template);

@@ -160,7 +160,15 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
             world.MarkDirty(Entity);
             return DamageOutcome.Applied;
         }
-        if (info.DamageType is DamageTypes.KillPilot or DamageTypes.Status) return DamageOutcome.NoEffect;
+        if (info.DamageType == DamageTypes.Status)
+        {
+            // "Damage amount is msec time we set the status given in damageStatusType."
+            if (info.StatusBit < 0) return DamageOutcome.NoEffect;
+            world.DoStatusDamage(Entity, info.StatusBit, (amount * Fixed.FromInt(SimulationRate.OriginalFramesPerSecond) / Fixed.FromInt(1000)).Ceiling());
+            RecordDamage(world, info);
+            return DamageOutcome.Applied;
+        }
+        if (info.DamageType == DamageTypes.KillPilot) return DamageOutcome.NoEffect;
         // ActiveBody::attemptDamage: the body's damage scalar (the strategy center's hold-the-line plan) applies to everything but unresistable damage.
         if (info.DamageType != DamageTypes.Unresistable) amount *= world.DamageScalarOf(Entity);
         if (amount <= Fixed.Zero && !info.Kill) return DamageOutcome.NoEffect;

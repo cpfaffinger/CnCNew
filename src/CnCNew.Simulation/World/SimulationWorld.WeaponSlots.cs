@@ -140,6 +140,44 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>The weapon may be aimed at this victim at all: it targets its kind and would do damage (or is unresistable, which "is allowed to do zero damage").</summary>
+    /// <summary><c>WeaponSet::isAnyWithinTargetPitch</c>: what an order for one slot asks of the whole set.</summary>
+    private bool AnyWithinTargetPitch(Entity source, WeaponSetInfo set, Entity victim)
+    {
+        var limited = false;
+        for (var slot = 0; slot < WeaponSlot.Count; slot++)
+        {
+            if (!set.HasWeapon(slot)) continue;
+            var weapon = _templates.Weapons[set.Weapons[slot]];
+            limited |= weapon.PitchLimited;
+            if (WithinTargetPitch(source, weapon, victim)) return true;
+        }
+        return !limited;
+    }
+
+    private static readonly Fixed AcceptablePitchHeight = Fixed.FromInt(10);
+
+    /// <summary>
+    /// <c>Weapon::isWithinTargetPitch</c> with <c>GeometryInfo::calcPitches</c>: "always good enough if dz is small, regardless of pitch", else the pitches from the source's centre to the
+    /// bottom and the top of the victim must meet the weapon's range of pitches.
+    /// </summary>
+    private bool WithinTargetPitch(Entity source, WeaponInfo weapon, Entity victim)
+    {
+        if (!weapon.PitchLimited || IsContactWeapon(weapon)) return true;
+        var (sourceX, sourceY, sourceZ) = _firstFrameTicks != TickOrder.Next ? source.FrameEnd(_tick) : (source.X, source.Y, source.Z);
+        var (victimX, victimY, victimZ) = _firstFrameTicks != TickOrder.Next ? victim.FrameEnd(_tick) : (victim.X, victim.Y, victim.Z);
+        if ((victimZ - sourceZ).Abs() < AcceptablePitchHeight) return true;
+        var (dx, dy) = (victimX - sourceX, victimY - sourceY);
+        var flat = Fixed.Sqrt(dx * dx + dy * dy);
+        var center = sourceZ + source.Template.CenterZDelta;
+        var above = victim.Template.IsSphere ? victim.Template.GeometryMajorRadius : victim.Template.GeometryHeight;
+        var below = victim.Template.IsSphere ? victim.Template.GeometryMajorRadius : Fixed.Zero;
+        var maxPitch = FixedTrig.Atan2(victimZ + above - center, flat);
+        var minPitch = FixedTrig.Atan2(victimZ - below - center, flat);
+        return (minPitch >= weapon.MinTargetPitch && minPitch <= weapon.MaxTargetPitch)
+            || (maxPitch >= weapon.MinTargetPitch && maxPitch <= weapon.MaxTargetPitch)
+            || (minPitch <= weapon.MinTargetPitch && maxPitch >= weapon.MaxTargetPitch);
+    }
+
     private bool CanTarget(Entity source, WeaponInfo weapon, Entity victim, int victimAntiMask)
         => (weapon.AntiMask & victimAntiMask) != 0 && (EstimateDamage(source, weapon, victim) > Fixed.Zero || weapon.DamageType == DamageTypes.Unresistable);
 
@@ -218,7 +256,7 @@ public sealed partial class SimulationWorld
         {
             if (!set.HasWeapon(effective)) return new(effective, CommandRejection.NoWeapon);
             var weapon = _templates.Weapons[set.Weapons[effective]];
-            if (!CanTarget(source, weapon, victim, victimMask)) return new(effective, CommandRejection.InvalidWeaponTarget);
+            if (!CanTarget(source, weapon, victim, victimMask) || !AnyWithinTargetPitch(source, set, victim)) return new(effective, CommandRejection.InvalidWeaponTarget);
             if (_tick < EffectiveReadyTick(source, effective, set)) return new(effective, CommandRejection.WeaponNotReady);
             return WithinWeaponRange(source, weapon, victim) ? new(effective, 0) : new(effective, CommandRejection.OutOfRange);
         }
@@ -239,7 +277,7 @@ public sealed partial class SimulationWorld
             var sources = set.AutoChoose[candidate];
             if ((sources & (1u << (int)origin)) == 0 && (sources & CommandSourceBits.FromAi) == 0) continue;
             var weapon = _templates.Weapons[set.Weapons[candidate]];
-            if (!CanTarget(source, weapon, victim, victimMask)) { filteredByTarget = true; continue; }
+            if (!CanTarget(source, weapon, victim, victimMask) || !WithinTargetPitch(source, weapon, victim)) { filteredByTarget = true; continue; }
             anyEligible = true;
             var ready = _tick >= EffectiveReadyTick(source, candidate, set);
             if (ready) allEligibleReloading = false;

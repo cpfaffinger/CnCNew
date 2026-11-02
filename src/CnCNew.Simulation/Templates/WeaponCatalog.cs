@@ -48,6 +48,16 @@ public sealed record WeaponInfo(
 
     public Fixed ScatterTargetScalar { get; init; }
 
+    /// <summary><c>MinTargetPitch</c> and <c>MaxTargetPitch</c> in radians; only a weapon with <see cref="PitchLimited"/> looks at them.</summary>
+    public Fixed MinTargetPitch { get; init; }
+    public Fixed MaxTargetPitch { get; init; }
+
+    /// <summary><c>Weapon::m_pitchLimited</c>.</summary>
+    public bool PitchLimited { get; init; }
+
+    /// <summary><c>DamageStatusType</c> as a bit of the status table: what a weapon of <c>DAMAGE_STATUS</c> puts on its victim; -1 for none.</summary>
+    public int DamageStatusBit { get; init; } = -1;
+
     /// <summary><c>LeechRangeWeapon</c>: once the attack has begun, its range holds no more ("essentially grants the weapon unlimited range for the remainder of the attack").</summary>
     public bool LeechRange { get; init; }
 
@@ -190,6 +200,9 @@ public sealed class WeaponBonusTable
     public const int VeteranCondition = 9, EliteCondition = 10, HeroCondition = 11, PlayerUpgradeCondition = 5;
     public const uint VeterancyConditions = (1u << VeteranCondition) | (1u << EliteCondition) | (1u << HeroCondition);
     public const int ContinuousFireMeanCondition = 2, ContinuousFireFastCondition = 3;
+
+    /// <summary><c>WEAPONBONUSCONDITION_TARGET_FAERIE_FIRE</c>.</summary>
+    public static int TargetFaerieFireCondition { get; } = NameTablesPhase5.WeaponBonusCondition.TryIndexOf("TARGET_FAERIE_FIRE", out var index) ? index : throw new InvalidOperationException("TARGET_FAERIE_FIRE");
 
     private static readonly int FieldCount = NameTablesPhase5.WeaponBonusField.Count;
     private readonly Fixed[] _delta;
@@ -345,6 +358,16 @@ public sealed class WeaponCatalog
                     ? parsed : throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value '{field.Value.OriginalText}'.")
                 : null;
             var projectile = Name("ProjectileObject");
+            Fixed Pitch(string key, Fixed fallback) => Field(key)?.Value.Value switch
+            {
+                Angle angle => SimulationTiming.DegreesToRadians(angle.Degrees),
+                null => fallback,
+                decimal number => SimulationTiming.DegreesToRadians(number),
+                long integer => SimulationTiming.DegreesToRadians(integer),
+                var other => throw new InvalidDataException($"{definition.OriginalName}: {key} is no angle ({other})."),
+            };
+            var minPitch = Pitch("MinTargetPitch", -FixedTrig.Pi);
+            var maxPitch = Pitch("MaxTargetPitch", FixedTrig.Pi);
             weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(minimumDelay, delay), WeaponBonusTable.From(definition),
                 primaryRadius, secondaryDamage, secondaryRadius, affects)
             {
@@ -361,6 +384,10 @@ public sealed class WeaponCatalog
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
                 ProjectileCollideMask = collide,
                 LeechRange = Flag("LeechRangeWeapon"),
+                MinTargetPitch = minPitch,
+                MaxTargetPitch = maxPitch,
+                PitchLimited = minPitch > -FixedTrig.Pi || maxPitch < FixedTrig.Pi,
+                DamageStatusBit = Name("DamageStatusType") is { Length: > 0 } status && !status.Equals("NONE", StringComparison.OrdinalIgnoreCase) ? Modules.ObjectStatusBits.Index(status) : -1,
                 HistoricBonusCount = Field("HistoricBonusCount")?.Value.Value is long historicCount ? checked((int)historicCount) : Field("HistoricBonusCount")?.Value.Value is decimal historicNumber ? (int)historicNumber : 0,
                 HistoricBonusFrames = decimal.TryParse(Name("HistoricBonusTime").Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var historicTime) ? (long)(historicTime * CnCNew.Data.OriginalFrame.PerSecond / 1000m) : 0,
                 HistoricBonusRadius = Field("HistoricBonusRadius") is null ? Fixed.Zero : Length("HistoricBonusRadius"),

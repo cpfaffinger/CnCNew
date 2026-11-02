@@ -60,6 +60,9 @@ public interface IWorldServices
     /// <summary>The object's <c>SubdualDamageHelper</c> wakes up (<c>notifySubdualDamage</c>).</summary>
     void BeginSubdualHealing(Entity entity);
 
+    /// <summary><c>StatusDamageHelper::doStatusDamage</c>: the status for that many logic frames of the original; a different one that was on the object goes.</summary>
+    void DoStatusDamage(Entity entity, int bit, long frames);
+
     /// <summary><c>ContainModuleInterface::orderAllPassengersToIdle</c>: the riders of a subdued container stop what they attack.</summary>
     void OrderRidersToIdle(Entity container);
 

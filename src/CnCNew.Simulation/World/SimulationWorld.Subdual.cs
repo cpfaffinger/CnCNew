@@ -9,9 +9,35 @@ namespace CnCNew.Simulation.World;
 public sealed partial class SimulationWorld
 {
     private readonly SortedDictionary<uint, Entity> _subdualHealing = [];
+    private readonly SortedDictionary<uint, Entity> _statusDamaged = [];
 
     /// <inheritdoc cref="Modules.IWorldServices.BeginSubdualHealing"/>
     public void BeginSubdualHealing(Entity entity) => _subdualHealing[entity.Id.Value] = entity;
+
+    /// <inheritdoc cref="Modules.IWorldServices.DoStatusDamage"/>
+    public void DoStatusDamage(Entity entity, int bit, long frames)
+    {
+        // "Clear any different status we may have. Re-getting the same status will just reset the timer."
+        if (entity.StatusDamageUntil != 0 && entity.StatusDamageBit != bit) entity.Status &= ~(1UL << entity.StatusDamageBit);
+        entity.Status |= 1UL << bit;
+        entity.StatusDamageBit = bit;
+        entity.StatusDamageUntil = _tick + Time.OriginalFrames(frames);
+        _statusDamaged[entity.Id.Value] = entity;
+        MarkDirty(entity);
+    }
+
+    private void StepStatusDamage(long tick)
+    {
+        if (_statusDamaged.Count == 0) return;
+        foreach (var entity in _statusDamaged.Values.ToArray())
+        {
+            if (entity.Registered && !entity.DestroyRequested && tick < entity.StatusDamageUntil) continue;
+            entity.Status &= ~(1UL << entity.StatusDamageBit);
+            entity.StatusDamageUntil = 0;
+            _statusDamaged.Remove(entity.Id.Value);
+            if (entity.Registered) MarkDirty(entity);
+        }
+    }
 
     private void StepSubdualHealing(long tick)
     {
