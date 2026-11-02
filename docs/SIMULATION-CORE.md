@@ -879,6 +879,8 @@ position change of a ground object, `IWorldServices.ResolveFootprintCollisions(m
 
 ### Local avoidance movement (`AvoidLocalBlockers`, not an original function)
 
+Since §75.2 this holds for standing units and for one that comes towards the mover; a unit on the move in the same direction is followed, as in the original.
+
 Not an original mechanism but a deliberately simple addition so that ground units do not pass through each other without complaint: before `AIUpdateInterface` applies the planned step to the
 next waypoint, `AvoidLocalBlockers` checks whether the target position lies within the bounding circle of another living, mobile unit (`Template.Locomotor` set
 – buildings already block via `NavigationGrid`); if so, the step vector is rotated one after the other by four fixed angles (±45°, ±90°) and checked again, the first free
@@ -4312,7 +4314,7 @@ returning other errors for shrouded areas could be used to game the system"); th
   source's circle), with its footprint grown by `SupplyBuildBorder` (`expandFootprint`): `LBC_TOO_CLOSE_TO_SUPPLIES`.
 - **The objects** (`d0cd821`, `isLocationClearOfObjects`, `clearRemovableForConstruction`, `moveObjectsForConstruction`): what will be removed (shrubbery, `CLEARED_BY_BUILD`, rubble, the dead), mines and inert
   objects do not count; an immobile or disabled object and an enemy do; an ally at an ability cannot be moved aside. The bibs and factory exits of the second half (`FactoryExitWidth`, `FactoryExtraBibWidth`
-  typed), with the three cells a computer player keeps "so it doesn't build itself into a corner", and with the original's collision tests (`SiteShape`: `xy_collideTest_Rect_Rect` compares corners, so a cross
+  typed), with the three cells a computer player keeps "so it doesn't build itself into a corner", and with the original's collision tests (`SiteShape`, with the preflight of §75.1: `xy_collideTest_Rect_Rect` compares corners, so a cross
   of two long rectangles does not collide, and a circle against a rectangle is the square around it). When a building is begun the removable objects under it are destroyed and the player's and neutral
   units walk off to a place drawn around it - two draws of the logic stream per unit, in the order of their ids; what cannot be moved makes a human's construction fail, and the AI "gets to cheat".
 - **The sight and the path** (`75daa55`): `SHROUD_REVEALED` and `CLEAR_PATH` (`isQuickPathAvailable`, "no goals on cliffs", an immobile builder needs none); the client's preview and its message name the reason
@@ -4664,3 +4666,59 @@ The input manifest records `rulesSha256` per map that has a `map.ini` (83 of 150
 **What moved** (reference manifest, one commit, one cause): 34 of the 50 runs. 22 of the 27 mission runs in their hashes, 4 of them in the number of objects and 3 in shots; every outcome and end tick kept. The ten skirmish runs on Armored Fury, Bitter Winter, Fortress Avalanche and Iron Dragon only by the fingerprint (`commandStreamSha256`, `snapshotSha256`): their end hashes stayed, because those `map.ini` hold weather and light, not rules. Reference match (no map) a stalemate at tick 108,000, `556023EBE5E461C2` / `79AF22AB1CF269A1`, stress test `9EE9F730D124C3BD` / `5611A72EDB7D52F2`, 12 of 16 pairings decided - unchanged.
 
 **Limit:** a match keeps the rules it began with; a `map.ini` changed on disk counts from the next match.
+
+## 75. The owner's acceptance: motion and placement (F-101 to F-106)
+
+The findings of the owner's report of 1 November 2026 that are about how things move and where they stand. Each was measured per frame first (a tick trace of the scene), read in the original, and either fixed by one cause with a test that fails on the code before at 30, 60 and 120 Hz (`tests/CnCNew.Simulation.Tests/Tests.OwnersMotionFindings.cs`, `Tests.BuildSite.cs`, the suite `FxTests` of `Presentation.Tests`) or named as the original's behaviour.
+
+### 75.1 F-101: a building site sees a rectangle laid across another (SPEC-08)
+
+The built-in AI built its supply center inside the dock: on Alpine Assault (seed 11) the Chinese center stood 15.9 units from the middle of a `SupplyDock` turned by 45 degrees (`SupplyBuildBorder` is 0 in the patch and 20 in the original, so only the objects count). `SiteShape.Collide` compared corners as `xy_collideTest_Rect_Rect` does, and two rectangles of about the same size laid across each other have no corner in the other. The original gets there through `z_collideTest_Nonsphere_Nonsphere`, which asks first ("Preflight for close objects"): middles closer than the smallest of the four radii collide. That is what the port lacked; every use of `SiteShape` goes through it (the objects under a site, the bib, the exits, the supplies, what `ClearSite` moves). Measured on the same match: the centers stand 171.3 and 172.2 units from their docks. Beyond the smallest radius a real cross still does not collide, as in the original. A sphere (no shipped building) has no preflight in the original and has one here.
+
+### 75.2 F-102: a unit on the move behind another (UNIT-02)
+
+In `acc-march` the tanks drive back behind the Rangers, and from there their track shook: 108 to 128 of about 375 frames changed direction by more than 0.1 radians (up to 3.07), the step sideways reached a unit and the heading flipped sign 16 to 59 times. The cause is `AvoidLocalBlockers` (§23, not in the original): the next step lay in a soldier's circle, it was turned by 45 degrees, and the path pulled the tank back in the frame after.
+
+The original does not steer around a unit on the move at all. `PartitionManager::update` calls `AIUpdateInterface::processCollision` when every object has moved: `blockedBy` holds a unit up only by what overlaps its ground plan, lies within 45 degrees ahead of it and is not about to pass (infantry that does not walk its way, what it can run over, what flies, a unit off that angle, its own goal within a cell), and `calculateMaxBlockedSpeed` gives it the speed at which it stays behind. `doLocomotor` drives at that limit and falls back from it by a twentieth per frame (`m_bumpSpeedLimit`), comes back by as much from at least a fifth of its speed, and `scrubVelocity2D` cuts the speed at once. After two seconds blocked `AIInternalMoveToState` asks for a new path.
+
+The port does that now (`SimulationWorld.Collision.cs`, `AIUpdateInterface.HeldBehindAMover`):
+
+- `StepBlockedMovers` is one pass at the end of every logic frame of the original. In one pass no unit sees another at a moment of its own, so the limit is the same at every rate; measured per decision (the first form of this fix) it was not: 6 of 44 AI quantities of the rate suite left their tolerance, because a unit reads another's speed differently when the two decide in other ticks of a frame.
+- A unit counts as under way with a speed of its frame: an order given in the last tick of a frame above 30 Hz belongs to the next frame.
+- `IsNoObstacleOnTheMove`: the bounded avoidance no longer turns a step for a unit on the move, unless that unit comes towards the mover (`calculateMaxBlockedSpeed`: "They are running into us"): the original answers that with `aiMoveAwayFromUnit`, the port still with the turned step. For standing units nothing changed (§23, the detour of `StationaryBlockersAhead`).
+- The new path after two seconds asks with the circles of the units around (`MoversInTheWay`), because the port's path search does not see units.
+- Found by the rate suite on the way: a rider's look at its container (`UpdateEnter`) came only in a tick with a share of a step, so above 30 Hz a boarder that stood through its frame waiting for its path (`movement-budget`) missed it and went in a frame after 30 Hz (`DecidedThisTick`).
+
+Measured on `acc-march`: direction changes above 0.1 radians 2 to 4 per tank (largest 0.114), no sign flip, the tank drives straight at 0.28 to 0.35 units per tick behind the soldiers, who walk at 0.33. The AI match China against GLA on the rate comparison: all compared fields equal over 16,000 frames at 30 and 60 Hz.
+
+**Not ported:** `MODELCONDITION_MOVING` cleared after a quarter of a second blocked (the presentation keeps the moving animation); formations' factor 0.55 (the port's group moves have no formation id); `aiMoveAwayFromUnit` for infantry in front of a vehicle that does not walk away. A unit that turns on the spot at speed 0 holds nobody up (the original stops behind it).
+
+### 75.3 F-103: `Lift` of a locomotor was read as 0
+
+The compiled value of `Lift` is no key of the locomotor schema and arrives as text; `TemplateCatalog` read it with the helper for typed reals, so every locomotor had lift 0 (`LiftDamaged` went through another helper and was right). `ControlHeight` took its fallback of an eighth of the speed as an acceleration. Read now; the climb of an aircraft from its take-off to its cruising height is the net lift of the data (Raptor: 0.062 units per frame² instead of 0.73): measured 14 frames later at the top. The input manifest moves (the locomotors' fingerprint).
+
+### 75.4 F-104: a jet flares its landing (UNIT-19)
+
+Traced on `jet-strafe`: the height of a landing was a straight line (`_glideHeight` by the way left) from 118.75 to 18.75 over 25 frames: 3.2 units per frame down from the first frame to the last, then 0, at 60 units of forward speed per second: a descent of 58 degrees that ends in a corner. Before it the jet stood still in the air for one frame (the state change) and flew 2.4 units back to an approach point it had passed.
+
+`JetTakeoffOrLandingState` gives the locomotor `PRECISE_Z_POS` and `ULTRA_ACCURATE`, and `Locomotor::calcLiftToUseAtPt` holds the height of the next point of the path: lift between minus the locomotor's and three times it, braking in time with twice the net lift (`brakeDist`, "the old, looks-incorrect-to-me-but-works calc"). `JetAIUpdate.SinkTowards` is that controller with gravity and the ground of `PhysicsBehavior::update`, on the frame grid; the goal is `ApproachHeight` above the runway on the first leg and the runway after it. The state change flies on in its frame (`AwaitLanding` calls `Land`), and a first point already behind the jet on the way to the next is passed (`Path::computeFlightDistToGoal`).
+
+Measured: the sink builds up over 16 frames to 3.1 units per frame, is braked from 70 units above the runway, and the wheels touch at 0.15 units per frame at frame 1,029 of the scene (before: 3.2 at frame 996), 72 units further along the 79 of the runway; every shipped jet has the same lift and height, so all of them come down on it. The controller's own brake switch leaves a small saw in the sink (0.1 to 0.2 units per frame), as the original's would. Test `AJetFlaresItsLanding` at 30, 60 and 120 Hz; `RateFlightJetSortieIsBitIdentical` holds.
+
+### 75.5 F-105 and what is not a defect: the war factory (UNIT-10)
+
+`exit-america-warfactory`: the tank appears at `UnitCreatePoint` (-10, -30, 0 from it), on the ground (z 18.75, the terrain is flat there), and drives out over `NaturalRallyPoint` at the height of the terrain. The model `ABWarFact` has a floor plate at 0.7 and in front of the hall a ramp from 3.9 down to 1.9 (x 25 to 50, the tank's line y = -30), and the Crusader's treads are 5.1 high. So the tank's treads are in the ramp by up to 3.9 units and its height does not change. **That is the original:** `DefaultProductionExitUpdate::exitObjectViaDoor` puts the unit "on the terrain" (`getLayerHeight`), a tank's locomotor has `Z_NO_Z_MOTIVE_FORCE`, and `PhysicsBehavior` clamps to the layer height; no code reads a model's geometry for a height. Not changed.
+
+What the look found: `ClaimExit` gave the unit the factory's height. On a step of the ground above three frames of free fall (9 units) the unit began in the air and fell. F-105: the height of its place, as the original (25 units above the ground before, in the test).
+
+### 75.6 What else is the original (UNIT-06, SHELL-01)
+
+**UNIT-06.** The Rangers of `acc-board` appear at (-5.7, 0), (-1.7, 3.9) and (-1.7, -3.7) of the Humvee: its bones `EXITSTART01` to `03`, inside the hull (half width 8.5), with the Humvee's heading, and walk to `EXITEND01` to `03` from there (`OpenContain::exitObjectViaDoor`; `NumberOfExitPaths = 3`). A Ranger that has to walk backwards first turns on the spot for up to 11 frames at 500 degrees per second: `moveTowardsPositionLegs` gives no speed at 45 degrees off, the port at 30 (a difference of the port, not touched here). The port's numbers are the original's bones. Not changed.
+
+**SHELL-01.** The Chinooks of the shell map (`ShellMapMD`) are `AirF_AmericaVehicleChinook` (model `AVChinookAG`, placed on the map) and `AmericaVehicleChinook` (`AVChinook`, by script). Traced over 1,800 frames: states `NONE`, `MOVING`, `LOADED`, `OVER_WATER`. No draw module of either has a door state, the only animated bones are the two propellers, there is no visibility channel, and the door is no sub-object: `AVChinookAG` carries a mesh `BUNKER01` beside the fuselage (x -11.5 to 5, y to 7) that no line of the data hides, the look of the Air Force general's combat Chinook. A capture of the model (the port's model viewer, kept outside the repository) shows that mesh as a pale panel with a dark strip on the flank, which reads as an open door. What the owner saw is the model as it is drawn in the default state; no state can be chosen differently. Not changed; **not verified** against a picture of the original.
+
+### 75.7 F-106: a range written the wrong way round (FX-02)
+
+The spent casings of infantry (`FallingShells`, `WeaponFX_GenericMachineGunFire`) have `VelOrthoZ = 7.00 2.00`. `FxRandom.NextReal` drew between the two, so a casing left at up to 7 units per frame under a gravity of 0.2: 122 units high. `GetGameClientRandomValueReal` returns `hi` without a draw when `delta <= 0`: every casing leaves at 2 and rises 10. 377 ranges of `ParticleSystem.ini` are written that way (mostly damping and negative rates). Presentation only; the client's random stream draws less.
+
+**What moves in the manifests:** the reference manifest in every run with units (F-101, F-102, F-104, F-103), the input manifest with F-103; not rewritten here.
