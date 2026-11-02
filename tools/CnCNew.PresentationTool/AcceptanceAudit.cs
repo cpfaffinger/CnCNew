@@ -14,12 +14,14 @@ namespace CnCNew.PresentationTool;
 internal sealed class AcceptanceAudit
 {
     private sealed record Row(bool Alive, float X, float Y, float Speed, float Yaw, bool Contained, float Health, bool Drawn, string Conditions, bool Healing, float WheelAngle, float Pitch, float Roll,
-        float WheelTravel, float Construction);
+        float WheelTravel, float Construction, float Z = 0, bool Disabled = false);
 
     private readonly LiveScenario _live;
     private readonly List<Dictionary<string, Row>> _frames = [];
     private readonly Dictionary<string, float> _radius = new(StringComparer.OrdinalIgnoreCase);
     private float _highestStranger;
+    private int _framesWithABeam;
+    private readonly HashSet<string> _strangers = new(StringComparer.OrdinalIgnoreCase);
     private float _groundZ = float.NaN;
 
     private AcceptanceAudit(LiveScenario live) => _live = live;
@@ -48,9 +50,12 @@ internal sealed class AcceptanceAudit
             var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? F(body.Health) / F(body.MaxHealth) : 1f;
             rows[tag] = new Row(!entity.EffectivelyDead, F(entity.X) - _live.Anchor.X, F(entity.Y) - _live.Anchor.Y, F(entity.Speed) * _live.World.Time.TicksPerSecond, F(entity.Angle),
                 entity.ContainedBy.IsValid, health, drawable is not null, drawable?.Conditions.ToString() ?? "(not drawn)", drawable?.ShowsHealing ?? false,
-                drawable?.Chassis.WheelAngle ?? 0f, drawable?.Chassis.Pitch ?? 0f, drawable?.Chassis.Roll ?? 0f, drawable?.WheelTravel ?? 0f, drawable?.ConstructionProgress01 ?? 0f);
+                drawable?.Chassis.WheelAngle ?? 0f, drawable?.Chassis.Pitch ?? 0f, drawable?.Chassis.Roll ?? 0f, drawable?.WheelTravel ?? 0f, drawable?.ConstructionProgress01 ?? 0f, F(entity.Z), entity.DisabledFlags(_live.World.Tick) != CnCNew.Simulation.World.DisabledMask.None);
         }
         _frames.Add(rows);
+        foreach (var entity in _live.World.Entities)
+            if (!tagged.Contains(entity.Id)) _strangers.Add(entity.Template.Name);
+        if (_live.Attached.ProjectileStreams.Length > 0) _framesWithABeam++;
         // Anything drawn that the scene did not place is a projectile or debris; how high it flies tells an arc from a straight line.
         foreach (var drawable in frame.Drawables)
             if (drawable.Entity.IsValid && !drawable.IsStatic && !tagged.Contains(drawable.Entity) && !float.IsNaN(_groundZ))
@@ -70,6 +75,11 @@ internal sealed class AcceptanceAudit
             case "acc-repair": CheckRepair(failures); break;
             case "acc-firefight": CheckFirefight(events, failures); break;
             case "acc-build": CheckBuild(failures); break;
+            case "acc-combat-drop": CheckCombatDrop(failures); break;
+            case "acc-bodies": CheckBodies(failures); break;
+            case "acc-subdual": CheckSubdual(failures); break;
+            case "acc-firestorm": CheckFirestorm(failures); break;
+            case "acc-reverse": CheckReverse(failures); break;
         }
         Console.WriteLine();
         return failures;
@@ -284,6 +294,77 @@ internal sealed class AcceptanceAudit
         if (firing.Length == 0) failures.Add("the Gattling is never drawn in a firing state");
         if (firing.Length >= _frames.Count - 30) failures.Add("the Gattling is drawn firing in (nearly) every frame, also before and after the fight");
         CheckDrawn(failures);
+    }
+
+    private void CheckCombatDrop(List<string> failures)
+    {
+        var rangers = _live.Tags.Keys.Where(tag => tag.StartsWith("ranger", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
+        foreach (var tag in rangers)
+        {
+            var rows = _frames.Select(frame => frame[tag]).ToArray();
+            var aboard = rows.Count(row => row.Contained);
+            var sliding = rows.Count(row => row.Conditions.Contains("RAPPELLING", StringComparison.OrdinalIgnoreCase));
+            var last = rows[^1];
+            Console.WriteLine($"  {tag}: {aboard} frames aboard, {sliding} on the rope, ends at ({last.X:F0},{last.Y:F0})");
+            if (aboard == 0) failures.Add($"{tag} never boarded");
+            if (sliding == 0) failures.Add($"{tag} never slid down a rope");
+            if (last is not { Alive: true, Contained: false } || Vector2.Distance(new Vector2(last.X, last.Y), new Vector2(60, 0)) > 60) failures.Add($"{tag} does not stand at the drop");
+        }
+    }
+
+    private void CheckBodies(List<string> failures)
+    {
+        var rangers = _live.Tags.Keys.Where(tag => tag.StartsWith("ranger", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
+        var (flung, sunk) = (0, 0);
+        foreach (var tag in rangers)
+        {
+            var rows = _frames.Select(frame => frame[tag]).ToArray();
+            var ground = rows[0].Z;
+            var dead = rows.Where(row => !row.Alive && row.Conditions != "gone").ToArray();
+            if (dead.Length == 0) continue;
+            var (high, low) = (dead.Max(row => row.Z - ground), dead.Min(row => row.Z - ground));
+            Console.WriteLine($"  {tag}: dead for {dead.Length} frames, highest {high:F1}, lowest {low:F1}, gone in the end: {rows[^1].Conditions == "gone"}");
+            if (high > 3f) flung++;
+            if (low < -1f) sunk++;
+        }
+        if (flung == 0) failures.Add("no body was thrown into the air");
+        if (sunk == 0) failures.Add("no body sank into the ground");
+    }
+
+    private void CheckSubdual(List<string> failures)
+    {
+        Console.WriteLine($"  a beam is drawn in {_framesWithABeam} frames");
+        if (_framesWithABeam < 60) failures.Add("the beams of the two tanks are not drawn");
+        foreach (var tag in new[] { "crusader", "plant" })
+        {
+            var rows = _frames.Select(frame => frame[tag]).ToArray();
+            var disabled = rows.Count(row => row.Disabled);
+            var lost = rows[0].Health - rows.Min(row => row.Health);
+            Console.WriteLine($"  {tag}: disabled in {disabled} frames, lost {lost:P1} of its health");
+            if (disabled == 0) failures.Add($"{tag} is never disabled");
+            if (lost > 0.001f) failures.Add($"{tag} lost health to a weapon that only disables");
+        }
+    }
+
+    private void CheckFirestorm(List<string> failures)
+    {
+        var storms = _strangers.Where(name => name.Contains("Firestorm", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).ToArray();
+        Console.WriteLine($"  firestorms: {string.Join(", ", storms)}");
+        if (storms.Length == 0) failures.Add("no firestorm rose");
+    }
+
+    private void CheckReverse(List<string> failures)
+    {
+        var rows = _frames.Select(frame => frame["humvee"]).ToArray();
+        var first = rows.Take(300).ToArray();
+        var turnedOnTheShortWay = first.Max(row => MathF.Abs(Wrap(row.Yaw - first[0].Yaw))) * 180f / MathF.PI;
+        var moved = first[0].X - first[^1].X;
+        var second = rows.Skip(300).ToArray();
+        var turnedOnTheLongWay = second.Max(row => MathF.Abs(Wrap(row.Yaw - first[0].Yaw))) * 180f / MathF.PI;
+        Console.WriteLine($"  short way: {moved:F1} units behind it, turned {turnedOnTheShortWay:F1} degrees; long way: turned {turnedOnTheLongWay:F1} degrees, ends at x {rows[^1].X:F0}");
+        if (moved < 20f) failures.Add("the Humvee did not go back");
+        if (turnedOnTheShortWay > 10f) failures.Add("the Humvee turned round for the short way");
+        if (turnedOnTheLongWay < 90f) failures.Add("the Humvee did not turn for the long way");
     }
 
     private void CheckBuild(List<string> failures)

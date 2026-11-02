@@ -176,14 +176,14 @@ public static class AcceptanceScenes
         ],
         0, 0, 20f, 42f, 420f);
 
-    /// <summary>Missile soldiers fire at a squad: a rocket throws a body in the air, and every body goes into the ground before it is gone.</summary>
+    /// <summary>Tomahawks fire at a squad from beyond its rifles: a rocket throws a body in the air, and every body goes into the ground before it is gone.</summary>
     public static DemoScenario Bodies { get; } = new(
         "acc-bodies", "Bodies flung and sinking",
-        "Two missile soldiers fire at a squad of Rangers. To see: a soldier killed by a rocket is thrown through the air and lands; the dead lie for a few seconds, then sink slowly into the ground and are gone.",
+        "Two Tomahawk launchers fire at a squad of Rangers from far away. To see: a soldier killed by a rocket is thrown through the air and lands; the dead lie for a few seconds, then sink slowly into the ground and are gone.",
         900,
         [
-            new("rocket1", "AmericaInfantryMissileDefender", 1, -70, -15, 0f),
-            new("rocket2", "AmericaInfantryMissileDefender", 1, -70, 15, 0f),
+            new("rocket1", "AmericaVehicleTomahawk", 1, -200, -30, 0f),
+            new("rocket2", "AmericaVehicleTomahawk", 1, -200, 30, 0f),
             ..Enumerable.Range(0, 4).Select(index => new ScenarioUnit($"ranger{index + 1}", "AmericaInfantryRanger", 2, 70, -24 + 16 * index, 180f)),
         ],
         [
@@ -192,7 +192,7 @@ public static class AcceptanceScenes
             new(220, "rocket1", ScenarioOrderKind.Attack, "ranger2"),
             new(220, "rocket2", ScenarioOrderKind.Attack, "ranger4"),
         ],
-        30, 0, 20f, 42f, 240f);
+        40, 0, 20f, 42f, 300f);
 
     /// <summary>The microwave tank and the ECM tank disable without killing.</summary>
     public static DemoScenario Subdual { get; } = new(
@@ -211,18 +211,18 @@ public static class AcceptanceScenes
         ],
         0, 0, 20f, 42f, 330f);
 
-    /// <summary>Three napalm hits make a firestorm.</summary>
+    /// <summary>Eight napalm hits within three seconds make a firestorm (<c>HistoricBonusCount</c>, <c>HistoricBonusTime</c>): five MiGs fly in side by side.</summary>
     public static DemoScenario Firestorm { get; } = new(
         "acc-firestorm", "Firestorm",
-        "Three MiGs fire napalm at one spot. To see: the first hits burn on the ground, and when enough of them have fallen at one place a tall firestorm rises there and burns what stands around it.",
+        "Five MiGs fire napalm at one spot. To see: the first hits burn on the ground, and when enough of them have fallen at one place a tall firestorm rises there and burns what stands around it.",
         1500,
         [
-            ..Enumerable.Range(0, 3).Select(index => new ScenarioUnit($"mig{index + 1}", "ChinaJetMIG", 1, -260, -40 + 40 * index, 0f)),
+            ..Enumerable.Range(0, 5).Select(index => new ScenarioUnit($"mig{index + 1}", "ChinaJetMIG", 1, -260, -40 + 20 * index, 0f)),
             new("plant", "AmericaPowerPlant", 2, 80, 0, 180f),
             new("barracks", "AmericaBarracks", 2, 120, 90, 180f),
         ],
         [
-            ..Enumerable.Range(0, 3).Select(index => new ScenarioOrder(30 + 20 * index, $"mig{index + 1}", ScenarioOrderKind.Attack, "plant")),
+            ..Enumerable.Range(0, 5).Select(index => new ScenarioOrder(30, $"mig{index + 1}", ScenarioOrderKind.Attack, "plant")),
         ],
         60, 20, 20f, 42f, 420f);
 
