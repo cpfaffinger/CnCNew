@@ -192,7 +192,7 @@ public sealed class FxCatalog
         catalog.CheckReferences(diagnostics);
         return new FxCatalog
         {
-            FxLists = catalog.FxLists, ParticleSystems = catalog.ParticleSystems, Weapons = catalog.Weapons, Objects = catalog.Objects,
+            FxLists = catalog.FxLists, FactionMusics = catalog.FactionMusics, ParticleSystems = catalog.ParticleSystems, Weapons = catalog.Weapons, Objects = catalog.Objects,
             DamageFx = catalog.DamageFx, Upgrades = catalog.Upgrades, SpecialPowers = catalog.SpecialPowers, MiscAudio = catalog.MiscAudio,
             AudioEvents = catalog.AudioEvents, Settings = catalog.Settings, Diagnostics = diagnostics.ToSortedArray(),
         };
