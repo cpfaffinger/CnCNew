@@ -154,8 +154,13 @@ static partial class Tests
         world.Step();
         Check.That(!world.Entities.Any(value => value.Template.Name == "PendingCrate"), "A crate whose modules are not fully implemented is reported but never spawned.");
 
-        feeder.FireWeapon(2, f5, noScienceVictim);
-        result = world.Step();
-        Check.That(world.FindEntity(new EntityId(noScienceVictim)) is null && Requests(result.Events).Count == 0, "A killer without the required science gets no crate.");
+        // The enemy fighter has turned to what it found by itself on its other side: the order brings it round first.
+        var crates = 0;
+        for (var tick = 0; tick < world.Frames(60) && world.FindEntity(new EntityId(noScienceVictim)) is not null; tick++)
+        {
+            feeder.FireWeapon(2, f5, noScienceVictim);
+            crates += Requests(world.Step().Events).Count;
+        }
+        Check.That(world.FindEntity(new EntityId(noScienceVictim)) is null && crates == 0, "A killer without the required science gets no crate.");
     }
 }

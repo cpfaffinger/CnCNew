@@ -87,7 +87,7 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | UNIT-07..09 factory exits | machine | sim (`RateInvariance.Exits`), scenes (`exit-*`) | - |
 | UNIT-10 war factory up close | machine | world (door states, model conditions) | likeness of the door animation |
 | UNIT-11 turrets and fire release | machine | sim (`SIM-TURRET-AIM.md` tests), scenes (`tank-duel`) | - |
-| UNIT-12 projectile paths | **fixed** | sim (`Projectiles`), the detonation effect once at the impact | how the arc looks |
+| UNIT-12 projectile paths | **fixed** | sim (`Projectiles`, `Missile flight`), the detonation effect once at the impact; `ProjectileFlightTests`: launch bone, climb, cruise and dive of the Tomahawk, every shipped launcher arrives (`docs/SIMULATION-CORE.md` §75) | how the arc looks |
 | UNIT-13 jets | machine | sim (`JetFlight`, `JetFlightReal`), scenes (`jet-strafe`) | feel |
 | UNIT-14 capturing | machine | scenes (`capture-building`, flashes and tick sounds counted) | - |
 | UNIT-15 wheels, steering, suspension | **fixed** | world (`SuspensionTracker` numbers: steer 19.8 and 30 degrees, nod 3.4 degrees) | look |

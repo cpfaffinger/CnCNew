@@ -32,6 +32,7 @@ static partial class Tests
           DelayBetweenShots = 500
         End
         Weapon BigGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 40
           AttackRange = 60.0
           DamageType = EXPLOSION

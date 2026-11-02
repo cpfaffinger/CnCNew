@@ -4722,3 +4722,54 @@ What the look found: `ClaimExit` gave the unit the factory's height. On a step o
 The spent casings of infantry (`FallingShells`, `WeaponFX_GenericMachineGunFire`) have `VelOrthoZ = 7.00 2.00`. `FxRandom.NextReal` drew between the two, so a casing left at up to 7 units per frame under a gravity of 0.2: 122 units high. `GetGameClientRandomValueReal` returns `hi` without a draw when `delta <= 0`: every casing leaves at 2 and rises 10. 377 ranges of `ParticleSystem.ini` are written that way (mostly damping and negative rates). Presentation only; the client's random stream draws less.
 
 **What moves in the manifests:** the reference manifest in every run with units (F-101, F-102, F-104, F-103), the input manifest with F-103; not rewritten here.
+## 76. The flight of projectiles (F-96 to F-98; UNIT-12, FX-04, FX-05)
+
+The owner's report of 1 November 2026: the Tomahawk "drives" on the ground, a rocket goes 0 degrees for a few pixels and then steers hard to its target. Three causes, each its own commit; none of them was a defect of the drawing. Measured with `PresentationTool scenario-audit --name acc-artillery --projectiles`, which prints every projectile per original frame.
+
+| Tomahawk at frame | before | after |
+| --- | --- | --- |
+| launch | 5 above the ground, level, the hull's heading 0 | 16 above the ground on its rack, 70 degrees up, heading 7.8 (the target's) |
+| 80 units flown | still 5 above the ground, turns at once | 84 above the ground, turns at the locomotor's rate |
+| cruise | 1.8 to 5 above the ground, descending | 125 to 131 above the ground, level |
+| end | through the building to its feet | down at 61 degrees from 100 units out, on the roof, 31.8 above the ground |
+
+The flight of 84 frames is bit for bit the same at 30, 60 and 120 Hz (`Missile flight` tests). `ProjectileFlightTests` of `Game.Tests` flies every shipped launcher with a missile at a target: 81 launchers, 81 arrive.
+
+### 76.1 The launch (F-96)
+
+`Weapon::positionProjectileForLaunch` gives a projectile the matrix of the launch bone of the barrel in turn (`calcProjectileLaunchPosition`): the pristine bone, pitched about the turret's pitch bone, turned about its angle bone, then with the object. The port launched from the geometry centre along the hull's heading: the turret's direction, the barrel's height and, for the Tomahawk, the launcher's `FirePitch = 70` never reached the projectile.
+
+`ModelGeometry.WeaponLaunches` (`WeaponLaunchPoints`; part of the world fingerprint) holds per object with a projectile weapon and per slot the barrels (`validateWeaponBarrelInfo`: `NAME01`, `NAME02`, ... while any of the four bones of a number exists, a number without a launch bone being the identity, else the plain names) and the rest positions of the turret's bones, from the state the object shows when the slot fires (`FIRING_A`, `_B`, `_C`), at the first frame of that state's first animation or, with `PRISTINE_BONE_POS_IN_FINAL_FRAME`, the last (`validateCachedBones`): an infantryman's shoulder is not where his rest pose has it. The numbers are computed in the exact domain of the bone table; `W3dAnimationBinding.SampleStored` hands over what the file states, without interpolation. `SimulationWorld.Launch.cs` applies the turret's angle and pitch where its frame ends. The barrels go in turn (`ShotsPerBarrel`, `BarrelState`, written only for an object with more than one). Above 30 Hz the launch is the 30 Hz launch: the launcher's place and heading are read where its frame ends.
+
+**Named differences:** the state with `FIRING_x` alone, not the object's whole condition set (a state that adds a bone for another condition is not seen); no tilt of the object on the ground (the simulation has none); a rider leaves at its container's point along the bearing to its victim; a template without launch bones keeps the stand-in of the geometry centre (the original takes the object's origin).
+
+### 76.2 A unit turns to its victim (F-97)
+
+`AIAttackAimAtTargetState::update`: a weapon no turret can bring to bear makes the unit turn on the spot until it faces the victim within the weapon's `AcceptableAimDelta` (at least 2 degrees, `REL_THRESH`), and only then fire. The port had no such step: a rocket trooper never turned at all (yaw 0 for the whole scene `acc-flames`, firing at a target at -45 degrees), which is half of what the owner saw. `AimBodyAt` stands in `AimTurretsAt` and `AimTurretsAtPlace`, through which every shot passes; `AIUpdateInterface.TurnInPlace` takes one step of the locomotor's turn rate in the first tick of the unit's own frame and covers it in shares above 30 Hz. It holds for what can turn in place (`m_canTurnInPlace`: no `MinSpeed`); a contact weapon does not aim, a turret that turns aims itself, a "fake" turret leaves it to the body. `AcceptableAimDelta` typed: 48 shipped weapons state it, most of them 180 ("Don't need to turn at all").
+
+A unit in the air does not begin a turn ("Skip moveTowardsAngle if physics say you're stunned"), and a turn the flight catches ends with its frame: covered by shares it would stop half way where the 30 Hz turn was whole, and a match parted between the rates.
+
+**Named differences:** an immobile object does not aim (the original's cannot turn either, its data say 180); a rider does not turn (F-96 gives its shot the bearing); a unit with a move order fires along its way as before (the original's attack stops it first).
+
+### 76.3 The missile flies (F-98)
+
+The port's missile was kinematic: a speed, a direction, and "turns at will". `setMaxTurnRate(BIGNUM)` in the original lifts a cap and leaves the locomotor's `TurnRate`; and nothing read `PreferredHeight`, `PreferredHeightDamping`, `MaxThrustAngle` or `DistanceToTargetBeforeDiving`. Now `MissileAIUpdate` does per frame of the original what its AI, locomotor and physics do (all 44 shipped missile objects have a THRUST locomotor and `Z_NO_Z_MOTIVE_FORCE`, so one way covers them):
+
+1. `doLocomotor` asks for the goal direct (`computeFlightDistToGoal`), not along a path.
+2. `moveTowardsPositionThrust`: the preferred height replaces the goal's height, damped, until the dive; `calcDirectionToApplyThrust` with the frame's gravity in the velocity; `tryToRotateVector3D` limits the thrust to `MaxThrustAngle` off the nose (0 while turning is forbidden), and the nose to the turn rate toward the velocity (three times the rate toward the goal while braking); `accel = thrust · A − v · A/S` relaxes the speed to the top speed. `getForwardSpeed3D` is what it is, the root of the summed squares of the products.
+3. `PhysicsBehavior::update`: the motive force, gravity and the air's friction integrate into the velocity, and the velocity into the place; in `KILL` the status `BRAKING` makes the locomotor move the missile straight at its goal at its speed instead ("Projectiles cheat in 3 dimensions"). `transferVelocityTo` gives it the launcher's velocity at the launch; that speed comes from the frame's own value, because the speed per tick has lost the division's rest and a world just restored would otherwise read it (D3 of `Game.Tests` found this).
+4. The ground stops it and takes the excess out of `v.z`; only coming down from the air (`WAS_AIRBORNE_LAST_FRAME`) is a hit, and not when it is more than a cell above its goal and more than three cells from it (`projectileHandleCollision(NULL)`).
+
+The rotation of a direction by an angle is the sum of the two axes in fixed point; a rotation matrix is not needed. All of it runs once per original frame on the missile's own phase and flies in shares, as before (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md).
+
+**Stand-in for the collision.** With a dive the missile would go through a building to its feet. It now detonates where it meets the geometry of the object it was fired at, also when it does not follow it (`ProjectileModules.Touches`: box or cylinder, from the feet to the top, with the missile's radius); that is the only object it meets, `ProjectileCollidesWith` stays unread. The area damage measures to the victim's bounding sphere, so a hit on a wall counts.
+
+**The picture.** `IProjectileModule.FlightPitch` gives the nose (the shell's along its path, `m_orientToFlightPath`), and `FrameProjector` adds it to the object's chassis pitch: the simulation keeps the heading on the object and the rest on the module.
+
+**Named differences:** the frames a missile waits for its path before the locomotor acts; a damaged locomotor; the lateral friction of a missile flying below 0.64 units; jamming.
+
+### 76.4 What moves
+
+Every run with a shot from a launch bone, a unit without a turret or a missile. `baselines/compatibility.json` 662 -> 658 entries (`AcceptableAimDelta`, `ShotsPerBarrel`, `MaxThrustAngle`, `PreferredHeightDamping`). The picture hashes of the observer and the analysis (they draw a real match) moved with it. The world fingerprint follows the launch table. **The manifests are not rewritten here:** `reference-manifest` and `input-manifest` are measured at the merge. Versions unchanged; a missile's state has new fields, and a save or replay of an older build is refused by the fingerprint anyway.
+
+**Rates.** The rush match of `ObserverTests` is field for field the same at 30, 60 and 120 Hz to its end at frame 9,810. **Open:** the default match America against China on Alpine Assault parts at frame 11,429: a Red Guard goes into its troop crawler a frame later at 60 Hz, because `AIUpdateInterface.UpdateEnter` decides when `_frameTicksLeft` is `stride - 1`, which at 30 Hz also holds for a unit still waiting for its queued path. The code is not touched by this section and the match reached the case only because its course changed; it is of the kind of F-88. The rate-equivalence suite stands as before: its two known cases and nothing else.

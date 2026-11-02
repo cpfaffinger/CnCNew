@@ -5,6 +5,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -77,7 +78,10 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) RateProjectileWorld(SimulationRate rate)
     {
-        var fixture = new SyntheticFixture(rate, files: RateProjectileFiles());
+        // The fuel missile is launched 20 units up: only coming down from the air is a hit on the ground (WAS_AIRBORNE_LAST_FRAME).
+        var high = new LaunchSlot([new LaunchBarrel(Fixed.Zero, Fixed.Zero, Fixed.FromInt(20), Fixed.One, Fixed.Zero, Fixed.Zero)], []);
+        var geometry = new ModelGeometry([], [], [], null, [new KeyValuePair<string, WeaponLaunchPoints>("FuelMissileLauncher", new WeaponLaunchPoints([high, new LaunchSlot([], []), new LaunchSlot([], [])]))]);
+        var fixture = new SyntheticFixture(rate, files: RateProjectileFiles(), geometry: geometry);
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         return (world, new Feeder(world), fixture);
     }
@@ -246,18 +250,20 @@ static partial class Tests
 
     /// <summary>
     /// §5.2 <c>MissileAIUpdate</c>: the two hand-computed missiles of Tests.Projectiles.cs fly the 30 Hz flight at every rate. With an acceleration of one top speed per frame the
-    /// missile is 10 units out after its first frame (before: 10 / 7.5 / 6.25, because speed and acceleration were stepped per tick) and lands in F+10; with an ignition delay of
-    /// three frames and one unit per frame² it follows the table 2, 4, 7, 11 … 96 (before, after frame 10: 56 / 50 / 47.19) and lands in F+15. The kill-self wait ends in the same frame.
+    /// missile is 10 units out after its first frame (before: 10 / 7.5 / 6.25, because speed and acceleration were stepped per tick) and lands in F+11; with an ignition delay of
+    /// three frames and one unit per frame² it follows the table of Tests.Projectiles.cs (before, after frame 10: 56 / 50 / 47.19) and lands in F+18. The kill-self wait ends in the same frame.
     /// </summary>
     public static void RateProjectilesMissilesFlyTheThirtyHertzFlight()
     {
-        var fast = SameFlightAtEveryRate("MissileLauncher", "FastMissile", 100, 16, 10);
+        var fast = SameFlightAtEveryRate("MissileLauncher", "FastMissile", 100, 16, 11);
         Check.That(fast.Frames[1] is { } first && first.X == Fixed.FromInt(10), "After its first frame the missile is one full step out.");
-        Check.That(fast.Frames[12] is not null && fast.Frames[13] is null, "KillSelfDelay (3 frames) after the detonation removes the missile, in F+13.");
-        var slow = SameFlightAtEveryRate("SlowMissileLauncher", "SlowMissile", 100, 18, 15);
-        int[] expected = [2, 4, 7, 11, 16, 22, 29, 37, 46, 56, 66, 76, 86, 96];
-        for (var frame = 0; frame < expected.Length; frame++)
-            Check.That(slow.Frames[frame + 1] is { } at && at.X == Fixed.FromInt(expected[frame]), $"After frame {frame + 1} the slow missile is at x = {expected[frame]}.");
+        Check.That(fast.Frames[13] is not null && fast.Frames[14] is null, "KillSelfDelay (3 frames) after the detonation removes the missile, in F+14.");
+        var slow = SameFlightAtEveryRate("SlowMissileLauncher", "SlowMissile", 100, 21, 18);
+        for (var frame = 0; frame < SlowMissileTable.Length; frame++)
+        {
+            Check.That(slow.Frames[frame + 1] is not null, $"After frame {frame + 1} the slow missile flies.");
+            Near(slow.Frames[frame + 1]!.Value.X, SlowMissileTable[frame], $"After frame {frame + 1} the slow missile", 0.5m);
+        }
     }
 
     /// <summary>

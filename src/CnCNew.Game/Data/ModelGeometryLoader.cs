@@ -42,7 +42,164 @@ public static class ModelGeometryLoader
             layouts[definition.OriginalName] = ReadLayout(library, definition.OriginalName, model, rows, cols);
         }
 
-        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library));
+        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library));
+    }
+
+    /// <summary>The fraction bits of a launch bone's direction.</summary>
+    private const int DirectionBits = 16;
+
+    private static readonly ModelConditionSet[] FiringConditions = [ModelConditionSet.Parse("FIRING_A"), ModelConditionSet.Parse("FIRING_B"), ModelConditionSet.Parse("FIRING_C")];
+
+    /// <summary>
+    /// The launch points of every object one of whose weapons launches a projectile (<c>ModelConditionInfo::validateWeaponBarrelInfo</c>, <c>W3DModelDraw::getProjectileLaunchOffset</c>), for
+    /// the state the object shows when the slot fires: the first draw module that has barrels for the slot gives them. The pristine bones of a state are those of the first or, with
+    /// <c>PRISTINE_BONE_POS_IN_FINAL_FRAME</c>, the last frame of its first animation (<c>validateCachedBones</c>), times the template's <c>Scale</c>.
+    /// </summary>
+    private static SortedDictionary<string, WeaponLaunchPoints> ReadWeaponLaunches(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        var launchers = graph.Definitions.OfType<WeaponDefinition>()
+            .Where(weapon => weapon.Fields.Any(field => field.Name.Equals("ProjectileObject", StringComparison.OrdinalIgnoreCase)))
+            .Select(weapon => weapon.OriginalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var points = new SortedDictionary<string, WeaponLaunchPoints>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            if (!FiresProjectiles(definition, launchers) || !visuals.TryGet(definition.OriginalName, out var visual)) continue;
+            var scale = Fixed.FromDecimal(ScaleOf(definition));
+            var slots = ImmutableArray.CreateBuilder<LaunchSlot>(FiringConditions.Length);
+            for (var slot = 0; slot < FiringConditions.Length; slot++) slots.Add(ReadLaunchSlot(definition, visual, library, slot, scale));
+            if (slots.Any(slot => !slot.Barrels.IsEmpty)) points[definition.OriginalName] = new WeaponLaunchPoints(slots.MoveToImmutable());
+        }
+
+        return points;
+    }
+
+    private static bool FiresProjectiles(ObjectDefinition definition, HashSet<string> launchers)
+    {
+        foreach (var section in definition.Sections)
+        {
+            if (!section.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)) continue;
+            foreach (var field in section.Fields)
+                if (field.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase)
+                    && field.Value.OriginalText.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries) is [_, var weapon, ..] && launchers.Contains(weapon)) return true;
+        }
+
+        return false;
+    }
+
+    private static LaunchSlot ReadLaunchSlot(ObjectDefinition definition, ObjectVisual visual, W3dAssetLibrary library, int slot, Fixed scale)
+    {
+        foreach (var draw in visual.Draws)
+        {
+            if (BestStateSelector.FindBest(draw, FiringConditions[slot]) is not (var index and >= 0) || index >= draw.States.Length) continue;
+            var state = draw.States[index];
+            if (state.Model is not { } model) continue;
+            var bones = slot < state.WeaponBones.Length ? state.WeaponBones[slot] : WeaponSlotBones.None;
+            if (bones is { LaunchBone: null, FireFxBone: null, RecoilBone: null, MuzzleFlash: null }) continue;
+            W3dModel loaded;
+            try
+            {
+                loaded = library.GetModel(model);
+            }
+            catch (W3dMissingAssetException exception)
+            {
+                throw new InvalidDataException($"{definition.OriginalName}: model '{model}' cannot be loaded: {exception.Message}");
+            }
+
+            var skeleton = loaded.Skeleton;
+            var pose = new StatePose(skeleton, FirstAnimation(state, skeleton, library), state.Flags.HasFlag(AnimationFlags.PristineBonePosInFinalFrame));
+            var barrels = ReadBarrels(bones, skeleton, pose, scale);
+            if (barrels.IsEmpty) continue;
+            return new LaunchSlot(barrels, [ReadLaunchTurret(state.Turret, skeleton, pose, scale), ReadLaunchTurret(state.AltTurret, skeleton, pose, scale)]);
+        }
+
+        return new LaunchSlot([], []);
+    }
+
+    /// <summary>The state's first animation, if it can be had; a state without one keeps the rest pose (the original's model shows its current animation or none).</summary>
+    private static W3dAnimationBinding? FirstAnimation(ModelStateSpec state, W3dSkeleton skeleton, W3dAssetLibrary library)
+    {
+        if (state.Animations.IsDefaultOrEmpty || !state.Animations[0].Name.Contains('.', StringComparison.Ordinal)) return null;
+        try
+        {
+            return library.GetAnimation(state.Animations[0].Name) is { } binding && binding.PivotCount <= skeleton.BoneCount ? binding : null;
+        }
+        catch (Exception exception) when (exception is W3dMissingAssetException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <c>validateWeaponBarrelInfo</c>: barrels are <c>NAME01</c>, <c>NAME02</c>, ... while any of the four bones of a number exists; a number without a launch bone is the identity;
+    /// without any numbered barrel the plain names give one.
+    /// </summary>
+    private static ImmutableArray<LaunchBarrel> ReadBarrels(WeaponSlotBones bones, W3dSkeleton skeleton, StatePose pose, Fixed scale)
+    {
+        bool Has(string? name, string suffix) => name is not null && skeleton.FindBone(name + suffix) > 0;
+        LaunchBarrel Barrel(string suffix) => Has(bones.LaunchBone, suffix) ? pose.Barrel(skeleton.FindBone(bones.LaunchBone + suffix), scale) : LaunchBarrel.Origin;
+        var barrels = ImmutableArray.CreateBuilder<LaunchBarrel>();
+        for (var number = 1; number <= 99; number++)
+        {
+            var suffix = number.ToString("00", CultureInfo.InvariantCulture);
+            if (!Has(bones.FireFxBone, suffix) && !Has(bones.RecoilBone, suffix) && !Has(bones.MuzzleFlash, suffix) && !Has(bones.LaunchBone, suffix)) break;
+            barrels.Add(Barrel(suffix));
+        }
+
+        if (barrels.Count == 0 && (Has(bones.FireFxBone, string.Empty) || Has(bones.RecoilBone, string.Empty) || Has(bones.MuzzleFlash, string.Empty) || Has(bones.LaunchBone, string.Empty)))
+            barrels.Add(Barrel(string.Empty));
+        return barrels.ToImmutable();
+    }
+
+    private static LaunchTurret ReadLaunchTurret(TurretSpec turret, W3dSkeleton skeleton, StatePose pose, Fixed scale)
+    {
+        (Fixed X, Fixed Y, Fixed Z) Pivot(string? bone) => bone is not null && skeleton.FindBone(bone) is var index and > 0 ? pose.Point(index, scale) : default;
+        var (angle, pitch) = (Pivot(turret.AngleBone), Pivot(turret.PitchBone));
+        return new LaunchTurret(angle.X, angle.Y, angle.Z, pitch.X, pitch.Y, pitch.Z, Radians(turret.ArtAngleDegrees), Radians(turret.ArtPitchDegrees));
+    }
+
+    private static Fixed Radians(decimal degrees) => FixedTrig.PiFraction(1, 180) * Fixed.FromDecimal(degrees);
+
+    /// <summary>The bones of a state: its model's rest pose under the first or last frame of an animation, computed exactly as the rest pose is (<see cref="BoneTransform"/>).</summary>
+    private sealed class StatePose(W3dSkeleton skeleton, W3dAnimationBinding? animation, bool finalFrame)
+    {
+        private readonly int _frame = animation is null || !finalFrame ? 0 : animation.Animation.FrameCount - 1;
+
+        private ExactTransform Transform(int bone)
+        {
+            var world = ExactTransform.Identity;
+            for (var index = bone; index > 0;)
+            {
+                if (animation is not null && index < animation.PivotCount)
+                {
+                    animation.SampleStored(index, _frame, out var translation, out var rotation);
+                    world = world.Then(ExactTransform.FromPivot(Exact(rotation.X), Exact(rotation.Y), Exact(rotation.Z), Exact(rotation.W), Exact(translation.X), Exact(translation.Y), Exact(translation.Z)));
+                }
+
+                var pivot = skeleton.RestPivots[index];
+                world = world.Then(ExactTransform.FromPivot(Exact(pivot.Rotation.X), Exact(pivot.Rotation.Y), Exact(pivot.Rotation.Z), Exact(pivot.Rotation.W),
+                    Exact(pivot.Translation.X), Exact(pivot.Translation.Y), Exact(pivot.Translation.Z)));
+                var parent = skeleton.Parents[index];
+                if (parent < 0 || parent >= index) throw new InvalidDataException($"bone {index} has the parent {parent}; a parent must precede its children.");
+                index = parent;
+            }
+
+            return world;
+        }
+
+        public (Fixed X, Fixed Y, Fixed Z) Point(int bone, Fixed scale)
+        {
+            var world = Transform(bone);
+            return (Step(world.X.RoundToStep(PositionBits), PositionBits) * scale, Step(world.Y.RoundToStep(PositionBits), PositionBits) * scale, Step(world.Z.RoundToStep(PositionBits), PositionBits) * scale);
+        }
+
+        public LaunchBarrel Barrel(int bone, Fixed scale)
+        {
+            var (x, y, z) = Point(bone, scale);
+            var world = Transform(bone);
+            return new LaunchBarrel(x, y, z, Step(world.M11.RoundToStep(DirectionBits), DirectionBits), Step(world.M12.RoundToStep(DirectionBits), DirectionBits), Step(world.M13.RoundToStep(DirectionBits), DirectionBits));
+        }
+
+        private static Fixed Step(long count, int bits) => Fixed.FromDecimal(count / new decimal(1L << bits));
     }
 
     /// <summary>The fraction bits the lateral extent of a bridge model is kept with.</summary>

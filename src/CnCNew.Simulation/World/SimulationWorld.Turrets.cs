@@ -118,6 +118,8 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool AimTurretsAt(Entity source, int slot, Entity victim, TurretAimOrder order = TurretAimOrder.Shot)
     {
+        var (victimX, victimY, _) = victim.FrameEnd(_tick);
+        if (!AimBodyAt(source, slot, victimX, victimY)) return false;
         if (source.Turrets is not { } states || source.Template.Turrets is not { } set) return true;
         var aligned = true;
         for (var index = 0; index < states.Length; index++)
@@ -139,6 +141,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool AimTurretsAtPlace(Entity source, int slot, Fixed x, Fixed y, Fixed z)
     {
+        if (!AimBodyAt(source, slot, x, y)) return false;
         if (source.Turrets is not { } states || source.Template.Turrets is not { } set) return true;
         var aligned = true;
         for (var index = 0; index < states.Length; index++)
@@ -166,6 +169,40 @@ public sealed partial class SimulationWorld
             if (!IsAlignedAtPlace(source, info, state, x, y, z, slot)) aligned = false;
         }
         return aligned;
+    }
+
+    /// <summary><c>REL_THRESH</c> of <c>AIAttackAimAtTargetState::update</c>: "about 2 degrees", the least a weapon's aim delta counts for.</summary>
+    private static readonly Fixed BodyAimThreshold = Fixed.FromDecimal(0.035m);
+
+    /// <summary>
+    /// <c>AIAttackAimAtTargetState::update</c> for a weapon no turret can bring to bear: the unit turns on the spot until it faces the point within the weapon's
+    /// <c>AcceptableAimDelta</c>, and fires only then. A weapon on a turret that turns has the turret's own aim, a contact weapon does not aim, a unit that cannot turn in place flies
+    /// at its victim (<c>setLocomotorGoalPositionExplicit</c>, its flight modules do), and an immobile object has nothing to turn with. Not modeled: a rider in its container
+    /// (<see cref="FireWeaponAt"/> gives its shot the bearing), a unit on its way (the attack's approach ends before the aim in the original; a move goes on in the port).
+    /// </summary>
+    private bool AimBodyAt(Entity source, int slot, Fixed x, Fixed y)
+    {
+        if (source.ContainedBy.IsValid || source.HasMoveTarget || source.Template.IsKindOf("IMMOBILE") || AiOf(source) is not { CanTurnInPlace: true } ai) return true;
+        var weaponIndex = WeaponIndexIn(source, slot);
+        if (weaponIndex < 0) return true;
+        var weapon = _templates.Weapons[weaponIndex];
+        if (IsContactWeapon(weapon) || IsOnTurningTurret(source, slot)) return true;
+        if (ai.IsCoveringTurn) return false;
+        var (ownX, ownY, _) = source.FrameEnd(_tick);
+        if (x == ownX && y == ownY) return true;
+        var bearing = FixedTrig.Atan2(y - ownY, x - ownX);
+        if (FixedTrig.AngleDifference(source.FrameEndAngle(_tick), bearing).Abs() <= Fixed.Max(weapon.AimDelta, BodyAimThreshold)) return true;
+        ai.TurnInPlace(this, bearing);
+        return false;
+    }
+
+    /// <summary><c>getWhichTurretForCurWeapon</c> with a turn rate: the weapon of the slot is aimed by a turret (a "fake" turret that cannot turn leaves it to the body).</summary>
+    private static bool IsOnTurningTurret(Entity entity, int slot)
+    {
+        if (entity.Template.Turrets is not { } set) return false;
+        for (var index = 0; index < TurretSet.MaxTurrets; index++)
+            if (set[index] is { Gates: true } info && (set.Linked || info.Controls(slot))) return true;
+        return false;
     }
 
     /// <summary>How a turret is told to aim: a one-off shot (module, script button), an accepted fire order of a unit that attacks, or a pursuit (the unit is on its way to attack).</summary>

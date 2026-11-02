@@ -22,6 +22,7 @@ static partial class Tests
     {
         ["Data/INI/Object/SlotFixture.ini"] = """
         Weapon MainGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 40
           AttackRange = 100.0
           DamageType = ARMOR_PIERCING
@@ -30,6 +31,7 @@ static partial class Tests
           DelayBetweenShots = 500
         End
         Weapon MachineGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 5
           AttackRange = 60.0
           DamageType = SMALL_ARMS
@@ -45,6 +47,7 @@ static partial class Tests
           DelayBetweenShots = 200
         End
         Weapon BigGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 100
           AttackRange = 100.0
           DamageType = ARMOR_PIERCING

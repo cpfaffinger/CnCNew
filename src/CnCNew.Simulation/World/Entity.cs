@@ -193,6 +193,9 @@ public sealed class Entity
     /// <summary>The state of the object's turrets (<c>AIUpdateInterface::m_turretAI</c>), indexed like <see cref="Templates.TurretSet.Turrets"/>; null when the template declares none.</summary>
     internal TurretState?[]? Turrets { get; set; }
 
+    /// <summary>The barrels of an object that fires from more than one; null on every other object.</summary>
+    internal BarrelState? Barrels { get; set; }
+
     /// <summary>The continuous-fire counters (<c>FiringTracker</c>); null until the object fires a weapon with continuous-fire stages and again once they are back at rest.</summary>
     internal FiringState? Firing { get; set; }
 
@@ -425,6 +428,7 @@ public sealed class Entity
         writer.Int("lastFireTick", LastFireTick);
         DescribeTurrets(writer);
         Firing?.Describe(writer);
+        Barrels?.Describe(writer);
         Acquisition?.Describe(writer);
         Guard?.Describe(writer);
         AttackPlace?.Describe(writer);

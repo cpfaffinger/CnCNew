@@ -655,6 +655,17 @@ run.Test("Projectiles: delayed hit without a projectile object", Tests.Projectil
 run.Test("Projectiles: scatter radius", Tests.ProjectileScatter);
 run.Test("Projectiles: point-defense laser shoots a missile down", Tests.ProjectilePointDefenseLaser);
 run.Test("Projectiles: snapshot mid-flight and two-run determinism", Tests.ProjectileSnapshotAndDeterminism);
+run.Test("Projectile launch: the bone turns with the turret", Tests.ProjectileLaunchTurnsWithTheTurret);
+run.Test("Projectile launch: the bone turns with the hull", Tests.ProjectileLaunchTurnsWithTheHull);
+run.Test("Projectile launch: the barrels in turn", Tests.ProjectileLaunchTakesTheBarrelsInTurn);
+run.Test("Missile flight: a cruise missile climbs, holds its height and dives, the same at every rate", Tests.MissileCruisesAtItsPreferredHeightAndDives);
+run.Test("Missile flight: the nose turns at the locomotor's rate", Tests.MissileTurnsAtItsLocomotorsRate);
+run.Test("Missile flight: it detonates on the victim's geometry", Tests.MissileDetonatesOnTheVictimsGeometry);
+run.Test("Missile flight: the launcher's velocity, the same after a save", Tests.MissileTakesTheLaunchersVelocityAcrossASave);
+run.Test("Shell flight: the nose follows the arc", Tests.ShellPitchFollowsItsArc);
+run.Test("Body aim: a unit without a turret turns to its victim before it fires", Tests.BodyAimTurnsTheUnitToItsVictim);
+run.Test("Body aim: the weapon's acceptable delta", Tests.BodyAimAcceptsTheWeaponsDelta);
+run.Test("Body aim: a victim the unit found by itself, in the same frames at every rate", Tests.BodyAimOfASelfAcquiredVictim);
 run.Test("Rate invariance, projectiles: a delayed hit counts its frames against the 30 Hz speed", Tests.RateProjectilesDelayedHitCountsAgainstTheOriginalFrameSpeed);
 run.Test("Rate invariance, projectiles: the speed per frame is the 30 Hz catalog value", Tests.RateProjectilesFrameSpeedIsTheThirtyHertzValue);
 run.Test("Rate invariance, projectiles: a straight shell flies the 30 Hz path", Tests.RateProjectilesStraightShellFliesTheThirtyHertzPath);

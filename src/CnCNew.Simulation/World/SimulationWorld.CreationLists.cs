@@ -200,7 +200,7 @@ public sealed partial class SimulationWorld
     public EntityId LaunchProjectileObject(Entity launcher, int templateIndex, WeaponInfo weapon, Fixed startX, Fixed startY, Fixed startZ, Fixed targetX, Fixed targetY, Fixed targetZ)
     {
         var id = Ids.AllocateEntity();
-        var launch = new Modules.ProjectileLaunch(weapon.Index, launcher.Id, EntityId.Invalid, targetX, targetY, targetZ, launcher.WeaponBonusConditions);
+        var launch = new Modules.ProjectileLaunch(weapon.Index, launcher.Id, EntityId.Invalid, targetX, targetY, targetZ, launcher.WeaponBonusConditions, FixedTrig.Cos(launcher.Angle), FixedTrig.Sin(launcher.Angle), Fixed.Zero);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, launcher.Owner, startX, startY, startZ, launcher.Angle, default(SpawnSetup) with { Launch = launch }));
         EmitAt(SimEventKind.ProjectileLaunched, id, launcher.Id, weapon.Name, 0, targetX, targetY, targetZ);
         return id;

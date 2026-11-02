@@ -26,6 +26,7 @@ static partial class Tests
     {
         ["Data/INI/Object/AcquisitionFixture.ini"] = """
         Weapon AcqGun
+          AcceptableAimDelta = 180
           PrimaryDamage = 10
           AttackRange = 100.0
           DamageType = EXPLOSION

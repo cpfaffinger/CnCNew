@@ -1507,6 +1507,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             if (Entity.InPhysicsFlight && world.Time.TicksPerOriginalFrame > TickOrder.Next) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
+            // A turn on the spot the flight caught ends with its frame: the 30 Hz turn was taken whole before the flight began.
+            if (_frameTicksLeft > 0 && _frameArriving && _frameStepX == Fixed.Zero && _frameStepY == Fixed.Zero) Coast(world);
         }
         else if (Entity.HasMoveTarget)
         {
@@ -2192,7 +2194,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// The speed of the object in units per logic frame of the original, as the movement computes with it (a read access for measurements: above 30 Hz <see cref="Entity.Speed"/> is
     /// this value divided by the ticks per frame and has lost its last bits). <paramref name="ticksPerOriginalFrame"/> is the world's <c>Time.TicksPerOriginalFrame</c>.
     /// </summary>
-    public Fixed SpeedPerOriginalFrame(int ticksPerOriginalFrame) => _stride == 0 ? Entity.Speed * ticksPerOriginalFrame : FrameSpeed();
+    public Fixed SpeedPerOriginalFrame(int ticksPerOriginalFrame) => _stride != 0 ? FrameSpeed() : _frameSpeed != Fixed.Zero ? _frameSpeed : Entity.Speed * ticksPerOriginalFrame;
 
     /// <summary>The way the locomotor drives the object: along its heading where its frame ends, at the speed of that frame.</summary>
     public (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world)
@@ -2293,6 +2295,43 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         InvalidatePath();
         _frameArriving = true;
         if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+    }
+
+    /// <summary><c>AIAttackAimAtTargetState::m_canTurnInPlace</c>: a locomotor without a minimum speed can face its victim standing (the others fly at it).</summary>
+    internal bool CanTurnInPlace => ActiveLocomotor is { MinSpeed.Raw: 0 };
+
+    /// <summary>The object is covering a frame's turn: whether it looks at a victim is decided when that is done. Always false at 30 Hz, where the turn is taken at once.</summary>
+    internal bool IsCoveringTurn => _frameTicksLeft > 0 && Entity.HasAheadAngle;
+
+    // The tick of the last turn on the spot; derived within a tick, not state: a unit turns one step per logic frame of the original, however many orders ask for it.
+    private long _spotTurnTick = -1;
+
+    /// <summary>
+    /// <c>Locomotor::locoUpdate_moveTowardsAngle</c> of a unit that stands (<c>setLocomotorGoalOrientation</c> of <c>AIAttackAimAtTargetState</c>): one step of its turn rate toward
+    /// <paramref name="desired"/> in the first tick of its own frame, covered in the frame's shares above 30 Hz.
+    /// </summary>
+    internal void TurnInPlace(IWorldServices world, Fixed desired)
+    {
+        // "Skip moveTowardsAngle if physics say you're stunned": a unit in the air, or one whose movement is held, does not turn.
+        if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick || Entity.InPhysicsFlight || HoldsMovement) return;
+        if (_stride == 0) ResolveBlockerTiming(world.Time);
+        if (_frameTicksLeft > 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+        _spotTurnTick = world.Tick;
+        FrameConstants(locomotor, out _, out _, out _, out var turnRate, out _);
+        var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
+        var end = turnRate > Fixed.Zero && difference.Abs() > turnRate ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate)) : desired;
+        world.MarkDirty(Entity);
+        if (_stride == 1)
+        {
+            Entity.Angle = end;
+            return;
+        }
+        (_frameStepX, _frameStepY) = (Fixed.Zero, Fixed.Zero);
+        _frameAngle = end;
+        _frameTicksLeft = _stride;
+        _frameArriving = true;
+        AdvanceFrame(world, locomotor);
+        world.WakeAt(Entity, this, world.Tick + TickOrder.Next);
     }
 
     /// <summary>

@@ -217,6 +217,38 @@ public sealed class W3dAnimationBinding
         }
     }
 
+    /// <summary>
+    /// The numbers an animation holds for <paramref name="pivot"/> at a whole frame, without any interpolation or normalisation: what the file (or the sum of its deltas) states. The
+    /// bones the logic reads (<c>ModelConditionInfo::validateCachedBones</c>: the first or last frame of a state's animation) enter the exact domain of the bone table through this. A
+    /// frame between two keys of a time-coded channel has no stored value; this takes the key before it, and only the first and the last frame are asked for.
+    /// </summary>
+    public void SampleStored(int pivot, int frame, out Vector3 translation, out Quaternion rotation)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(pivot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pivot, PivotCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(frame);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(frame, Animation.FrameCount);
+        var motion = _pivots[pivot];
+        translation = new Vector3(StoredScalar(motion.X, frame), StoredScalar(motion.Y, frame), StoredScalar(motion.Z, frame));
+        rotation = motion.Q switch
+        {
+            null => Quaternion.Identity,
+            W3dRawMotionChannel raw => raw.GetQuaternion(frame),
+            W3dTimeCodedMotionChannel coded => coded.GetStoredQuaternion(frame),
+            W3dAdaptiveDeltaMotionChannel delta => delta.GetStoredQuaternion(frame),
+            _ => throw new InvalidOperationException($"Unknown channel {motion.Q.GetType().Name}."),
+        };
+    }
+
+    private static float StoredScalar(W3dMotionChannel? channel, int frame) => channel switch
+    {
+        null => 0f,
+        W3dRawMotionChannel raw => raw.GetScalar(frame),
+        W3dTimeCodedMotionChannel coded => coded.GetStoredScalar(frame),
+        W3dAdaptiveDeltaMotionChannel delta => delta.GetStoredScalar(frame),
+        _ => throw new InvalidOperationException($"Unknown channel {channel.GetType().Name}."),
+    };
+
     private void SampleRawInterpolated(PivotMotion motion, float frame, out Vector3 translation, out Quaternion rotation)
     {
         // WWMath::Float_To_Long uses fistp (round half to even); frame - 0.499999 therefore yields floor(frame).

@@ -426,6 +426,10 @@ public sealed class FrameProjector
         // The pitch and roll a shock wave gave the object (F-63; the physics module's matrix in the original) on top of what the chassis does.
         if (entity.InPhysicsFlight && entity.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.PhysicsBehavior>().FirstOrDefault() is { } thrown && thrown.Tilt != (Fixed.Zero, Fixed.Zero))
             chassis = chassis with { Pitch = chassis.Pitch + ToFloat(thrown.Tilt.Pitch), Roll = chassis.Roll + ToFloat(thrown.Tilt.Roll) };
+        // A projectile's matrix has its flight in it (the missile's nose, a shell along its path): the simulation keeps the heading on the object and the rest on the module. A
+        // chassis pitch is a rotation about y and lowers the nose (Rotate_Y), the flight's pitch raises it.
+        if (entity.Template.IsKindOf("PROJECTILE") && entity.Modules.OfType<CnCNew.Simulation.Modules.IProjectileModule>().FirstOrDefault() is { } projectile)
+            chassis = chassis with { Pitch = chassis.Pitch - ToFloat(projectile.FlightPitch) };
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.
         var selections = previous is not null && ReferenceEquals(previous.Visual, visual) && previous.Conditions == conditions ? previous.Selections : Select(visual, conditions);

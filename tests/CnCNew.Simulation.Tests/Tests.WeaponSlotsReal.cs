@@ -75,7 +75,9 @@ static partial class Tests
                 for (var attempt = 0; attempt < world.Frames(40) && fired.Count == shots; attempt++)
                 {
                     sequence[1]++;
-                    Check.That(world.Submit(new FireWeaponCommand(tank.Owner, sequence[1], world.Tick, tank.Id, victim.Id)).Accepted, $"The Gattling Tank fires at {victim.Template.Name}.");
+                    var order = world.Submit(new FireWeaponCommand(tank.Owner, sequence[1], world.Tick, tank.Id, victim.Id));
+                    // The tank's own acquisition may just have fired: a repeated order goes out when the gun is ready again.
+                    Check.That(order.Accepted || order.Reason == CommandRejection.WeaponNotReady, $"The Gattling Tank fires at {victim.Template.Name}: {order}.");
                     fired.AddRange(world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id).Select(value => value.Text));
                 }
                 for (var i = 0; i < world.Frames(20); i++) world.Step();
