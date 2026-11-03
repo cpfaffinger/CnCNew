@@ -1056,11 +1056,21 @@ public sealed record SpectreData(string PowerName, string GattlingTemplate, stri
 /// <c>HowitzerFollowLag</c> ticks each cycle also fires the howitzer weapon at the aim point with a random offset (<c>RandomOffsetForHowitzer</c>). After the orbit it <b>departs</b> straight
 /// ahead at the transit locomotor and is deleted once it left the map; the gattling is deleted with the cleanup. Movement is kinematic (turn rate and speed of the locomotor; the height is the
 /// locomotor's preferred height at once); the gattling is a free-standing entity that follows the ship (put into its container when the container accepts it). Not modeled: fog of war (the
-/// reference lets it fire only at what its player sees), the command-from-script variant, the override-destination command from the player, the radius decals, afterburner and door
+/// reference lets it fire only at what its player sees), the command-from-script variant, the radius decals, afterburner and door
 /// model conditions.
 /// </summary>
-public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateModule, ISpecialPowerHandler
+public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateModule, ISpecialPowerHandler, ISteerablePower
 {
+    /// <inheritdoc/>
+    public bool IsSteerable => Status is GunshipStatus.Inserting or GunshipStatus.Orbiting;
+
+    /// <inheritdoc/>
+    public void Steer(IWorldServices world, Fixed x, Fixed y)
+    {
+        _overrideTarget = _overrideTarget with { X = x, Y = y };
+        world.MarkDirty(Entity);
+    }
+
     /// <summary><c>getDisabledTypesToProcess</c>.</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.Subdued | DisabledMask.Underpowered | DisabledMask.Emp | DisabledMask.Hacked;
 

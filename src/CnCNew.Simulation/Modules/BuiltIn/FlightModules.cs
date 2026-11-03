@@ -1178,7 +1178,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
 /// </summary>
 public sealed record ParticleUplinkData(string PowerName, string BeamObject, string RemnantObject, string GroundHitFx, string BeamLaunchFx, long LaunchFxTicks, long WidthGrowTicks, long BeamTravelTicks,
     long TotalFiringTicks, Fixed SwathDistance, Fixed SwathAmplitude, long TotalScorchMarks, int TotalDamagePulses, Fixed DamagePerSecond, int DamageType, int DeathType, Fixed DamageRadiusScalar,
-    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default, long BeginChargeTicks = 0, long RaiseAntennaTicks = 0, long ReadyDelayTicks = 0) : ModuleData
+    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default, long BeginChargeTicks = 0, long RaiseAntennaTicks = 0, long ReadyDelayTicks = 0, long DoubleClickTicks = 0) : ModuleData
 {
     public static ParticleUplinkData Parse(RatedModuleConfiguration configuration)
     {
@@ -1195,7 +1195,8 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
             deathType.Length == 0 ? DeathTypes.Normal : NameTables.DeathType.TryIndexOf(deathType, out var deathIndex) ? deathIndex : throw new InvalidDataException($"Unknown death type '{deathType}'."),
             ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
             ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
-            ModuleConfigReader.Ticks(configuration, "BeginChargeTime", 0), ModuleConfigReader.Ticks(configuration, "RaiseAntennaTime", 0), ModuleConfigReader.Ticks(configuration, "ReadyDelayTime", 0));
+            ModuleConfigReader.Ticks(configuration, "BeginChargeTime", 0), ModuleConfigReader.Ticks(configuration, "RaiseAntennaTime", 0), ModuleConfigReader.Ticks(configuration, "ReadyDelayTime", 0),
+            ModuleConfigReader.Ticks(configuration, "DoubleClickToFastDriveDelay", 0));
     }
 }
 
@@ -1206,13 +1207,29 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// (half the beam object's <c>OuterBeamWidth</c>, growing from nothing over <c>WidthGrowTime</c> and shrinking the same way after <c>TotalFiringTime</c>) times <c>DamageRadiusScalar</c>
 /// — and the use ends when the beam has decayed. A computer-controlled owner (and so a scripted use) lets the beam sweep an S curve across the target
 /// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
-/// drives it, and without a driving command the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
+/// drives it by clicks (<see cref="Steer"/>, a second click soon after the first drives it fast), and without one the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
 /// stages (presentation, only visible through the power's own readiness), the shroud reveal around the beam, the abort of a beam whose building is underpowered or disabled, the
 /// sounds and the scorch marks. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
 /// waypoint at <c>ManualFastDrivingSpeed</c> (the path is followed in order; the reference picks a random link at a fork) and stays at the last one.
 /// </summary>
-public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler
+public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler, ISteerablePower
 {
+    private long _lastClick;
+    private long _secondLastClick;
+
+    /// <inheritdoc/>
+    public bool IsSteerable => _startAttack != 0 && _beam != Beam.Dead;
+
+    /// <inheritdoc/>
+    public void Steer(IWorldServices world, Fixed x, Fixed y)
+    {
+        _destination = new Point3(x, y, world.GroundHeightAt(x, y));
+        _manual = true;
+        _secondLastClick = _lastClick;
+        _lastClick = world.Tick;
+        world.MarkDirty(Entity);
+    }
+
     /// <summary><c>getDisabledTypesToProcess</c>.</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.Subdued | DisabledMask.Underpowered | DisabledMask.Emp | DisabledMask.Hacked;
 
@@ -1447,7 +1464,9 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
             var dx = _destination.X - _current.X;
             var dy = _destination.Y - _current.Y;
             var distance = Fixed.Sqrt(dx * dx + dy * dy);
-            var speed = Fixed.Min(FlightFrames.PerFrame(world.Time, _path is null ? data.ManualDrivingSpeed : data.ManualFastDrivingSpeed), distance);
+            // "Because we double clicked, use the faster driving speed."
+            var fast = _path is not null || _lastClick - _secondLastClick < data.DoubleClickTicks;
+            var speed = Fixed.Min(FlightFrames.PerFrame(world.Time, fast ? data.ManualFastDrivingSpeed : data.ManualDrivingSpeed), distance);
             if (_path is not null && distance <= speed && _pathIndex + 1 < _path.Count) _destination = _path[++_pathIndex];
             if (distance > Fixed.Zero)
             {
@@ -1506,6 +1525,8 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         writer.Int("decayStart", _decayStart);
         writer.Int("beam", (int)_beam);
         writer.Bool("manual", _manual);
+        if (_lastClick != 0) writer.Int("lastClick", _lastClick);
+        if (_secondLastClick != 0) writer.Int("secondLastClick", _secondLastClick);
         if (_path is not null)
         {
             writer.Int("pathIndex", _pathIndex);
@@ -1548,6 +1569,8 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         if (beam < 0 || beam > (int)Beam.Dead) throw new InvalidDataException("Uplink beam state out of range.");
         _beam = (Beam)beam;
         _manual = reader.Bool("manual");
+        _lastClick = reader.Has("lastClick") ? reader.Int("lastClick") : 0;
+        _secondLastClick = reader.Has("secondLastClick") ? reader.Int("secondLastClick") : 0;
         if (reader.Has("path"))
         {
             _pathIndex = checked((int)reader.Int("pathIndex"));

@@ -727,6 +727,17 @@ public sealed partial class SimulationWorld : IWorldServices
     private static Modules.BuiltIn.ParkingPlaceBehavior? QueueReservesSpace(Entity producer, ObjectTemplate template)
         => template.IsKindOf("PRODUCED_AT_HELIPAD") ? null : Array.Find(producer.ModuleArray, module => module is Modules.BuiltIn.ParkingPlaceBehavior) as Modules.BuiltIn.ParkingPlaceBehavior;
 
+    private CommandRejection CheckSteer(PlayerId issuer, SteerPowerCommand order)
+    {
+        if (order.Units.IsDefaultOrEmpty || order.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
+        foreach (var id in order.Units)
+        {
+            if (!_entities.TryGetValue(id.Value, out var member) || member.DestroyRequested) return CommandRejection.UnknownEntity;
+            if (member.Owner != issuer) return CommandRejection.NotPermitted;
+        }
+        return 0;
+    }
+
     private static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
     /// <summary>The carrier's deck, which takes the orders of the object: "the carrier is a dumb stump that only propagates orders to it's aircraft".</summary>
@@ -846,6 +857,7 @@ public sealed partial class SimulationWorld : IWorldServices
             GuardCommand guard => InReach(guard.X, limit) && InReach(guard.Y, limit),
             CombatDropCommand drop => InReach(drop.X, limit) && InReach(drop.Y, limit),
             AttackPositionCommand place => InReach(place.X, limit) && InReach(place.Y, limit),
+            SteerPowerCommand steer => InReach(steer.X, limit) && InReach(steer.Y, limit),
             PursueCommand pursue => InReach(pursue.X, limit) && InReach(pursue.Y, limit),
             UseSpecialPowerCommand power => InReach(power.X, limit) && InReach(power.Y, limit),
             ConstructCommand construct => InReach(construct.X, limit) && InReach(construct.Y, limit) && InReach(construct.Angle, CommandAngleLimit),
@@ -947,6 +959,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckAttackPosition(command.Player, place);
             case SetMineClearingCommand clearing:
                 return CheckSetMineClearing(command.Player, clearing);
+            case SteerPowerCommand steer:
+                return CheckSteer(command.Player, steer);
             case ExecuteRailedTransportCommand ferry:
                 return CheckOwnUnits(command.Player, ferry.Units);
             case PlaceBeaconCommand:
@@ -1424,6 +1438,16 @@ public sealed partial class SimulationWorld : IWorldServices
                 var reason = CheckSetMineClearing(command.Player, clearing);
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 ExecuteSetMineClearing(clearing);
+                break;
+            }
+            case SteerPowerCommand steer:
+            {
+                var reason = CheckSteer(command.Player, steer);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                foreach (var id in steer.Units)
+                    if (FindEntity(id) is { DestroyRequested: false } unit && DisabledFlagsOf(unit) == DisabledMask.None)
+                        foreach (var module in unit.ModuleArray)
+                            if (module is ISteerablePower { IsSteerable: true } power) power.Steer(this, steer.X, steer.Y);
                 break;
             }
             case AttackPositionCommand place:

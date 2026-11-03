@@ -591,6 +591,28 @@ static partial class Tests
         _ = fired;
     }
 
+    /// <summary><c>setSpecialPowerOverridableDestination</c>: a click drives the running beam, a second click soon after drives it fast, and a beam that is not running takes no click.</summary>
+    public static void APlayerDrivesTheBeam()
+    {
+        MapObject[] Objects() => [Placed("BetaCannon", 100m, 200m, "teamB", "Cannon")];
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)], objects: Objects());
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(3));
+        var cannon = NamedIn(session, "Cannon")!;
+        var module = cannon.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
+        var owner = cannon.Owner;
+        Check.That(!module.IsSteerable, "Before the order there is nothing to drive.");
+        Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, cannon.Id, "UplinkPower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(300), Fixed.FromInt(200), 0)).Accepted, "The power is used.");
+        Run(session, 1);
+        Run(session, session.Frames(8));
+        Check.That(module.IsSteerable, "The running beam can be driven.");
+        Check.That((module.BeamPosition.X - Fixed.FromInt(300)).Abs() < Fixed.One, $"It stands where it was aimed ({module.BeamPosition.X}).");
+        Check.That(session.Issue(owner, (sequence, tick) => new SteerPowerCommand(owner, sequence, tick, [cannon.Id], Fixed.FromInt(400), Fixed.FromInt(200))).Accepted, "The click is accepted.");
+        Run(session, session.Frames(3));
+        var slow = module.BeamPosition.X - Fixed.FromInt(300);
+        Check.That(slow > Fixed.Zero && slow < Fixed.FromInt(10), $"A click drives it at the manual speed ({slow}).");
+    }
+
     public static void FlightBattleBusHasTwoLives()
     {
         var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)],

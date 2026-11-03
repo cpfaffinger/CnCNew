@@ -442,7 +442,10 @@ static partial class NetTests
             encoded.Add(ReplayFormat.EncodeCommand(new AttackPositionCommand(move.Player, move.Sequence, move.Tick, [move.Target], move.X, move.Y, places % 3 == 1, places++ % 3 - 1, places % 4)));
         // Nor the mine-clearing flag (F-69): one for the units of their moves is changed too.
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(60).Take(10))
+        {
             encoded.Add(ReplayFormat.EncodeCommand(new SetMineClearingCommand(move.Player, move.Sequence, move.Tick, [move.Target])));
+            encoded.Add(ReplayFormat.EncodeCommand(new SteerPowerCommand(move.Player, move.Sequence, move.Tick, [move.Target], move.X, move.Y)));
+        }
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(70).Take(10))
             encoded.Add(ReplayFormat.EncodeCommand(new ExecuteRailedTransportCommand(move.Player, move.Sequence, move.Tick, [move.Target])));
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(80).Take(10))

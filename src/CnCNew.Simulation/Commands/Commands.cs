@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 23;
+    public const int Version = 24;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -123,7 +123,11 @@ public static class CommandTypes
     /// <summary><c>MSG_INTERNET_HACK</c> to a group (<c>AIGroup::groupHackInternet</c>): the hackers set up and begin to earn.</summary>
     public const ushort HackInternet = 42;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= HackInternet;
+    // ------------------------------------------------------------------------------------------------------ a beam that is driven (v24)
+    /// <summary><c>MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION</c> to a group (<c>AIGroup::groupOverrideSpecialPowerDestination</c>): the running beam or gunship goes for the place.</summary>
+    public const ushort SteerPower = 43;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= SteerPower;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -218,6 +222,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 reader.Fixed("y"), reader.Bool("own"), checked((int)reader.Int("slot")), checked((int)reader.Int("maxShots"))),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
             CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
+            CommandTypes.SteerPower => new SteerPowerCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.PlaceBeacon => new PlaceBeaconCommand(player, sequence, tick, reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.RemoveBeacon => new RemoveBeaconCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
@@ -1011,6 +1016,31 @@ public sealed record SetMineClearingCommand(PlayerId Player, ulong Sequence, lon
 
     public bool Equals(SetMineClearingCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
+}
+
+/// <summary><c>MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION</c>: the units of the selection whose power can be driven (the Particle Cannon's beam, the Spectre) go for the place.</summary>
+public sealed record SteerPowerCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SteerPower;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+
+    public bool Equals(SteerPowerCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

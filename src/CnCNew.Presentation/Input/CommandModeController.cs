@@ -163,6 +163,9 @@ public sealed class CommandModeController
             return target is null ? Hint(ContextAction.None, CursorKind.Normal) : Hint(ContextAction.Select, CursorKind.Select);
         if (target is not null && target.Owner == Player && PreferSelection) return Hint(ContextAction.Select, CursorKind.Select);
 
+        // canSelectedObjectsOverrideSpecialPowerDestination: while a beam of the selection runs, a click on the ground drives it.
+        if (target is null && ground is not null && Steerable(own).Any()) return Hint(ContextAction.SteerPower, CursorKind.Target);
+
         var movers = own.Where(SimulationQueries.CanMove).ToList();
         if (WaypointMode && ground is not null && movers.Count > 0) return Hint(ContextAction.AddWaypoint, CursorKind.Waypoint);
 
@@ -228,6 +231,9 @@ public sealed class CommandModeController
     private IEnumerable<Entity> Infiltrators(SimulationWorld world, ImmutableArray<Entity> own, Entity target, CollideEntry only = CollideEntry.None)
         => own.Where(unit => world.CollideEntryOf(Player, unit, target) is var entry && entry != CollideEntry.None && (only == CollideEntry.None || entry == only));
 
+    /// <summary>The units of the selection with a power that can be driven now.</summary>
+    private static IEnumerable<Entity> Steerable(ImmutableArray<Entity> own) => own.Where(unit => unit.Modules.OfType<ISteerablePower>().Any(power => power.IsSteerable));
+
     private static CollideEntry EntryOf(GuiCommandKind kind) => kind switch
     {
         GuiCommandKind.HijackVehicle => CollideEntry.Hijack,
@@ -260,6 +266,13 @@ public sealed class CommandModeController
         {
             case ContextAction.Move:
                 return MoveTo(world, own.Where(SimulationQueries.CanMove), ground);
+            case ContextAction.SteerPower:
+            {
+                var (x, y) = (FixedConvert.FromSingle(ground.X), FixedConvert.FromSingle(ground.Y));
+                if (!Issue((sequence, tick) => new SteerPowerCommand(Player, sequence, tick, [..Steerable(own).Select(unit => unit.Id)], x, y)).Accepted) return false;
+                Feedback(FeedbackKind.MoveMarker, world, ground, EntityId.Invalid, Settings.MoveHintFrames);
+                return true;
+            }
             case ContextAction.AddWaypoint:
             {
                 var any = false;

@@ -50,7 +50,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 22;
+    public const int CurrentVersion = 23;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -412,6 +412,12 @@ public static class ReplayFormat
                 writer.Write(clearing.Units.Length);
                 foreach (var unit in clearing.Units) writer.Write(unit.Value);
                 break;
+            case SteerPowerCommand steer:
+                writer.Write(steer.Units.Length);
+                foreach (var unit in steer.Units) writer.Write(unit.Value);
+                writer.Write(steer.X.Raw);
+                writer.Write(steer.Y.Raw);
+                break;
             case ExecuteRailedTransportCommand ferry:
                 writer.Write(ferry.Units.Length);
                 foreach (var unit in ferry.Units) writer.Write(unit.Value);
@@ -500,6 +506,7 @@ public static class ReplayFormat
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()),
                 reader.ReadBoolean(), reader.ReadSByte(), reader.ReadInt32()),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, ReadUnits(reader)),
+            CommandTypes.SteerPower => new SteerPowerCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, ReadUnits(reader)),
             CommandTypes.PlaceBeacon => new PlaceBeaconCommand(player, sequence, tick, Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.RemoveBeacon => new RemoveBeaconCommand(player, sequence, tick, ReadUnits(reader)),

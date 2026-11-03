@@ -50,6 +50,7 @@ public enum ContextAction
     Select,
     Move,
     AddWaypoint,
+    SteerPower,
     AttackObject,
     AttackObjectAfterMoving,
     ForceAttackObject,

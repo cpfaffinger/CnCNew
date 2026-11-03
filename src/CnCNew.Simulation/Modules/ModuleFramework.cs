@@ -747,6 +747,16 @@ public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = 
 
 // ------------------------------------------------------------------------------------------------ structures and world group
 
+/// <summary><c>SpecialPowerUpdateInterface</c>: a running power a player drives by clicks.</summary>
+public interface ISteerablePower
+{
+    /// <summary><c>doesSpecialPowerHaveOverridableDestinationActive</c>.</summary>
+    bool IsSteerable { get; }
+
+    /// <summary><c>setSpecialPowerOverridableDestination</c>.</summary>
+    void Steer(IWorldServices world, Fixed x, Fixed y);
+}
+
 /// <summary><c>UpgradeModule::onCapture</c>: told that the object's controlling player is about to change (<c>Object::setTeam</c> by a capture or a script transfer), before <see cref="Entity.Owner"/> changes.</summary>
 public interface IOwnerChangeReceiver
 {
