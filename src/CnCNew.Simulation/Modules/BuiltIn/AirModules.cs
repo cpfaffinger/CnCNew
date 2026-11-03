@@ -52,7 +52,7 @@ public sealed record ParkingPlaceData(int Rows, int Cols, Fixed ApproachHeight, 
 
 /// <summary><c>ParkingPlaceBehaviorInterface::PPInfo</c>: where one aircraft parks and which way it drives and flies to take off and land.</summary>
 public readonly record struct ParkingInfo(Point3 ParkingSpace, Point3 RunwayPrep, Fixed ParkingOrientation, Point3 RunwayStart, Point3 RunwayEnd, Point3 RunwayApproach, Point3 RunwayExit,
-    Point3 HangarInternal, Fixed HangarInternalOrientation, Fixed RunwayTakeoffDistance);
+    Point3 HangarInternal, Fixed HangarInternalOrientation, Fixed RunwayTakeoffDistance, Point3 RunwayLandingStart = default, Point3 RunwayLandingEnd = default);
 
 /// <summary>
 /// <c>ParkingPlaceBehavior.cpp</c>: the airfield. It owns <c>NumRows · NumCols</c> parking spaces (an aircraft keeps one from the moment it leaves the production door until it is
@@ -70,17 +70,17 @@ public readonly record struct ParkingInfo(Point3 ParkingSpace, Point3 RunwayPrep
 /// (<see cref="ModelGeometry"/>, read from the base pose of the draw model by the client layer), the airfield uses exactly the points of <c>buildInfo</c> instead: the parking, hangar and
 /// taxi points per space, <c>RunwayStart</c>/<c>RunwayEnd</c> per runway, <c>HeliPark01</c> for the helipad, with the height of the apron (the airfield's own height plus the bone's).
 /// </para>
-/// Not modeled: <c>defectAllParkedUnits</c> (a captured airfield's parked units change sides: no module is told of an owner change), carrier decks (<c>FlightDeckBehavior</c> is a shell),
-/// the helicopter rally point, the door-hold of <c>ProductionUpdate::setHoldDoorOpen</c> (presentation).
+/// Not modeled: <c>defectAllParkedUnits</c> (a captured airfield's parked units change sides: no module is told of an owner change), the helicopter rally point, the door-hold of
+/// <c>ProductionUpdate::setHoldDoorOpen</c> (presentation). A carrier is <see cref="FlightDeckBehavior"/>, the same interface in the original.
 /// </summary>
-public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateModule, IDieModule, IProductionExit
+public class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateModule, IDieModule, IProductionExit
 {
     /// <summary><c>HEAL_RATE_FRAMES = LOGICFRAMES_PER_SECOND / 5</c>: "don't really need to autoheal every frame".</summary>
     private const int HealRateFrames = SimulationRate.OriginalFramesPerSecond / 5;
 
     private static readonly int DeckHeightBit = ObjectStatusBits.Index("DECK_HEIGHT_OFFSET");
 
-    private sealed record Arrival(int Template, Fixed X, Fixed Y, PlayerId Owner, long Tick, int Space);
+    private sealed record Arrival(int Template, Fixed X, Fixed Y, PlayerId Owner, long Tick, int Space, bool Parked = false);
 
     private long _nextWake = -1;
     private readonly EntityId[] _occupant = new EntityId[Math.Max(0, data.Rows * data.Cols)];
@@ -102,6 +102,25 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
 
     public int SpaceCount => _occupant.Length;
     public int RunwayCount => _runwayUser.Length;
+
+    protected EntityId RunwayUser(int runway) => _runwayUser[runway];
+
+    protected void SetRunwayUser(int runway, EntityId aircraft) => _runwayUser[runway] = aircraft;
+
+    protected void SetOccupant(int space, EntityId aircraft) => _occupant[space] = aircraft;
+
+    /// <summary><c>getTaxiLocations</c>: the way from the end of a landing to the spaces.</summary>
+    public virtual IReadOnlyList<Point3> TaxiLocations(IWorldServices world, EntityId aircraft) => [];
+
+    /// <summary><c>getCreationLocations</c>: the way out of the hangar, the first point being where the aircraft appears.</summary>
+    public virtual IReadOnlyList<Point3> CreationLocations(IWorldServices world, EntityId aircraft) => [];
+
+    /// <summary><c>calcBestParkingAssignment</c>: an airfield has none.</summary>
+    public virtual bool CalcBestParkingAssignment(IWorldServices world, EntityId aircraft, out Point3 position)
+    {
+        position = default;
+        return false;
+    }
 
     /// <summary>Who occupies a space (invalid: free). Index = row · columns + column.</summary>
     public EntityId OccupantOf(int space) => _occupant[space];
@@ -161,7 +180,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         => ModelLayout(world) is { HeliPark: { } pad } ? FromBone(pad) : ToWorld(world, Fixed.Zero, Fixed.Zero, Data.LandingDeckHeightOffset);
 
     /// <summary><c>calcPPInfo</c> for the space at <paramref name="index"/> (the runway is the one of its column).</summary>
-    public ParkingInfo InfoOfSpace(IWorldServices world, int index)
+    public virtual ParkingInfo InfoOfSpace(IWorldServices world, int index)
     {
         if (ModelLayout(world) is { } layout) return InfoFromModel(world, layout, index);
         var (a, b) = Extents();
@@ -206,7 +225,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     }
 
     /// <summary>The parking orientation of an apron space as the offset of <c>reserveSpace</c> uses it.</summary>
-    private Fixed ApronOrientation(IWorldServices world, int index)
+    protected virtual Fixed ApronOrientation(IWorldServices world, int index)
     {
         if (ModelLayout(world) is { } layout) return BoneHeading(layout.Parking[index]);
         var cols = Math.Max(data.Cols, 1);
@@ -224,7 +243,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         return -1;
     }
 
-    private int EmptySpace()
+    protected int EmptySpace()
     {
         if (!IsReady) return -1;
         for (var index = 0; index < _occupant.Length; index++)
@@ -239,7 +258,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     public bool HasFreeSpaceOrOwns(EntityId id) => IsReady && (SpaceOf(id) >= 0 || EmptySpace() >= 0);
 
     /// <summary><c>purgeDead</c>: occupants, runway users and healees that are gone or dead lose their place.</summary>
-    public void Purge(IWorldServices world)
+    public virtual void Purge(IWorldServices world)
     {
         for (var index = 0; index < _occupant.Length; index++)
         {
@@ -329,7 +348,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     /// <c>reserveRunway</c>: the aircraft (which must hold a space) takes its column's runway when it is free; a take-off request that finds it taken becomes the single next-in-line
     /// and is told no (<c>return false; // yes, that's right</c>), a landing is simply refused. An airfield without runways never makes anybody wait.
     /// </summary>
-    public bool ReserveRunway(IWorldServices world, EntityId aircraft, bool forLanding)
+    public virtual bool ReserveRunway(IWorldServices world, EntityId aircraft, bool forLanding)
     {
         Purge(world);
         var space = SpaceOf(aircraft);
@@ -353,7 +372,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     }
 
     /// <summary><c>transferRunwayReservationToNextInLineForTakeoff</c>: the runway passes to the waiting aircraft while the previous one starts its run.</summary>
-    public void TransferRunwayToNext(IWorldServices world, EntityId aircraft)
+    public virtual void TransferRunwayToNext(IWorldServices world, EntityId aircraft)
     {
         Purge(world);
         for (var index = 0; index < _runwayUser.Length; index++)
@@ -366,7 +385,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     }
 
     /// <summary><c>releaseRunway</c>.</summary>
-    public void ReleaseRunway(IWorldServices world, EntityId aircraft)
+    public virtual void ReleaseRunway(IWorldServices world, EntityId aircraft)
     {
         Purge(world);
         for (var index = 0; index < _runwayUser.Length; index++)
@@ -396,7 +415,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         else if (_healing.Remove(aircraft.Id)) ResetHealWake(world);
     }
 
-    public long Update(IWorldServices world)
+    public virtual long Update(IWorldServices world)
     {
         Purge(world);
         // Order, not time: the produced aircraft spawns in the tick of the exit or the one after and adopts its arrival there.
@@ -450,7 +469,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     /// <c>reserveDoorForExit</c>: a <c>PRODUCED_AT_HELIPAD</c> object needs no door; anything else reserves the first free space, whose door is the space's number
     /// (<c>buildInfo</c> counts the doors along the spaces).
     /// </summary>
-    public int ReserveDoor(IWorldServices world, ObjectTemplate produced)
+    public virtual int ReserveDoor(IWorldServices world, ObjectTemplate produced)
     {
         Purge(world);
         if (produced.IsKindOf("PRODUCED_AT_HELIPAD")) return ExitDoor.NoneNeeded;
@@ -464,7 +483,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     /// <c>exitObjectViaDoor</c> through a reserved door: the aircraft takes the space of that door, whose door is held open from now on (<c>reserveSpace</c> of the new object; the
     /// space itself becomes the aircraft's when it is adopted, <see cref="TryAdoptArrival"/>).
     /// </summary>
-    public (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced, int door)
+    public virtual (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced, int door)
     {
         if (door < ExitDoor.First || door >= _occupant.Length || !_reservedForExit[door] || _occupant[door].IsValid || produced.IsKindOf("PRODUCED_AT_HELIPAD"))
             return ClaimExitCore(world, produced);
@@ -483,12 +502,12 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     }
 
     /// <summary><c>ProductionUpdate::setHoldDoorOpen</c> for the door of a space (the producer of an airfield is the airfield itself).</summary>
-    private void HoldDoor(IWorldServices world, int space, bool hold)
+    protected virtual void HoldDoor(IWorldServices world, int space, bool hold)
     {
         if (Array.Find(Entity.ModuleArray, module => module is ProductionUpdate) is ProductionUpdate production) production.SetHoldDoorOpen(world, space, hold);
     }
 
-    private (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExitCore(IWorldServices world, ObjectTemplate? produced)
+    protected (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExitCore(IWorldServices world, ObjectTemplate? produced)
     {
         if (produced is not null && produced.IsKindOf("PRODUCED_AT_HELIPAD"))
         {
@@ -508,9 +527,20 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     /// Finds the airfield whose door just let <paramref name="aircraft"/> out (same owner, product and position, claimed within the last ticks) and gives it its space
     /// (<c>exitObjectViaDoor</c>: the reserved space becomes the aircraft's). Null when the aircraft did not come out of an airfield.
     /// </summary>
-    public static ParkingPlaceBehavior? TryAdoptArrival(IWorldServices world, Entity aircraft, out bool atHelipad)
+    public static ParkingPlaceBehavior? TryAdoptArrival(IWorldServices world, Entity aircraft, out bool atHelipad) => TryAdoptArrival(world, aircraft, out atHelipad, out _);
+
+    /// <summary>A jet a carrier makes for a space, which appears parked there (<c>FlightDeckBehavior::buildInfo</c>).</summary>
+    protected void ExpectParkedArrival(IWorldServices world, ObjectTemplate produced, Point3 place, int space)
+    {
+        _reservedForExit[space] = true;
+        _arrivals.Add(new Arrival(produced.Index, place.X, place.Y, Entity.Owner, world.Tick, space, Parked: true));
+    }
+
+    /// <inheritdoc cref="TryAdoptArrival(IWorldServices, Entity, out bool)"/>
+    public static ParkingPlaceBehavior? TryAdoptArrival(IWorldServices world, Entity aircraft, out bool atHelipad, out bool parked)
     {
         atHelipad = false;
+        parked = false;
         foreach (var candidate in world.Entities.OrderBy(value => value.Id.Value))
         {
             if (candidate.Owner != aircraft.Owner || !candidate.Template.IsKindOf("FS_AIRFIELD")) continue;
@@ -518,6 +548,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
             var arrival = parking._arrivals.Find(value => value.Template == aircraft.Template.Index && value.X == aircraft.X && value.Y == aircraft.Y);
             if (arrival is null) continue;
             parking._arrivals.Remove(arrival);
+            parked = arrival.Parked;
             atHelipad = aircraft.Template.IsKindOf("PRODUCED_AT_HELIPAD");
             if (!atHelipad)
             {
@@ -576,6 +607,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
             writer.Int("owner", arrival.Owner.Value);
             writer.Int("tick", arrival.Tick);
             writer.Int("space", arrival.Space);
+            if (arrival.Parked) writer.Bool("parked", true);
             writer.EndObject();
         }
         writer.EndArray();
@@ -604,6 +636,6 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         foreach (var item in reader.Array("healing")) _healing.Add(new EntityId(checked((uint)item.UInt("id"))));
         _arrivals.Clear();
         foreach (var item in reader.Array("arrivals"))
-            _arrivals.Add(new Arrival(checked((int)item.Int("template")), item.Fixed("x"), item.Fixed("y"), new PlayerId(checked((int)item.Int("owner"))), item.Int("tick"), checked((int)item.Int("space"))));
+            _arrivals.Add(new Arrival(checked((int)item.Int("template")), item.Fixed("x"), item.Fixed("y"), new PlayerId(checked((int)item.Int("owner"))), item.Int("tick"), checked((int)item.Int("space")), item.Has("parked")));
     }
 }

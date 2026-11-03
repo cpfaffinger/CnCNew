@@ -18,6 +18,13 @@ public sealed record AirfieldLayout(int Rows, int Cols, ImmutableArray<BonePose>
     ImmutableArray<BonePose> RunwayStart, ImmutableArray<BonePose> RunwayEnd, BonePose? HeliPark);
 
 /// <summary>
+/// The points of a carrier's model that <c>FlightDeckBehavior::buildInfo</c> reads, in the object's frame: per space (row-major over the runways) the bone its runway names for that row, per runway the
+/// two ends of take-off and landing, and the taxi and creation points in their order.
+/// </summary>
+public sealed record FlightDeckLayout(ImmutableArray<BonePose> Spaces, ImmutableArray<BonePose> TakeoffStart, ImmutableArray<BonePose> TakeoffEnd, ImmutableArray<BonePose> LandingStart,
+    ImmutableArray<BonePose> LandingEnd, ImmutableArray<ImmutableArray<BonePose>> Taxi, ImmutableArray<ImmutableArray<BonePose>> Creation);
+
+/// <summary>
 /// One exit path of a container's model (<c>OpenContain::exitObjectViaDoor</c>): the bones <c>ExitStart</c>/<c>ExitEnd</c> (<c>ExitStartNN</c>/<c>ExitEndNN</c> when the module has more than one
 /// path) in the object's frame. A bone the model does not have is <see langword="null"/>: <c>Object::getSingleLogicalBonePosition</c> then answers with the object's own position.
 /// </summary>
@@ -83,6 +90,9 @@ public sealed class ModelGeometry
     /// <summary>Airfield templates by name (case-insensitive).</summary>
     public ImmutableDictionary<string, AirfieldLayout> Airfields { get; }
 
+    /// <summary>The decks of carrier templates by name (case-insensitive).</summary>
+    public ImmutableDictionary<string, FlightDeckLayout> FlightDecks { get; }
+
     /// <summary>The rider points of container templates by name (case-insensitive); a template without an entry has no such bones, and its riders stand at its position.</summary>
     public ImmutableDictionary<string, ContainerFirePoints> FirePoints { get; }
 
@@ -98,7 +108,7 @@ public sealed class ModelGeometry
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty && FlightDecks.IsEmpty;
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
 
@@ -107,8 +117,10 @@ public sealed class ModelGeometry
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths,
         IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null,
-        IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>>? ropes = null)
+        IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>>? ropes = null,
+        IEnumerable<KeyValuePair<string, FlightDeckLayout>>? flightDecks = null)
     {
+        FlightDecks = (flightDecks ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Ropes = (ropes ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Airfields = airfields.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         ExitPaths = exitPaths.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
@@ -155,6 +167,14 @@ public sealed class ModelGeometry
         // Written only when the table has bridges: a table without them keeps its fingerprint.
         foreach (var pair in BridgeDecks.OrderBy(value => value.Key, StringComparer.Ordinal))
             text.Append(CultureInfo.InvariantCulture, $"bridge {pair.Key} {pair.Value.MinY.Raw} {pair.Value.MaxY.Raw}\n");
+        // Written only when the table has decks: a table without them keeps its fingerprint.
+        foreach (var pair in FlightDecks.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
+        {
+            static string Poses(IEnumerable<BonePose> poses) => string.Join(";", poses.Select(Pose));
+            var deck = pair.Value;
+            text.Append(CultureInfo.InvariantCulture, $"deck {pair.Key.ToUpperInvariant()} {Poses(deck.Spaces)}|{Poses(deck.TakeoffStart)}|{Poses(deck.TakeoffEnd)}|{Poses(deck.LandingStart)}|{Poses(deck.LandingEnd)}");
+            text.Append(CultureInfo.InvariantCulture, $"|{string.Join("/", deck.Taxi.Select(set => Poses(set)))}|{string.Join("/", deck.Creation.Select(set => Poses(set)))}\n");
+        }
         // Written only when the table has launch points: a table without them keeps its fingerprint.
         foreach (var pair in WeaponLaunches.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
         {

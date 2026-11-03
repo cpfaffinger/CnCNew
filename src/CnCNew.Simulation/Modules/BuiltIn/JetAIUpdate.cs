@@ -184,12 +184,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _homeX = Entity.X;
         _homeY = Entity.Y;
         // JetAIUpdate::getProducerLocation: with no airfield that holds a space for it the aircraft simply flies.
-        var parking = ParkingPlaceBehavior.TryAdoptArrival(world, Entity, out var atHelipad);
+        var parking = ParkingPlaceBehavior.TryAdoptArrival(world, Entity, out var atHelipad, out var parked);
         if (parking is null) return;
         _airfield = parking.Entity.Id;
         _homeX = parking.Entity.X;
         _homeY = parking.Entity.Y;
         _allowAir = false;
+        // FlightDeckBehavior::buildInfo: the jets a carrier comes with stand on their spaces.
+        if (parked) return;
         if (atHelipad || !data.NeedsRunway)
         {
             // aiMoveToPosition(parking space): the order waits while the helicopter lifts off; a rally point order replaces it.
@@ -205,10 +207,46 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             Entity.Angle = info.HangarInternalOrientation;
             _leg = info;
             _path.Clear();
-            _path.Add(info.ParkingSpace);
+            if (OnDeck)
+            {
+                // "Skip the first node because it's the creation location."
+                _path.AddRange(parking.CreationLocations(world, Entity.Id).Skip(1));
+                _path.Add(info.RunwayPrep);
+            }
+            else _path.Add(info.ParkingSpace);
             _pathIndex = 0;
             _phase = JetPhase.TaxiFromHangar;
         }
+    }
+
+    /// <summary><c>OBJECT_STATUS_DECK_HEIGHT_OFFSET</c>: the aircraft belongs to a carrier's deck, and the deck's rules of taxiing hold.</summary>
+    private bool OnDeck => Entity.HasStatus(DeckHeightBit);
+
+    private static readonly int DeckHeightBit = ObjectStatusBits.Index("DECK_HEIGHT_OFFSET");
+
+    /// <summary>The stored order is a landing (<c>friend_getPendingCommandType</c> is <c>AICMD_ENTER</c>).</summary>
+    public bool IsOrderedToLand => _pending == PendingKind.Land;
+
+    /// <summary><c>friend_purgePendingCommand</c>.</summary>
+    public void PurgePending()
+    {
+        _pending = PendingKind.None;
+        _pendingAttackMove = false;
+    }
+
+    /// <summary><c>OBJECT_STATUS_REASSIGN_PARKING</c>: the deck gave the aircraft a space further forward, "so simply move to the new parking spot which was just switched from under us".</summary>
+    public void TaxiToNewSpace(IWorldServices world, ParkingPlaceBehavior deck)
+    {
+        if (!deck.TryGetInfo(world, Entity.Id, out var info)) return;
+        Enter(JetPhase.TaxiFromHangar);
+        _leg = info;
+        _path.Add(info.RunwayPrep);
+    }
+
+    /// <summary><c>JetOrHeliTaxiState::update</c>: "keep checking to see if there is a better spot as it moves forward".</summary>
+    private void LookForABetterSpace(IWorldServices world, ParkingPlaceBehavior parking)
+    {
+        if (OnDeck && parking.CalcBestParkingAssignment(world, Entity.Id, out var best)) _path.Add(best);
     }
 
     public override void OnRemove(IWorldServices world)
@@ -457,6 +495,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 break;
             case JetPhase.TaxiFromHangar:
                 if (parking is null) { Enter(JetPhase.None); _allowAir = true; break; }
+                LookForABetterSpace(world, parking);
                 if (TaxiAlongPath(world)) Enter(JetPhase.OrientForParking);
                 break;
             case JetPhase.AwaitTakeoff:
@@ -484,6 +523,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 break;
             case JetPhase.TaxiFromLanding:
                 if (parking is null) { BeginDeadAirfield(); break; }
+                LookForABetterSpace(world, parking);
                 if (TaxiAlongPath(world)) Enter(JetPhase.OrientForParking);
                 break;
             case JetPhase.OrientForParking:
@@ -638,11 +678,23 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         if (!parking.ReserveSpace(world, Entity, data.ParkingOffset, out _)) { Enter(JetPhase.None); return; }
-        if (!parking.ReserveRunway(world, Entity.Id, false)) return;
+        if (!parking.ReserveRunway(world, Entity.Id, false))
+        {
+            // "If we're trying to take off an aircraft carrier and fail to reserve a runway, it's because we need to be at the front of the carrier queue."
+            if (!OnDeck) return;
+            if (parking.CalcBestParkingAssignment(world, Entity.Id, out var best))
+            {
+                _path.Clear();
+                _pathIndex = 0;
+                _path.Add(best);
+            }
+            TaxiAlongPath(world);
+            return;
+        }
         if (!parking.TryGetInfo(world, Entity.Id, out var info)) { Enter(JetPhase.None); return; }
         _leg = info;
         Enter(JetPhase.TaxiToTakeoff);
-        // JetOrHeliTaxiState FROM_PARKING: the taxi point, then the runway start (the taxi point only when it had to queue).
+        // JetOrHeliTaxiState FROM_PARKING: the taxi point, then the runway start (the taxi point only when it had to queue); on a deck the front space is the runway start.
         _path.Add(info.RunwayPrep);
         if (info.RunwayStart.X != info.RunwayPrep.X || info.RunwayStart.Y != info.RunwayPrep.Y) _path.Add(info.RunwayStart);
     }
@@ -919,8 +971,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _verticalSpeed = Fixed.Zero;
         Enter(JetPhase.Landing);
         _path.Add(info.RunwayApproach);
-        _path.Add(info.RunwayEnd);
-        _path.Add(info.RunwayStart);
+        // "Assigned to an aircraft carrier which has separate landing strips."
+        _path.Add(OnDeck ? info.RunwayLandingStart : info.RunwayEnd);
+        _path.Add(OnDeck ? info.RunwayLandingEnd : info.RunwayStart);
         Land(world, parking);
     }
 
@@ -1034,7 +1087,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var info = _leg;
         Enter(JetPhase.TaxiFromLanding);
         if (Array.Find(Entity.ModuleArray, module => module is CountermeasuresBehavior) is CountermeasuresBehavior flares) flares.ReloadAtAirfield();
-        // JetOrHeliTaxiState TO_PARKING: the taxi point, then the space.
+        // JetOrHeliTaxiState TO_PARKING: the taxi point, then the space; on a deck the runway's taxi points, then the best space there is.
+        if (OnDeck)
+        {
+            _path.AddRange(parking.TaxiLocations(world, Entity.Id));
+            parking.CalcBestParkingAssignment(world, Entity.Id, out var best);
+            _path.Add(parking.TryGetInfo(world, Entity.Id, out var space) ? space.RunwayPrep : best);
+            return;
+        }
         _path.Add(info.RunwayPrep);
         _path.Add(info.ParkingSpace);
     }
@@ -1050,6 +1110,12 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
         if (!parking.ReserveSpace(world, Entity, data.ParkingOffset, out var info)) { Enter(JetPhase.None); return; }
         _leg = info;
+        if (OnDeck)
+        {
+            // "Magically position it correctly."
+            Entity.X = info.RunwayPrep.X;
+            Entity.Y = info.RunwayPrep.Y;
+        }
         if (!TurnTo(world.Time, info.ParkingOrientation))
         {
             world.MarkDirty(Entity);

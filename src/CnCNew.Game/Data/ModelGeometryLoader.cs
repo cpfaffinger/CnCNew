@@ -42,7 +42,38 @@ public static class ModelGeometryLoader
             layouts[definition.OriginalName] = ReadLayout(library, definition.OriginalName, model, rows, cols);
         }
 
-        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library), ReadRopes(graph, visuals, library));
+        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library), ReadRopes(graph, visuals, library),
+            ReadFlightDecks(graph, visuals, library));
+    }
+
+    /// <summary><c>FlightDeckBehavior::buildInfo</c>: the bones a carrier's module names, of its default model.</summary>
+    private static SortedDictionary<string, FlightDeckLayout> ReadFlightDecks(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        var decks = new SortedDictionary<string, FlightDeckLayout>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            var module = definition.Modules.FirstOrDefault(value => value.Name.Equals("FlightDeckBehavior", StringComparison.Ordinal));
+            if (module is null) continue;
+            var (rows, cols) = (Count(definition, module, "NumSpacesPerRunway"), Count(definition, module, "NumRunways"));
+            var skeleton = library.GetModel(ModelOf(definition, visuals)).Skeleton;
+            BonePose Bone(string name)
+            {
+                var index = skeleton.FindBone(name);
+                if (index < 0) throw new InvalidDataException($"{definition.OriginalName}: the model has no bone '{name}'.");
+                return RestPose(skeleton, index);
+            }
+            string[] Names(string key) => (module.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText ?? string.Empty)
+                .Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            ImmutableArray<BonePose> Run(int column, string part) => [..Names($"Runway{column + 1}{part}").Select(Bone)];
+            var spaces = ImmutableArray.CreateBuilder<BonePose>(rows * cols);
+            for (var row = 0; row < rows; row++)
+                for (var col = 0; col < cols; col++)
+                    spaces.Add(Bone(Names($"Runway{col + 1}Spaces")[row]));
+            var columns = Enumerable.Range(0, cols).ToArray();
+            decks[definition.OriginalName] = new FlightDeckLayout(spaces.MoveToImmutable(), [..columns.Select(col => Run(col, "Takeoff")[0])], [..columns.Select(col => Run(col, "Takeoff")[1])],
+                [..columns.Select(col => Run(col, "Landing")[0])], [..columns.Select(col => Run(col, "Landing")[1])], [..columns.Select(col => Run(col, "Taxi"))], [..columns.Select(col => Run(col, "Creation"))]);
+        }
+        return decks;
     }
 
     /// <summary>The fraction bits of a launch bone's direction.</summary>

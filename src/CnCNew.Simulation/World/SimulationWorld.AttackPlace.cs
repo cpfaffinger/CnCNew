@@ -61,6 +61,12 @@ public sealed partial class SimulationWorld
         foreach (var unit in members)
         {
             var (x, y) = order.OwnPosition ? FramePosition(unit) : (order.X, order.Y);
+            if (DeckOf(unit) is { } deck)
+            {
+                deck.TakeOrder(this, Modules.BuiltIn.DeckOrder.AttackPosition, EntityId.Invalid, x, y);
+                any = true;
+                continue;
+            }
             // "This code allows garrisoned buildings to force attack a ground position": the riders of a container that lets them fire attack the same place.
             if (PassesAttackToRiders(unit))
                 foreach (var id in unit.Container!.Contained.ToArray())

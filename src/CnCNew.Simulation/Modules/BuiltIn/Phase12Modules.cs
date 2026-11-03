@@ -26,7 +26,7 @@ internal static class Phase12Modules
         new ModuleBinding<FireWeaponWhenDamagedData>("FireWeaponWhenDamagedBehavior", ModuleOwnerKind.Object, FireWeaponWhenDamagedData.Parse, data => new FireWeaponWhenDamagedBehavior(data)),
         new ModuleBinding<FireWeaponPowerData>("FireWeaponPower", ModuleOwnerKind.Object, (configuration, _) => FireWeaponPowerData.Parse(configuration), data => new FireWeaponPower(data)),
         new ModuleBinding<BaikonurLaunchData>("BaikonurLaunchPower", ModuleOwnerKind.Object, (configuration, _) => BaikonurLaunchData.Parse(configuration), data => new BaikonurLaunchPower(data)),
-        new ModuleBinding<NoFieldsData>("FlightDeckBehavior", ModuleOwnerKind.Object, (_, _) => NoFieldsData.Instance, _ => new FlightDeckBehavior()),
+        new ModuleBinding<FlightDeckData>("FlightDeckBehavior", ModuleOwnerKind.Object, (configuration, _) => FlightDeckData.Parse(configuration), data => new FlightDeckBehavior(data)),
         new ModuleBinding<HordeData>("HordeUpdate", ModuleOwnerKind.Object, (configuration, _) => HordeData.Parse(configuration), data => new HordeUpdate(data)),
     ];
 }
@@ -440,19 +440,4 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
         _inHorde = reader.Bool("inHorde");
         _trueMember = reader.Bool("trueMember");
     }
-}
-
-// ============================================================================================================ FlightDeckBehavior
-
-/// <summary>
-/// <c>FlightDeckBehavior.cpp</c> runs an aircraft carrier's deck: parking spaces, catapult take-off, landing, replacing destroyed aircraft (<c>PayloadTemplate</c>), healing aircraft on
-/// the deck. It needs jet aircraft (<c>JetAIUpdate</c>, not simulated) and the parking-place machinery. The module is therefore a shell: the carrier can be created, damaged and
-/// destroyed (<c>docs/SCRIPT-ENGINE.md</c> §8), but launches, lands, replaces and heals no aircraft. Without it the one carrier of <c>MD_GLA03</c> would not exist and the mission's
-/// ending (destroy the carrier) could not be reached.
-/// </summary>
-public sealed class FlightDeckBehavior : SimModule
-{
-    public override string ModuleName => "FlightDeckBehavior";
-    public override void Describe(IStateWriter writer) { }
-    public override void Load(IStateReader reader) { }
 }

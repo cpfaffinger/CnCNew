@@ -539,17 +539,17 @@ public static class ModuleCatalog
         ]);
         Add("FireWeaponPower", [..SpecialPowerBase(), new("MaxShotsToFire", FieldType.Integer, Source: "FireWeaponPower.cpp")]);
         Add("BaikonurLaunchPower", [..SpecialPowerBase(), new("DetonationObject", FieldType.Text, Source: "BaikonurLaunchPower.cpp")]);
-        // FlightDeckBehavior.cpp: the carrier's runway/launch fields are recognized so the shipped data compiles; the module is a shell (no aircraft are launched, landed or replaced).
+        // FlightDeckBehavior.cpp: the bone names of the runways are read where the bones are, by the model geometry; the rest by the module.
         Add("FlightDeckBehavior",
         [
             new("NumRunways", FieldType.Integer, Source: "FlightDeckBehavior.cpp"),
             new("NumSpacesPerRunway", FieldType.Integer, Source: "FlightDeckBehavior.cpp"),
-            new("Runway1Spaces", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway1Takeoff", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
-            new("Runway1Landing", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway1Taxi", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
-            new("Runway1Creation", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway1CatapultSystem", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
-            new("Runway2Spaces", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway2Takeoff", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
-            new("Runway2Landing", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway2Taxi", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
-            new("Runway2Creation", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway2CatapultSystem", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            new("Runway1Spaces", FieldType.Text, Source: "FlightDeckBehavior.cpp"), new("Runway1Takeoff", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
+            new("Runway1Landing", FieldType.Text, Source: "FlightDeckBehavior.cpp"), new("Runway1Taxi", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
+            new("Runway1Creation", FieldType.Text, Source: "FlightDeckBehavior.cpp"), new("Runway1CatapultSystem", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
+            new("Runway2Spaces", FieldType.Text, Source: "FlightDeckBehavior.cpp"), new("Runway2Takeoff", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
+            new("Runway2Landing", FieldType.Text, Source: "FlightDeckBehavior.cpp"), new("Runway2Taxi", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
+            new("Runway2Creation", FieldType.Text, Source: "FlightDeckBehavior.cpp"), new("Runway2CatapultSystem", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
             Real("HealAmountPerSecond", "FlightDeckBehavior.cpp"),
             Real("ApproachHeight", "FlightDeckBehavior.cpp"),
             Real("LandingDeckHeightOffset", "FlightDeckBehavior.cpp"),

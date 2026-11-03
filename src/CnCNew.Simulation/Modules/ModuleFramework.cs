@@ -371,6 +371,15 @@ public interface IWorldServices
     /// <summary><c>Object::setTeam</c> for a controlling-player change: the object (and the power it supplies or consumes) now belongs to <paramref name="newOwner"/>; false when nothing changed.</summary>
     bool TransferOwnership(EntityId id, PlayerId newOwner);
 
+    /// <summary><c>ProductionUpdateInterface::queueCreateUnit</c>: a carrier's replacement, which costs nothing.</summary>
+    void QueueWithoutPay(Entity producer, BuiltIn.ProductionUpdate production, ObjectTemplate template);
+
+    /// <summary><c>aiForceAttackObject</c> for an order that does not come from a player's command.</summary>
+    void AttackFor(Entity unit, Entity victim);
+
+    /// <summary><c>aiGuardPosition(GUARDMODE_NORMAL)</c> for an order that does not come from a player's command.</summary>
+    void GuardPlaceFor(Entity unit, Fixed x, Fixed y);
+
     /// <summary><c>DAMAGE_KILLPILOT</c> of <c>ActiveBody::attemptDamage</c> (<c>SimulationWorld.Unmanned.cs</c>).</summary>
     void KillPilot(Entity victim, in DamageInfo info);
 

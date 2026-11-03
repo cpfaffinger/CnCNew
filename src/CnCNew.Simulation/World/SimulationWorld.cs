@@ -729,6 +729,27 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
+    /// <summary>The carrier's deck, which takes the orders of the object: "the carrier is a dumb stump that only propagates orders to it's aircraft".</summary>
+    private static Modules.BuiltIn.FlightDeckBehavior? DeckOf(Entity entity)
+        => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.FlightDeckBehavior) as Modules.BuiltIn.FlightDeckBehavior;
+
+    /// <inheritdoc cref="IWorldServices.QueueWithoutPay"/>
+    public void QueueWithoutPay(Entity producer, Modules.BuiltIn.ProductionUpdate production, ObjectTemplate template)
+        => production.Enqueue(Time, template.Index, Fixed.Zero, BuildTicksUnderPower(producer.Owner, template.BuildTicks));
+
+    /// <inheritdoc cref="IWorldServices.AttackFor"/>
+    public void AttackFor(Entity unit, Entity victim)
+    {
+        ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
+        AiOf(unit)?.OrderMove(this, victim.X, victim.Y, false);
+        BeginPursuit(unit, victim);
+        NoteOrderedAttack(unit, victim);
+    }
+
+    /// <inheritdoc cref="IWorldServices.GuardPlaceFor"/>
+    public void GuardPlaceFor(Entity unit, Fixed x, Fixed y)
+        => ExecuteGuard(new GuardCommand(unit.Owner, 0, _tick, [unit.Id], x, y, EntityId.Invalid, GuardMode.Normal));
+
     internal static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity)
         => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface) as Modules.BuiltIn.AIUpdateInterface;
 
@@ -912,7 +933,7 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 if (!_entities.TryGetValue(attackMove.Unit.Value, out var marcher) || marcher.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (marcher.Owner != command.Player) return CommandRejection.NotPermitted;
-                if (!CanMove(marcher)) return CommandRejection.CannotMove;
+                if (!CanMove(marcher) && DeckOf(marcher) is null) return CommandRejection.CannotMove;
                 break;
             }
             case PlayerLeaveCommand:
@@ -948,7 +969,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (pursuer.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(pursue.Victim.Value, out var pursued) || pursued.DestroyRequested || pursued.Body is null) return CommandRejection.UnknownEntity;
-                if (!CanMove(pursuer) && !PassesAttackToRiders(pursuer) && !PassesAttackToSlaves(pursuer)) return CommandRejection.CannotMove;
+                if (!CanMove(pursuer) && !PassesAttackToRiders(pursuer) && !PassesAttackToSlaves(pursuer) && DeckOf(pursuer) is null) return CommandRejection.CannotMove;
                 if (!CanPlayerSee(command.Player, pursued)) return CommandRejection.TargetNotVisible;
                 break;
             }
@@ -1352,6 +1373,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 var marcher = FindEntity(attackMove.Unit);
                 if (marcher is null || marcher.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (marcher.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (DeckOf(marcher) is { } marchingDeck)
+                {
+                    marchingDeck.TakeOrder(this, Modules.BuiltIn.DeckOrder.AttackMove, EntityId.Invalid, attackMove.X, attackMove.Y);
+                    break;
+                }
                 if (!CanMove(marcher)) { RecordRejection(command, CommandRejection.CannotMove); break; }
                 ReleaseWeaponLock(marcher, WeaponLockKind.Temporary);
                 var (marchX, marchY) = IndividualDestination(marcher, attackMove.X, attackMove.Y);
@@ -1424,6 +1450,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 {
                     PassAttackToSlaves(unit, victim);
                     passes = true;
+                }
+                if (DeckOf(unit) is { } deck)
+                {
+                    deck.TakeOrder(this, Modules.BuiltIn.DeckOrder.AttackObject, victim.Id, Fixed.Zero, Fixed.Zero);
+                    break;
                 }
                 if (!CanMove(unit))
                 {

@@ -179,7 +179,7 @@ public sealed partial class SimulationWorld
         {
             if (!_entities.TryGetValue(id.Value, out var member) || member.DestroyRequested) return CommandRejection.UnknownEntity;
             if (member.Owner != issuer) return CommandRejection.NotPermitted;
-            if (!CanMove(member)) return CommandRejection.CannotMove;
+            if (!CanMove(member) && DeckOf(member) is null) return CommandRejection.CannotMove;
         }
         return 0;
     }
@@ -197,6 +197,13 @@ public sealed partial class SimulationWorld
         var any = false;
         foreach (var id in order.Units)
         {
+            if (FindEntity(id) is { DestroyRequested: false } carrier && carrier.Owner == order.Player && DeckOf(carrier) is { } deck)
+            {
+                var (deckX, deckY) = guarded is not null ? (guarded.X, guarded.Y) : area is not null ? (areaX, areaY) : (order.X, order.Y);
+                deck.TakeOrder(this, Modules.BuiltIn.DeckOrder.Guard, EntityId.Invalid, deckX, deckY);
+                any = true;
+                continue;
+            }
             if (FindEntity(id) is not { DestroyRequested: false } unit || unit.Owner != order.Player || AiOf(unit) is not { } ai) continue;
             if (unit.Template.Locomotor is null || unit.Template.IsKindOf("IMMOBILE") || unit.Template.IsKindOf("PROJECTILE")) continue;
             ai.OrderIdle(this, true);
