@@ -260,6 +260,9 @@ public sealed partial class SimulationWorld
     /// <c>AI::getAdjustedVisionRangeForObject(OWNERTYPE | MOOD [| GUARDINNER])</c>: the vision range times the guard factor of a human (1.8 inner, 2.2 outer) or a computer player
     /// (1.1, 1.333), for a computer player's unit also times its team's mood; a contained unit's largest weapon range instead.
     /// </summary>
+    /// <summary><c>AIGuardMachine::getStdGuardRange</c>: the inner guard range of the unit, which the guard mode's radius cursor shows.</summary>
+    public Fixed StdGuardRange(Entity entity) => GuardRange(entity, true);
+
     private Fixed GuardRange(Entity entity, bool inner)
     {
         if (entity.ContainedBy.IsValid) return MaxWeaponRange(entity);

@@ -26,6 +26,12 @@ public sealed record InGameUiFont(string Name, int PointSize, bool Bold);
 /// says, and the ones a screen draws with are <see cref="GlobalLanguageSettings.Font(string)"/> of the slot named by <see cref="LanguageSlots"/>; a test pins that the two agree in size and weight in the retail data.
 /// </para>
 /// </summary>
+/// <summary>
+/// One <c>...RadiusCursor</c> block (<c>RadiusDecalTemplate::parseRadiusDecalTemplate</c>): the decal that follows the cursor in a mode that asks for a place - its texture, how its opacity throbs
+/// between <see cref="OpacityMin"/> and <see cref="OpacityMax"/> over <see cref="ThrobMilliseconds"/>, its colour, and whether only its owner sees it.
+/// </summary>
+public sealed record RadiusCursorTemplate(string Texture, string Style, decimal OpacityMin, decimal OpacityMax, int ThrobMilliseconds, WndColor Color, bool OnlyVisibleToOwningPlayer);
+
 public sealed record InGameUiSettings(
     int MaxSelectionSize,
     WndColor MessageColor1,
@@ -113,12 +119,14 @@ public sealed record InGameUiSettings(
             values[key] = (field.Value.OriginalText.Trim(), $"{field.Location.Source}({field.Location.Line})");
         }
         var cursors = ImmutableArray.CreateBuilder<string>();
+        var templates = ImmutableSortedDictionary.CreateBuilder<string, RadiusCursorTemplate>(StringComparer.Ordinal);
         foreach (var section in sections)
         {
             var name = section.Declaration.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
             if (!name.EndsWith("RadiusCursor", StringComparison.Ordinal))
                 throw new FormatException($"{section.Location.Source}({section.Location.Line}): '{section.Declaration}' is not a sub-block of the InGameUI block (only the ...RadiusCursor decals are).");
             cursors.Add(name);
+            templates[name] = RadiusCursor(section);
         }
         cursors.Sort(StringComparer.Ordinal);
         var defaulted = Keys.Where(key => !values.ContainsKey(key)).OrderBy(key => key, StringComparer.Ordinal).ToImmutableArray();
@@ -257,6 +265,50 @@ public sealed record InGameUiSettings(
             Color("DrawableCaptionColor", new WndColor(255, 255, 255, 255)),
             Boolean("DrawRMBScrollAnchor", false),
             Boolean("MoveRMBScrollAnchor", false),
-            cursors.ToImmutable(), defaulted);
+            cursors.ToImmutable(), defaulted) { RadiusCursors = templates.ToImmutable() };
+    }
+
+    /// <summary>The radius cursor decals by block name (<c>GuardAreaRadiusCursor</c>, ...).</summary>
+    public ImmutableSortedDictionary<string, RadiusCursorTemplate> RadiusCursors { get; init; } = ImmutableSortedDictionary<string, RadiusCursorTemplate>.Empty;
+
+    /// <summary>
+    /// <c>RadiusDecalTemplate::parseRadiusDecalTemplate</c>: <c>Texture</c>, <c>Style</c>, <c>OpacityMin</c>/<c>OpacityMax</c> (percentages; defaults 1.0 and 1.0), <c>OpacityThrobTime</c>
+    /// (milliseconds; default 1 second), <c>Color</c> (default white) and <c>OnlyVisibleToOwningPlayer</c> (default yes). An unknown key is an error.
+    /// </summary>
+    private static RadiusCursorTemplate RadiusCursor(DefinitionSection section)
+    {
+        string texture = string.Empty, style = "SHADOW_ALPHA_DECAL";
+        decimal min = 1m, max = 1m;
+        var throb = 1000;
+        var color = new WndColor(255, 255, 255, 255);
+        var owner = true;
+        foreach (var field in section.Fields)
+        {
+            var where = $"{field.Location.Source}({field.Location.Line})";
+            var tokens = IniTokens.Split(field.Value.OriginalText.Trim(), where);
+            decimal Percent() => tokens.Length == 1 && decimal.TryParse(tokens[0].TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                ? (tokens[0].EndsWith('%') ? value / 100m : value) : throw new FormatException($"{where}: {field.Name} is not a percentage.");
+            switch (field.Name.ToUpperInvariant())
+            {
+                case "TEXTURE": texture = tokens.Single(); break;
+                case "STYLE": style = tokens.Single(); break;
+                case "OPACITYMIN": min = Percent(); break;
+                case "OPACITYMAX": max = Percent(); break;
+                case "OPACITYTHROBTIME":
+                    throb = int.TryParse(tokens.Single(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms) ? ms : throw new FormatException($"{where}: OpacityThrobTime is not a whole number.");
+                    break;
+                case "COLOR":
+                {
+                    var channels = new byte[] { 0, 0, 0, 255 };
+                    for (var index = 0; index < tokens.Length && index < 4; index++)
+                        channels[index] = byte.Parse(tokens[index][2..], NumberStyles.Integer, CultureInfo.InvariantCulture);
+                    color = new WndColor(channels[0], channels[1], channels[2], channels[3]);
+                    break;
+                }
+                case "ONLYVISIBLETOOWNINGPLAYER": owner = tokens.Single().Equals("Yes", StringComparison.OrdinalIgnoreCase); break;
+                default: throw new FormatException($"{where}: '{field.Name}' is not a key of a radius cursor (RadiusDecalTemplate::parseRadiusDecalTemplate).");
+            }
+        }
+        return new RadiusCursorTemplate(texture, style, min, max, throb, color, owner);
     }
 }

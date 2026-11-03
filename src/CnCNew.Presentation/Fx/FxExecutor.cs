@@ -362,13 +362,18 @@ public sealed class FxExecutor
         Decals.Expire(frame);
     }
 
+    /// <summary>The radius cursor under the mouse (<c>InGameUI::handleRadiusCursor</c>), set by the HUD every frame; null when there is none.</summary>
+    public DecalInstance? CursorDecal { get; set; }
+
     /// <summary>The current renderable state; ray and shake requests are handed out once.</summary>
     public FxFrame Capture(Func<Vector3, float, bool>? isVisible = null)
     {
+        var decals = Decals.Snapshot();
+        if (CursorDecal is { } cursor) decals = decals.Add(cursor);
         var frame = new FxFrame(Frame, Particles.Capture(isVisible),
             [.._tracers.Select(tracer => tracer.ToInstance()), ..Ropes?.Invoke() ?? []],
             [.._lights.Select(light => light.ToInstance())],
-            Decals.Snapshot(), [.._rays], [.._shakes]) { ProjectileStreams = ProjectileStreams?.Invoke() ?? [] };
+            decals, [.._rays], [.._shakes]) { ProjectileStreams = ProjectileStreams?.Invoke() ?? [] };
         _rays.Clear();
         _shakes.Clear();
         return frame;

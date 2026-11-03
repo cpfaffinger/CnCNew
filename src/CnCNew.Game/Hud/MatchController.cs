@@ -521,6 +521,7 @@ public sealed partial class MatchController
         Overlay = ComputeOverlay();
         // The building follows the cursor in the world, too: the object layer draws it translucent (InGameUI::handleBuildPlacements).
         Match.PlacementGhost = !IsMenuOpen && Input.Commands.Mode == CommandModeKind.Placement ? Input.Commands.Ghost : null;
+        UpdateRadiusCursor();
         _clockMs += (long)Math.Round(deltaSeconds * 1000);
         _tree.AdvanceTo(_clockMs);
     }

@@ -51,6 +51,16 @@ public sealed class CommandModeController
 
     public CommandModeKind Mode { get; private set; }
     public CommandButtonInfo? PendingButton => _button;
+
+    /// <summary>
+    /// <c>InGameUI::setRadiusCursor</c>: the radius cursor of the mode the controller is in - the armed button's <c>RadiusCursorType</c> (<c>GUARD_AREA</c> for the guard buttons, the
+    /// power's for a special power) - or null outside such a mode.
+    /// </summary>
+    public string? RadiusCursorType => Mode is CommandModeKind.ButtonTarget or CommandModeKind.Guard && _button is { RadiusCursorType.Length: > 0 } button
+        && !button.RadiusCursorType.Equals("NONE", StringComparison.OrdinalIgnoreCase) ? button.RadiusCursorType : null;
+
+    /// <summary>The objects the armed mode acts for (the readiest carrier of a power, the units that guard).</summary>
+    public ImmutableArray<EntityId> PendingSources => _sources;
     public PlacementGhost? Ghost { get; private set; }
     public CursorKind Cursor { get; private set; } = CursorKind.Normal;
 

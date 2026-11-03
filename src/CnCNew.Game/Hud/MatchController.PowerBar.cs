@@ -61,6 +61,9 @@ public sealed partial class MatchController
         }
     }
 
+    /// <summary>A press on button <paramref name="number"/> (from 1) of the bar, as a click on it would be.</summary>
+    public bool PressPowerButton(int number) => PressPower($"{_powerLayout}:ButtonCommand{number}");
+
     /// <summary>A press on a button of the bar: true when it was one.</summary>
     private bool PressPower(string name)
     {
