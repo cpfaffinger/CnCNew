@@ -561,6 +561,33 @@ static class InputTests
 
     internal static Vector2 Screen(float x, float y) => new(2 * x, 600 - 2 * y);
 
+    /// <summary>A camera south of the ground looking north and down at 45 degrees: what stands higher lies further up the screen.</summary>
+    internal sealed class SlantView : IViewProjection
+    {
+        private static readonly Vector3 Down = Vector3.Normalize(new Vector3(0, 1, -1));
+        public Matrix4x4 ViewProjection => Matrix4x4.Identity;
+        public Vector2 ViewportSize => new(800, 600);
+
+        public bool TryScreenToGround(Vector2 screen, out Vector3 world)
+        {
+            world = new Vector3(screen.X / 2, (600 - screen.Y) / 2, 0);
+            return true;
+        }
+
+        public bool TryWorldToScreen(Vector3 world, out Vector2 screen)
+        {
+            screen = new Vector2(world.X * 2, 600 - (world.Y + world.Z) * 2);
+            return true;
+        }
+
+        public void GetScreenRay(Vector2 screen, out Vector3 origin, out Vector3 direction)
+        {
+            TryScreenToGround(screen, out var ground);
+            direction = Down;
+            origin = ground - Down * 1000;
+        }
+    }
+
     /// <summary>Submits to the world like <c>SkirmishMatchSession.Issue</c> (per-player sequence, current tick) and records every command.</summary>
     internal sealed class WorldSink(SimulationWorld world, List<SimCommand> log) : ICommandSink
     {
@@ -827,8 +854,9 @@ static class InputTests
         Assert(picker.Pick(world, Me, view, Screen(40, 40) + new Vector2(9, 0)) is null, "9 px misses it");
         Assert(picker.Pick(world, Me, view, Screen(60, 40) - new Vector2(12, 0)) == tank, "12 px picks the tank");
         Assert(picker.Pick(world, Me, view, Screen(60, 40) - new Vector2(13, 0)) is null, "13 px misses it");
-        // At 66 m the tank is 12 px away (radius 12) and the ranger at 70 m 8 px away (radius 8): both contain the cursor.
-        Assert(picker.Pick(world, Me, view, Screen(66, 40)) == near, "equal depth: the smaller screen distance wins");
+        // At 66 m the view ray meets the edge of the tank (radius 6), and the ranger at 70 m is only 8 px away; at 68 m it meets the ranger.
+        Assert(picker.Pick(world, Me, view, Screen(66, 40)) == tank, "the ray meets the tank's edge first: the tank");
+        Assert(picker.Pick(world, Me, view, Screen(68, 40)) == near, "the ray meets the ranger: the ranger");
         Assert(picker.Pick(world, Me, view, Screen(103, 100)) == arena.Find("Bunker", Me, 100, 100), "the bunker is nearer the camera than the ranger 2 px away: the view ray hits it first");
         Assert(picker.Pick(world, Me, view, Screen(150, 40)) == arena.Find("Ranger", Enemy, 150, 40), "a visible enemy is pickable");
         Assert(picker.Pick(world, Me, view, Screen(190, 190)) is null, "an enemy in the shroud is not pickable");
@@ -838,6 +866,16 @@ static class InputTests
         arena.Step();
         Assert(ranger.ContainedBy == bunker.Id && picker.Pick(world, Me, view, Screen(40, 40)) is null && !EntityPicker.IsSelectable(ranger), "a contained unit is not pickable");
         var inBox = picker.InRect(world, Me, view, ScreenRect.FromCorners(Screen(0, 0), Screen(200, 200)));
+
+        // The owner's playtest of 3 November 2026: a unit beside a building, seen at a slant. The ray through the unit meets the unit; by the depth of the centres the building's,
+        // higher, won although the ray never met it (W3DView::pickDrawable casts against the geometry).
+        arena.Spawn("Bunker", Me, 160, 150);
+        arena.Spawn("Ranger", Me, 171, 150);
+        arena.Step();
+        var slant = new SlantView();
+        var beside = arena.Find("Ranger", Me, 171, 150);
+        Assert(slant.TryWorldToScreen(EntityPicker.CenterOf(beside), out var besideScreen) && picker.Pick(world, Me, slant, besideScreen) == beside, "seen at a slant, a unit beside a building is picked");
+        Assert(slant.TryWorldToScreen(new Vector3(160, 150, 8), out var roof) && picker.Pick(world, Me, slant, roof) == arena.Find("Bunker", Me, 160, 150), "the roof of the building is the building");
         Assert(inBox.Select(entity => entity.Id.Value).SequenceEqual(inBox.Select(entity => entity.Id.Value).Order()) && inBox.Length == 5, $"the box lists the five pickable objects in id order ({inBox.Length})");
     }
 

@@ -11,11 +11,12 @@ namespace CnCNew.Presentation.Input;
 public readonly record struct ScreenEntity(Entity Entity, Vector2 Center, float Radius, float Depth);
 
 /// <summary>
-/// Screen-space picking. The original casts a ray against the rendered geometry (<c>W3DView::pickDrawable</c>); this layer has no meshes, so it
-/// approximates each object by its bounding circle: an object is under the cursor when the cursor lies within the projected geometry radius of
-/// its projected centre (never less than <see cref="MinRadiusPixels"/>), and among several the one nearest the camera along the view ray wins,
-/// then the smaller screen distance, then the lower id. A box selects objects whose projected centre lies inside it (<c>W3DView.cpp</c>
-/// <c>iterateDrawablesInRegion</c>, the same rule as the original).
+/// Picking. The original casts a ray from the camera through the cursor against the rendered geometry and takes the first object it meets (<c>W3DView::pickDrawable</c>,
+/// <c>RTS3DScene::castRay</c>); this layer has no meshes, so the ray is cast against each object's geometry volume - the box of a <c>BOX</c> turned by the object's angle, the upright
+/// cylinder of a <c>CYLINDER</c>, the ball of a <c>SPHERE</c> - and the object whose volume it enters first wins. A small object is also picked within
+/// <see cref="MinRadiusPixels"/> of its projected centre, at the depth of its centre. Among equal depths the smaller screen distance, then the lower id. A box selects objects whose
+/// projected centre lies inside it (<c>W3DView.cpp</c> <c>iterateDrawablesInRegion</c>, the same rule as the original).
+/// Until the owner's playtest of 3 November 2026 the depth was that of each object's centre, and the high centre of a building beat a dozer standing in front of its wall.
 /// </summary>
 public sealed class EntityPicker(float minRadiusPixels = 8f)
 {
@@ -79,15 +80,69 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
     /// <summary>The pickable object under <paramref name="screen"/>, or null.</summary>
     public Entity? Pick(SimulationWorld world, PlayerId viewer, IViewProjection view, Vector2 screen)
     {
+        view.GetScreenRay(screen, out var origin, out var direction);
         ScreenEntity? best = null;
         foreach (var entity in world.Entities)
         {
             if (!IsPickable(world, viewer, entity) || _scriptUnselectable.Contains(entity.Id.Value) || !TryProject(view, entity, out var candidate)) continue;
             var distance = Vector2.Distance(candidate.Center, screen);
-            if (distance > candidate.Radius) continue;
+            if (RayEnters(entity, origin, direction) is { } enter) candidate = candidate with { Depth = enter };
+            else if (distance > MinRadiusPixels) continue;
             if (best is not { } current || Better(candidate, distance, current, Vector2.Distance(current.Center, screen))) best = candidate;
         }
         return best?.Entity;
+    }
+
+    /// <summary>Where the view ray enters the object's geometry volume (its distance along the ray), or null when it misses it.</summary>
+    public static float? RayEnters(Entity entity, Vector3 origin, Vector3 direction)
+    {
+        var template = entity.Template;
+        var major = (float)template.GeometryMajorRadius.ToDecimal();
+        var minor = (float)template.GeometryMinorRadius.ToDecimal();
+        var height = Math.Max((float)template.GeometryHeight.ToDecimal(), 1f);
+        var center = CenterOf(entity);
+        if (major <= 0f) return null;
+        if (template.Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase))
+        {
+            var toCenter = origin - center;
+            var b = Vector3.Dot(toCenter, direction);
+            var c = Vector3.Dot(toCenter, toCenter) - major * major;
+            var discriminant = b * b - c;
+            if (discriminant < 0f) return null;
+            var t = -b - MathF.Sqrt(discriminant);
+            return t >= 0f ? t : (-b + MathF.Sqrt(discriminant) >= 0f ? 0f : null);
+        }
+        var bottom = center.Z - height / 2;
+        // Into the object's own frame: its position at the origin, its heading along +x.
+        var angle = (float)entity.Angle.ToDecimal();
+        var (cos, sin) = (MathF.Cos(-angle), MathF.Sin(-angle));
+        var relative = origin - new Vector3(center.X, center.Y, bottom);
+        var local = new Vector3(relative.X * cos - relative.Y * sin, relative.X * sin + relative.Y * cos, relative.Z);
+        var way = new Vector3(direction.X * cos - direction.Y * sin, direction.X * sin + direction.Y * cos, direction.Z);
+        float enter = 0f, leave = float.MaxValue;
+        bool Slab(float start, float step, float low, float high)
+        {
+            if (MathF.Abs(step) < 1e-9f) return start >= low && start <= high;
+            var (a, b) = ((low - start) / step, (high - start) / step);
+            if (a > b) (a, b) = (b, a);
+            enter = Math.Max(enter, a);
+            leave = Math.Min(leave, b);
+            return enter <= leave;
+        }
+        if (!Slab(local.Z, way.Z, 0f, height)) return null;
+        if (template.IsBox) return Slab(local.X, way.X, -major, major) && Slab(local.Y, way.Y, -minor, minor) ? enter : null;
+        // An upright cylinder: the part of the ray inside the circle, within the height.
+        var qa = way.X * way.X + way.Y * way.Y;
+        var qb = local.X * way.X + local.Y * way.Y;
+        var qc = local.X * local.X + local.Y * local.Y - major * major;
+        if (qa < 1e-12f) return qc <= 0f ? enter : null;
+        var root = qb * qb - qa * qc;
+        if (root < 0f) return null;
+        var sqrt = MathF.Sqrt(root);
+        var (inside, outside) = ((-qb - sqrt) / qa, (-qb + sqrt) / qa);
+        enter = Math.Max(enter, inside);
+        leave = Math.Min(leave, outside);
+        return enter <= leave ? enter : null;
     }
 
     private static bool Better(ScreenEntity candidate, float distance, ScreenEntity current, float currentDistance)
