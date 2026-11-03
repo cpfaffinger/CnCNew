@@ -817,6 +817,9 @@ public interface IProductionExit
     /// <summary><c>SupplyCenterProductionExitUpdate::exitObjectViaDoor</c>: units leaving this exit start gathering supplies immediately.</summary>
     bool ForcesSupplyWanting => false;
 
+    /// <summary><c>GrantTemporaryStealth</c> of a supply center's exit, in ticks.</summary>
+    long GrantStealthTicks => 0;
+
     /// <summary>
     /// <c>ExitInterface::getNaturalRallyPoint</c> as the first leg of the exit path: the point just outside the door a created unit passes and the point in front of the building it
     /// walks to before anything else; false when this exit has none.

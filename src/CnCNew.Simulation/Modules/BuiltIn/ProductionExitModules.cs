@@ -11,15 +11,15 @@ public readonly record struct Point3(Fixed X, Fixed Y, Fixed Z);
 
 /// <summary>
 /// <c>UnitCreatePoint</c>/<c>NaturalRallyPoint</c> of the three exit modules plus the two <c>QueueProductionExitUpdate</c> pacing keys.
-/// <c>UseSpawnRallyPoint</c> and <c>GrantTemporaryStealth</c> are typed by the catalog but have no consumer.
+/// <c>UseSpawnRallyPoint</c> is typed by the catalog but has no consumer.
 /// </summary>
-public sealed record ProductionExitData(Point3 UnitCreatePoint, long ExitDelayTicks, int InitialBurst, Point3 NaturalRallyPoint = default) : ModuleData
+public sealed record ProductionExitData(Point3 UnitCreatePoint, long ExitDelayTicks, int InitialBurst, Point3 NaturalRallyPoint = default, long GrantStealthTicks = 0) : ModuleData
 {
     public static ProductionExitData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Vector(configuration, "UnitCreatePoint"),
         ModuleConfigReader.Ticks(configuration, "ExitDelay", 0),
         checked((int)ModuleConfigReader.Int(configuration, "InitialBurst", 0)),
-        ModuleConfigReader.Vector(configuration, "NaturalRallyPoint"));
+        ModuleConfigReader.Vector(configuration, "NaturalRallyPoint"), ModuleConfigReader.Ticks(configuration, "GrantTemporaryStealth", 0));
 }
 
 /// <summary>
@@ -66,6 +66,9 @@ public abstract class ProductionExitBase(ProductionExitData exitData) : SimModul
     public virtual bool IsFreeToExit => true;
 
     public virtual bool ForcesSupplyWanting => false;
+
+    /// <inheritdoc/>
+    public long GrantStealthTicks => Data.GrantStealthTicks;
 
     public virtual (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world)
     {

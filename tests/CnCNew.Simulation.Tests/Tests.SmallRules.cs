@@ -1,4 +1,5 @@
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -121,6 +122,53 @@ static partial class Tests
             for (var step = 0; step < world.Frames(3); step++) world.Step();
             Check.That(!shooter.HasStatus(stealthed), $"{rate}: while it attacks it is seen.");
         }
+    }
+
+    /// <summary><c>SupplyCenterDockUpdate::action</c>: a hidden building hides what comes to it for a while, and an open one does not; a grant of another kind takes precedence.</summary>
+    public static void AHiddenBuildingHidesItsTruck()
+    {
+        var stealthed = CnCNew.Simulation.Modules.ObjectStatusBits.Index("STEALTHED");
+        var ini = StealthRulesIni.Replace("Object HiddenVictim", """
+            Object Truck
+              KindOf = VEHICLE SELECTABLE
+              Body = ActiveBody Body01
+                MaxHealth = 100.0
+                InitialHealth = 100.0
+              End
+              Behavior = StealthUpdate Stealth01
+              End
+            End
+            Object HiddenStore
+              KindOf = STRUCTURE SELECTABLE
+              Body = StructureBody Body01
+                MaxHealth = 100.0
+                InitialHealth = 100.0
+              End
+              Behavior = StealthUpdate Stealth01
+                StealthDelay = 100
+                InnateStealth = Yes
+              End
+            End
+            Object HiddenVictim
+            """);
+        var files = new Dictionary<string, string>(SmallRuleFiles()) { ["Data/INI/Object/StealthRules.ini"] = ini };
+        var (world, feeder, _) = RatedWorld(SimulationRate.FromTicksPerSecond(60), files, NavTerrain());
+        feeder.Spawn(1, "HiddenVictim", x: 100, y: 100);
+        feeder.Spawn(1, "HiddenStore", x: 100, y: 140);
+        feeder.Spawn(1, "Truck", x: 140, y: 100);
+        for (var step = 0; step < world.Frames(20); step++) world.Step();
+        var building = world.Entities.Single(value => value.Template.Name == "HiddenVictim");
+        var truck = world.Entities.Single(value => value.Template.Name == "Truck");
+        StealthUpdate.GrantFrom(world, building, truck, 600);
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        Check.That(!truck.HasStatus(stealthed), "An open building hides nothing.");
+        var store = world.Entities.Single(value => value.Template.Name == "HiddenStore");
+        Check.That(store.HasStatus(stealthed), "The store hides.");
+        StealthUpdate.GrantFrom(world, store, truck, 600);
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        Check.That(truck.HasStatus(stealthed), "A hidden one hides its truck.");
+        for (var step = 0; step < 700; step++) world.Step();
+        Check.That(!truck.HasStatus(stealthed), "For a while.");
     }
 
     private static IReadOnlyDictionary<string, string> SmallRuleFiles() => new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/SmallRules.ini"] = SmallRulesIni };

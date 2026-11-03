@@ -19,7 +19,7 @@ public sealed record SpecialAbilityUpdateData(
     SpecialPowerBaseData Base, Fixed StartAbilityRange, Fixed AbilityAbortRange, long PreparationTicks, long PackTicks, long UnpackTicks,
     Fixed PackUnpackVariation, bool DoCaptureFx, int AwardXp, int SkillPoints, bool NeedToFaceTarget, bool ApproachRequiresLos, string SpecialObject, int MaxSpecialObjects, bool SpecialObjectsPersistent,
     bool SpecialObjectsPersistWhenOwnerDies, bool SkipPackingWithNoTarget, bool LoseStealthOnTrigger, Fixed FleeRange, long EffectTicks, long PersistentPrepTicks,
-    bool PersistenceRequiresRecharge) : ModuleData
+    bool PersistenceRequiresRecharge, long PreTriggerUnstealthTicks = 0) : ModuleData
 {
     /// <summary><c>SPECIAL_ABILITY_HUGE_DISTANCE</c>: "no limit". Compared, never squared (the square would not fit a <see cref="Fixed"/>).</summary>
     public static readonly Fixed HugeDistance = Fixed.FromInt(10000000);
@@ -46,7 +46,8 @@ public sealed record SpecialAbilityUpdateData(
         ModuleConfigReader.Real(configuration, "FleeRangeAfterCompletion", Fixed.Zero),
         ModuleConfigReader.Ticks(configuration, "EffectDuration", 0),
         ModuleConfigReader.Ticks(configuration, "PersistentPrepTime", 0),
-        ModuleConfigReader.Bool(configuration, "PersistenceRequiresRecharge", false));
+        ModuleConfigReader.Bool(configuration, "PersistenceRequiresRecharge", false),
+        ModuleConfigReader.Ticks(configuration, "PreTriggerUnstealthTime", 0));
 }
 
 /// <summary>The part of a staged capture the player sees, in the order the ability goes through them.</summary>
@@ -308,6 +309,10 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         {
             // "If power requires recharging, lets freeze prep countdown until power is ready".
             if (!IsPersistent || !data.PersistenceRequiresRecharge || power.IsReady(world)) _prepFrames--;
+            // "This is new... the ability to disable stealth before triggering."
+            if (data.LoseStealthOnTrigger && _prepFrames < data.PreTriggerUnstealthTicks)
+                foreach (var module in Entity.Modules)
+                    if (module is StealthUpdate stealth) stealth.MarkDetected(world);
             if (_prepFrames == 0)
             {
                 TriggerEffect(world, target, power);

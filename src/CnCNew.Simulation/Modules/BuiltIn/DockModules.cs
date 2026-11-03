@@ -83,9 +83,9 @@ public record DockData(int NumberApproachPositions) : ModuleData
     internal int InitialSlots => NumberApproachPositions == DynamicApproachPositions ? DefaultDynamicSize : NumberApproachPositions;
 }
 
-public sealed record SupplyCenterDockData(int NumberApproachPositions) : DockData(NumberApproachPositions)
+public sealed record SupplyCenterDockData(int NumberApproachPositions, long GrantStealthTicks = 0) : DockData(NumberApproachPositions)
 {
-    public static SupplyCenterDockData Parse(RatedModuleConfiguration configuration) => new(ParseApproachPositions(configuration));
+    public static SupplyCenterDockData Parse(RatedModuleConfiguration configuration) => new(ParseApproachPositions(configuration), ModuleConfigReader.Ticks(configuration, "GrantTemporaryStealth", 0));
 }
 
 public sealed record SupplyWarehouseDockData(int NumberApproachPositions, int StartingBoxes, bool DeleteWhenEmpty) : DockData(NumberApproachPositions)
@@ -328,8 +328,8 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
 
 /// <summary>
 /// <c>SupplyCenterDockUpdate::action</c>: the docker unloads every box at <c>ValuePerSupplyBox</c> (<c>Player::getSupplyBoxValue</c>) plus
-/// its upgraded boost once, the sum goes to the centre's controlling player, and the action never asks to be repeated. Not modelled:
-/// <c>GrantTemporaryStealth</c> (typed, no stealth grant system), the score keeper and the floating text.
+/// its upgraded boost once, the sum goes to the centre's controlling player, and the action never asks to be repeated. A stealthed centre grants the docker <c>GrantTemporaryStealth</c>.
+/// Not modelled: the score keeper and the floating text.
 /// </summary>
 internal sealed class SupplyCenterDockUpdate(SupplyCenterDockData data) : DockUpdateBase(data)
 {
@@ -348,6 +348,7 @@ internal sealed class SupplyCenterDockUpdate(SupplyCenterDockData data) : DockUp
         world.AddMoney(Entity.Owner, Fixed.FromInt(value));
         world.Emit(SimEventKind.SupplyDeposited, docker.Id, Entity.Id, string.Empty, value);
         world.MarkDirty(docker);
+        if (data.GrantStealthTicks > 0) StealthUpdate.GrantFrom(world, Entity, docker, data.GrantStealthTicks);
         return false;
     }
 }

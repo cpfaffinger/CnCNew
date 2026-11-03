@@ -97,8 +97,30 @@ public sealed record StealthData(
 /// applied for <see cref="StealthData.StealthDelayTicks"/> consecutive ticks; any forbidden condition breaks stealth
 /// immediately (matches the reference: violating a condition resets the countdown and clears the flag in the same frame).
 /// </summary>
-public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
+public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule, IProducerReceiver
 {
+    /// <summary><c>isTemporaryGrant</c>.</summary>
+    private bool IsTemporaryGrant => _framesGranted > 0;
+
+    /// <summary>
+    /// <c>SupplyCenterDockUpdate::action</c>, <c>SupplyCenterProductionExitUpdate</c>: a stealthed building hides its truck for a while. "Only grant temporary stealth to the default stealth update. It's
+    /// possible that another type of stealth was granted... like the GPS scrambler. We want that to take precendence."
+    /// </summary>
+    public static void GrantFrom(IWorldServices world, Entity building, Entity truck, long ticks)
+    {
+        if (!building.HasStatus(ObjectStatusBits.Index("STEALTHED"))) return;
+        foreach (var module in truck.Modules)
+            if (module is StealthUpdate stealth && (stealth.IsTemporaryGrant || !truck.HasStatus(CanStealthBit))) stealth.ReceiveGrant(world, true, ticks);
+    }
+
+    /// <inheritdoc/>
+    public void OnProducedBy(IWorldServices world, EntityId producer)
+    {
+        if (world.FindEntity(producer) is not { } building) return;
+        foreach (var module in building.Modules)
+            if (module is IProductionExit { GrantStealthTicks: > 0 and var ticks }) GrantFrom(world, building, Entity, ticks);
+    }
+
     /// <summary><c>getDisabledTypesToProcess</c>.</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
 
@@ -3486,7 +3508,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
         Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
         var hasExit = !forcesSupplyWanting && exit is not null && exit.TryGetExitPath(out doorX, out doorY, out exitX, out exitY);
-        var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
+        var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true, Producer: exit!.GrantStealthTicks > 0 ? Entity.Id : EntityId.Invalid)
             : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
             : default(SpawnExtras?);
         var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[templateIndex], door);
