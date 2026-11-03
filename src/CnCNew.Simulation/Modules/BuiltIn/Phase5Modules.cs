@@ -1871,9 +1871,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var wheels = locomotor.IsWheeled && !air;
         // rotateObjAroundLocoPivot: the way is measured from the point the object turns about. "When braking we do exact movement towards goal, instead of physics."
         var pivot = wheels && remaining > brakingDistance ? locomotor.TurnPivotOffset * Entity.Template.BoundingCircleRadius : Fixed.Zero;
-        if (pivot != Fixed.Zero) desired = FixedTrig.Atan2(target.Y - Entity.Y - FixedTrig.Sin(heading) * pivot, target.X - Entity.X - FixedTrig.Cos(heading) * pivot);
-        // A three-point turn reverses with the front swinging to the goal; a short way back keeps the tail to it.
-        if (backing && !threePoint) desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
+        // A three-point turn reverses with the front swinging to the goal; a short way back aims at the goal mirrored about the object (backwardPos), which keeps the tail to it.
+        var mirrored = backing && !threePoint;
+        if (pivot != Fixed.Zero)
+        {
+            var (aimX, aimY) = mirrored ? (-dx, -dy) : (dx, dy);
+            desired = FixedTrig.Atan2(aimY - FixedTrig.Sin(heading) * pivot, aimX - FixedTrig.Cos(heading) * pivot);
+        }
+        else if (mirrored) desired = FixedTrig.Normalize(desired + FixedTrig.Pi);
         difference = FixedTrig.AngleDifference(heading, desired);
         var turnNow = wheels ? WheelTurn(world, locomotor, difference, distance, speed, topSpeed, turnRate, out var turnSpeed) : turnRate;
         Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnNow

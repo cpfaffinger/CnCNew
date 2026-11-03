@@ -79,6 +79,16 @@ internal static partial class Tests
           Appearance = FOUR_WHEELS
           CanMoveBackwards = Yes
         End
+        Locomotor PivotLoco
+          Surfaces = GROUND
+          Speed = 30
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 90
+          Appearance = FOUR_WHEELS
+          CanMoveBackwards = Yes
+          TurnPivotOffset = -0.5
+        End
         Locomotor ForwardLoco
           Surfaces = GROUND
           Speed = 30
@@ -94,6 +104,20 @@ internal static partial class Tests
           GeometryMinorRadius = 5.0
           GeometryHeight = 10.0
           Locomotor = SET_NORMAL ReverseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object PivotCar
+          KindOf = VEHICLE SELECTABLE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          Locomotor = SET_NORMAL PivotLoco
           Body = ActiveBody Body01
             MaxHealth = 100.0
             InitialHealth = 100.0
@@ -136,6 +160,8 @@ internal static partial class Tests
                 return FixedTrig.AngleDifference(start, car.Angle).Abs();
             }
             Check.That(Turned("ReverseCar", 40) < Fixed.FromDecimal(0.1m), $"{rate}: it backs up without turning.");
+            // The pivot lies behind the car: the goal passes it before the car arrives, and only the mirrored goal stays behind the tail.
+            Check.That(Turned("PivotCar", 40) < Fixed.FromDecimal(0.1m), $"{rate}: a car with a pivot behind it backs up without turning.");
             Check.That(Turned("ForwardCar", 40) > Fixed.FromInt(2), $"{rate}: a car that cannot turns round.");
             Check.That(Turned("ReverseCar", 150) > Fixed.FromInt(2), $"{rate}: over a longer way it turns as well.");
         }
