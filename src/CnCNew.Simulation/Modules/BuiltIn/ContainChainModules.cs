@@ -161,8 +161,7 @@ public sealed record RiderChangeContainData(TransportContainData Transport, bool
 /// old rider's status); the rider's <c>STATUS_RIDERn</c> object status is set on the vehicle, and the bike takes the rider's veterancy (raised only — the rider keeps its own).
 /// The initial payload boards the vehicle once it exists (the next tick), without throwing anybody out. When the rider leaves and is not replaced, the vehicle is scuttled:
 /// unselectable (and immobile when it stands still), and <c>ScuttleDelay</c> frames later it dies of <c>TOPPLED</c>; a scuttled vehicle accepts nobody. When the vehicle dies, its
-/// rider is destroyed with it. The weapon set, command set and locomotor set of the rider line, and the model condition, are not applied: a template has one weapon set per
-/// condition, no command-set override and a single locomotor, and the model is presentation. Selection transfer is presentation.
+/// rider is destroyed with it. The rider line gives the vehicle its weapon set flag, its command set and its locomotor set. The model condition and the selection are presentation.
 /// </summary>
 public sealed class RiderChangeContain(RiderChangeContainData data) : TransportContain(data.Transport)
 {
@@ -183,6 +182,9 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
 
     /// <summary>Which of the rider lines the current rider matches (-1: nobody, or a rider no line names).</summary>
     public int RiderIndex => _riderIndex;
+
+    /// <summary><c>setCommandSetStringOverride</c>: the set of the rider's line, or null without a rider.</summary>
+    public string? RiderCommandSet => _riderIndex >= 0 ? data.Riders[_riderIndex].CommandSet : null;
 
     public override void OnSpawn(IWorldServices world)
     {
@@ -230,6 +232,7 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         {
             _riderIndex = line;
             Entity.Status |= 1UL << data.Riders[line].StatusBit;
+            ApplyLine(world, data.Riders[line]);
             // The rule fix bike-trainable-from-rider (the community source): the bike is trainable when its rider is.
             if (world.Templates.Rules.Has(Rules.GameFix.BikeTrainableFromRider))
             {
@@ -253,6 +256,9 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         {
             Entity.Status &= ~(1UL << data.Riders[_riderIndex].StatusBit);
             _riderIndex = -1;
+            // "Also clear the current weaponset flag": the bike's locomotor set stays, the next rider sets his.
+            Entity.RiderWeaponBit = -1;
+            world.WeaponSetFlagsChanged(Entity);
         }
         // "Note if the bike dies, the rider dies too."
         if (Entity.EffectivelyDead || Entity.DestroyRequested)
@@ -272,6 +278,15 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         Entity.Status |= 1UL << UnselectableBit;
         if (!Entity.HasMoveTarget) Entity.Status |= 1UL << ImmobileBit;
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+    }
+
+    /// <summary><c>onContaining</c>: the weapon set flag, and the locomotor set of the rider's line.</summary>
+    private void ApplyLine(IWorldServices world, RiderInfo line)
+    {
+        Entity.RiderWeaponBit = NameTablesPhase5.WeaponSetCondition.TryIndexOf(line.WeaponSet, out var bit) ? bit : -1;
+        world.WeaponSetFlagsChanged(Entity);
+        foreach (var module in Entity.ModuleArray)
+            if (module is AIUpdateInterface ai) ai.ChooseLocomotorSet(world, line.LocomotorSet);
     }
 
     public override long Update(IWorldServices world)

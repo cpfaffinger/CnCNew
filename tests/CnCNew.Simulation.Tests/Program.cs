@@ -373,6 +373,8 @@ run.Test("Combat: CrushDie binds and stays inert", Tests.CrushDieIsInert);
 run.Test("Phase 58: a crushed car rings", Tests.ACrushedCarRings);
 run.Test("Phase 58: a crusher runs over a vehicle", Tests.ACrusherRunsOverAVehicle);
 run.Test("Phase 58: a vehicle loses its driver", Tests.AVehicleLosesItsDriver);
+run.Test("Phase 58: a rider arms its bike", Tests.ARiderArmsItsBike);
+run.Test("Phase 58: an upgrade changes the locomotor", Tests.AnUpgradeChangesTheLocomotor);
 run.Test("Phase 58: a carrier comes with its jets", Tests.ACarrierComesWithItsJets);
 run.Test("Phase 58: a carrier launches waves", Tests.ACarrierLaunchesWaves);
 run.Test("Phase 58: a carrier is saved", Tests.ACarrierIsSaved);

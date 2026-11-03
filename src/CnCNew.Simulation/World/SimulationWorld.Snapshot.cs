@@ -216,6 +216,7 @@ public sealed partial class SimulationWorld
             LastFireTick = reader.Int("lastFireTick"),
             Captured = reader.Has("captured"),
             Unmanned = reader.Has("unmanned"),
+            RiderWeaponBit = reader.Has("riderWeapon") ? checked((int)reader.Int("riderWeapon")) : -1,
             MineClearingDetail = reader.Has("mineClearingDetail"),
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),

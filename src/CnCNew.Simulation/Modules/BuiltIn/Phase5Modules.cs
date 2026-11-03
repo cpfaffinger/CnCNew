@@ -526,15 +526,16 @@ public sealed class WeaponBonusUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModu
     protected override void Activate(IWorldServices world) => Entity.WeaponBonusConditions |= 1u << WeaponBonusTable.PlayerUpgradeCondition;
 }
 
-/// <summary>
-/// <c>LocomotorSetUpgrade</c>: phase 5's <see cref="Templates.ObjectTemplate.Locomotor"/> only resolves the <c>SET_NORMAL</c>
-/// entry (no freefall/wander/taxi/panic/upgrade locomotor sets — see <c>ObjectTemplate.ResolveLocomotor</c>), so switching
-/// locomotor sets has no distinct target to switch to yet; documented no-op, deferred to phase 6.
-/// </summary>
+/// <summary><c>LocomotorSetUpgrade::upgradeImplementation</c>: <c>setLocomotorUpgrade(true)</c>, from here on <c>SET_NORMAL</c> means <c>SET_NORMAL_UPGRADED</c> (nuclear engines).</summary>
 public sealed class LocomotorSetUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(data.Mux)
 {
     public override string ModuleName => "LocomotorSetUpgrade";
-    protected override void Activate(IWorldServices world) { }
+
+    protected override void Activate(IWorldServices world)
+    {
+        foreach (var module in Entity.ModuleArray)
+            if (module is AIUpdateInterface ai) ai.SetLocomotorUpgrade(world);
+    }
 }
 
 /// <summary><c>StatusBitsUpgradeModuleData</c>: <c>StatusToSet</c> and <c>StatusToClear</c>, two masks of object status bits (default empty).</summary>
@@ -843,7 +844,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         => _locomotorSet is not null && Entity.Template.LocomotorSets.TryGetValue(_locomotorSet, out var chosen) ? chosen : Entity.Template.Locomotor;
 
     /// <summary><see cref="SelectedLocomotor"/> for the world.</summary>
-    internal LocomotorInfo? CurrentLocomotor => SelectedLocomotor;
+    public LocomotorInfo? CurrentLocomotor => SelectedLocomotor;
 
     // AIUpdateInterface::m_curLocomotorSet when it is not SET_NORMAL: a script's wander or panic, a run from a repulsor.
     private string? _locomotorSet;
@@ -854,7 +855,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// </summary>
     public bool ChooseLocomotorSet(IWorldServices world, string name)
     {
-        var chosen = name == "SET_NORMAL" ? null : name;
+        var chosen = name == "SET_NORMAL" ? _upgradedLocomotors ? UpgradedSet : null : name;
         if (chosen == _locomotorSet) return true;
         if (chosen is not null && !Entity.Template.LocomotorSets.ContainsKey(chosen)) return false;
         _locomotorSet = chosen;
@@ -862,6 +863,19 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         InvalidatePath();
         world.MarkDirty(Entity);
         return true;
+    }
+
+    /// <summary><c>AIUpdateInterface::m_upgradedLocomotors</c>: written only when set.</summary>
+    private bool _upgradedLocomotors;
+
+    private const string UpgradedSet = "SET_NORMAL_UPGRADED";
+
+    /// <summary><c>setLocomotorUpgrade</c>: an object on its normal set takes the upgraded one at once.</summary>
+    public void SetLocomotorUpgrade(IWorldServices world)
+    {
+        _upgradedLocomotors = true;
+        if (_locomotorSet is null or UpgradedSet) ChooseLocomotorSet(world, "SET_NORMAL");
+        world.MarkDirty(Entity);
     }
 
     private bool _rappelling;
@@ -2856,6 +2870,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_speedCap > Fixed.Zero) writer.Fixed("speedCap", _speedCap);
         if (_stoppingDistance > Fixed.Zero) writer.Fixed("stoppingDistance", _stoppingDistance);
         if (_locomotorSet is not null) writer.Text("locomotorSet", _locomotorSet);
+        if (_upgradedLocomotors) writer.Bool("upgradedLocomotors", true);
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
@@ -2949,6 +2964,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _speedCap = reader.Has("speedCap") ? reader.Fixed("speedCap") : Fixed.Zero;
         _stoppingDistance = reader.Has("stoppingDistance") ? reader.Fixed("stoppingDistance") : Fixed.Zero;
         _locomotorSet = reader.Has("locomotorSet") ? reader.Text("locomotorSet") : null;
+        _upgradedLocomotors = reader.Has("upgradedLocomotors");
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
         var task = reader.Int("task");

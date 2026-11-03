@@ -240,6 +240,9 @@ public sealed class Entity
     /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
     public bool Captured { get; internal set; }
 
+    /// <summary><c>WEAPON_RIDER1</c> and its neighbours: the weapon set flag of the rider who drives this bike, -1 without one. Written only when set.</summary>
+    public int RiderWeaponBit { get; internal set; } = -1;
+
     /// <summary><c>DISABLED_UNMANNED</c>: the vehicle lost its driver, belongs to nobody and stands until an infantry unit takes it over. Written only when set.</summary>
     public bool Unmanned { get; internal set; }
 
@@ -455,6 +458,7 @@ public sealed class Entity
         AttackPlace?.Describe(writer);
         if (Captured) writer.Bool("captured", true);
         if (Unmanned) writer.Bool("unmanned", true);
+        if (RiderWeaponBit >= 0) writer.Int("riderWeapon", RiderWeaponBit);
         if (MineClearingDetail) writer.Bool("mineClearingDetail", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (HackedUntil != 0) writer.Int("hackedUntil", HackedUntil);

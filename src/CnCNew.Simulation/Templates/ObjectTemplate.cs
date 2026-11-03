@@ -541,6 +541,9 @@ public sealed class TemplateCatalog
             foreach (var module in definition.Modules.Where(value => value.Name.Equals("CommandSetUpgrade", StringComparison.Ordinal)))
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
+            foreach (var module in definition.Modules.Where(value => value.Name.Equals("RiderChangeContain", StringComparison.Ordinal)))
+                foreach (var field in module.Fields.Where(value => value.Name.StartsWith("Rider", StringComparison.OrdinalIgnoreCase)))
+                    if (field.Value.OriginalText.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries) is { Length: > 4 } line && !commandSets.Contains(line[4])) commandSets.Add(line[4]);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable(), timing, rules ?? RuleProfile.Original)
             {

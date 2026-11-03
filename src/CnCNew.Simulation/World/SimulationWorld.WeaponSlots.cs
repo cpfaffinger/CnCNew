@@ -45,7 +45,7 @@ public sealed partial class SimulationWorld
     /// <c>Object::onVeterancyLevelChanged</c>), <c>PLAYER_UPGRADE</c> follows <c>WeaponSetUpgrade</c>, <c>CARBOMB</c> follows <c>IS_CARBOMB</c>
     /// (<c>ConvertToCarBombCrateCollide</c> sets the weapon-set flag together with the status and nothing ever clears either) and <c>CRATEUPGRADE_ONE</c>/<c>_TWO</c> follow
     /// <see cref="Entity.CrateWeaponLevel"/> (<c>SalvageCrateCollide</c>; one flag at a time, as the reference swaps them), <c>MINE_CLEARING_DETAIL</c> follows
-    /// <see cref="Entity.MineClearingDetail"/> (F-69). The remaining conditions a <c>WeaponSet</c> can name (<c>VEHICLE_HIJACK</c>, <c>WEAPON_RIDER*</c>) are never raised.
+    /// <see cref="Entity.MineClearingDetail"/> (F-69), <c>WEAPON_RIDER*</c> follows the rider of a bike. <c>VEHICLE_HIJACK</c> is never raised.
     /// </summary>
     public static uint WeaponSetFlagsOf(Entity entity)
     {
@@ -55,6 +55,7 @@ public sealed partial class SimulationWorld
         if (entity.CrateWeaponLevel > 0) flags |= 1u << (CrateUpgradeOneSetBit + entity.CrateWeaponLevel - 1);
         if (entity.HasStatus(CarBombStatusBit)) flags |= 1u << CarBombSetBit;
         if (entity.MineClearingDetail) flags |= 1u << MineClearingSetBit;
+        if (entity.RiderWeaponBit >= 0) flags |= 1u << entity.RiderWeaponBit;
         return flags;
     }
 

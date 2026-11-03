@@ -220,6 +220,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     /// <summary>The object's own set, replaced by the set of its last executed <c>CommandSetUpgrade</c> (<c>CommandSetUpgrade::upgradeImplementation</c>: the alternate set when <c>TriggerAlt</c> is owned by the player or the object).</summary>
     public string? ActiveCommandSet(SimulationWorld world, Entity entity)
     {
+        // RiderChangeContain::onContaining: "set the new commandset override".
+        if (entity.Modules.OfType<RiderChangeContain>().FirstOrDefault() is { RiderCommandSet: { } ridden }) return ridden;
         string? set = Catalog.TryGetObjectSet(entity.Template.Name, out var own) ? own : null;
         foreach (var module in entity.Modules.Where(module => module.ModuleName == "CommandSetUpgrade").OrderBy(module => module.Index))
         {
