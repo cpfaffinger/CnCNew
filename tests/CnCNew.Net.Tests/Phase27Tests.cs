@@ -66,10 +66,12 @@ static partial class NetTests
         var fixture = Fixture.Create();
         var settings = fixture.Settings(3, 0, 1_500);
         var rate = settings.TickRate;
-        // The first member the relay asks hands over a state that was damaged on its way. The joiner cannot use it; the relay turns the joiner away, holds the seat again,
-        // and gives it up when its time is over. Nobody plays on a state that does not hash to the match.
+        // The member the relay asks hands over a state that was damaged on its way. The joiner cannot use it; the relay turns the joiner away, holds the seat again,
+        // and gives it up when its time is over. Nobody plays on a state that does not hash to the match. The relay asks the first member whose hash reports are in
+        // time, which on a loaded machine may be either of the two that stay, so both damage theirs.
         var result = fixture.Probe().Run(settings, new LoopbackProbeOptions(settings.MaxTicks, Relay: new RelayOptions(SeatHoldMs: 6_000),
-            Disturbances: [new ProbeDisturbance(0, 10, ProbeDisturbanceKind.DamageSnapshot), new ProbeDisturbance(1, rate * 5, ProbeDisturbanceKind.Reconnect, 200)]));
+            Disturbances: [new ProbeDisturbance(0, 10, ProbeDisturbanceKind.DamageSnapshot), new ProbeDisturbance(2, 10, ProbeDisturbanceKind.DamageSnapshot),
+                new ProbeDisturbance(1, rate * 5, ProbeDisturbanceKind.Reconnect, 200)]));
         Check.That(result.Ok, $"the others play on: {result.Problem}");
         var story = string.Join(' ', result.ServerEvents.Where(name => name.StartsWith("seat", StringComparison.Ordinal) || name.StartsWith("snapshot", StringComparison.Ordinal) || name is "join-refused" or "joined-late"));
         Check.That(result.LateJoinsRefused == 1 && result.LateJoins == 0 && story == "seat-held seat-returned snapshot-relayed join-refused seat-held seat-given-up",
