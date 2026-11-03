@@ -488,7 +488,7 @@ public sealed partial class SimulationWorld
         if (mover.EffectivelyDead) return;
         if (mover.Template.CrusherLevel > 0)
         {
-            // Only an object with a ToppleUpdate or a SquishCollide module can be toppled or squished; for every other object the two calls below did nothing.
+            // Only an object with a ToppleUpdate or a SquishCollide module or a crushable level can be toppled, squished or crushed; for every other object the calls below did nothing.
             var targets = _crushTargets;
             for (var index = 0; index < targets.Count; index++)
             {
@@ -497,6 +497,7 @@ public sealed partial class SimulationWorld
                 if (!FootprintsOverlap(mover, other)) continue;
                 TryTopple(mover, other);
                 TrySquish(mover, other, stepX, stepY);
+                TryCrush(mover, other, stepX, stepY);
             }
         }
         DeliverCollisions(mover);
@@ -513,7 +514,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private readonly List<Entity> _mobiles = [];
 
-    /// <summary>Every registered entity that has a <see cref="ToppleUpdate"/> or a <see cref="SquishCollide"/> module, in ascending id order: what a crusher can topple or squish.</summary>
+    /// <summary>Every registered entity that has a <see cref="ToppleUpdate"/> or a <see cref="SquishCollide"/> module or a crushable level, in ascending id order: what a crusher can topple, squish or crush.</summary>
     private readonly List<Entity> _crushTargets = [];
 
     // Kept in ascending id order, so a live world and one restored from a snapshot (which registers in id order) visit the entities of a list in the same order: the order of the entity table.
@@ -526,6 +527,7 @@ public sealed partial class SimulationWorld
 
     private static bool IsCrushTarget(Entity entity)
     {
+        if (entity.Template.CrushableLevel < NotCrushable) return true;
         foreach (var module in entity.ModuleArray)
             if (module is ToppleUpdate or SquishCollide) return true;
         return false;
@@ -666,6 +668,60 @@ public sealed partial class SimulationWorld
             topple.ApplyTopplingForce(this, otherX - mover.X, otherY - mover.Y, speed);
             return;
         }
+    }
+
+    /// <summary><c>ThingTemplate::m_crushableLevel</c> of an object that does not say.</summary>
+    private const int NotCrushable = 255;
+
+    /// <summary><c>isVerySmall3D</c>: "unless I am moving right now, I may not crush anything".</summary>
+    private static readonly Fixed CrushingStep = Fixed.FromDecimal(0.01m);
+
+    /// <summary><c>PERP_RANGE</c> of <c>perpsLogicallyEqual</c>.</summary>
+    private static readonly Fixed CrushPerpRange = Fixed.FromDecimal(0.15m);
+
+    /// <summary>
+    /// <c>PhysicsBehavior::checkForOverlapCollision</c>: a mover with a crusher level above the victim's crushable level kills it when it has passed the victim's crush point nearest its line of
+    /// travel, of the front, the middle and the back, half the major radius apart, and no further from it than one and a half of that. The victim needs a physics module or to be immobile
+    /// (<c>onCollide</c>), and an unmanned crusher crushes nothing. Not done: the first contact's damage of 0, which only triggers the minor <c>DamageFX</c>; a victim that survives no crush, so its
+    /// crushed ends never lead the next crush. The ends a crushed car shows are the presentation's.
+    /// </summary>
+    private void TryCrush(Entity mover, Entity other, Fixed stepX, Fixed stepY)
+    {
+        if (mover.Template.CrusherLevel <= other.Template.CrushableLevel || (stepX.Abs() < CrushingStep && stepY.Abs() < CrushingStep)) return;
+        if (RelationshipOf(mover.Owner, other.Owner) == Relationship.Allies || (mover.DisabledFlags(_tick) & DisabledMask.Unmanned) != 0) return;
+        if (other.ContainedBy.IsValid || mover.ContainedBy == other.Id || IsAirborneTargetAtFrameEnd(other)) return;
+        if (!other.Template.IsKindOf("IMMOBILE") && Array.Find(other.ModuleArray, module => module is PhysicsBehavior) is null) return;
+        var (otherX, otherY, _) = other.FrameEnd(_tick);
+        var offset = other.Template.GeometryMajorRadius / Fixed.FromInt(2);
+        var angle = other.FrameEndAngle(_tick);
+        var (pointX, pointY) = (FixedTrig.Cos(angle) * offset, FixedTrig.Sin(angle) * offset);
+        var (dirX, dirY) = (FixedTrig.Cos(mover.Angle), FixedTrig.Sin(mover.Angle));
+        CrushPoint Measure(Fixed x, Fixed y)
+        {
+            var (toX, toY) = (x - mover.X, y - mover.Y);
+            var ray = toX * dirX + toY * dirY;
+            var (perpX, perpY) = (ray * dirX - toX, ray * dirY - toY);
+            return new CrushPoint(Fixed.Sqrt(perpX * perpX + perpY * perpY), Fixed.Sqrt(toX * toX + toY * toY), ray);
+        }
+        var point = NearestCrushPoint(Measure(otherX + pointX, otherY + pointY), Measure(otherX, otherY), Measure(otherX - pointX, otherY - pointY));
+        // "(1.5x)^2 means if we are outside the crushed front point, we will not auto get the back point."
+        if (!point.Ray.IsNegative || point.Length >= offset + offset / Fixed.FromInt(2)) return;
+        Damage(other.Id, new DamageInfo(mover.Id, HugeDamage, CrushDamageType, DeathTypes.Crushed, false));
+    }
+
+    /// <summary>A crush point seen from the crusher: how far off its line of travel, how far away, and how far along its heading.</summary>
+    private readonly record struct CrushPoint(Fixed Perp, Fixed Length, Fixed Ray);
+
+    /// <summary>"Now find the shortest. Use the straightline distance to crush point as tie breaker."</summary>
+    private static CrushPoint NearestCrushPoint(CrushPoint front, CrushPoint centre, CrushPoint back)
+    {
+        static bool Equal(CrushPoint one, CrushPoint two) => (one.Perp - two.Perp).Abs() <= CrushPerpRange;
+        static CrushPoint Closer(CrushPoint one, CrushPoint two) => one.Length < two.Length ? one : two;
+        if (front.Perp <= centre.Perp && front.Perp <= back.Perp)
+            return Equal(front, centre) ? Closer(front, centre) : Equal(front, back) ? Closer(front, back) : front;
+        if (back.Perp <= centre.Perp && back.Perp <= front.Perp)
+            return Equal(back, centre) ? Closer(back, centre) : Equal(back, front) ? Closer(back, front) : back;
+        return Equal(centre, front) ? Closer(centre, front) : Equal(centre, back) ? Closer(centre, back) : centre;
     }
 
     /// <summary>

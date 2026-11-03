@@ -276,6 +276,108 @@ static partial class Tests
         return (world, new Feeder(world));
     }
 
+    private static readonly string CrushIni = """
+        Locomotor CrushLoco
+          Surfaces = GROUND
+          Speed = 30
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 90
+        End
+        Object Juggernaut
+          KindOf = SELECTABLE VEHICLE
+          CrusherLevel = 3
+          CrushableLevel = 3
+          Geometry = BOX
+          GeometryMajorRadius = 15.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 10.0
+          Locomotor = SET_NORMAL CrushLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object Sedan
+          KindOf = SELECTABLE VEHICLE
+          CrusherLevel = 2
+          CrushableLevel = 2
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 10.0
+          End
+        End
+        Object Bunker
+          KindOf = SELECTABLE VEHICLE
+          CrushableLevel = 3
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 10.0
+          End
+        End
+        Object Ghost
+          KindOf = SELECTABLE VEHICLE
+          CrushableLevel = 2
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 5.0
+          GeometryHeight = 10.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+        End
+        """;
+
+    /// <summary><c>PhysicsBehavior::checkForOverlapCollision</c>: a crusher above the victim's level kills it when it has passed its crush point, at the same frame at every rate.</summary>
+    public static void ACrusherRunsOverAVehicle()
+    {
+        long[] frames = new long[3];
+        var rates = new[] { 30, 60, 120 };
+        for (var index = 0; index < rates.Length; index++)
+        {
+            var rate = SimulationRate.FromTicksPerSecond(rates[index]);
+            var files = new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/Crush.ini"] = CrushIni };
+            var (victim, frame) = RunOver(rate, files, 1, 2, "Sedan");
+            Check.That(frame > 0 && (victim is null || victim.EffectivelyDead), $"{rate}: the heavy crusher kills the vehicle it drives over.");
+            frames[index] = frame;
+            Check.That(RunOver(rate, files, 1, 2, "Bunker").Frame < 0, $"{rate}: a level as high as its own stops nothing.");
+            Check.That(RunOver(rate, files, 1, 2, "Ghost").Frame < 0, $"{rate}: without a physics module it is insubstantial.");
+            Check.That(RunOver(rate, files, 1, 1, "Sedan").Frame < 0, $"{rate}: friends do not crush friends.");
+        }
+        Check.That(frames.Distinct().Count() == 1, $"The crush falls into the same frame at every rate ({string.Join(", ", frames)}).");
+    }
+
+    private static (Entity? Victim, long Frame) RunOver(SimulationRate rate, IReadOnlyDictionary<string, string> files, int crusher, int owner, string template)
+    {
+        var (world, feeder, _) = RatedWorld(rate, files, NavTerrain());
+        feeder.Spawn(crusher, "Juggernaut", x: 60, y: 100);
+        feeder.Spawn(owner, template, x: 120, y: 100);
+        for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+        var mover = world.Entities.Single(value => value.Template.Name == "Juggernaut");
+        var victim = world.Entities.Single(value => value.Template.Name == template);
+        Check.That(world.Submit(new CnCNew.Simulation.Commands.SetMoveTargetCommand(new PlayerId(crusher), 1000, world.Tick, mover.Id, Fixed.FromInt(170), Fixed.FromInt(100))).Accepted, "The move is accepted.");
+        for (var step = 0; step < world.Frames(240); step++)
+            if (world.Step().Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity == victim.Id)) return (world.FindEntity(victim.Id), (world.Tick + rate.TicksPerOriginalFrame - 1) / rate.TicksPerOriginalFrame);
+        return (world.FindEntity(victim.Id), -1);
+    }
+
     /// <summary><c>SquishCollide.cpp onCollide</c>, now wired to real footprint overlap (<c>SimulationWorld.Collision.cs</c>, <c>TrySquish</c>).</summary>
     public static void CollisionCrushAndSquish()
     {

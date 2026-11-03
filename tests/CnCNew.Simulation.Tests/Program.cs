@@ -371,6 +371,7 @@ run.Test("Combat: FireWeaponUpdate snapshot", Tests.FireWeaponUpdateSnapshot);
 run.Test("Combat: ReplaceObjectUpgrade swaps the template", Tests.ReplaceObjectUpgradeSwapsTemplate);
 run.Test("Combat: CrushDie binds and stays inert", Tests.CrushDieIsInert);
 run.Test("Phase 58: a crushed car rings", Tests.ACrushedCarRings);
+run.Test("Phase 58: a crusher runs over a vehicle", Tests.ACrusherRunsOverAVehicle);
 run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSampling);
 run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
 run.Test("Terrain: world placement, snapshot v5 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
