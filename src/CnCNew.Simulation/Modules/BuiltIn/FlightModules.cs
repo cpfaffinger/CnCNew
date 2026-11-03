@@ -1208,7 +1208,7 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// — and the use ends when the beam has decayed. A computer-controlled owner (and so a scripted use) lets the beam sweep an S curve across the target
 /// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
 /// drives it by clicks (<see cref="Steer"/>, a second click soon after the first drives it fast), and without one the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
-/// stages (presentation, only visible through the power's own readiness),, the
+/// stages (presentation, only visible through the power's own readiness), the
 /// sounds and the scorch marks. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
 /// waypoint at <c>ManualFastDrivingSpeed</c> (the path is followed in order; the reference picks a random link at a fork) and stays at the last one.
 /// </summary>

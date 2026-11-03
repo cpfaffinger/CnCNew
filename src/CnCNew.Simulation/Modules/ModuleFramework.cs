@@ -383,6 +383,9 @@ public interface IWorldServices
     /// <summary><c>doShroudReveal</c> followed by <c>undoShroudReveal</c>: the player has seen the place once.</summary>
     void RevealOnce(PlayerId player, Fixed x, Fixed y, Fixed range);
 
+    /// <summary><c>AIUpdateInterface::isClearingMines</c> with a goal: attacking something with an anti-mine weapon.</summary>
+    bool IsClearingMines(Entity entity);
+
     /// <summary><c>DAMAGE_KILLPILOT</c> of <c>ActiveBody::attemptDamage</c> (<c>SimulationWorld.Unmanned.cs</c>).</summary>
     void KillPilot(Entity victim, in DamageInfo info);
 

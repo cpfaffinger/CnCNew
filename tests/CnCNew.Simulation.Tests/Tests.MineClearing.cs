@@ -99,6 +99,39 @@ static partial class Tests
         End
         """;
 
+    /// <summary><c>MinefieldBehavior::onCollide</c>: "things that are in the process of clearing mines are immune to mine detonation", for as long as they keep touching the mine.</summary>
+    public static void AClearerIsImmuneToTheMine()
+    {
+        const string Field = """
+            Object McField
+              KindOf = MINE
+              Body = ActiveBody Body01
+                MaxHealth = 100.0
+                InitialHealth = 100.0
+              End
+              Behavior = MinefieldBehavior Field01
+                NumVirtualMines = 5
+                DetonatedBy = ENEMIES NEUTRAL
+                DetonationWeapon = McDisarm
+                WorkersDetonate = Yes
+              End
+            End
+            """;
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/MineClearing.ini"] = MineClearingIni, ["Data/INI/Object/McField.ini"] = Field });
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "mines");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        Check.That(feeder.Spawn(1, "McDozer", owner: 1, x: 300, y: 300).Accepted && feeder.Spawn(2, "McField", owner: 2, x: 315, y: 300).Accepted && feeder.Spawn(2, "McSturdyMine", owner: 2, x: 320, y: 300).Accepted, "Dozer and mines spawn.");
+        world.Step();
+        var dozer = world.Entities.Single(value => value.Template.Name == "McDozer");
+        var field = world.Entities.Single(value => value.Template.Name == "McField").Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.MinefieldBehavior>().Single();
+        for (var step = 0; step < world.Frames(30) && !world.IsClearingMines(dozer); step++) world.Step();
+        Check.That(world.IsClearingMines(dozer), "The dozer goes for a mine.");
+        var left = field.VirtualMinesRemaining;
+        field.OnCollide(world, dozer);
+        Check.That(field.VirtualMinesRemaining == left, "It is immune while it clears.");
+    }
+
     /// <summary><c>DemoTrapUpdate::update</c> (F-19): "check if it's trying to disarm me. If so, don't blow up!" - a dozer that attacks with a <c>DISARM</c> weapon does not set a trap off.</summary>
     public static void DozerAtWorkDoesNotSetATrapOff()
     {

@@ -199,8 +199,7 @@ public sealed record MinefieldData(string DetonationWeapon, uint DetonatedByMask
 /// healing keep health and count in step (<c>onDamage</c>: a hit detonates as many virtual mines as it took; a heal restores them; <c>AutoHealBehavior</c> regenerates them one by one), a mine
 /// with no virtual mines left is masked (<c>MASKED</c> status; the rubble model is presentation) and is destroyed instead if it does not regenerate. A regenerating mine whose creator is
 /// gone (checked every <c>CreatorDeathCheckRate</c>; the creator is the object that laid it, <see cref="IProducerReceiver"/>) stops healing and degenerates by
-/// <c>DegenPercentPerSecondAfterCreatorDies</c> of its health a second until it is gone. Death destroys it. Not modeled: mine clearers' immunity (<c>isClearingMines</c>; the simulation
-/// has no mine-clearing detail), the scoot of a newly laid mine, <c>disarm</c> (no caller).
+/// <c>DegenPercentPerSecondAfterCreatorDies</c> of its health a second until it is gone. Death destroys it. Whoever clears mines is immune to it for as long as it keeps touching it. Not modeled: the scoot of a newly laid mine, <c>disarm</c> (no caller).
 /// </summary>
 public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateModule, ICollideModule, IDamageModule, IDieModule, IProducerReceiver
 {
@@ -217,6 +216,33 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
     private bool _ignoreDamage;
     private EntityId _producer = EntityId.Invalid;
     private readonly List<(EntityId Id, Fixed X, Fixed Y, Fixed Z)> _detonators = [];
+
+    /// <summary><c>m_immunes</c>: who touched it while clearing mines, and when it last did.</summary>
+    private readonly List<(EntityId Id, long Touched)> _immunes = [];
+
+    /// <summary><c>MAX_IMMUNITY</c>.</summary>
+    private const int MaxImmunity = 3;
+
+    /// <summary>An immunity lasts while the touching goes on: <c>collideTime + 2</c>.</summary>
+    private const int ImmunityFrames = 2;
+
+    /// <summary>
+    /// "NOTE NOTE NOTE, must always do this check FIRST so that 'collideTime' is updated": whoever is on the list keeps its immunity; "mine-clearers are granted immunity to us for as long as they
+    /// continuously collide, even if no longer clearing mines".
+    /// </summary>
+    private bool IsImmune(IWorldServices world, Entity other)
+    {
+        _immunes.RemoveAll(entry => world.FindEntity(entry.Id) is null || world.Tick > entry.Touched + world.Time.OriginalFrames(ImmunityFrames));
+        var index = _immunes.FindIndex(entry => entry.Id == other.Id);
+        if (index >= 0)
+        {
+            _immunes[index] = (other.Id, world.Tick);
+            return true;
+        }
+        if (!world.IsClearingMines(other)) return false;
+        if (_immunes.Count < MaxImmunity) _immunes.Add((other.Id, world.Tick));
+        return true;
+    }
 
     public override string ModuleName => "MinefieldBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -291,7 +317,7 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
 
     public void OnCollide(IWorldServices world, Entity other)
     {
-        if (other.EffectivelyDead || _virtualMines == 0) return;
+        if (other.EffectivelyDead || _virtualMines == 0 || IsImmune(world, other)) return;
         // A worker is infantry that is also a dozer: it walks over mines unless the mine says otherwise.
         if (!data.WorkersDetonate && other.Template.IsKindOf("INFANTRY") && other.Template.IsKindOf("DOZER")) return;
         var relationship = world.RelationshipOf(Entity.Owner, other.Owner);
@@ -370,6 +396,18 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         writer.Bool("regenerates", _regenerates);
         writer.Bool("draining", _draining);
         if (_producer.IsValid) writer.UInt("producer", _producer.Value);
+        if (_immunes.Count > 0)
+        {
+            writer.BeginArray("immunes");
+            foreach (var (id, touched) in _immunes)
+            {
+                writer.BeginObject(null);
+                writer.UInt("id", id.Value);
+                writer.Int("touched", touched);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         if (_detonators.Count == 0) return;
         writer.BeginArray("detonators");
         foreach (var (id, x, y, z) in _detonators)
@@ -393,6 +431,9 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         _regenerates = reader.Bool("regenerates");
         _draining = reader.Bool("draining");
         _producer = reader.Has("producer") ? new EntityId(checked((uint)reader.UInt("producer"))) : EntityId.Invalid;
+        _immunes.Clear();
+        if (reader.Has("immunes"))
+            foreach (var item in reader.Array("immunes")) _immunes.Add((new EntityId(checked((uint)item.UInt("id"))), item.Int("touched")));
         _detonators.Clear();
         if (!reader.Has("detonators")) return;
         foreach (var item in reader.Array("detonators"))

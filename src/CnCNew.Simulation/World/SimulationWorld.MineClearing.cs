@@ -58,6 +58,10 @@ public sealed partial class SimulationWorld
         if (_firstFrameTicks != TickOrder.Next && (_tick - builder.SpawnTick) % _firstFrameTicks != 0 && MayAct(builder, _tick)) GuardEngage(builder, ai, state, victim, _tick);
     }
 
+    /// <inheritdoc cref="IWorldServices.IsClearingMines"/>
+    public bool IsClearingMines(Entity entity)
+        => entity.Acquisition is { Victim.IsValid: true } && ActiveWeaponIndex(entity) is >= 0 and var index && (_templates.Weapons[index].AntiMask & CnCNew.Simulation.Templates.WeaponInfo.AntiMaskMine) != 0;
+
     private CommandRejection CheckSetMineClearing(PlayerId issuer, SetMineClearingCommand order) => CheckOwnUnits(issuer, order.Units);
 
     private CommandRejection CheckOwnUnits(PlayerId issuer, ImmutableArray<EntityId> units)
