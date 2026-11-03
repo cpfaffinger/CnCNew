@@ -89,7 +89,8 @@ phase number is 32.
 | 56 | [HANDOFF-PHASE56.md](HANDOFF-PHASE56.md) | S1-M11, S3-M1, S4-M5 | What needs no person, while the owner's next acceptance waits | **done** by machine (2 November 2026): §78 |
 | 57 | [HANDOFF-PHASE57.md](HANDOFF-PHASE57.md) | S1-M11 | What the data still names and nobody reads, what the original shows and the port does not (F-111) | **done** by machine (3 November 2026): §79 |
 | 58 | [HANDOFF-PHASE58.md](HANDOFF-PHASE58.md) | S1-M11 | What a player of the original would miss: the columns, the deck, crushing, the sniped pilot and a list of 34 (F-113) | **done** by machine (3 November 2026): §80 |
-| 59 | [HANDOFF-PHASE59.md](HANDOFF-PHASE59.md) | S1-M11 | The rest of Phase 58's list (F-124, F-125) and why the computer decides fewer matches | current |
+| 59 | [HANDOFF-PHASE59.md](HANDOFF-PHASE59.md) | S1-M11 | The rest of Phase 58's list (F-124, F-125) and why the computer decides fewer matches | **done** by machine (3 November 2026): §81 |
+| 60 | [HANDOFF-PHASE60.md](HANDOFF-PHASE60.md) | S1-M11 | A skirmish of the built-in AI places every object of its map (F-129) | current |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 
