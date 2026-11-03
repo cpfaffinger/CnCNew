@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 58
-> **Status:** current (begun 3 November 2026)
+> **Status:** done by machine (3 November 2026)
 > **Predecessor:** HANDOFF-PHASE57.md · **Results in:** `docs/SIMULATION-CORE.md` §80, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
