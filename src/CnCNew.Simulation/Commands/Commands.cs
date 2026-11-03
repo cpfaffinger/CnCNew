@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 25;
+    public const int Version = 26;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -131,7 +131,11 @@ public static class CommandTypes
     /// <summary><c>MSG_ENABLE_RETALIATION_MODE</c>: the player's units answer an attack on a friend nearby, or not (<c>Player::setLogicalRetaliationModeEnabled</c>).</summary>
     public const ushort SetRetaliation = 44;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetRetaliation;
+    // ------------------------------------------------------------------------------------------------------ the map explored at the start (v26)
+    /// <summary><c>PartitionManager::revealMapForPlayer</c>: every cell of the map seen once by the player. Only the system gives it.</summary>
+    public const ushort ExploreMap = 45;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= ExploreMap;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -139,7 +143,7 @@ public static class CommandTypes
     /// (<see cref="Spawn"/>, <see cref="Destroy"/>): a session accepts those from a player for its own objects, which is fine in a test and a free army over a wire.
     /// </summary>
     public static bool IsPlayerOrder(ushort code)
-        => IsKnown(code) && code is not (Spawn or Destroy or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave);
+        => IsKnown(code) && code is not (Spawn or Destroy or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap);
 }
 
 /// <summary>
@@ -184,6 +188,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 reader.Int("repeat"), (TimerActionKind)reader.Int("action"), reader.Fixed("amount"), checked((int)reader.Int("damageType")), checked((int)reader.Int("tag"))),
             CommandTypes.CancelTimer => new CancelTimerCommand(player, sequence, tick, new TimerId(reader.UInt("timer"))),
             CommandTypes.GiveMoney => new GiveMoneyCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), reader.Fixed("amount")),
+            CommandTypes.ExploreMap => new ExploreMapCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target")))),
             CommandTypes.PurchaseUpgrade => new PurchaseUpgradeCommand(player, sequence, tick, reader.Text("upgrade"),
                 reader.UInt("target") == 0 ? null : new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Text("template")),
@@ -236,6 +241,17 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
 }
 
 // ------------------------------------------------------------------------------------------------------- phase 5
+
+/// <summary>
+/// <c>GameLogic::startNewGame</c> in a match of several players with <c>UseShroud = No</c> (<c>Multiplayer.ini</c>): <c>PartitionManager::revealMapForPlayer</c> - every cell is seen once, so
+/// the player sees the whole terrain under the fog and only what moves stays hidden.
+/// </summary>
+public sealed record ExploreMapCommand(PlayerId Player, ulong Sequence, long Tick, PlayerId Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.ExploreMap;
+    public override bool RequiresSystem => true;
+    protected override void DescribeBody(IStateWriter writer) => writer.Int("target", Target.Value);
+}
 
 /// <summary>Credits a player's balance directly (fixture/scenario setup and scripted income; not a purchase).</summary>
 public sealed record GiveMoneyCommand(PlayerId Player, ulong Sequence, long Tick, PlayerId Target, Fixed Amount) : SimCommand(Player, Sequence, Tick)

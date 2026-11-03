@@ -198,6 +198,8 @@ public sealed class ScriptedSkirmishSession
             var player = PlayerOf(index);
             var participant = _slots[index].Participant;
             World.SetMoney(player, Fixed.FromInt(_options.StartMoney));
+            // GameLogic::startNewGame: "remove shroud for the player in MP games" unless Multiplayer.ini says UseShroud.
+            if (!catalog.ShroudInMultiplayer) World.ExploreMap(player);
             if (_slots[index].IsHuman) continue;
             var (bx, by) = (starts[index].X, starts[index].Y);
             if (_slots[index].Kind == SkirmishAiKind.Builtin)

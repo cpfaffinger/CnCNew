@@ -458,6 +458,9 @@ public sealed class TemplateCatalog
     /// <summary><c>MultiplayerSettings::getMaxBeaconsPerPlayer</c>.</summary>
     public int MaxBeaconsPerPlayer { get; private init; }
 
+    /// <summary><c>MultiplayerSettings::isShroudInMultiplayer</c> (<c>UseShroud</c>, the reference default yes; the shipped data say no): a match of several players starts with the map unexplored.</summary>
+    public bool ShroudInMultiplayer { get; private init; } = true;
+
     /// <summary>The objects the player templates name as their <c>BeaconName</c>.</summary>
     public ImmutableArray<string> BeaconTemplates { get; private init; } = [];
 
@@ -577,6 +580,7 @@ public sealed class TemplateCatalog
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
             MaxBeaconsPerPlayer = ResolveMaxBeacons(graph),
+            ShroudInMultiplayer = graph.Definitions.OfType<MultiplayerSettingsDefinition>().LastOrDefault()?.Fields.LastOrDefault(field => field.Name.Equals("UseShroud", StringComparison.OrdinalIgnoreCase))?.Value.Value is not false,
             BeaconTemplates = [..factions.Factions.Select(faction => faction.BeaconName).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),

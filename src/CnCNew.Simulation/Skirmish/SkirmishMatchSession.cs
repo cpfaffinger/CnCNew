@@ -446,6 +446,8 @@ public sealed class SkirmishMatchSession
             var (bx, by) = (starts[slot.StartPosition].X, starts[slot.StartPosition].Y);
             var participant = slot.Participant;
             System(sequence => new GiveMoneyCommand(PlayerId.System, sequence, 0, player, Fixed.FromInt(_description.StartMoney)));
+            // GameLogic::startNewGame: "remove shroud for the player in MP games" unless Multiplayer.ini says UseShroud.
+            if (!catalog.ShroudInMultiplayer) System(sequence => new ExploreMapCommand(PlayerId.System, sequence, 0, player));
             if (participant.Substitution is { } substitution) notes.Add($"{participant.Faction.Name}: {substitution}; starts with {participant.BaseBuilding}");
             System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, participant.BaseBuilding, player, bx, by, Fixed.Zero, Fixed.Zero));
             var units = participant.Faction.StartingUnits;

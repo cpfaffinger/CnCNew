@@ -915,6 +915,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_players.ContainsKey(give.Target.Value)) return CommandRejection.UnknownPlayer;
                 if (give.Amount.IsNegative) return CommandRejection.InvalidArguments;
                 break;
+            case ExploreMapCommand explore:
+                if (!_players.ContainsKey(explore.Target.Value)) return CommandRejection.UnknownPlayer;
+                break;
             case PurchaseUpgradeCommand purchase:
             {
                 if (_templates.Upgrades.TryGet(purchase.Upgrade, out var info) && info.IsEngine) return CommandRejection.NotPermitted;
@@ -1323,6 +1326,9 @@ public sealed partial class SimulationWorld : IWorldServices
             // --------------------------------------------------------------------------------------------- phase 5
             case GiveMoneyCommand give:
                 if (_players.TryGetValue(give.Target.Value, out var recipient)) recipient.Money += give.Amount;
+                break;
+            case ExploreMapCommand explore:
+                ExploreMap(explore.Target);
                 break;
             case PurchaseUpgradeCommand purchase:
             {
