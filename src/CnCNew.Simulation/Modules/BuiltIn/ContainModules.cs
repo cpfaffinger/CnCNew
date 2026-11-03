@@ -332,9 +332,8 @@ public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, b
 /// transitions into <c>REALLYDAMAGED</c> (<see cref="IDamageModule.OnBodyDamageStateChange"/>). Healing
 /// (<see cref="GarrisonContainData.HealObjects"/>) follows <c>healSingleObject</c>: a sliver of
 /// <c>MaxHealth / TimeForFullHeal</c> per tick until the occupant has been inside for the full duration, then a hard
-/// snap to full. Deliberately not modeled: <c>InitialRoster</c> (needs synchronous nested spawning, a bigger pipeline
-/// change than this first cut justifies), firing from inside, garrison points/positions (art-derived, not INI data),
-/// the apparent-controlling-player/team-swap system (no team system), capture handling (no capture system).
+/// snap to full. <c>InitialRoster</c> enters on the building's first update (Phase 58); firing from inside, the stealth garrison and the
+/// apparent controlling player are F-54, F-60 and F-61 (<c>docs/SIMULATION-CORE.md</c> §55).
 /// </summary>
 public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBase(data.Base), IDamageModule, IContainerModule
 {

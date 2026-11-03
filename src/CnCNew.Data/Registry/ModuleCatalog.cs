@@ -628,9 +628,8 @@ public static class ModuleCatalog
             new("AllowEnemiesInside", FieldType.Bool, Source: "OpenContain.cpp"),
             new("AllowNeutralInside", FieldType.Bool, Source: "OpenContain.cpp"),
             // GarrisonContainModuleData (GarrisonContain.cpp): HealObjects/TimeForFullHeal are mechanically modeled.
-            // MobileGarrison is presentation/not-yet-built-subsystem (Opaque); ImmuneToClearBuildingAttacks is read (F-60: clearing a garrison); IsEnclosingContainer is read (F-60: where a rider fires from); InitialRoster (starting occupants) is deferred — it needs
-            // synchronous nested spawning at construction time, a bigger change to the spawn pipeline than this first
-            // cut of the containment subsystem justifies (see the simulation-layer doc comment).
+            // MobileGarrison is presentation/not-yet-built-subsystem (Opaque); ImmuneToClearBuildingAttacks is read (F-60: clearing a garrison); IsEnclosingContainer is read (F-60: where a rider fires from); InitialRoster (starting occupants) enters on the
+            // building's first update (Phase 58, docs/SIMULATION-CORE.md §80.2).
             new("MobileGarrison", FieldType.Opaque, Source: "GarrisonContain.h"),
             new("HealObjects", FieldType.Bool, Source: "GarrisonContain.h"),
             new("TimeForFullHeal", FieldType.DurationMs, Source: "GarrisonContain.h"),
