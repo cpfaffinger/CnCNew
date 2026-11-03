@@ -4874,3 +4874,7 @@ One manifest commit for the whole phase (`4fcce5f7`), because the causes were bu
 ### 79.6 Named, not built
 
 `GroupMovementPriority` and the columns of a group move (`friend_moveInfantryToPos`, `friend_moveVehicleToPos`), a design of 350 lines that the port's individual destinations stand in for; `FlightDeckBehavior` (one object, a shell); `InitialRoster` (two lines, one of them 0); the car alarm of `CrushDie` (and its draw of the logic stream); the sound loops of the particle cannon, the train's sounds.
+
+### 79.7 Reference values
+
+The retail reference match a stalemate at tick 108,000, `F489EA0CB26F3FAE` / `694B1CB7B501CA64`, 184,463 commands; stress test `9EE9F730D124C3BD` / `139E5E5F077F4DA3`; 12 of 16 pairings decided; every mission keeps its outcome and end tick; world fingerprint `5B1B400AD8BDA032`; compatibility baseline 649. The pivot of a reversing wheel (`moveTowardsPositionWheels` hands `rotateObjAroundLocoPivot` the goal mirrored about the object, `backwardPos`) was found by the scene `acc-reverse` after the first manifests: a pivot behind the unit passed a goal close behind it before the unit did, and the Humvee swung round its goal until the next order.

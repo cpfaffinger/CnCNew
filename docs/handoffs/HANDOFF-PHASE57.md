@@ -1,6 +1,6 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 57
-> **Status:** current (begun 2 November 2026)
-> **Predecessor:** HANDOFF-PHASE56.md · **Results in:** `docs/SIMULATION-CORE.md`, `docs/GAME-HUD.md`, `docs/GAME-AUDIO.md`, fidelity register `docs/plan/STAGE-1-PORT.md` §3
+> **Status:** done by machine (3 November 2026, `5ffa4fb4`; begun at `e0aa3a51`)
+> **Predecessor:** HANDOFF-PHASE56.md · **Successor:** HANDOFF-PHASE58.md · **Results in:** `docs/SIMULATION-CORE.md`, `docs/GAME-HUD.md`, `docs/GAME-AUDIO.md`, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
 N+1 handoff (Phase 57): what the data still names and nobody reads, what the original shows and the port does not, while the owner's next acceptance waits.
