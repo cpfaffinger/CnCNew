@@ -29,6 +29,14 @@ Phase 58 closed on 3 November 2026; its numbers are in `CLAUDE.md`. Built in it:
 
 Named in Phase 58 and not to be built without a new reason: the cheer and a player's formation (no shipped key reaches them), the tunnel network's guard (only the original AI's scripts give it), the carrier's stop.
 
+## Progress (3 November 2026)
+
+Done, each with a test that fails on the code before, at 30, 60 and 120 Hz, its manifest commit and tier 4 (60 of 60 steps at `d63869bf`): F-124 (`8177596f`, §81.1), F-127 (`aa1cec02`, §81.2), F-128 (`e355e80b`, §81.3). Read and left for the next steps:
+
+- **Retaliation off** (item 5): a flag of the player, off at its creation, set from the client's option `OptionsMenu.wnd:Retaliation` by `MSG_ENABLE_RETALIATION_MODE`, which the local player posts once a second when the two differ (`Player::update`, `GameLogicDispatch.cpp`); `ActiveBody::attemptDamage` asks it. The port retaliates always: it needs a command of its own (a new `CommandTypes.Version` and replay version), the flag in the player's state and the box in the options.
+- **Wall tops** (item 4): one shared layer `LAYER_WALL` (`Pathfinder::addWallPiece`, `removeWallPiece`, `classifyWallCells`, `isPointOnWall`), its height `WallHeight` of `AIData.ini`, changed by a map's `map.ini`; five `FortressWall*` objects of `CivilianBuilding.ini` carry `WALK_ON_TOP_OF_WALL`. The bridges' layers of Phase 54 are the model.
+- **The Spectre's sight** and **team waypoints**: the list of Phase 58 names them without a source; find what is meant before building anything.
+
 ## Bottlenecks and showstoppers
 
 Each behaviour change moves the manifests; measure them per cause in a worktree, one after the other. The survey of item 2 takes hours: run it in pieces of under two hours against fixed binaries.
