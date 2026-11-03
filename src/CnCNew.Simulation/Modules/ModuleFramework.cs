@@ -513,6 +513,12 @@ public interface IWorldServices
     void RequestClearPath(Entity mover);
 
     /// <summary>
+    /// <c>AIUpdateInterface::processCollision</c>: a ground unit that is no infantry and finds standing infantry on its way ahead (<paramref name="dx"/>, <paramref name="dy"/>) tells it to move out of
+    /// its way (<c>aiMoveAwayFromUnit</c>), when every object has decided its frame.
+    /// </summary>
+    void RequestStepAside(Entity mover, Fixed dx, Fixed dy);
+
+    /// <summary>
     /// The same search for a unit already on its way: when the place <paramref name="mover"/> is heading for (<see cref="Entity.MoveTargetX"/>) has been taken — a ground unit
     /// of a side that is not its enemy stands there, or one with a lower id is heading there — the place <see cref="FindFreeGoal"/> gives from where the mover is now; false
     /// when the goal is not taken, the mover flies or closes in on a victim, or no free place is found.

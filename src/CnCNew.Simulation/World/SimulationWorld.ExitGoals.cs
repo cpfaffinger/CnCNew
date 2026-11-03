@@ -144,6 +144,113 @@ public sealed partial class SimulationWorld
         _clearPaths.Add(new ClearPathClaim(mover.Id, _tick + _firstFrameTicks - TickOrder.Next - (_tick - mover.SpawnTick) % _firstFrameTicks));
     }
 
+    /// <summary>A mover that asked standing infantry ahead of it to make way, in the last tick of its frame, and the way it looked.</summary>
+    private readonly record struct StepAsideClaim(EntityId Mover, long Tick, Fixed Dx, Fixed Dy);
+
+    private readonly List<StepAsideClaim> _stepAsides = [];
+
+    /// <inheritdoc cref="IWorldServices.RequestStepAside"/>
+    /// <remarks>
+    /// The original asks when the two touch: "if (other->isKindOf(KINDOF_INFANTRY) && !getObject()->isKindOf(KINDOF_INFANTRY))", and "Prevent busy units from being told to move out of the way!"
+    /// (Patch 1.01). The port's step plans round what stands ahead and asks when it does. The original asks any infantry it touches, but its path search goes round enemies and only through allies and
+    /// neutrals (<c>Pathfinder::checkForMovement</c>), so an enemy is never touched that way: the port asks none.
+    /// Like <see cref="RequestClearPath"/> the question is asked at the end of the mover's frame, where every object has decided at every rate.
+    /// </remarks>
+    public void RequestStepAside(Entity mover, Fixed dx, Fixed dy)
+    {
+        if (mover.Template.IsKindOf("INFANTRY") || (dx == Fixed.Zero && dy == Fixed.Zero)) return;
+        foreach (var claim in _stepAsides)
+            if (claim.Mover == mover.Id) return;
+        _stepAsides.Add(new StepAsideClaim(mover.Id, _tick + _firstFrameTicks - TickOrder.Next - (_tick - mover.SpawnTick) % _firstFrameTicks, dx, dy));
+    }
+
+    private void ProcessStepAsides()
+    {
+        var kept = 0;
+        for (var index = 0; index < _stepAsides.Count; index++)
+        {
+            var claim = _stepAsides[index];
+            if (claim.Tick > _tick)
+            {
+                _stepAsides[kept++] = claim;
+                continue;
+            }
+            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false, HasMoveTarget: true } mover) StepInfantryAside(mover, claim.Dx, claim.Dy);
+        }
+        _stepAsides.RemoveRange(kept, _stepAsides.Count - kept);
+    }
+
+    /// <summary>
+    /// <c>aiMoveAwayFromUnit</c>, <c>Pathfinder::getMoveAwayFromPath</c>: the nearest place whose box does not touch the mover's way. Here the way is the line the mover looked along, and the places lie
+    /// across it at the infantry's own place, on its own side first.
+    /// </summary>
+    private void StepInfantryAside(Entity mover, Fixed dx, Fixed dy)
+    {
+        var length = Fixed.Sqrt(dx * dx + dy * dy);
+        if (length == Fixed.Zero) return;
+        var (ux, uy) = (dx / length, dy / length);
+        var moverRadius = CircleRadius(mover);
+        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
+        var mobiles = _mobiles;
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var other = mobiles[index];
+            if (!other.Template.IsKindOf("INFANTRY") || !StandsStill(other, mover, goal) || OnAnotherLevel(mover, other) || other.DestroyRequested) continue;
+            if (RelationshipOf(mover.Owner, other.Owner) == Relationship.Enemies) continue;
+            var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
+            var (ox, oy) = (other.X - mover.X, other.Y - mover.Y);
+            var along = ox * ux + oy * uy;
+            if (along < -limit || along > length + limit) continue;
+            var across = oy * ux - ox * uy;
+            if (across.Abs() >= limit) continue;
+            var clamped = Fixed.Min(Fixed.Max(along, Fixed.Zero), length);
+            var (nearX, nearY) = (mover.X + ux * clamped, mover.Y + uy * clamped);
+            var (rx, ry) = (other.X - nearX, other.Y - nearY);
+            if (!SquaredReach.Of(limit).ContainsStrictly(rx * rx + ry * ry)) continue;
+            if (other.HasStatus(UsingAbilityBit) || other.Acquisition is { Victim.IsValid: true } || DisabledFlagsOf(other) != DisabledMask.None) continue;
+            if (AiOf(other) is not { IsIdle: true, IsBuilding: false } ai) continue;
+            var spacing = Fixed.Max(Fixed.FromInt(TerrainMap.CellSize), CircleRadius(other) * Fixed.FromInt(2) + StandingBlockerMargin);
+            var side = across >= Fixed.Zero ? Fixed.One : -Fixed.One;
+            var (baseX, baseY) = (mover.X + ux * along, mover.Y + uy * along);
+            for (var attempt = 0; attempt < StepAsideAttempts; attempt++)
+            {
+                // Its own side first, further out each time; then the other side.
+                var sign = attempt < StepAsideAttempts / 2 ? side : -side;
+                var offset = (limit + spacing * Fixed.FromInt(attempt % (StepAsideAttempts / 2))) * sign;
+                var (x, y) = (baseX - uy * offset, baseY + ux * offset);
+                if (!GoalIsFree(other, x, y)) continue;
+                ai.OrderMove(this, x, y, false);
+                break;
+            }
+        }
+    }
+
+    // Written only while a claim waits for the end of its frame, which never happens at 30 Hz.
+    private void DescribeStepAsides(IStateWriter writer)
+    {
+        if (_stepAsides.Count == 0) return;
+        writer.BeginArray("stepAsides");
+        foreach (var claim in _stepAsides)
+        {
+            writer.BeginObject(null);
+            writer.UInt("mover", claim.Mover.Value);
+            writer.Int("tick", claim.Tick);
+            writer.Fixed("dx", claim.Dx);
+            writer.Fixed("dy", claim.Dy);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    private void LoadStepAsides(IStateReader state)
+    {
+        if (!state.Has("stepAsides")) return;
+        foreach (var item in state.Array("stepAsides")) _stepAsides.Add(new StepAsideClaim(new EntityId(checked((uint)item.UInt("mover"))), item.Int("tick"), item.Fixed("dx"), item.Fixed("dy")));
+    }
+
+    /// <summary>Own value: places tried across the mover's way, half on each side.</summary>
+    private const int StepAsideAttempts = 8;
+
     private void ProcessClearPaths()
     {
         var kept = 0;

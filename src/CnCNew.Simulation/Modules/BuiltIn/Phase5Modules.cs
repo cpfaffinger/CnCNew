@@ -2070,6 +2070,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             if (aroundMovers) _blockedFrames = 0;
             if (ahead.Count > 0)
             {
+                if (!aroundMovers) world.RequestStepAside(Entity, FixedTrig.Cos(Entity.Angle) * speed * BlockerLookAhead, FixedTrig.Sin(Entity.Angle) * speed * BlockerLookAhead);
                 if (world.PathsQueued && !_viaPending)
                 {
                     // The movement profile: the detour is a question to the world's path queue; the path the object has stays until the answer comes.

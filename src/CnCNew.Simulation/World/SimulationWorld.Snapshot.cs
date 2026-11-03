@@ -140,6 +140,7 @@ public sealed partial class SimulationWorld
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
         LoadExitClaims(state);
         LoadClearPaths(state);
+        LoadStepAsides(state);
         LoadPathQueue(state);
 
         _restoringEnergy = true;
