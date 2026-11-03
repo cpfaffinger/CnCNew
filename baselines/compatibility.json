@@ -175,33 +175,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "CrushDie/BackEndCrushSound",
-      "count": 41,
-      "owners": [
-        "CrushDie"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "CrushDie/FrontEndCrushSound",
-      "count": 41,
-      "owners": [
-        "CrushDie"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "CrushDie/TotalCrushSound",
-      "count": 41,
-      "owners": [
-        "CrushDie"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "EMPUpdate/DisableFXParticleSystem",
       "count": 5,
       "owners": [

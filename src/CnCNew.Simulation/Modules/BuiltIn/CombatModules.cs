@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -22,7 +23,7 @@ internal static class CombatModules
     [
         new ModuleBinding<FireWeaponUpdateData>("FireWeaponUpdate", ModuleOwnerKind.Object, (configuration, _) => FireWeaponUpdateData.Parse(configuration), data => new FireWeaponUpdate(data)),
         new ModuleBinding<ReplaceObjectUpgradeData>("ReplaceObjectUpgrade", ModuleOwnerKind.Object, ReplaceObjectUpgradeData.Parse, data => new ReplaceObjectUpgrade(data)),
-        new ModuleBinding<PlainDieData>("CrushDie", ModuleOwnerKind.Object, (configuration, _) => PlainDieData.Parse(configuration), data => new CrushDie(data)),
+        new ModuleBinding<CrushDieData>("CrushDie", ModuleOwnerKind.Object, (configuration, _) => CrushDieData.Parse(configuration), data => new CrushDie(data)),
     ];
 }
 
@@ -101,16 +102,43 @@ internal sealed class FireWeaponUpdate(FireWeaponUpdateData data) : SimModule, I
     }
 }
 
-/// <summary>
-/// <c>CrushDie::onDie</c> only reacts to <c>DAMAGE_CRUSH</c> dealt by a crusher: it picks the crushed end (front, back or total), plays a
-/// crush sound and sets the FRONTCRUSHED/BACKCRUSHED body and model-condition flags. Crush damage comes from <c>PhysicsCollide</c>, and
-/// the simulation has no collision detection, so the callback never fires; the crushed flags and the sounds are presentation. The
-/// module keeps no state and exists so the units that have it can be instantiated. Collisions and crushing are phase 6.
-/// </summary>
-internal sealed class CrushDie(PlainDieData data) : DieModuleBase(data.Mux)
+/// <summary><c>CrushDieModuleData</c>: per crushed end a sound and how often it plays.</summary>
+public sealed record CrushDieData(DieMuxData Mux, string TotalSound, string BackSound, string FrontSound, int TotalPercent, int BackPercent, int FrontPercent) : DieData(Mux)
 {
+    public static CrushDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+        ModuleConfigReader.Text(configuration, "TotalCrushSound"), ModuleConfigReader.Text(configuration, "BackEndCrushSound"), ModuleConfigReader.Text(configuration, "FrontEndCrushSound"),
+        checked((int)ModuleConfigReader.Int(configuration, "TotalCrushSoundPercent", 0)), checked((int)ModuleConfigReader.Int(configuration, "BackEndCrushSoundPercent", 0)),
+        checked((int)ModuleConfigReader.Int(configuration, "FrontEndCrushSoundPercent", 0)));
+}
+
+/// <summary>
+/// <c>CrushDie::onDie</c> reacts to <c>DAMAGE_CRUSH</c>: of the victim's middle, front and back point the one nearest the crusher (<c>crushLocationCheck</c>; no crusher: all of it) names the sound,
+/// which plays with its percent, drawn from the logic stream only when the end has a sound. The crushed ends a car shows are the presentation's (<c>UnitConditionTracker</c>): a victim dies once, so nothing
+/// of it was crushed before.
+/// </summary>
+internal sealed class CrushDie(CrushDieData data) : DieModuleBase(data.Mux)
+{
+    private static readonly int CrushDamage = NameTables.DamageType.TryIndexOf("CRUSH", out var crush) ? crush : throw new InvalidOperationException("CRUSH is not a damage type.");
+
     public override string ModuleName => "CrushDie";
-    public override void OnDie(IWorldServices world, in DamageInfo info) { }
+
+    public override void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (!Mux.IsApplicable(Entity, info) || info.DamageType != CrushDamage) return;
+        var (sound, percent) = world.FindEntity(info.Source) is { } crusher ? EndNearest(crusher) : (data.TotalSound, data.TotalPercent);
+        if (sound.Length == 0) return;
+        if (world.LogicRandom.Range(0, 99) < percent) world.Emit(SimEventKind.CrushSound, Entity.Id, info.Source, sound, 0);
+    }
+
+    private (string Sound, int Percent) EndNearest(Entity crusher)
+    {
+        var offset = Entity.Template.GeometryMajorRadius / Fixed.FromInt(2);
+        var (offsetX, offsetY) = (FixedTrig.Cos(Entity.Angle) * offset, FixedTrig.Sin(Entity.Angle) * offset);
+        Fixed Squared(Fixed x, Fixed y) => (x - crusher.X) * (x - crusher.X) + (y - crusher.Y) * (y - crusher.Y);
+        var (middle, front, back) = (Squared(Entity.X, Entity.Y), Squared(Entity.X + offsetX, Entity.Y + offsetY), Squared(Entity.X - offsetX, Entity.Y - offsetY));
+        if (back < middle && back < front) return (data.BackSound, data.BackPercent);
+        return front < middle ? (data.FrontSound, data.FrontPercent) : (data.TotalSound, data.TotalPercent);
+    }
 }
 
 public sealed record ReplaceObjectUpgradeData(UpgradeMuxData Mux, string ReplaceObject) : ModuleData

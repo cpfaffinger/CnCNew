@@ -372,7 +372,27 @@ static partial class Tests
         SnapshotContinues(world, fixture);
     }
 
-    /// <summary>CrushDie is inert without collisions: it binds strictly, keeps the object instantiable and does not disturb an ordinary death.</summary>
+    /// <summary><c>CrushDie::onDie</c>: a crushed car rings with its percent, drawn from the logic stream; an ordinary death does not ring and draws nothing.</summary>
+    public static void ACrushedCarRings()
+    {
+        foreach (var rate in new[] { 30, 60, 120 })
+        {
+            var (world, feeder, _) = RatedWorld(SimulationRate.FromTicksPerSecond(rate), CombatFiles());
+            for (var index = 0; index < 200; index++) feeder.Spawn(1, "Crushable", x: 10 + index, y: 10);
+            world.Step();
+            var cars = world.Entities.Where(value => value.Template.Name == "Crushable").ToArray();
+            var crush = CnCNew.Data.Definitions.NameTables.DamageType.TryIndexOf("CRUSH", out var type) ? type : throw new InvalidOperationException();
+            var rings = 0;
+            foreach (var car in cars)
+            {
+                world.Damage(car.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(9999), crush, DeathTypes.Crushed, false));
+                rings += world.Step().Events.Count(value => value.Kind == SimEventKind.CrushSound && value.Text == "CarAlarm");
+            }
+            Check.That(rings is > 70 and < 130, $"{rate} Hz: half of the crushed cars ring ({rings} of 200).");
+        }
+    }
+
+    /// <summary>CrushDie keeps the object instantiable and does not disturb an ordinary death.</summary>
     public static void CrushDieIsInert()
     {
         var world = CombatWorld(out _, out var feeder);

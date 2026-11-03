@@ -314,9 +314,9 @@ public static class ModuleCatalog
         Add("CrushDie",
         [
             ..DieMux(),
-            new("TotalCrushSound", FieldType.Opaque, Source: "CrushDie.h"),
-            new("BackEndCrushSound", FieldType.Opaque, Source: "CrushDie.h"),
-            new("FrontEndCrushSound", FieldType.Opaque, Source: "CrushDie.h"),
+            new("TotalCrushSound", FieldType.Text, Source: "CrushDie.h"),
+            new("BackEndCrushSound", FieldType.Text, Source: "CrushDie.h"),
+            new("FrontEndCrushSound", FieldType.Text, Source: "CrushDie.h"),
             new("TotalCrushSoundPercent", FieldType.Integer, Source: "CrushDie.h"),
             new("BackEndCrushSoundPercent", FieldType.Integer, Source: "CrushDie.h"),
             new("FrontEndCrushSoundPercent", FieldType.Integer, Source: "CrushDie.h"),

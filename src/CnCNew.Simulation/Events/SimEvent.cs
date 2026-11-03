@@ -137,6 +137,9 @@ public enum SimEventKind : byte
     /// <summary><c>SupplyTruckAIUpdate::gainOneBox</c>: this carrier took the last box of a source with no other near it; its <c>SuppliesDepletedVoice</c> is <see cref="SimEvent.Text"/>.</summary>
     SuppliesDepleted = 89,
 
+    /// <summary><c>CrushDie::onDie</c>: this object was crushed and <see cref="SimEvent.Text"/> plays at it.</summary>
+    CrushSound = 90,
+
     /// <summary><c>CrateCollide::onCollide</c>: the crate plays its <c>ExecuteAnimation</c> (<see cref="SimEvent.Text"/>); the value is <see cref="CrateAnimation"/>.</summary>
     CrateAnimation = 88,
 }
