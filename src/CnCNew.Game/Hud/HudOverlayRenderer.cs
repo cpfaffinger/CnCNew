@@ -113,9 +113,12 @@ public static class HudOverlayRenderer
             foreach (var icon in overlay.Icons)
                 commands.Add(new UiImageDraw(icon.Image, icon.Place, WndColor.White with { A = icon.Alpha }, false, false));
 
+        // The text's line starts at its point and the font is scaled with the screen: the clip holds the whole line (the owner's playtest of 3 November 2026 saw the lower half of a
+        // construction's percent cut off by a clip of 18 pixels from 8 above the point).
         if (!overlay.Labels.IsDefaultOrEmpty)
             foreach (var label in overlay.Labels)
-                commands.Add(new UiTextDraw(label.Text, null, LabelFont, label.Color ?? WndColor.White, new WndColor(0, 0, 0, label.Color?.A ?? 255), (int)label.At.X, (int)label.At.Y, UiTextAlignment.Center, new UiRect((int)label.At.X - 120, (int)label.At.Y - 8, 240, 18)));
+                commands.Add(new UiTextDraw(label.Text, null, LabelFont, label.Color ?? WndColor.White, new WndColor(0, 0, 0, label.Color?.A ?? 255), (int)label.At.X, (int)label.At.Y, UiTextAlignment.Center,
+                    new UiRect((int)label.At.X - LabelClipHalfWidth, (int)label.At.Y - LabelClipAbove, 2 * LabelClipHalfWidth, LabelClipAbove + LabelClipBelow)));
 
         if (!overlay.Ranks.IsDefaultOrEmpty)
             foreach (var rank in overlay.Ranks)
@@ -205,6 +208,9 @@ public static class HudOverlayRenderer
     }
 
     private static readonly UiFont LabelFont = new("Arial", 12, true);
+
+    /// <summary>The clip around a label's point: wide enough for a long line, from a little above the point to below the tallest scaled line.</summary>
+    private const int LabelClipHalfWidth = 200, LabelClipAbove = 8, LabelClipBelow = 64;
 
     private const int AmmoPipWidth = 5, AmmoPipHeight = 10, SeatPipHeight = 12, RankSize = 16;
     private static readonly WndColor InfantrySeat = new(0, 255, 0, 255);
