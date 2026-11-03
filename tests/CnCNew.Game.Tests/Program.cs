@@ -21,6 +21,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(ScenarioTests), ScenarioTests.Run),
     (nameof(HotkeyTests), HotkeyTests.Run),
     (nameof(RadiusCursorTests), RadiusCursorTests.Run),
+    (nameof(PlaytestHudTests), PlaytestHudTests.Run),
     (nameof(RetaliationOptionTests), RetaliationOptionTests.Run),
     (nameof(TimeScaleTests), TimeScaleTests.Run),
     (nameof(SourceRuleTests), SourceRuleTests.Run),

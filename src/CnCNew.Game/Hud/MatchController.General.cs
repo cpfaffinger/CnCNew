@@ -33,11 +33,16 @@ public sealed partial class MatchController
 
     private void AddGeneralsWindow()
     {
-        var roots = _tree.AddLayout(Skin.Derive(_assets.GeneralsExpPoints, _assets.HeaderTemplates));
+        // The window keeps the original's art in every skin, as the bar of the powers does: its translucent background and the states of its buttons are pictures (the owner's
+        // playtest of 3 November 2026 found it drawn flat and opaque, owned and unaffordable sciences alike).
+        var roots = _tree.AddLayout(Skin.Derive(_assets.GeneralsExpPoints, _assets.HeaderTemplates, keepArt: true));
         _generalsRoot = roots.Single(window => window.Name == "GeneralsExpPoints.wnd:GenExpParent");
         _generalsRoot.SetHidden(true);
         _tree.Register("GeneralsExpPointsSystem", OnGeneralsSystem);
     }
+
+    /// <summary>The star of the control bar: opens or closes the general's window.</summary>
+    public void ToggleGenerals() => ToggleGeneralsWindow();
 
     private void ToggleGeneralsWindow()
     {
