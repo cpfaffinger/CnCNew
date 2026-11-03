@@ -319,6 +319,9 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-119 | Standing infantry never stepped out of a vehicle's way: the vehicle planned round it | `AIUpdateInterface::processCollision`, `aiMoveAwayFromUnit` | Phase 58 list, item 12 | **done** (§80.10) |
 | F-120 | What fell in a physics flight met nothing: a hulk falling into a building neither blew up nor was gone | `PhysicsBehavior::onCollide` | Phase 58 list, item 21 | **done** (§80.11) |
 | F-121 | `EnterGuard` and `HijackGuard` were unread: a hijacker on guard stood | `AIGuardMachine::lookForInnerTarget`, `AIGuardInnerState` | Phase 58 list, item 24 | **done** (§80.12) |
+| F-122 | A captured airfield kept its parked jets with their old owner | `ParkingPlaceBehavior::defectAllParkedUnits` | Phase 58 list | **done** (§80.13) |
+| F-123 | `CanDetectWhileGarrisoned` and `CanDetectWhileContained` were unread: a detector detected from inside anything | `StealthDetectorUpdate::update` | Phase 58 list | **done** (§80.13) |
+| F-124 | The attackers of an Aurora aim at it while it attacks; the original makes them aim behind it and lets nothing hit it for `AttackersMissPersistTime` | `JetAIUpdate::getSneakyTargetingOffset`, `Weapon::privateFireWeapon` | Phase 58 list | open (Phase 59) |
 | F-33 | Installer: Steam outside the default path untested; manifest hash Windows-only; client not self-contained (**Phase 56:** the export leaves out the program files, manuals and metadata of the original) | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog
