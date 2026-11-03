@@ -141,6 +141,30 @@ public sealed partial class SimulationWorld
         }
     }
 
+    /// <inheritdoc cref="IWorldServices.TransferAttack"/>
+    public void TransferAttack(EntityId from, EntityId to)
+    {
+        if (!from.IsValid || !to.IsValid) return;
+        foreach (var other in Entities)
+        {
+            var changed = false;
+            if (other.Acquisition is { } state && state.Victim == from)
+            {
+                state.Victim = to;
+                changed = true;
+            }
+            // "Transfer the turrets too this frame."
+            if (other.Turrets is { } turrets)
+                foreach (var turret in turrets)
+                    if (turret is { AtPlace: false } && turret.Target == from)
+                    {
+                        turret.Target = to;
+                        changed = true;
+                    }
+            if (changed) MarkDirty(other);
+        }
+    }
+
     /// <summary>
     /// <c>MM_Controller_AI | MM_Mood_Sleep</c>: "AI Units that are asleep actually ignore all commands" (<c>isAllowedToRespondToAiCommands</c>), acquire nothing while idle
     /// (<c>MAA_Affect_Range_IgnoreAll</c>) and do not fire (<c>AIAttackFireWeaponState::onEnter</c>).
@@ -303,6 +327,8 @@ public sealed partial class SimulationWorld
         if (state is { Victim.IsValid: true })
         {
             var victim = FindEntity(state.Victim);
+            // A victim the attack was transferred to that the spawn phase creates later in this tick (a rebuild hole: the original creates it in the dying building's onDie).
+            if (victim is null && IsSpawnPending(state.Victim)) return;
             var attackable = victim is not null && IsAttackable(entity, victim);
             if (state.Ordered)
             {

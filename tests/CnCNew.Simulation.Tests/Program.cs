@@ -392,6 +392,7 @@ run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardT
 run.Test("Phase 58: a captured airfield takes its parked jets", Tests.AirCapturedAirfieldTakesItsParkedJets);
 run.Test("Phase 59 (F-124): attackers aim behind an attacking Aurora", Tests.AirAttackersAimBehindASneakyJet);
 run.Test("Phase 59 (F-127): a reveal wakes the enemies that see it", Tests.ARevealWakesTheEnemiesThatSeeIt);
+run.Test("Phase 59 (F-128): the attackers of a structure go over to its rebuild hole", Tests.AttackersGoOverToTheHole);
 run.Test("Phase 58: a detector in a transport detects only when allowed", Tests.ADetectorInATransportDetectsOnlyWhenAllowed);
 run.Test("Phase 58: an attacker shows itself", Tests.AnAttackerShowsItself);
 run.Test("Phase 58: a hidden building hides its truck", Tests.AHiddenBuildingHidesItsTruck);

@@ -66,6 +66,8 @@ public sealed partial class SimulationWorld
             var amount = body.MaxHealth - body.PreviousHealth;
             if (amount > Fixed.Zero) UpdateSetup(first, setup => setup with { TransferDamage = amount, TransferSource = requester });
         }
+        // CreateObjectDie with TransferPreviousHealth: "Transfer attackers."
+        if (first.IsValid && transferPreviousHealth) TransferAttack(source.Id, first);
         return first;
     }
 

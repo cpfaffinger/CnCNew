@@ -194,6 +194,12 @@ public interface IWorldServices
     /// </summary>
     void WakeEnemiesThatSee(Entity revealed);
 
+    /// <summary>
+    /// <c>AIUpdateInterface::transferAttack</c> for every object: whoever attacks <paramref name="from"/>, with its victim or a turret, attacks <paramref name="to"/> from now on (a destroyed
+    /// building's hole, the site rebuilt on it, what a death creates).
+    /// </summary>
+    void TransferAttack(EntityId from, EntityId to);
+
     /// <summary><c>aiAttackPosition(pos, shots, CMD_FROM_AI)</c> (F-64): the unit attacks the place for <paramref name="shots"/> shots (0 or less: no limit); false when it cannot.</summary>
     bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots);
 

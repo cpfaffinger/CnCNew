@@ -425,8 +425,8 @@ public sealed record RebuildHoleExposeDieData(DieMuxData Mux, string HoleName, F
 
 /// <summary>
 /// <c>RebuildHoleExposeDie::onDie</c>: a dying GLA structure leaves a hole of the same owner, position and orientation with
-/// <c>HoleMaxHealth</c> hit points, unless the owner is neutral or the structure was still under construction. Not modeled: the
-/// <c>isPlayerActive</c> check (no per-player activity state), copying the geometry to the hole, and <c>TransferAttackers</c>.
+/// <c>HoleMaxHealth</c> hit points, unless the owner is neutral or the structure was still under construction; with <c>TransferAttackers</c> (the default) whoever attacked the structure
+/// attacks the hole. Not modeled: the <c>isPlayerActive</c> check (no per-player activity state) and copying the geometry to the hole.
 /// </summary>
 public sealed class RebuildHoleExposeDie(RebuildHoleExposeDieData data) : DieModuleBase(data.Mux)
 {
@@ -445,8 +445,9 @@ public sealed class RebuildHoleExposeDie(RebuildHoleExposeDieData data) : DieMod
             world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.HoleName, CreationSkipReasons.TemplateNotInstantiable);
             return;
         }
-        world.RequestSpawn(hole.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle,
+        var made = world.RequestSpawn(hole.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle,
             new SpawnExtras(data.HoleMaxHealth, Entity.Template.Index, Spawner: world.HolesRebuild ? Entity.Id : default));
+        if (data.TransferAttackers) world.TransferAttack(Entity.Id, made);
     }
 }
 
@@ -461,8 +462,8 @@ public sealed record RebuildHoleBehaviorData(string WorkerName, long WorkerRespa
 /// <c>RebuildHoleBehavior.cpp</c>: the hole regenerates <c>HoleHealthRegen%PerSecond</c> of its maximum health per second and, once <c>WorkerRespawnDelay</c> has passed, spawns a worker that
 /// reconstructs the destroyed structure. Where the world's rule says so (<see cref="IWorldServices.HolesRebuild"/>, the session of the original skirmish AI) that happens: the worker comes up
 /// from the hole, builds free of charge where the hole lies, the hole is masked meanwhile, a worker or a site that is lost starts the wait over, and the finished building takes the hole away.
-/// Without the rule a <see cref="SimEventKind.CreationSkipped"/> event (<see cref="CreationSkipReasons.SettingNotSimulated"/>) records the missing rebuild and the countdown stops. Not modelled:
-/// that attackers and sticky bombs of the hole go over to the site (<c>transferAttack</c>, <c>transferBombs</c>) and back.
+/// Without the rule a <see cref="SimEventKind.CreationSkipped"/> event (<see cref="CreationSkipReasons.SettingNotSimulated"/>) records the missing rebuild and the countdown stops. The attackers of
+/// the hole go over to the site, and back to the hole when the site is lost (<c>transferAttack</c>). Not modelled: the sticky bombs (<c>transferBombs</c>).
 /// </summary>
 public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModule, IUpdateModule, ISpawnOriginReceiver, IDieModule
 {
@@ -513,6 +514,8 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         var reconstructing = _reconstructing.IsValid ? world.FindEntity(_reconstructing) : null;
         if (_reconstructing.IsValid && reconstructing is null)
         {
+            // "So if the site dies, we can transfer the attack back to the hole."
+            world.TransferAttack(_reconstructing, Entity.Id);
             NewWorkerRespawnProcess(world, worker);
             worker = null;
             _reconstructing = EntityId.Invalid;
@@ -539,6 +542,8 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
             reconstructing.BuilderId = worker.Id;
             CrateModules.AiOf(worker)?.OrderConstruct(world, reconstructing);
         }
+        // "Just like the building transfers attackers to the hole when it creates us, we need to transfer attackers to our replacement building before we mask ourselves."
+        if (_reconstructing != reconstructing.Id) world.TransferAttack(Entity.Id, reconstructing.Id);
         _reconstructing = reconstructing.Id;
         worker.Status |= 1UL << UnselectableBit;
         Entity.Status |= 1UL << MaskedBit;
