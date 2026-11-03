@@ -451,7 +451,13 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool IsAttackable(Entity entity, Entity victim)
         => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && AreEnemies(entity, victim)
-           && !IsHiddenFrom(entity.Owner, victim);
+           && !IsHiddenFrom(entity.Owner, victim) && !IsNoTarget(victim);
+
+    /// <summary><c>WeaponSet::getAbleToAttackSpecificObject</c>: "an OBJECT_STATUS_MASKED object is not really a valid target", and "the KINDOF version, for things that aren't really game objects".</summary>
+    private static bool IsNoTarget(Entity victim) => victim.HasStatus(MaskedBit) || victim.Template.IsKindOf("UNATTACKABLE");
+
+    private static readonly int MaskedBit = ObjectStatusBits.Index("MASKED");
+    private static readonly int NoAttackFromAiBit = ObjectStatusBits.Index("NO_ATTACK_FROM_AI");
 
     /// <summary>
     /// One tick of an attack on <paramref name="victim"/>: in range the unit stands (an attack-move stops for the fight, aircraft keep flying) and fires when its weapon may; out of range a
@@ -708,6 +714,8 @@ public sealed partial class SimulationWorld
         if (!SquaredReach.Of(search.Radius + radii).Contains(distance)) return;
         // A mine is a target like any other (F-69): only a weapon with AntiMine can attack it (getVictimAntiMask) - the builders' mine-clearing weapons.
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT")) return;
+        // "This object is not currently auto-acquireable."
+        if (candidate.HasStatus(NoAttackFromAiBit)) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(entity, candidate, search.Buildings, search.Computer) || IsHiddenStealthGarrison(entity, candidate)) return;
         // AI::UNFOGGED: "Instead of shroud affecting the ability to attack, it affects the ability to target" - for a human player's unit only.
         if (!search.Computer && !CanPlayerSee(entity.Owner, candidate)) return;

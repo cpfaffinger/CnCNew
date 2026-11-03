@@ -359,7 +359,7 @@ public sealed partial class SimulationWorld
             _sales.Remove(_sales.Min);
             var entity = FindEntity(new EntityId(id));
             if (entity is null || entity.DestroyRequested) continue;
-            var payout = Fixed.FromInt((int)(entity.Template.BuildCost * _templates.SellPercentage).Floor());
+            var payout = entity.Template.RefundValue != Fixed.Zero ? entity.Template.RefundValue : Fixed.FromInt((int)(entity.Template.BuildCost * _templates.SellPercentage).Floor());
             if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.Money += payout;
             Emit(SimEventKind.StructureSold, entity.Id, EntityId.Invalid, string.Empty, payout.Raw, entity.Owner);
             RequestDestroy(entity.Id);

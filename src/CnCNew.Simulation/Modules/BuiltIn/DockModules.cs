@@ -438,8 +438,8 @@ internal sealed class SupplyWarehouseCreate : SimModule
 
 // =================================================================================================== AutoDeposit
 
-/// <summary><c>AutoDepositUpdate.cpp</c> field set. <c>InitialCaptureBonus</c> is typed but not applied (no capture mechanic).</summary>
-public sealed record AutoDepositData(long DepositTimingTicks, int DepositAmount, bool ActualMoney, ImmutableArray<(string Upgrade, int Boost)> UpgradedBoosts) : ModuleData
+/// <summary><c>AutoDepositUpdate.cpp</c> field set.</summary>
+public sealed record AutoDepositData(long DepositTimingTicks, int DepositAmount, bool ActualMoney, ImmutableArray<(string Upgrade, int Boost)> UpgradedBoosts, int InitialCaptureBonus) : ModuleData
 {
     public static AutoDepositData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades)
     {
@@ -454,7 +454,8 @@ public sealed record AutoDepositData(long DepositTimingTicks, int DepositAmount,
             ModuleConfigReader.Ticks(configuration, "DepositTiming", 0),
             checked((int)ModuleConfigReader.Int(configuration, "DepositAmount", 0)),
             ModuleConfigReader.Bool(configuration, "ActualMoney", true),
-            boosts.ToImmutable());
+            boosts.ToImmutable(),
+            checked((int)ModuleConfigReader.Int(configuration, "InitialCaptureBonus", 0)));
     }
 
     /// <summary><c>INI::parseUpgradePair</c>: <c>UpgradeType:&lt;name&gt; Boost:&lt;int&gt;</c>.</summary>
@@ -479,12 +480,15 @@ public sealed record AutoDepositData(long DepositTimingTicks, int DepositAmount,
 /// <summary>
 /// <c>AutoDepositUpdate</c>: every <c>DepositTiming</c> ticks the controlling player receives <c>DepositAmount</c> plus the first boost whose
 /// upgrade the player owns. Neutral objects and objects still under construction earn nothing (the timer still advances); with
-/// <c>ActualMoney = No</c> the reference only shows the number, which is not modelled.
+/// <c>ActualMoney = No</c> the reference only shows the number, which is not modelled. The first player who takes it after its first deposit date is paid <c>InitialCaptureBonus</c>, once
+/// (<c>awardInitialCaptureBonus</c>, from <c>Player::becomingTeamMember</c>); "we don't want to award initial bonus on load", so a map's first owner has none.
 /// </summary>
-internal sealed class AutoDepositUpdate(AutoDepositData data) : SimModule, IUpdateModule
+internal sealed class AutoDepositUpdate(AutoDepositData data) : SimModule, IUpdateModule, IOwnerChangeReceiver
 {
     private long _nextWake = -1;
     private long _depositOnTick;
+    private bool _bonusStanding;
+    private bool _initialized;
 
     public override string ModuleName => "AutoDepositUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -498,6 +502,11 @@ internal sealed class AutoDepositUpdate(AutoDepositData data) : SimModule, IUpda
     public long Update(IWorldServices world)
     {
         if (world.Tick < _depositOnTick) return _depositOnTick - world.Tick;
+        if (!_initialized)
+        {
+            _bonusStanding = true;
+            _initialized = true;
+        }
         // A DepositTiming of 0 pays once per frame of the original, not once per tick (the income per second must not depend on the rate).
         _depositOnTick = world.Tick + world.Time.AtLeastOneFrame(data.DepositTimingTicks);
         if (!Entity.Owner.IsSystem && data.DepositAmount > 0 && !Entity.HasStatus(ObjectStatusBits.UnderConstruction) && data.ActualMoney)
@@ -507,6 +516,19 @@ internal sealed class AutoDepositUpdate(AutoDepositData data) : SimModule, IUpda
             world.Emit(SimEventKind.SupplyDeposited, Entity.Id, Entity.Id, string.Empty, money);
         }
         return _depositOnTick - world.Tick;
+    }
+
+    /// <inheritdoc/>
+    public void OnOwnerChanged(IWorldServices world, PlayerId oldOwner, PlayerId newOwner)
+    {
+        if (newOwner.IsSystem) return;
+        _depositOnTick = world.Tick + data.DepositTimingTicks;
+        world.WakeAt(Entity, this, _depositOnTick);
+        world.MarkDirty(Entity);
+        if (!_bonusStanding || data.InitialCaptureBonus <= 0) return;
+        world.AddMoney(newOwner, Fixed.FromInt(data.InitialCaptureBonus));
+        world.Emit(SimEventKind.SupplyDeposited, Entity.Id, Entity.Id, string.Empty, data.InitialCaptureBonus);
+        _bonusStanding = false;
     }
 
     private int Boost(IWorldServices world)
@@ -521,11 +543,15 @@ internal sealed class AutoDepositUpdate(AutoDepositData data) : SimModule, IUpda
     {
         writer.Int("nextWake", _nextWake);
         writer.Int("depositOnTick", _depositOnTick);
+        if (_bonusStanding) writer.Bool("bonusStanding", true);
+        if (_initialized) writer.Bool("initialized", true);
     }
 
     public override void Load(IStateReader reader)
     {
         _nextWake = reader.Int("nextWake");
         _depositOnTick = reader.Int("depositOnTick");
+        _bonusStanding = reader.Has("bonusStanding");
+        _initialized = reader.Has("initialized");
     }
 }

@@ -151,6 +151,8 @@ public sealed class ObjectTemplate
         FactoryExtraBibWidth = Real(definition, "FactoryExtraBibWidth");
         GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         IsBridge = definition.Fields.LastOrDefault(field => field.Name.Equals("IsBridge", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        RefundValue = definition.Fields.LastOrDefault(field => field.Name.Equals("RefundValue", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money refund ? Fixed.FromInt(refund.Value) : Fixed.Zero;
+        ShroudRevealToAllRange = Real(definition, "ShroudRevealToAllRange");
         VisionRange = Real(definition, "VisionRange");
         ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
@@ -249,6 +251,12 @@ public sealed class ObjectTemplate
     /// <summary><c>ThingTemplate::getTransportSlotCount</c>: how many <c>TransportContain</c> slots this object occupies (0 = not transportable).</summary>
     public int TransportSlotCount { get; }
     public Fixed BuildCost { get; }
+
+    /// <summary><c>ThingTemplate::m_refundValue</c>: what a sale pays instead of its share of the cost; 0 "means you have no override".</summary>
+    public Fixed RefundValue { get; }
+
+    /// <summary><c>ThingTemplate::m_shroudRevealToAllRange</c>: how far every enemy sees around it, whatever it can see (the superweapons).</summary>
+    public Fixed ShroudRevealToAllRange { get; }
     public long BuildTicks { get; }
     public int EnergyProduction { get; }
     /// <summary>The object's own <c>CommandSet</c> plus every set a <c>CommandSetUpgrade</c> module can switch to (all of them, whatever the upgrade state).</summary>

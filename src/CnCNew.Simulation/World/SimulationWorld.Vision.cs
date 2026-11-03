@@ -120,12 +120,29 @@ public sealed partial class SimulationWorld
                 entity.Look = look = new LookRecord(entity.X, entity.Y, range, mask, cellX, cellY);
             }
             RevealTo(vision, look.Viewers, look.X, look.Y, look.Range);
+            if (entity.Template.ShroudRevealToAllRange > Fixed.Zero) RevealToEnemies(vision, entity, ownerSlot);
         }
         var now = Time.FramesIn(_tick);
         while (_unlooks.Count > 0 && _unlooks.Peek().Until < now) _unlooks.Dequeue();
         foreach (var (_, look) in _unlooks) RevealTo(vision, look.Viewers, look.X, look.Y, look.Range);
         vision.EndCollectedRefresh();
     }
+
+    /// <summary>
+    /// <c>Object::look</c>: "reveal to everyone if we're special", at a range of its own, to enemies and neutrals, not while it is under construction, and "only when the unit is visible" (the stealth
+    /// general's Scud Storm).
+    /// </summary>
+    private void RevealToEnemies(VisionMap vision, Entity entity, int ownerSlot)
+    {
+        if (entity.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        if (entity.HasStatus(StealthedBit) && !entity.HasStatus(DetectedBit) && !entity.HasStatus(DisguisedBit)) return;
+        for (var slot = 0; slot < _playerList.Length; slot++)
+            if (!_playerList[slot].Id.IsSystem && slot != ownerSlot && !AreAllies(_playerList[ownerSlot].Id, _playerList[slot].Id)) vision.Reveal(slot, entity.X, entity.Y, entity.Template.ShroudRevealToAllRange);
+    }
+
+    private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
+    private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
+    private static readonly int DisguisedBit = ObjectStatusBits.Index("DISGUISED");
 
     private void RevealTo(VisionMap vision, ulong viewers, Fixed x, Fixed y, Fixed range)
     {
