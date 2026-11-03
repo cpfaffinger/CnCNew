@@ -134,7 +134,12 @@ public sealed partial class SimulationWorld
     private static bool OnAnotherLevel(Entity a, Entity b) => a.Layer != b.Layer && (a.Z - b.Z).Abs() > CnCNew.Simulation.Terrain.TerrainBridge.LayerCloseEnough;
 
     private static bool StandsStill(Entity other, Entity mover, EntityId goal)
-        => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
+        => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero || PassesThrough(mover, other));
+
+    /// <summary>
+    /// <c>INFANTRY_MOVES_THROUGH_INFANTRY</c> of <c>Pathfinder::checkForMovement</c>: "Infantry can run through infantry", so standing infantry is nothing an infantry's way goes round.
+    /// </summary>
+    private static bool PassesThrough(Entity mover, Entity other) => mover.Template.IsKindOf("INFANTRY") && other.Template.IsKindOf("INFANTRY");
 
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
     {
@@ -388,7 +393,7 @@ public sealed partial class SimulationWorld
 
     private bool StandsStillAtFrameEnd(Entity other, Entity mover, EntityId goal)
     {
-        if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) return false;
+        if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || PassesThrough(mover, other)) return false;
         if (!other.HasMoveTarget) return other.Speed == Fixed.Zero;
         // Covering the last step of its move: the 30 Hz step has already put it on its target, where it stands.
         return other.AheadTick + TickOrder.Next >= _tick && AiOf(other) is { IsArrivingWithThisFrame: true };

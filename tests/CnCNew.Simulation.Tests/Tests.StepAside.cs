@@ -49,6 +49,46 @@ static partial class Tests
         Check.That(stander.X == Fixed.FromInt(70) && stander.Y == Fixed.FromInt(102), $"Infantry passes infantry; nobody steps aside ({stander.X}, {stander.Y}).");
     }
 
+    /// <summary>
+    /// <c>INFANTRY_MOVES_THROUGH_INFANTRY</c>: "Infantry can run through infantry". Infantry whose way crosses a row of standing infantry plans no way round it and goes straight on, the same at the end of
+    /// every frame at 30, 60 and 120 Hz; a vehicle goes round the same row.
+    /// </summary>
+    public static void InfantryPlansNoWayRoundInfantry()
+    {
+        (Fixed Walked, (Fixed X, Fixed Y)[] Places) Walk(SimulationRate rate, string walker)
+        {
+            var (world, feeder, _) = RatedWorld(rate, StepAsideFiles(), NavTerrain());
+            feeder.Spawn(1, walker, x: 20, y: 100);
+            for (var y = 70; y <= 130; y += 15) feeder.Spawn(1, "Marcher", x: 80, y: y);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var mover = world.Entities.Single(value => value.Template.Name == walker && value.X == Fixed.FromInt(20));
+            Check.That(world.Submit(new SetMoveTargetCommand(new PlayerId(1), 1000, world.Tick, mover.Id, Fixed.FromInt(170), Fixed.FromInt(100))).Accepted, "The walk is accepted.");
+            var places = new List<(Fixed X, Fixed Y)>();
+            var walked = Fixed.Zero;
+            var (lastX, lastY) = (mover.X, mover.Y);
+            for (var frame = 0; frame < 600; frame++)
+            {
+                for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+                places.Add((mover.X, mover.Y));
+                walked += Fixed.Sqrt((mover.X - lastX) * (mover.X - lastX) + (mover.Y - lastY) * (mover.Y - lastY));
+                (lastX, lastY) = (mover.X, mover.Y);
+            }
+            Check.That((mover.X - Fixed.FromInt(170)).Abs() < Fixed.FromInt(15) && (mover.Y - Fixed.FromInt(100)).Abs() < Fixed.FromInt(15), $"{rate}: the {walker} arrived ({mover.X}, {mover.Y}).");
+            return (walked, [.. places]);
+        }
+
+        (Fixed X, Fixed Y)[]? thirty = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (walked, places) = Walk(rate, "Marcher");
+            Check.That(walked < Fixed.FromInt(165), $"{rate}: the infantry walked {walked} for 150 straight, through the row.");
+            if (thirty is null) thirty = places;
+            else Check.That(places.SequenceEqual(thirty), $"{rate}: the infantry stands where the 30 Hz one stands at the end of every frame.");
+        }
+        var (driven, _) = Walk(SimulationRate.Hz30, "ForwardCar");
+        Check.That(driven > Fixed.FromInt(165), $"A car goes round the row ({driven} for 150 straight).");
+    }
+
     /// <summary>A request made in the first tick of a frame above 30 Hz is answered at the frame's end; a save between the two keeps it, and the restored world goes on as the one that was saved.</summary>
     public static void AStepAsideRequestSurvivesASave()
     {

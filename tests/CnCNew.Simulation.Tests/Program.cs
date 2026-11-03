@@ -385,6 +385,7 @@ run.Test("Phase 58: enemies see a superweapon", Tests.EnemiesSeeASuperweapon);
 run.Test("Phase 58: a computer tank runs infantry over", Tests.AComputerTankRunsInfantryOver);
 run.Test("Phase 58: a moving shooter's slow shot lands in the same frame at every rate", Tests.AMovingShooterHitsInTheSameFrameAtEveryRate);
 run.Test("Phase 58: idle infantry steps out of a vehicle's way", Tests.InfantryStepsAsideForAVehicle);
+run.Test("Phase 58: infantry plans no way round infantry", Tests.InfantryPlansNoWayRoundInfantry);
 run.Test("Phase 58: a step-aside request survives a save inside its frame", Tests.AStepAsideRequestSurvivesASave);
 run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkCrashesIntoABuilding);
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);

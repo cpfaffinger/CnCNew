@@ -184,7 +184,7 @@ static partial class Tests
         var blocked = false;
         foreach (var other in world.Entities)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero || BothInfantry(mover, other)) continue;
             var limit = moverRadius + ReferenceBoundingCircle(other) + margin;
             for (var sample = 1; sample <= 4 && !blocked; sample++)
             {
@@ -199,7 +199,7 @@ static partial class Tests
         var around = Fixed.FromInt(150);
         foreach (var other in world.Entities)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero || BothInfantry(mover, other)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
             if (ddx * ddx + ddy * ddy > around * around) continue;
@@ -207,6 +207,8 @@ static partial class Tests
         }
         return circles;
     }
+
+    private static bool BothInfantry(Entity mover, Entity other) => mover.Template.IsKindOf("INFANTRY") && other.Template.IsKindOf("INFANTRY");
 
     public static void MovementScansMatchTheFullScan()
     {
