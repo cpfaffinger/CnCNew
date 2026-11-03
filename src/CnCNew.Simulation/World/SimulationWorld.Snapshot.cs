@@ -141,6 +141,7 @@ public sealed partial class SimulationWorld
         LoadExitClaims(state);
         LoadClearPaths(state);
         LoadStepAsides(state);
+        LoadWayThroughs(state);
         LoadPathQueue(state);
 
         _restoringEnergy = true;

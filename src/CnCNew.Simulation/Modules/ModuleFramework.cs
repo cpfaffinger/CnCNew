@@ -541,6 +541,13 @@ public interface IWorldServices
     void RequestStepAside(Entity mover, Fixed dx, Fixed dy);
 
     /// <summary>
+    /// <c>Pathfinder::moveAllies</c> after a search that went through allies: when the way of <paramref name="mover"/> along <paramref name="path"/> from node <paramref name="index"/>, with each idle ally
+    /// standing on it within <paramref name="reach"/> costing what the original's search adds, is shorter than <paramref name="detour"/> (none: no way round), those allies are told to move off the way
+    /// when every object has decided its frame, and the answer is <see langword="true"/>: the mover keeps its path.
+    /// </summary>
+    bool PreferWayThroughAllies(Entity mover, IReadOnlyList<PathPoint> path, int index, IReadOnlyList<PathPoint>? detour, Fixed reach);
+
+    /// <summary>
     /// The same search for a unit already on its way: when the place <paramref name="mover"/> is heading for (<see cref="Entity.MoveTargetX"/>) has been taken — a ground unit
     /// of a side that is not its enemy stands there, or one with a lower id is heading there — the place <see cref="FindFreeGoal"/> gives from where the mover is now; false
     /// when the goal is not taken, the mover flies or closes in on a victim, or no free place is found.

@@ -251,6 +251,187 @@ public sealed partial class SimulationWorld
     /// <summary>Own value: places tried across the mover's way, half on each side.</summary>
     private const int StepAsideAttempts = 8;
 
+    /// <summary>
+    /// <c>Pathfinder::examineNeighboringCells</c>: a cell an ally stands still on costs <c>3*COST_DIAGONAL</c> more, where a cell straight on costs <c>COST_ORTHOGONAL</c> (10, one cell of way):
+    /// 4.2 cells of way.
+    /// </summary>
+    private static readonly Fixed AllyCellCost = Fixed.FromInt(42 * TerrainMap.CellSize) / Fixed.FromInt(10);
+
+    /// <summary>A mover whose way leads through allies that make way, at the end of its frame, and how far along its path it looked.</summary>
+    private readonly record struct WayThroughClaim(EntityId Mover, long Tick, Fixed Reach);
+
+    private readonly List<WayThroughClaim> _wayThroughs = [];
+
+    /// <inheritdoc cref="IWorldServices.PreferWayThroughAllies"/>
+    /// <remarks>
+    /// The original's search sees the units: a cell an ally stands on costs 4.2 cells more and marks the path "blocked by ally" (<c>setBlockedByAlly</c>, <c>Path::getBlockedByAlly</c>), and a path
+    /// that is <c>moveAllies</c> then tells each idle ally on its nodes to move away (<c>aiMoveAwayFromUnit</c>). The port's search knows only the ground and goes round what stands (the detour);
+    /// here the two ways are weighed as the original's costs weigh them: the way on, with each ally standing on it costing its cells, against the way round. Enemies and allies that cannot be
+    /// moved (busy, attacking, at an ability) are no way through. The allies are told at the end of the mover's frame, like <see cref="RequestStepAside"/>.
+    /// </remarks>
+    public bool PreferWayThroughAllies(Entity mover, IReadOnlyList<PathPoint> path, int index, IReadOnlyList<PathPoint>? detour, Fixed reach)
+    {
+        if (index >= path.Count) return false;
+        var allies = AlliesOnWay(mover, path, index, reach, out var blocked);
+        if (blocked || allies == 0) return false;
+        var through = PathLength(mover.X, mover.Y, path, index, Fixed.MaxValue) + AllyCellCost * Fixed.FromInt(allies);
+        if (detour is { Count: > 0 } && PathLength(mover.X, mover.Y, detour, 0, Fixed.MaxValue) <= through) return false;
+        foreach (var claim in _wayThroughs)
+            if (claim.Mover == mover.Id) return true;
+        _wayThroughs.Add(new WayThroughClaim(mover.Id, _tick + _firstFrameTicks - TickOrder.Next - (_tick - mover.SpawnTick) % _firstFrameTicks, reach));
+        return true;
+    }
+
+    private static Fixed PathLength(Fixed x, Fixed y, IReadOnlyList<PathPoint> path, int index, Fixed limit)
+    {
+        var length = Fixed.Zero;
+        for (var node = index; node < path.Count && length < limit; node++)
+        {
+            var (dx, dy) = (path[node].X - x, path[node].Y - y);
+            length += Fixed.Sqrt(dx * dx + dy * dy);
+            (x, y) = (path[node].X, path[node].Y);
+        }
+        return length;
+    }
+
+    /// <summary>Whether a standing unit touches the way of <paramref name="mover"/> from its place along <paramref name="path"/> for <paramref name="reach"/> (all of it when that is <see cref="Fixed.MaxValue"/>).</summary>
+    private bool TouchesWay(Entity mover, Fixed x, Fixed y, Fixed limit, IReadOnlyList<PathPoint> path, int index, Fixed reach)
+    {
+        var (fromX, fromY) = (mover.X, mover.Y);
+        var walked = Fixed.Zero;
+        for (var node = index; node < path.Count && walked < reach; node++)
+        {
+            var (toX, toY) = (path[node].X, path[node].Y);
+            var (sx, sy) = (toX - fromX, toY - fromY);
+            var length = Fixed.Sqrt(sx * sx + sy * sy);
+            var (ox, oy) = (x - fromX, y - fromY);
+            Fixed rx, ry;
+            if (length == Fixed.Zero) (rx, ry) = (ox, oy);
+            else
+            {
+                var along = Fixed.Min(Fixed.Max((ox * sx + oy * sy) / length, Fixed.Zero), length);
+                (rx, ry) = (ox - sx * along / length, oy - sy * along / length);
+            }
+            if (!FurtherThan(rx, Fixed.Zero, limit) && !FurtherThan(ry, Fixed.Zero, limit) && SquaredReach.Of(limit).ContainsStrictly(rx * rx + ry * ry)) return true;
+            walked += length;
+            (fromX, fromY) = (toX, toY);
+        }
+        return false;
+    }
+
+    /// <summary>Whether a standing ally can be told to make way (<c>moveAllies</c>: not moving, attacking, at an ability or busy).</summary>
+    private bool MakesWay(Entity mover, Entity other)
+        => RelationshipOf(mover.Owner, other.Owner) == Relationship.Allies && !other.HasStatus(UsingAbilityBit) && other.Acquisition is not { Victim.IsValid: true }
+           && DisabledFlagsOf(other) == DisabledMask.None && AiOf(other) is { IsIdle: true, IsBuilding: false };
+
+    /// <summary>The cells allies stand on along the way ahead, as the original's search counts them; <paramref name="blocked"/> when something stands there that does not make way.</summary>
+    private int AlliesOnWay(Entity mover, IReadOnlyList<PathPoint> path, int index, Fixed reach, out bool blocked)
+    {
+        blocked = false;
+        var cells = 0;
+        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
+        var moverRadius = CircleRadius(mover);
+        foreach (var other in _mobiles)
+        {
+            if (other.DestroyRequested || !StandsStill(other, mover, goal) || OnAnotherLevel(mover, other)) continue;
+            var radius = CircleRadius(other);
+            var (x, y, _) = other.FrameEnd(_tick);
+            if (!TouchesWay(mover, x, y, moverRadius + radius + StandingBlockerMargin, path, index, reach)) continue;
+            if (!MakesWay(mover, other))
+            {
+                blocked = true;
+                return 0;
+            }
+            // The cells of the mover's way whose footprint overlaps the ally's.
+            cells += Math.Max(1, (int)((moverRadius + radius) * Fixed.FromInt(2) / Fixed.FromInt(TerrainMap.CellSize)).Ceiling());
+        }
+        return cells;
+    }
+
+    private void ProcessWayThroughs()
+    {
+        var kept = 0;
+        for (var index = 0; index < _wayThroughs.Count; index++)
+        {
+            var claim = _wayThroughs[index];
+            if (claim.Tick > _tick)
+            {
+                _wayThroughs[kept++] = claim;
+                continue;
+            }
+            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false, HasMoveTarget: true } mover && AiOf(mover) is { } ai) MoveAlliesOffWay(mover, ai.PathNodes, ai.PathIndex, claim.Reach);
+        }
+        _wayThroughs.RemoveRange(kept, _wayThroughs.Count - kept);
+    }
+
+    /// <summary>
+    /// <c>aiMoveAwayFromUnit</c>, <c>Pathfinder::getMoveAwayFromPath</c>: each ally that stands on the way ahead goes to the nearest place whose footprint keeps off the mover's whole way. The original
+    /// searches it with its A*; here the cells are tried in the spiral of <c>adjustDestination</c>.
+    /// </summary>
+    private void MoveAlliesOffWay(Entity mover, IReadOnlyList<PathPoint> path, int index, Fixed reach)
+    {
+        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
+        var moverRadius = CircleRadius(mover);
+        var mobiles = _mobiles;
+        for (var number = 0; number < mobiles.Count; number++)
+        {
+            var other = mobiles[number];
+            if (other.DestroyRequested || !StandsStill(other, mover, goal) || OnAnotherLevel(mover, other)) continue;
+            var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
+            var (x, y, _) = other.FrameEnd(_tick);
+            if (!TouchesWay(mover, x, y, limit, path, index, reach) || !MakesWay(mover, other)) continue;
+            var i = TerrainMap.CellOf(x);
+            var j = TerrainMap.CellOf(y);
+            var tries = MaxCellsToTry;
+            var delta = 1;
+            var placed = false;
+            while (tries > 0 && !placed)
+            {
+                for (var leg = 0; leg < 4 && !placed; leg++)
+                {
+                    for (var count = delta; count > 0 && !placed; count--)
+                    {
+                        switch (leg)
+                        {
+                            case 0: i++; break;
+                            case 1: j++; break;
+                            case 2: i--; break;
+                            default: j--; break;
+                        }
+                        tries--;
+                        var (cellX, cellY) = (TerrainMap.CellCenter(i), TerrainMap.CellCenter(j));
+                        if (TouchesWay(mover, cellX, cellY, limit, path, index, Fixed.MaxValue) || !GoalIsFree(other, cellX, cellY)) continue;
+                        AiOf(other)!.OrderMove(this, cellX, cellY, false);
+                        placed = true;
+                    }
+                    if (leg % 2 == 1) delta++;
+                }
+            }
+        }
+    }
+
+    // Written only while a claim waits for the end of its frame, which never happens at 30 Hz.
+    private void DescribeWayThroughs(IStateWriter writer)
+    {
+        if (_wayThroughs.Count == 0) return;
+        writer.BeginArray("wayThroughs");
+        foreach (var claim in _wayThroughs)
+        {
+            writer.BeginObject(null);
+            writer.UInt("mover", claim.Mover.Value);
+            writer.Int("tick", claim.Tick);
+            writer.Fixed("reach", claim.Reach);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    private void LoadWayThroughs(IStateReader state)
+    {
+        if (!state.Has("wayThroughs")) return;
+        foreach (var item in state.Array("wayThroughs")) _wayThroughs.Add(new WayThroughClaim(new EntityId(checked((uint)item.UInt("mover"))), item.Int("tick"), item.Fixed("reach")));
+    }
+
     private void ProcessClearPaths()
     {
         var kept = 0;

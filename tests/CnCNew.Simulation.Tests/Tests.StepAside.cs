@@ -89,6 +89,50 @@ static partial class Tests
         Check.That(driven > Fixed.FromInt(165), $"A car goes round the row ({driven} for 150 straight).");
     }
 
+    /// <summary>
+    /// <c>Pathfinder::moveAllies</c> weighed against the way round (F-125): a car whose only way leads through a gap in a wall where an idle allied car stands has that car move off its way and
+    /// drives through; on open ground the same car goes round the one that stands, which stays where it is. The places at the end of every frame are the same at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AlliesMakeWayWhenTheWayRoundCostsMore()
+    {
+        var wall = Enumerable.Range(0, NavCells).Where(y => y is < 9 or > 11).Select(y => (10, y)).ToArray();
+        (bool Arrived, Fixed StanderMoved, (Fixed X, Fixed Y)[] Places) Drive(SimulationRate rate, bool walled)
+        {
+            var (world, feeder, _) = RatedWorld(rate, StepAsideFiles(), walled ? NavTerrain(wall) : NavTerrain());
+            feeder.Spawn(1, "ForwardCar", x: 40, y: 105);
+            feeder.Spawn(1, "ForwardCar", x: 105, y: 105);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var car = world.Entities.Single(value => value.Template.Name == "ForwardCar" && value.X == Fixed.FromInt(40));
+            var stander = world.Entities.Single(value => value.Template.Name == "ForwardCar" && value.Id != car.Id);
+            Check.That(world.Submit(new SetMoveTargetCommand(new PlayerId(1), 1000, world.Tick, car.Id, Fixed.FromInt(170), Fixed.FromInt(105))).Accepted, "The move is accepted.");
+            var places = new List<(Fixed X, Fixed Y)>();
+            var arrived = false;
+            for (var frame = 0; frame < 900; frame++)
+            {
+                for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+                places.Add((car.X, car.Y));
+                places.Add((stander.X, stander.Y));
+                if (!car.HasMoveTarget && (car.X - Fixed.FromInt(170)).Abs() < Fixed.FromInt(20) && (car.Y - Fixed.FromInt(105)).Abs() < Fixed.FromInt(20)) arrived = true;
+            }
+            var (dx, dy) = (stander.X - Fixed.FromInt(105), stander.Y - Fixed.FromInt(105));
+            return (arrived, Fixed.Sqrt(dx * dx + dy * dy), [.. places]);
+        }
+
+        foreach (var walled in new[] { true, false })
+        {
+            (Fixed X, Fixed Y)[]? thirty = null;
+            foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+            {
+                var (arrived, moved, places) = Drive(rate, walled);
+                Check.That(arrived, $"{rate}, {(walled ? "a gap" : "open ground")}: the car arrived.");
+                if (walled) Check.That(moved > Fixed.FromInt(10), $"{rate}: the car in the gap made way (it moved {moved}).");
+                else Check.That(moved == Fixed.Zero, $"{rate}: on open ground the car that stands stays (it moved {moved}).");
+                if (thirty is null) thirty = places;
+                else Check.That(places.SequenceEqual(thirty), $"{rate}, {(walled ? "a gap" : "open ground")}: both cars stand where the 30 Hz ones stand at the end of every frame.");
+            }
+        }
+    }
+
     /// <summary>A request made in the first tick of a frame above 30 Hz is answered at the frame's end; a save between the two keeps it, and the restored world goes on as the one that was saved.</summary>
     public static void AStepAsideRequestSurvivesASave()
     {

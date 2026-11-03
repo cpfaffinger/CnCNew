@@ -2769,7 +2769,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                 var detour = _pathWait == PathWait.Detour;
                 _pathWait = PathWait.None;
                 world.MarkDirty(Entity);
-                if (!detour || answer is { Status: PathStatus.Found, Points.IsDefaultOrEmpty: false })
+                var found = answer is { Status: PathStatus.Found, Points.IsDefaultOrEmpty: false };
+                // A way through allies that make way keeps the path the object has.
+                var through = detour && _pathComplete && world.PreferWayThroughAllies(Entity, _path, _pathIndex, found ? answer!.Points : null, WayReach(locomotor));
+                if (!through && (!detour || found))
                 {
                     _path.Clear();
                     if (answer is not null) _path.AddRange(answer.Points);
@@ -2818,6 +2821,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _blockerReplanTick = tick;
         // Only a detour that arrives replaces the path: the grid may stop as soon as it knows there is none.
         var result = navigation.FindPathToGoal(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), blockers, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor)));
+        if (_pathComplete && world.PreferWayThroughAllies(Entity, _path, _pathIndex, result is null || result.Points.IsDefaultOrEmpty ? null : result.Points, WayReach(locomotor))) return;
         if (result is null || result.Points.IsDefaultOrEmpty) return;
         _path.Clear();
         _path.AddRange(result.Points);
@@ -2827,6 +2831,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary>The nodes of the path the object follows.</summary>
     public IReadOnlyList<PathPoint> PathNodes => _path;
+
+    /// <summary>The node of <see cref="PathNodes"/> the object heads for.</summary>
+    public int PathIndex => _pathIndex;
+
+    /// <summary>How far along its way a mover looks for what stands on it: the travel of about 25 logic frames of the original at its top speed.</summary>
+    private Fixed WayReach(LocomotorInfo locomotor)
+    {
+        FrameConstants(locomotor, out var topSpeed, out _, out _, out _, out _);
+        return topSpeed * BlockerLookAhead;
+    }
 
     private void PlanPath(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor, bool air)
     {
