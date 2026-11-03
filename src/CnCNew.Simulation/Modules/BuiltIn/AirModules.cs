@@ -70,7 +70,7 @@ public readonly record struct ParkingInfo(Point3 ParkingSpace, Point3 RunwayPrep
 /// (<see cref="ModelGeometry"/>, read from the base pose of the draw model by the client layer), the airfield uses exactly the points of <c>buildInfo</c> instead: the parking, hangar and
 /// taxi points per space, <c>RunwayStart</c>/<c>RunwayEnd</c> per runway, <c>HeliPark01</c> for the helipad, with the height of the apron (the airfield's own height plus the bone's).
 /// </para>
-/// Not modeled: <c>defectAllParkedUnits</c> (a captured airfield's parked units change sides: no module is told of an owner change), the helicopter rally point, the door-hold of
+/// A captured airfield takes what is parked on it along (<see cref="DefectAllParkedUnits"/>). Not modeled: the helicopter rally point, the door-hold of
 /// <c>ProductionUpdate::setHoldDoorOpen</c> (presentation). A carrier is <see cref="FlightDeckBehavior"/>, the same interface in the original.
 /// </summary>
 public class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateModule, IDieModule, IProductionExit
@@ -445,6 +445,30 @@ public class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateMod
             var airborne = Array.Find(aircraft.ModuleArray, module => module is JetAIUpdate) is JetAIUpdate { AllowAirLoco: true };
             if (airborne && !transitioning) continue;
             world.Kill(aircraft.Id);
+        }
+        Purge(world);
+    }
+
+    /// <summary>
+    /// <c>defectAllParkedUnits</c> (<c>Object::defect</c> of the airfield, a capture): what stands on it goes over with it and stands idle; an aircraft in the air that is not taking off or
+    /// landing stays its owner's and, when that is another player than the new one, loses its space and the airfield as its home.
+    /// </summary>
+    public void DefectAllParkedUnits(IWorldServices world, PlayerId newOwner)
+    {
+        Purge(world);
+        foreach (var id in _occupant.Where(value => value.IsValid).ToArray())
+        {
+            if (world.FindEntity(id) is not { EffectivelyDead: false } aircraft) continue;
+            var jet = Array.Find(aircraft.ModuleArray, module => module is JetAIUpdate) as JetAIUpdate;
+            var airborne = jet is { AllowAirLoco: true } && !jet.TakeoffOrLandingInProgress;
+            if (airborne)
+            {
+                if (aircraft.Owner == newOwner) continue;
+                ReleaseSpace(world, aircraft);
+                jet!.ForgetAirfield(Entity.Id);
+                world.MarkDirty(aircraft);
+            }
+            else CrateModules.Defect(world, aircraft, newOwner);
         }
         Purge(world);
     }

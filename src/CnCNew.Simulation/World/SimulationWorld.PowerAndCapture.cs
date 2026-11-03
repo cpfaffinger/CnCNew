@@ -122,6 +122,8 @@ public sealed partial class SimulationWorld
         }
         NotifyOwnerChange(target, newOwner);
         SetOwner(target, newOwner);
+        // Object::defect: "if it has parking places, defect anything parked there."
+        if (Array.Find(target.ModuleArray, module => module is ParkingPlaceBehavior) is ParkingPlaceBehavior parking) parking.DefectAllParkedUnits(this, newOwner);
         MarkDirty(target);
         MarkDirty(actor);
         Emit(SimEventKind.StructureCaptured, target.Id, actor.Id, string.Empty, oldOwner.Value, newOwner);

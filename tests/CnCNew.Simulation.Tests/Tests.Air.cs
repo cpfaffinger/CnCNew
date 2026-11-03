@@ -390,6 +390,23 @@ static partial class Tests
         StepUntil(world, () => first.EffectivelyDead || first.DestroyRequested, 200, "It burns out.");
     }
 
+    /// <summary><c>defectAllParkedUnits</c>: a captured airfield takes its parked jet along; the jet in the air stays its owner's and loses its space.</summary>
+    public static void AirCapturedAirfieldTakesItsParkedJets()
+    {
+        var (world, feeder, airfield, parking, first, _) = ParkedJet();
+        Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "A second jet is queued.");
+        StepUntil(world, () => world.Entities.Count(value => value.Template.Name == "AirTestJet") == 2, 200, "The second jet was produced.");
+        var second = world.Entities.Where(value => value.Template.Name == "AirTestJet").OrderBy(value => value.Id.Value).Last();
+        StepUntil(world, () => JetOf(second).Phase == JetAIUpdate.JetPhase.None, 600, "The second jet parked.");
+        feeder.SetMoveTarget(1, first.Id.Value, 900, 500);
+        StepUntil(world, () => JetOf(first).AllowAirLoco && !first.HasMoveTarget && first.Z == Fixed.FromInt(60), 1500, "The first jet is flying.");
+        world.CaptureStructure(Get(world, "AirDummy"), airfield);
+        Check.That(airfield.Owner == new PlayerId(2) && second.Owner == new PlayerId(2), "The parked jet goes over with its airfield.");
+        Check.That(first.Owner == new PlayerId(1) && !JetOf(first).Airfield.IsValid, "The jet in the air stays its owner's and has no airfield any more.");
+        var spaces = Enumerable.Range(0, parking.SpaceCount).Select(parking.OccupantOf).ToArray();
+        Check.That(!spaces.Contains(first.Id) && spaces.Contains(second.Id), "Its space is free; the parked jet keeps its own.");
+    }
+
     /// <summary>A helicopter produced at a helipad needs no space and no runway: it rises, flies, comes back when idle and settles on the pad.</summary>
     public static void AirHelicopterUsesThePad()
     {

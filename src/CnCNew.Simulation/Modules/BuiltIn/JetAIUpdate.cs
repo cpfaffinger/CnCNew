@@ -136,6 +136,12 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     /// <summary>The airfield that produced (or took in) the aircraft (<c>Object::getProducerID</c>).</summary>
     public EntityId Airfield => _airfield;
 
+    /// <summary><c>setProducer(nullptr)</c> of <c>defectAllParkedUnits</c>: the captured airfield is no longer this aircraft's.</summary>
+    internal void ForgetAirfield(EntityId airfield)
+    {
+        if (_airfield == airfield) _airfield = EntityId.Invalid;
+    }
+
     /// <summary><c>HAS_PENDING_COMMAND</c>.</summary>
     public bool HasPendingCommand => _pending != PendingKind.None;
 
