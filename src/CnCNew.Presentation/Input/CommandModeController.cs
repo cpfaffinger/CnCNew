@@ -236,7 +236,6 @@ public sealed class CommandModeController
         return own.Where(entity => SimulationQueries.CanMove(entity) && entity.Body is { } body && body.Health < body.MaxHealth);
     }
 
-    /// <summary><c>ContainModuleInterface::isValidContainerFor</c> through the simulation's own container module.</summary>
     /// <summary>The units of <paramref name="own"/> that would hijack, convert or sabotage <paramref name="target"/>, or do the one <paramref name="only"/> names.</summary>
     private IEnumerable<Entity> Infiltrators(SimulationWorld world, ImmutableArray<Entity> own, Entity target, CollideEntry only = CollideEntry.None)
         => own.Where(unit => world.CollideEntryOf(Player, unit, target) is var entry && entry != CollideEntry.None && (only == CollideEntry.None || entry == only));
@@ -255,8 +254,9 @@ public sealed class CommandModeController
     private bool Infiltrate(SimulationWorld world, IEnumerable<Entity> units, Entity target)
         => ForEach(units.ToList(), unit => Issue((sequence, tick) => new MoveAndEnterCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
 
+    /// <summary>The units of the selection the enter order would take into <paramref name="target"/> (<see cref="SimulationWorld.CanEnter"/>, the order's own test).</summary>
     private static IEnumerable<Entity> Entrants(SimulationWorld world, ImmutableArray<Entity> own, Entity target)
-        => target.Container is { } container && !own.Contains(target) ? own.Where(entity => container.IsValidContainerFor(world, entity, true)) : [];
+        => target.Container is not null && !own.Contains(target) ? own.Where(entity => world.CanEnter(entity, target)) : [];
 
     // ------------------------------------------------------------------------------------------------ issuing
 

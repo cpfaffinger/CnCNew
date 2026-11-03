@@ -492,6 +492,13 @@ public sealed partial class SimulationWorld : IWorldServices
         return inside.ContainCount - inside.StealthUnitsContained(this) <= 0;
     }
 
+    /// <summary>
+    /// <c>ActionManager::canEnterObject</c> with <c>CHECK_CAPACITY</c>: whether an order would send <paramref name="actor"/> into <paramref name="container"/> - the test of the enter order, and what the
+    /// pointer shows. Another player's building that riders hold is not entered but attacked.
+    /// </summary>
+    public bool CanEnter(Entity actor, Entity container)
+        => container.Container is { } inside && MayEnterAsOwner(actor, container) && inside.IsValidContainerFor(this, actor, EnterChecksRoom(actor, container));
+
     /// <summary><c>canEnterObject</c>'s capacity test: skipped for another player's building held by stealth riders only (it looks empty).</summary>
     private bool EnterChecksRoom(Entity actor, Entity container)
         => container.Owner == actor.Owner || container.Container is not { ContainCount: > 0 } inside || inside.StealthUnitsContained(this) == 0;
