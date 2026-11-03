@@ -71,6 +71,7 @@ public sealed class SpecialPowerCatalog
             var radius = Field("RadiusCursorRadius")?.Value.Value switch
             {
                 Distance distance => Fixed.FromDecimal(distance.Value),
+                decimal real => Fixed.FromDecimal(real),
                 CompatibilityValue compatibility when decimal.TryParse(compatibility.NormalizedValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) => Fixed.FromDecimal(parsed),
                 long whole => Fixed.FromInt(whole),
                 _ => Fixed.Zero,
