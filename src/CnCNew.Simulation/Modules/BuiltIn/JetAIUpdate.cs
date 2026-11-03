@@ -10,11 +10,11 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
 /// <c>JetAIUpdateModuleData</c> (<c>JetAIUpdate.cpp</c>) in simulation units. <c>TakeoffDistForMaxLift</c> (unused by the reference's take-off lift, which scales with the runway
-/// distance), <c>MinHeight</c> (an instance offset of the drawable), <c>SneakyOffsetWhenAttacking</c>/<c>AttackersMissPersistTime</c> (aim offset of attackers) and the <c>Lockon*</c> fields (the
-/// lock-on cursor and the time missiles need to lock) are typed by the catalog schema and have no consumer here.
+/// distance), <c>MinHeight</c> (an instance offset of the drawable) and the <c>Lockon*</c> fields (the lock-on cursor and the time missiles need to lock) are typed by the catalog schema and have
+/// no consumer here.
 /// </summary>
 public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSecond, bool NeedsRunway, bool KeepsParkingSpaceWhenAirborne, long TakeoffPauseTicks, Fixed ParkingOffset,
-    string AttackLocomotor, long AttackLocomotorPersistTicks, string ReturnLocomotor, long ReturnToBaseIdleTicks) : ModuleData
+    string AttackLocomotor, long AttackLocomotorPersistTicks, string ReturnLocomotor, long ReturnToBaseIdleTicks, Fixed SneakyOffset = default, long AttackersMissPersistTicks = 0) : ModuleData
 {
     public static JetAIData Parse(RatedModuleConfiguration configuration)
     {
@@ -33,7 +33,9 @@ public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSe
             Set("AttackLocomotorType"),
             ModuleConfigReader.Ticks(configuration, "AttackLocomotorPersistTime", 0),
             Set("ReturnForAmmoLocomotorType"),
-            ModuleConfigReader.Ticks(configuration, "ReturnToBaseIdleTime", 0));
+            ModuleConfigReader.Ticks(configuration, "ReturnToBaseIdleTime", 0),
+            ModuleConfigReader.Real(configuration, "SneakyOffsetWhenAttacking", Fixed.Zero),
+            ModuleConfigReader.Ticks(configuration, "AttackersMissPersistTime", 0));
     }
 }
 
@@ -115,6 +117,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private long _returnTick;
     private bool _useReturnLocomotor;
     private long _attackExpireTick;
+    // m_attackersMissExpireFrame: while it lies ahead, attackers aim behind the aircraft and nothing on a projectile's way meets it.
+    private long _attackersMissExpireTick;
     private long _checkAirfieldTick;
     /// <summary>The climb speed of the height control, per logic frame of the original.</summary>
     private Fixed _verticalSpeed;
@@ -483,6 +487,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return SimulationTiming.SleepNone;
         }
         UpdateAttackLocomotor(world);
+        UpdateAttackersMiss(world);
         // The airfield states are the reference's state machine, which steps once per logic frame: a state change costs a frame, and what a state moves (taxi, turn, take-off run,
         // landing) is the 30 Hz step, decided once per frame and flown in shares per tick. Between two decisions only the rest of the decided frame is flown.
         if (_frame.Continue(Entity))
@@ -598,6 +603,29 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         // Own minimum (the reference has none): the attack set lasts at least one frame of the original, because 0 means "not attacking" here.
         if (Entity.LastFireTick == now) _attackExpireTick = now + world.Time.AtLeastOneFrame(data.AttackLocomotorPersistTicks);
         else if (_attackExpireTick != 0 && now >= _attackExpireTick) _attackExpireTick = 0;
+    }
+
+    /// <summary>
+    /// <c>JetAIUpdate::update</c>: "if (jet->testStatus(OBJECT_STATUS_IS_ATTACKING))" the attackers miss until <c>AttackersMissPersistTime</c> after it, else the time runs out. Asked once per logic
+    /// frame of the original of the aircraft, at its first tick, as the original's update is.
+    /// </summary>
+    private void UpdateAttackersMiss(IWorldServices world)
+    {
+        if (data.AttackersMissPersistTicks == 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+        if (Entity.Acquisition is { Victim.IsValid: true } || Entity.AttackPlace is not null) _attackersMissExpireTick = world.Tick + data.AttackersMissPersistTicks;
+        else if (_attackersMissExpireTick != 0 && world.Tick >= _attackersMissExpireTick) _attackersMissExpireTick = 0;
+    }
+
+    /// <summary>
+    /// <c>getSneakyTargetingOffset</c>: while the attackers miss, where they aim - <c>SneakyOffsetWhenAttacking</c> along the aircraft's heading (behind it, the data's offset is negative).
+    /// </summary>
+    internal bool SneakyOffset(long tick, out Fixed dx, out Fixed dy)
+    {
+        (dx, dy) = (Fixed.Zero, Fixed.Zero);
+        if (_attackersMissExpireTick == 0 || tick >= _attackersMissExpireTick) return false;
+        var angle = Entity.FrameEndAngle(tick);
+        (dx, dy) = (FixedTrig.Cos(angle) * data.SneakyOffset, FixedTrig.Sin(angle) * data.SneakyOffset);
+        return true;
     }
 
     /// <summary>The idle branch of <c>JetAIUpdate::update</c>: healing, the ammunition return, the stored order and the return after <c>ReturnToBaseIdleTime</c>.</summary>
@@ -1242,6 +1270,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         writer.Int("returnTick", _returnTick);
         writer.Bool("returnLoco", _useReturnLocomotor);
         writer.Int("attackExpire", _attackExpireTick);
+        if (_attackersMissExpireTick != 0) writer.Int("attackersMissExpire", _attackersMissExpireTick);
         writer.Int("checkAirfield", _checkAirfieldTick);
         writer.Fixed("verticalSpeed", _verticalSpeed);
         DescribeFlight(writer);
@@ -1315,6 +1344,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _returnTick = reader.Int("returnTick");
         _useReturnLocomotor = reader.Bool("returnLoco");
         _attackExpireTick = reader.Int("attackExpire");
+        _attackersMissExpireTick = reader.Has("attackersMissExpire") ? reader.Int("attackersMissExpire") : 0;
         _checkAirfieldTick = reader.Int("checkAirfield");
         _verticalSpeed = reader.Fixed("verticalSpeed");
         LoadFlight(reader);

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
@@ -56,6 +57,12 @@ public sealed partial class SimulationWorld
         var conditions = WeaponBonusOf(source);
         // Weapon::privateFireWeapon starts with this: a networked weapon asks its neighbours to join in.
         if (weapon.RequestAssistRange > Fixed.Zero && victim is not null) ProcessRequestAssistance(source, weapon, victim);
+        // "For a sneaky offset, we always target a position rather than an object": an attacking Aurora is aimed at behind itself (JetAIUpdate::getSneakyTargetingOffset).
+        if (victim is not null && IsSneaky(victim, out var sneakyX, out var sneakyY))
+        {
+            (x, y) = (x + sneakyX, y + sneakyY);
+            victim = null;
+        }
         if (weapon.FireOcl.Length > 0) CreateFromList(source, weapon.FireOcl, source.Id, false);
 
         // Scatter (fireWeaponTemplate): a random point within the radius, on the ground. It only redirects a projectile; a delayed hit keeps
@@ -112,6 +119,13 @@ public sealed partial class SimulationWorld
         return Fixed.Zero;
     }
 
+
+    /// <summary><c>AIUpdateInterface::getSneakyTargetingOffset</c>: whether attackers aim beside the object now, and how far.</summary>
+    private bool IsSneaky(Entity entity, out Fixed dx, out Fixed dy)
+    {
+        (dx, dy) = (Fixed.Zero, Fixed.Zero);
+        return Array.Find(entity.ModuleArray, module => module is JetAIUpdate) is JetAIUpdate jet && jet.SneakyOffset(_tick, out dx, out dy);
+    }
 
     /// <summary>
     /// <c>doNamedFireWeaponFollowingWaypointPath</c>: the highest slot that holds a weapon able to follow waypoints fires at the object's own place, whatever its reload says

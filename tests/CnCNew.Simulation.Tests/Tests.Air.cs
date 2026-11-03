@@ -213,9 +213,10 @@ static partial class Tests
     private static JetAIUpdate JetOf(Entity entity) => entity.Modules.OfType<JetAIUpdate>().Single();
 
     /// <summary>An airfield with one jet produced at it, parked and ready: (world, feeder, airfield, parking module, jet).</summary>
-    private static (SimulationWorld World, Feeder Feeder, Entity Airfield, ParkingPlaceBehavior Parking, Entity Jet, SyntheticFixture Fixture) ParkedJet(bool dummy = true, bool terrain = false)
+    private static (SimulationWorld World, Feeder Feeder, Entity Airfield, ParkingPlaceBehavior Parking, Entity Jet, SyntheticFixture Fixture) ParkedJet(bool dummy = true, bool terrain = false,
+        IReadOnlyDictionary<string, string>? files = null)
     {
-        var world = AirWorld(out var fixture, out var feeder, terrain);
+        var world = AirWorld(out var fixture, out var feeder, terrain, files);
         Check.That(fixture.Templates.TryGet("AirTestJet", out var jet) && jet.IsInstantiable && fixture.Templates.TryGet("AirTestAirfield", out var field) && field.IsInstantiable,
             "The airfield and the jet bind (nothing missing): " + string.Join(",", fixture.Templates.Templates.Where(value => !value.IsInstantiable).SelectMany(value => value.MissingModules)));
         feeder.Spawn(1, "AirTestAirfield", owner: 1, x: 500, y: 500);
@@ -388,6 +389,42 @@ static partial class Tests
         for (var i = 0; i < world.Frames(30); i++) world.Step();
         Check.That(first.Body.Health < health - Fixed.FromInt(30) || first.EffectivelyDead, $"It takes 30 % of its maximum health per second ({health} -> {first.Body.Health}).");
         StepUntil(world, () => first.EffectivelyDead || first.DestroyRequested, 200, "It burns out.");
+    }
+
+    /// <summary>
+    /// <c>JetAIUpdate::getSneakyTargetingOffset</c> (F-124): while a jet with <c>SneakyOffsetWhenAttacking</c> attacks (<c>OBJECT_STATUS_IS_ATTACKING</c>, here from the order on, while it taxis), and for
+    /// <c>AttackersMissPersistTime</c> after, a shot at it is aimed that far
+    /// along its heading - behind it - and at the place, not at the jet, so a weapon without a projectile and without a radius hits nothing; a jet without the keys is hit.
+    /// </summary>
+    public static void AirAttackersAimBehindASneakyJet()
+    {
+        Fixed Hit(bool sneaky, int framesAfterAttack)
+        {
+            var files = sneaky
+                ? AirFixtureFiles.ToDictionary(pair => pair.Key, pair => pair.Value.Replace("AttackLocomotorPersistTime = 1000", "AttackLocomotorPersistTime = 1000\n            SneakyOffsetWhenAttacking = -20.0\n            AttackersMissPersistTime = 2000"))
+                : AirFixtureFiles;
+            var (world, feeder, _, _, jet, _) = ParkedJet(files: files);
+            var dummy = Get(world, "AirDummy");
+            Check.That(feeder.Pursue(1, jet.Id.Value, dummy.Id.Value, 1500, 500).Accepted, "The attack is accepted.");
+            // The status is what counts, not the flight: the jet attacks from the order on, while it taxis to take off.
+            for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
+            Check.That(world.AcquiredVictimOf(jet).IsValid, "The jet attacks.");
+            if (framesAfterAttack > 0)
+            {
+                // The taxiing jet gives the victim up when it loses sight of it.
+                StepUntil(world, () => !world.AcquiredVictimOf(jet).IsValid, 300, "The jet gives its attack up.");
+                for (var tick = 0; tick < world.Frames(framesAfterAttack); tick++) world.Step();
+            }
+            Check.That(world.Weapons.TryGet("AirHeliGun", out var gun), "The gun is known.");
+            var before = jet.Body!.Health;
+            world.FireWeaponAt(dummy, gun, jet, jet.X, jet.Y, jet.Z);
+            return before - jet.Body!.Health;
+        }
+
+        Check.That(Hit(false, 0) > Fixed.Zero, "A jet without the keys is hit.");
+        Check.That(Hit(true, 0) == Fixed.Zero, "A sneaky jet that attacks is not hit: the shot goes behind it.");
+        Check.That(Hit(true, 30) == Fixed.Zero, "One second after its attack the attackers still miss.");
+        Check.That(Hit(true, 90) > Fixed.Zero, "Three seconds after it they hit again.");
     }
 
     /// <summary><c>defectAllParkedUnits</c>: a captured airfield takes its parked jet along; the jet in the air stays its owner's and loses its space.</summary>

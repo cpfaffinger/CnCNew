@@ -124,6 +124,8 @@ internal static class ProjectileModules
         var template = other.Template;
         // "Horrible special case for airplanes sitting on airfields."
         if (template.IsKindOf("FS_AIRFIELD") && victim.IsValid && other.Modules.OfType<ParkingPlaceBehavior>().Any(place => place.HasReservedSpace(victim))) return false;
+        // "If something has a Sneaky Target offset, it is momentarily immune to being hit."
+        if (Array.Find(other.ModuleArray, module => module is JetAIUpdate) is JetAIUpdate jet && jet.SneakyOffset(world.Tick, out _, out _)) return false;
         var required = world.RelationshipOf(projectile.Owner, other.Owner) switch
         {
             Relationship.Allies => WeaponInfo.CollideAllies,
