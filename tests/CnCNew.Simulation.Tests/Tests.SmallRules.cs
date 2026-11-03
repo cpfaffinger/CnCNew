@@ -58,6 +58,71 @@ static partial class Tests
         End
         """;
 
+    private static readonly string StealthRulesIni = """
+        Weapon HiddenGun
+          PrimaryDamage = 1.0
+          AttackRange = 100.0
+          DamageType = SMALL_ARMS
+          DeathType = NORMAL
+          DelayBetweenShots = 100
+        End
+        Locomotor HiddenLoco
+          Surfaces = GROUND
+          Speed = 30
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 90
+        End
+        Object HiddenShooter
+          KindOf = INFANTRY SELECTABLE CAN_ATTACK
+          VisionRange = 200.0
+          ShroudClearingRange = 200.0
+          Locomotor = SET_NORMAL HiddenLoco
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY HiddenGun
+          End
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = StealthUpdate Stealth01
+            StealthDelay = 100
+            InnateStealth = Yes
+            StealthForbiddenConditions = ATTACKING
+          End
+        End
+        Object HiddenVictim
+          KindOf = STRUCTURE SELECTABLE
+          Body = StructureBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+        End
+        """;
+
+    /// <summary><c>StealthUpdate::allowedToStealth</c>: <c>STEALTH_NOT_WHILE_ATTACKING</c> - nothing ever set the status it reads, so that nothing that attacks was ever seen.</summary>
+    public static void AnAttackerShowsItself()
+    {
+        foreach (var rate in new[] { SimulationRate.FromTicksPerSecond(30), SimulationRate.FromTicksPerSecond(60), SimulationRate.FromTicksPerSecond(120) })
+        {
+            var files = new Dictionary<string, string>(SmallRuleFiles()) { ["Data/INI/Object/StealthRules.ini"] = StealthRulesIni };
+            var (world, feeder, _) = RatedWorld(rate, files, NavTerrain());
+            feeder.Spawn(1, "HiddenShooter", x: 100, y: 100);
+            feeder.Spawn(2, "HiddenVictim", x: 150, y: 100);
+            for (var step = 0; step < world.Frames(20); step++) world.Step();
+            var shooter = world.Entities.Single(value => value.Template.Name == "HiddenShooter");
+            var victim = world.Entities.Single(value => value.Template.Name == "HiddenVictim");
+            var stealthed = CnCNew.Simulation.Modules.ObjectStatusBits.Index("STEALTHED");
+            Check.That(shooter.HasStatus(stealthed), $"{rate}: it hides.");
+            Check.That(world.Submit(new CnCNew.Simulation.Commands.PursueCommand(new PlayerId(1), 1000, world.Tick, shooter.Id, victim.Id, victim.X, victim.Y)).Accepted, $"{rate}: the attack is ordered.");
+            for (var step = 0; step < world.Frames(3); step++) world.Step();
+            Check.That(!shooter.HasStatus(stealthed), $"{rate}: while it attacks it is seen.");
+        }
+    }
+
     private static IReadOnlyDictionary<string, string> SmallRuleFiles() => new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/SmallRules.ini"] = SmallRulesIni };
 
     /// <summary><c>BuildAssistant::update</c>: "0 is the init, and means you have no override".</summary>

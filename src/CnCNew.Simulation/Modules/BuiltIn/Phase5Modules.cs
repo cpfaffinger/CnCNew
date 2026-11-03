@@ -58,7 +58,7 @@ internal static class Phase5Modules
 /// <see cref="RequiredStatus"/>/<see cref="ForbiddenStatus"/> and <see cref="InnateStealth"/>. The remaining typed-but-not-
 /// applied fields are cosmetic or belong to systems phase 5 does not model: <c>FriendlyOpacityMin/Max</c>, <c>PulseFrequency</c>,
 /// the disguise fields, <c>EnemyDetectionEvaEvent</c>/<c>OwnDetectionEvaEvent</c> (presentation), <c>RevealDistanceFromTarget</c>,
-/// <c>OrderIdleEnemiesToAttackMeUponReveal</c>, <c>UseRiderStealth</c> (no garrison system), <c>BlackMarketCheckDelay</c> (no
+/// <c>OrderIdleEnemiesToAttackMeUponReveal</c>, <c>BlackMarketCheckDelay</c> (no
 /// black-market economy hack) and <c>GrantedBySpecialPower</c> (no special-power system). None of the object's targeting
 /// consumes the resulting <c>STEALTHED</c> status bit yet either: phase 5's <c>FireWeaponCommand</c> is direct-target only,
 /// with no automatic target acquisition or line of sight to hide from — see docs/GAME-RULES.md.
@@ -80,9 +80,13 @@ public sealed record StealthData(
         ModuleConfigReader.Ticks(configuration, "DisguiseRevealTransitionTime", 0),
         ModuleConfigReader.Real(configuration, "RevealDistanceFromTarget", Fixed.Zero))
     {
+        UseRiderStealth = ModuleConfigReader.Bool(configuration, "UseRiderStealth", false),
         DisguiseFx = ModuleConfigReader.Text(configuration, "DisguiseFX"),
         DisguiseRevealFx = ModuleConfigReader.Text(configuration, "DisguiseRevealFX"),
     };
+
+    /// <summary><c>m_useRiderStealth</c>: the rider decides by its own rules whether the vehicle is stealthed.</summary>
+    public bool UseRiderStealth { get; init; }
 
     public string DisguiseFx { get; init; } = string.Empty;
     public string DisguiseRevealFx { get; init; } = string.Empty;
@@ -204,6 +208,10 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     /// </summary>
     public void ReceiveGrant(IWorldServices world, bool active, long frames)
     {
+        // A bike hands the grant on to its rider.
+        if (Entity.Container is RiderChangeContain { Contained.Count: > 0 } bike && world.FindEntity(bike.Contained[0]) is { } rider)
+            foreach (var module in rider.Modules)
+                if (module is StealthUpdate stealth) stealth.ReceiveGrant(world, active, frames);
         if (active)
         {
             Entity.Status |= (1UL << CanStealthBit) | (1UL << StealthedBit);
@@ -257,8 +265,15 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
             if (SquaredReach.Of(data.RevealDistance).Contains(dx * dx + dy * dy)) MarkDetected(world);
         }
         if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
+        // calcStealthOwner: "the rider will determine if the container is stealthed or not".
+        var owner = StealthOwner(world);
+        var rules = ReferenceEquals(owner, Entity) ? this : owner.Modules.OfType<StealthUpdate>().FirstOrDefault() ?? this;
         // StealthUpdate::update: without CAN_STEALTH (innate, or granted by StealthUpgrade) the module does nothing.
-        if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
+        if (!owner.HasStatus(CanStealthBit))
+        {
+            if (!ReferenceEquals(owner, Entity)) Entity.Status &= ~(1UL << StealthedBit);
+            return SimulationTiming.SleepNone;
+        }
         // "Deal with temporary stealth": a grant with a duration ends when it runs out or as soon as the player gives the unit an order ("No exploits").
         if (_framesGranted > 0)
         {
@@ -266,14 +281,14 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
             if (_framesGranted == 0 || CrateModules.AiOf(Entity) is { LastCommandFromPlayer: true }) ReceiveGrant(world, false, 0);
             if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
         }
-        if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world) || ScriptUnstealthed)
+        if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || rules.AnyForbiddenConditionOn(world, Entity) || ScriptUnstealthed)
         {
             _readyTick = long.MaxValue;
             Entity.Status &= ~(1UL << StealthedBit);
         }
         else if (!Entity.HasStatus(StealthedBit))
         {
-            if (_readyTick == long.MaxValue) _readyTick = world.Tick + world.Time.AtLeastOneFrame(data.StealthDelayTicks);
+            if (_readyTick == long.MaxValue) _readyTick = world.Tick + world.Time.AtLeastOneFrame(rules.Data.StealthDelayTicks);
             if (world.Tick >= _readyTick) Entity.Status |= 1UL << StealthedBit;
         }
         return SimulationTiming.SleepNone;
@@ -285,30 +300,39 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         return true; // RequiredStatus/ForbiddenStatus are evaluated against the entity directly, see below.
     }
 
-    private bool AnyForbiddenCondition(IWorldServices world)
+    public StealthData Data => data;
+
+    /// <summary><c>OBJECT_STATUS_IS_ATTACKING</c>: the object is in an attack.</summary>
+    private static bool IsAttacking(Entity entity) => entity.Acquisition is { Victim.IsValid: true } || entity.AttackPlace is not null;
+
+    private Entity StealthOwner(IWorldServices world)
+        => data.UseRiderStealth && Entity.Container is { Contained.Count: > 0 } contain && world.FindEntity(contain.Contained[0]) is { } rider ? rider : Entity;
+
+    /// <summary><c>allowedToStealth</c> with these rules, for the object they decide about: a vehicle's own, or its rider's.</summary>
+    private bool AnyForbiddenConditionOn(IWorldServices world, Entity self)
     {
         // allowedToStealth: no stealth inside a container that is not garrisonable (a transport, a tunnel); inside a garrison a rider may (F-54).
-        if (Entity.ContainedBy.IsValid && world.FindEntity(Entity.ContainedBy)?.Container is { IsGarrisonable: false }) return true;
-        if (data.ForbiddenStatus != 0 && (Entity.Status & data.ForbiddenStatus) != 0) return true;
-        if (data.RequiredStatus != 0 && (Entity.Status & data.RequiredStatus) != data.RequiredStatus) return true;
+        if (self.ContainedBy.IsValid && world.FindEntity(self.ContainedBy)?.Container is { IsGarrisonable: false }) return true;
+        if (data.ForbiddenStatus != 0 && (self.Status & data.ForbiddenStatus) != 0) return true;
+        if (data.RequiredStatus != 0 && (self.Status & data.RequiredStatus) != data.RequiredStatus) return true;
         foreach (var name in data.ForbiddenConditions)
-            if (ConditionActive(name, world)) return true;
+            if (ConditionActive(name, world, self)) return true;
         return false;
     }
 
     /// <summary>
-    /// Maps each <c>StealthForbiddenCondition</c> name to what phase 5 can actually observe. <c>NO_BLACK_MARKET</c> (no
-    /// black-market economy hack) and <c>RIDERS_ATTACKING</c> (no passenger/garrison system) are compiled but never true —
-    /// a documented gap, not a silent one.
+    /// Maps each <c>StealthForbiddenCondition</c> name to what can be observed. <c>NO_BLACK_MARKET</c> is compiled but never true: every line of the data that names it is commented out.
     /// </summary>
-    private bool ConditionActive(string name, IWorldServices world) => name.ToUpperInvariant() switch
+    private bool ConditionActive(string name, IWorldServices world, Entity self) => name.ToUpperInvariant() switch
     {
-        "ATTACKING" => Entity.HasStatus(ObjectStatusBits.Index("IS_ATTACKING")),
-        "MOVING" => Entity.Speed.Abs() > data.MoveThresholdSpeed,
-        "USING_ABILITY" => Entity.HasStatus(ObjectStatusBits.Index("USING_ABILITY")),
-        "FIRING_PRIMARY" or "FIRING_SECONDARY" or "FIRING_TERTIARY" => Entity.LastFireTick == world.Tick,
+        "ATTACKING" => IsAttacking(self),
+        "MOVING" => self.Speed.Abs() > data.MoveThresholdSpeed,
+        "USING_ABILITY" => self.HasStatus(ObjectStatusBits.Index("USING_ABILITY")),
+        "FIRING_PRIMARY" or "FIRING_SECONDARY" or "FIRING_TERTIARY" => self.LastFireTick == world.Tick,
+        // "new past-alpha feature, grr...": the Listening Outpost, whose riders fire from inside.
+        "RIDERS_ATTACKING" => self.Container is { } riders && riders.Contained.Any(id => world.FindEntity(id) is { } rider && world.ContainerLetsFire(rider) && IsAttacking(rider)),
         // StealthUpdate::allowedToStealth: a damage record (not a heal) of this frame of the original or the one before (F-52).
-        "TAKING_DAMAGE" => Entity.LastDamageTick >= 0 && !Entity.LastDamageHealing && world.Time.FramesIn(world.Tick) - world.Time.FramesIn(Entity.LastDamageTick) <= 1,
+        "TAKING_DAMAGE" => self.LastDamageTick >= 0 && !self.LastDamageHealing && world.Time.FramesIn(world.Tick) - world.Time.FramesIn(self.LastDamageTick) <= 1,
         _ => false,
     };
 
