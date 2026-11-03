@@ -572,6 +572,10 @@ public sealed class TemplateCatalog
             BeaconTemplates = [..factions.Factions.Select(faction => faction.BeaconName).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),
+            StructureStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
+                .LastOrDefault(field => field.Name.Equals("StructureStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal structureStiffness ? Fixed.FromDecimal(structureStiffness) : Fixed.FromDecimal(0.5m),
+            DefaultStructureRubbleHeight = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
+                .LastOrDefault(field => field.Name.Equals("DefaultStructureRubbleHeight", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal rubble ? Fixed.FromDecimal(rubble) : Fixed.One,
             UnlookPersistFrames = ResolveUnlookPersistFrames(graph),
             LookCellSize = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("PartitionCellSize", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal cell ? Fixed.FromDecimal(cell) : Fixed.FromInt(40),
@@ -642,6 +646,15 @@ public sealed class TemplateCatalog
     /// (<c>PhysicsBehavior::handleBounce</c>, clamped to 0.01-0.99 there; F-63, docs/SHOCK-WAVE.md).
     /// </summary>
     public Fixed GroundStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
+
+    /// <summary><c>GlobalData::m_structureStiffness</c> (<c>StructureStiffness</c>, 0.5 without the key): how hard a flying object comes back off a building it meets (<c>PhysicsBehavior::onCollide</c>).</summary>
+    public Fixed StructureStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
+
+    /// <summary>
+    /// <c>GlobalData::m_defaultStructureRubbleHeight</c> (<c>DefaultStructureRubbleHeight</c>, 1 without the key): <c>PhysicsBehavior::onCollide</c> compares the height of a falling object with it - the
+    /// object's height in the world, not above the ground, as the original does.
+    /// </summary>
+    public Fixed DefaultStructureRubbleHeight { get; private init; } = Fixed.One;
 
     /// <summary><c>UnlookPersistDuration</c> in logic frames of the original: how long a look goes on after the object looked elsewhere (30 without the key).</summary>
     public long UnlookPersistFrames { get; private init; } = CnCNew.Simulation.Time.SimulationRate.OriginalFramesPerSecond;

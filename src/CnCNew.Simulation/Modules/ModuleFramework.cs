@@ -20,6 +20,9 @@ public abstract record ModuleData;
 /// What modules may use of the world. Deliberately narrow: modules read the tick, draw from the <c>logic</c> stream, find
 /// entities, and mutate the world only through requests (events, destroy, damage, wake), never by touching each other.
 /// </summary>
+/// <summary>What a flight met (<see cref="IWorldServices.MeetWhatStands"/>): whether it touched something immobile, whether that ended it, and the way away from the first it touched.</summary>
+public readonly record struct FlightContact(bool Met, bool Destroyed, Fixed AwayX, Fixed AwayY, Fixed AwayZ);
+
 public interface IWorldServices
 {
     /// <summary>The 99999 the original writes into a height to ask for the top surface at a place.</summary>
@@ -323,6 +326,13 @@ public interface IWorldServices
     /// (death weapons of <c>FireWeaponWhenDeadBehavior</c> and <c>InstantDeathBehavior</c>). An unknown name is reported as a skipped creation, never ignored.
     /// </summary>
     void FireTempWeapon(Entity source, string weaponName, Fixed x, Fixed y, Fixed z);
+
+    /// <summary>
+    /// <c>PhysicsBehavior::onCollide</c> for an object in a physics flight that stands at (<paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/>) after its step: what it meets
+    /// of the immobile objects, falling into a building (the object is destroyed; a vehicle fires <paramref name="buildingWeapon"/> first) or onto anything else immobile (a vehicle
+    /// fires <paramref name="otherWeapon"/>).
+    /// </summary>
+    FlightContact MeetWhatStands(Entity flyer, Fixed x, Fixed y, Fixed z, string buildingWeapon, string otherWeapon);
 
     /// <summary><c>Object::fireCurrentWeapon(pos)</c>/<c>(victim)</c>: fires the current weapon (the locked slot, else the primary one) at a position (aimed at <paramref name="victim"/> when given) when it is ready (false otherwise).</summary>
     bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z, Entity? victim = null);

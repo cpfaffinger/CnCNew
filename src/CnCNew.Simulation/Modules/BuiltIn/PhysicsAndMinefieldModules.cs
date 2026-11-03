@@ -16,7 +16,8 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// <summary>
 /// The <c>PhysicsBehavior</c> fields the module carries, with the defaults of <c>PhysicsBehaviorModuleData</c>. The shock, friction and fall fields are what the flight of a shocked
 /// object reads (F-63, docs/SHOCK-WAVE.md): the frictions per logic frame of the original (<c>parseFrictionPerSec</c>: the value per second times 1/30), the shock rates in
-/// radians per frame, <c>MinFallHeightForDamage</c> as the height (the original turns it into a speed with the gravity, <c>heightToSpeed</c>). The crash-weapon keys have no consumer.
+/// radians per frame, <c>MinFallHeightForDamage</c> as the height (the original turns it into a speed with the gravity, <c>heightToSpeed</c>). The crash weapons are what a flying vehicle
+/// fires when it falls into a building or onto something else immobile (the original's defaults name the two weapons of <c>Weapon.ini</c>).
 /// </summary>
 public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowCollideForce, bool KillWhenRestingOnGround) : ModuleData
 {
@@ -32,6 +33,8 @@ public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowColli
     public Fixed MinFallHeightForDamage { get; init; } = Fixed.FromInt(40);
     public Fixed FallHeightDamageFactor { get; init; } = Fixed.One;
     public Fixed PitchRollYawFactor { get; init; } = Fixed.FromInt(2);
+    public string BuildingCrashWeapon { get; init; } = "VehicleCrashesIntoBuildingWeapon";
+    public string OtherCrashWeapon { get; init; } = "VehicleCrashesIntoNonBuildingWeapon";
 
     public static PhysicsData Parse(RatedModuleConfiguration configuration)
     {
@@ -56,6 +59,10 @@ public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowColli
             MinFallHeightForDamage = ModuleConfigReader.Real(configuration, "MinFallHeightForDamage", defaults.MinFallHeightForDamage),
             FallHeightDamageFactor = ModuleConfigReader.Real(configuration, "FallHeightDamageFactor", defaults.FallHeightDamageFactor),
             PitchRollYawFactor = ModuleConfigReader.Real(configuration, "PitchRollYawFactor", defaults.PitchRollYawFactor),
+            BuildingCrashWeapon = ModuleConfigReader.Find(configuration, "VehicleCrashesIntoBuildingWeaponTemplate") is not null
+                ? ModuleConfigReader.Text(configuration, "VehicleCrashesIntoBuildingWeaponTemplate") : defaults.BuildingCrashWeapon,
+            OtherCrashWeapon = ModuleConfigReader.Find(configuration, "VehicleCrashesIntoNonBuildingWeaponTemplate") is not null
+                ? ModuleConfigReader.Text(configuration, "VehicleCrashesIntoNonBuildingWeaponTemplate") : defaults.OtherCrashWeapon,
         };
     }
 }
@@ -305,6 +312,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     private static readonly Fixed MinStiffness = Fixed.FromDecimal(0.01m);
     private static readonly Fixed SteepFall = Fixed.FromInt(3);
     private static readonly Fixed TinyDelta = Fixed.FromDecimal(0.01m);
+    // MINBOUNCESPEED: 1 / (LOGICFRAMES_PER_SECOND * 5), per frame of the original.
+    private static readonly Fixed MinBounceSpeed = Fixed.One / Fixed.FromInt(150);
     private static readonly int FallingDamageType = NameTables.DamageType.TryIndexOf("FALLING", out var falling) ? falling : DamageTypes.Unresistable;
     private static readonly int SplattedDeathType = NameTables.DeathType.TryIndexOf("SPLATTED", out var splatted) ? splatted : DeathTypes.Normal;
 
@@ -424,6 +433,25 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         else if (stick && !_allowToFall) z = ground;
         if (bounced) (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
         if (bounced && _bounce) _accelZ += bounceZ;
+
+        // The partition's look after the move (PhysicsBehavior::onCollide): what falls into a building is gone; what meets anything immobile stops and is pushed back off it, "like
+        // we're bouncing off the ground" - its speed times the structures' stiffness, at least the speed of a fifth of a second's frame.
+        if (data.AllowCollideForce && world.MeetWhatStands(Entity, x, y, z, data.BuildingCrashWeapon, data.OtherCrashWeapon) is { Met: true } contact)
+        {
+            if (contact.Destroyed)
+            {
+                _flying = false;
+                Entity.InPhysicsFlight = false;
+                world.MarkDirty(Entity);
+                return SimulationTiming.SleepForever;
+            }
+            var speed = Fixed.Max(Fixed.Sqrt(_velocityX * _velocityX + _velocityY * _velocityY + _velocityZ * _velocityZ), MinBounceSpeed);
+            var push = speed * Clamp(world.Templates.StructureStiffness, MinStiffness, MaxFriction);
+            (_velocityX, _velocityY, _velocityZ) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            _accelX += contact.AwayX * push;
+            _accelY += contact.AwayY * push;
+            _accelZ += contact.AwayZ * push;
+        }
 
         var airborne = z > ground;
         var fell = _wasAirborne && !airborne;
