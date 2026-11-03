@@ -64,6 +64,11 @@ public sealed class SettingsStore
             if (root["controls"] is JsonObject controls && !controls.ContainsKey("retaliation")) controls["retaliation"] = true;
             return root;
         }),
+        new SettingsMigration(4, "skirmish.gameSpeed added (30, the original's speed)", root =>
+        {
+            if (root["skirmish"] is JsonObject skirmish && !skirmish.ContainsKey("gameSpeed")) skirmish["gameSpeed"] = SkirmishMemory.NormalGameSpeed;
+            return root;
+        }),
     ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
@@ -209,6 +214,7 @@ public static class SettingsJson
             foreach (var faction in settings.Skirmish.LastFactions) writer.WriteStringValue(faction);
             writer.WriteEndArray();
             writer.WriteNumber("lastStartMoney", settings.Skirmish.LastStartMoney);
+            writer.WriteNumber("gameSpeed", settings.Skirmish.GameSpeed);
             writer.WriteEndObject();
 
             writer.WriteEndObject();
@@ -231,7 +237,7 @@ public static class SettingsJson
         var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
         var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty", "tickRate"]);
-        var skirmish = reader.Section(root, "skirmish", ["lastMap", "lastFactions", "lastStartMoney"]);
+        var skirmish = reader.Section(root, "skirmish", ["lastMap", "lastFactions", "lastStartMoney", "gameSpeed"]);
 
         return new GameSettings(
             new DisplaySettings(
@@ -268,7 +274,8 @@ public static class SettingsJson
             new SkirmishMemory(
                 reader.String(skirmish, "skirmish.lastMap", d.Skirmish.LastMap, nullable: true),
                 reader.StringArray(skirmish, "skirmish.lastFactions", d.Skirmish.LastFactions),
-                reader.Int(skirmish, "skirmish.lastStartMoney", d.Skirmish.LastStartMoney)));
+                reader.Int(skirmish, "skirmish.lastStartMoney", d.Skirmish.LastStartMoney),
+                reader.Int(skirmish, "skirmish.gameSpeed", d.Skirmish.GameSpeed)));
     }
 
     /// <summary>Enum values are stored as camelCase names (<c>Borderless</c> becomes <c>borderless</c>).</summary>

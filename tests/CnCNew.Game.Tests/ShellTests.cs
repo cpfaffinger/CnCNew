@@ -53,6 +53,7 @@ internal static class ShellTests
         harness.Run("Menu shell walks every screen and draws cleanly in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => WalkScreens(data, modern, updating)));
         if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         harness.Run("Options persist and reload", () => OptionsPersist(data));
+        harness.Run("The game speed slider of the skirmish setup shows its number and speeds the match up (the owner's playtest)", () => SkirmishGameSpeed(data));
         harness.Run("The score counters count by the owner of an object: units built, supplies collected, losses and kills", () => ScoreCountersByOwner(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
@@ -846,6 +847,34 @@ internal static class ShellTests
     /// Most events of the simulation name only their object - a finished unit its factory, a deposit the truck, a death the victim and the killer - and carry no player; the
     /// counters must read the owner from the world. They did not, and showed 0 units built, 0 lost and 0 resources for everybody.
     /// </summary>
+    /// <summary>
+    /// <c>SkirmishGameOptionsMenu.cpp</c>, <c>setFPSTextBox</c>, <c>reallyDoStart</c>: the slider stands at the preference (30 at first) with its number beside it; moved it shows the new number,
+    /// "--" above 60, and the match starts that much faster; the setting keeps it. The owner's playtest of 3 November 2026: the slider sat at its start, showed nothing and did nothing.
+    /// </summary>
+    private static void SkirmishGameSpeed(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var tree = shell.CurrentScreen.Tree;
+        var slider = tree.FindByName("SkirmishGameOptionsMenu.wnd:SliderGameSpeed")!;
+        var number = tree.FindByName("SkirmishGameOptionsMenu.wnd:StaticTextGameSpeed")!;
+        TestHarness.Assert(slider.Slider!.Value == 30 && number.Text?.Value == "30", $"the slider starts at 30 and says so ({slider.Slider.Value}, '{number.Text}')");
+        tree.Post(UiEventKind.SliderDone, slider, value: 45);
+        tree.Dispatch();
+        TestHarness.Assert(number.Text?.Value == "45", $"moved, it shows 45 ('{number.Text}')");
+        tree.Post(UiEventKind.SliderDone, slider, value: 61);
+        tree.Dispatch();
+        TestHarness.Assert(number.Text?.Value == "--", $"above 60 there is no limit ('{number.Text}')");
+        tree.Post(UiEventKind.SliderDone, slider, value: 45);
+        tree.Dispatch();
+        Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+        shell.BuildDrawList();
+        shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        var started = shell.DrainOutputs().OfType<StartMatchOutput>().Single().Setup;
+        TestHarness.Assert(Math.Abs(started.Speed - 1.5) < 1e-9 && shell.Settings.Skirmish.GameSpeed == 45, $"the match runs at 45 / 30 and the setting keeps 45 ({started.Speed}, {shell.Settings.Skirmish.GameSpeed})");
+    }
+
     private static void ScoreCountersByOwner(GameData data)
     {
         var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"],

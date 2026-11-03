@@ -46,6 +46,21 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     private const int DefaultArmyEntry = ComputerArmyEntry + 1;
     private string? _selectedMapPath;
     private int _startMoney;
+    private int _gameSpeed = CnCNew.Ui.Settings.SkirmishMemory.NormalGameSpeed;
+
+    /// <summary>The range of <c>SliderGameSpeed</c> (<c>SkirmishGameOptionsMenu.cpp</c>: <c>max(15, min(61, ...))</c>); above 60 there is no limit (<c>GREATER_NO_FPS_LIMIT</c>).</summary>
+    private const int MinGameSpeed = 15, MaxGameSpeed = 61, NoLimitAbove = 60;
+
+    /// <summary><c>setFPSTextBox</c>: the number of the slider, "--" above 60, the original's speed drawn disabled.</summary>
+    private void ShowGameSpeed()
+    {
+        if (Tree.FindByName("SkirmishGameOptionsMenu.wnd:StaticTextGameSpeed") is not { } text) return;
+        text.SetEnabled(_gameSpeed != CnCNew.Ui.Settings.SkirmishMemory.NormalGameSpeed);
+        text.SetText(_gameSpeed > NoLimitAbove ? "--" : _gameSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary><c>reallyDoStart</c>: the slider is the frame rate of the match, at least 15, none above 60 (1,000 frames a second); this port runs the same game faster or slower.</summary>
+    private double GameSpeedFactor => (_gameSpeed > NoLimitAbove ? 1000 : Math.Max(MinGameSpeed, _gameSpeed)) / (double)CnCNew.Ui.Settings.SkirmishMemory.NormalGameSpeed;
     // The room of the local game (docs/NETWORK-PROTOCOL.md section 4): what the team and colour boxes of a slot say travels into the match description.
     private readonly int[] _team = new int[Slots];
     private readonly int[] _start = [-1, -1, -1, -1, -1, -1, -1, -1];
@@ -101,6 +116,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         var money = W("ComboBoxStartingCash");
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
         money.SetComboSelection(MoneyChoices.IndexOf(_startMoney));
+
+        // SkirmishGameOptionsMenuInit: the speed of the preferences (FPS), 15 to 61, beside it its number (setFPSTextBox).
+        _gameSpeed = Math.Clamp(Shell.Settings.Skirmish.GameSpeed, MinGameSpeed, MaxGameSpeed);
+        W("SliderGameSpeed").SetSliderValue(_gameSpeed);
+        ShowGameSpeed();
 
         // SkirmishGameOptionsMenuInit: the map of the preferences (SkirmishPreferences::getPreferredMap), or the first multiplayer map of the cache (getDefaultMap) - the
         // setup never stands without a map unless there is none at all.
@@ -261,9 +281,9 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         // A person plays until the match is decided (D-8); a check's short match (the client's --skirmish-seconds) has its length in game time.
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney, MaxTicks = SkirmishMatchOptions.NoTimeLimit };
         if (Shell.SkirmishMatchSeconds > 0) options = options with { MaxTicks = Shell.Data.Rate.Time.WholeSecondsToTicks(Shell.SkirmishMatchSeconds) };
-        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable() };
+        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable(), Speed = GameSpeedFactor };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
-        _ = Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
+        _ = Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney, GameSpeed = _gameSpeed } });
         Shell.BeginMatchLoading(setup);
     }
 
@@ -284,6 +304,10 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
                 Shell.OpenSkirmishMapSelect(this);
                 break;
             case UiEventKind.ComboSelected: OnCombo(e); break;
+            case UiEventKind.SliderTrack or UiEventKind.SliderDone when e.Source == "SkirmishGameOptionsMenu.wnd:SliderGameSpeed":
+                _gameSpeed = Math.Clamp(e.Value, MinGameSpeed, MaxGameSpeed);
+                ShowGameSpeed();
+                break;
         }
     }
 

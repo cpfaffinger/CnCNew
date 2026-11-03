@@ -93,6 +93,9 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     /// </summary>
     public int LocalSlot { get; init; }
 
+    /// <summary>The setup's game speed as a factor of the original's (<c>SliderGameSpeed</c> / 30): a match of this machine alone runs that much faster or slower.</summary>
+    public double Speed { get; init; } = 1.0;
+
     /// <summary>A faction the seed of the match chooses: what the setup screen calls "Random".</summary>
     public const string RandomFaction = "";
 
@@ -356,7 +359,9 @@ public sealed class LiveMatch : LiveGame
         var match = description.Resolve(data.Templates, terrain, data.Fingerprint, CnCNew.Net.BuildIdentity.Current.Id);
         if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, match, humanPlays).Join(relay);
         var session = SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, setup.Options.CheckpointInterval, data.Fingerprint, CnCNew.Net.BuildIdentity.Current.Id);
-        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(relay);
+        var live = new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(relay);
+        if (setup.Speed != 1.0) live.Speed = setup.Speed;
+        return live;
     }
 
     /// <summary>

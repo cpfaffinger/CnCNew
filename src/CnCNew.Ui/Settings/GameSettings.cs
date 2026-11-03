@@ -57,7 +57,8 @@ public sealed record GeneralSettings(string Language, bool ShowFps, bool PauseOn
 /// <summary>What the skirmish setup screen remembers between sessions.</summary>
 /// <param name="LastMap">Virtual path of the last map (for example <c>Maps/Alpine Assault/Alpine Assault.map</c>), or <c>null</c>.</param>
 /// <param name="LastFactions">Faction names per slot as chosen last time (at most 8).</param>
-public sealed record SkirmishMemory(string? LastMap, ImmutableArray<string> LastFactions, int LastStartMoney)
+/// <param name="GameSpeed">The game speed slider of the setup (<c>SliderGameSpeed</c>, the preference <c>FPS</c>): logic frames a second, 15 to 61; above 60 there is no limit.</param>
+public sealed record SkirmishMemory(string? LastMap, ImmutableArray<string> LastFactions, int LastStartMoney, int GameSpeed = SkirmishMemory.NormalGameSpeed)
 {
     public ImmutableArray<string> LastFactions { get; init; } = LastFactions.IsDefault ? [] : LastFactions;
 
@@ -65,7 +66,11 @@ public sealed record SkirmishMemory(string? LastMap, ImmutableArray<string> Last
         => other is not null
             && string.Equals(LastMap, other.LastMap, StringComparison.Ordinal)
             && LastFactions.SequenceEqual(other.LastFactions, StringComparer.Ordinal)
-            && LastStartMoney == other.LastStartMoney;
+            && LastStartMoney == other.LastStartMoney
+            && GameSpeed == other.GameSpeed;
+
+    /// <summary><c>GlobalData::m_framesPerSecondLimit</c>: the speed of the original, 30 logic frames a second.</summary>
+    public const int NormalGameSpeed = 30;
 
     public override int GetHashCode()
     {
@@ -73,6 +78,7 @@ public sealed record SkirmishMemory(string? LastMap, ImmutableArray<string> Last
         hash.Add(LastMap, StringComparer.Ordinal);
         foreach (var faction in LastFactions) hash.Add(faction, StringComparer.Ordinal);
         hash.Add(LastStartMoney);
+        hash.Add(GameSpeed);
         return hash.ToHashCode();
     }
 }
@@ -90,7 +96,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

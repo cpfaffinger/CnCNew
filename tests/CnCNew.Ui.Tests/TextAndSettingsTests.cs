@@ -457,7 +457,7 @@ public static class TextAndSettingsTests
             var found = result.Issues.Select(issue => $"{issue.Path}:{issue.Code}").ToArray();
             string[] wanted =
             [
-                "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
+                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
                 "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.lastFactions:invalid-type",
                 "audio.ambient:clamped",
             ];
@@ -524,7 +524,7 @@ public static class TextAndSettingsTests
             Assert(result.Issues.Length == GameSettings.CurrentVersion && result.Issues.All(issue => issue.Code == "migrated"), "Every migration step is reported.");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration, migration]), "same schema version");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration with { FromVersion = GameSettings.CurrentVersion }]), "must start below");
-            Assert(SettingsStore.Migrations.Length == 3 && SettingsStore.Migrations[0].FromVersion == 1 && SettingsStore.Migrations[1].FromVersion == 2 && SettingsStore.Migrations[2].FromVersion == 3, "Schema version 4 ships the steps from versions 1, 2 and 3.");
+            Assert(SettingsStore.Migrations.Length == 4 && SettingsStore.Migrations[3].FromVersion == 4, "Schema version 5 ships the steps from versions 1 to 4.");
 
             // Version 1 to 2 (Phase 38): the skin and the device come in at what version 1 meant, the aspect the client never applied becomes the one it drew.
             var version1 = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default))
@@ -533,6 +533,7 @@ public static class TextAndSettingsTests
                 .Replace(",\n    \"skin\": \"modern\"", "", StringComparison.Ordinal)
                 .Replace(",\n    \"tickRate\": 60", "", StringComparison.Ordinal)
                 .Replace(",\n    \"retaliation\": true", "", StringComparison.Ordinal)
+                .Replace(",\n    \"gameSpeed\": 30", "", StringComparison.Ordinal)
                 .Replace(",\n    \"device\": \"\"", "", StringComparison.Ordinal);
             Assert(!version1.Contains("skin", StringComparison.Ordinal) && !version1.Contains("device", StringComparison.Ordinal) && version1.Contains("stretch", StringComparison.Ordinal),
                 "The version 1 file was written as version 1 had it.");
@@ -540,7 +541,7 @@ public static class TextAndSettingsTests
             var upgraded = new SettingsStore(directory).Load();
             // A player who chose nothing under version 1 played the original skin, and keeps it.
             var original = GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = UiSkinName.Original } };
-            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == original && upgraded.Issues.Length == 3 && upgraded.Issues.All(issue => issue.Code == "migrated"),
+            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == original && upgraded.Issues.Length == 4 && upgraded.Issues.All(issue => issue.Code == "migrated"),
                 $"A version 1 file of the defaults loads with the skin it had: {string.Join(", ", upgraded.Issues.Select(issue => issue.Path + ":" + issue.Code))}.");
         }
         finally { Directory.Delete(directory, recursive: true); }
