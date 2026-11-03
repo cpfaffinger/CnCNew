@@ -102,6 +102,7 @@ static partial class Tests
           End
         End
         Object AcqTank
+          CrusherLevel = 2
           KindOf = SELECTABLE VEHICLE
           VisionRange = 150.0
           Locomotor = SET_NORMAL ChaseLoco
@@ -126,6 +127,7 @@ static partial class Tests
         End
         Object AcqDummy
           KindOf = SELECTABLE VEHICLE
+          CrushableLevel = 1
           Locomotor = SET_NORMAL ChaseLoco
           Body = ActiveBody Body01
             MaxHealth = 10000.0
@@ -220,6 +222,23 @@ static partial class Tests
     }
 
     private static Fixed Hurt(Entity entity) => entity.Body!.MaxHealth - entity.Body.Health;
+
+    /// <summary><c>wantToSquishTarget</c>: a computer's tank with a turret does not stand and fire at infantry it can run over, it drives at it with the turret firing; a human player's stands.</summary>
+    public static void AComputerTankRunsInfantryOver()
+    {
+        Fixed Driven(bool computer)
+        {
+            var (world, feeder, fixture) = AcquisitionWorld(computer, ("AcqTank", 1, 50, 50), ("AcqDummy", 2, 110, 50));
+            _ = feeder;
+            _ = fixture;
+            var tank = world.Entities.Single(value => value.Template.Name == "AcqTank");
+            var start = tank.X;
+            for (var step = 0; step < world.Frames(120); step++) world.Step();
+            return tank.X - start;
+        }
+        Check.That(Driven(false) == Fixed.Zero, "A human player's tank stands and fires.");
+        Check.That(Driven(true) > Fixed.FromInt(5), $"A computer's tank drives at what it can crush ({Driven(true)}).");
+    }
 
     private static int ShotsOf(TickResult result, Entity source) => result.Events.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == source.Id);
 

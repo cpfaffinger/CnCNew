@@ -470,7 +470,9 @@ public sealed partial class SimulationWorld
         var turretOnly = mode == AcquireMode.Turret;
         if (IsAsleep(entity) || !CanAttack(entity, victim, turretOnly, out var inRange)) return false;
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
-        if (inRange)
+        // wantToSquishTarget: a computer's tank in range goes on towards the infantry with its turret firing.
+        var squish = inRange && !turretOnly && WantsToSquish(entity, victim);
+        if (inRange && !squish)
         {
             // The unit stops where the 30 Hz unit stops: after the whole step of the frame in which it came into range (nothing to do at 30 Hz).
             if (state.Chasing)
@@ -494,7 +496,8 @@ public sealed partial class SimulationWorld
             return true;
         }
 
-        if (turretOnly || !MayChase(entity, aircraft)) return false;
+        if (squish) AutoFire(entity, victim, turretOnly);
+        if (turretOnly || !MayChase(entity, aircraft)) return squish;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
         // The chase is decided after the updates of the tick: at 30 Hz both objects have taken their whole step by then. Above 30 Hz they are read where the frame they have
         // begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
@@ -517,6 +520,17 @@ public sealed partial class SimulationWorld
         }
 
         return true;
+    }
+
+    /// <summary><c>TAiData::m_aiCrushesInfantry</c> (<c>AIData.ini AICrushesInfantry</c>): the reference default and the shipped value.</summary>
+    private const bool AiCrushesInfantry = true;
+
+    /// <summary><c>wantToSquishTarget</c>: "I can only decide to crush-attack if I am attacking with a turreted weapon."</summary>
+    private bool WantsToSquish(Entity entity, Entity victim)
+    {
+        if (!AiCrushesInfantry || victim.ContainedBy.IsValid || !IsComputerPlayer(entity.Owner) || entity.Template.IsKindOf("DONT_AUTO_CRUSH_INFANTRY")) return false;
+        if (entity.Template.CrusherLevel == 0 || !IsOnAimingTurret(entity, WeaponSlot.Primary) || RelationshipOf(entity.Owner, victim.Owner) == Relationship.Allies) return false;
+        return entity.Template.CrusherLevel > victim.Template.CrushableLevel || Array.Find(victim.ModuleArray, module => module is SquishCollide) is not null;
     }
 
     /// <inheritdoc cref="IWorldServices.OrderRidersToIdle"/>
