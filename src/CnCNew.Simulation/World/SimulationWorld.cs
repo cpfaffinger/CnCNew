@@ -1130,7 +1130,8 @@ public sealed partial class SimulationWorld : IWorldServices
         if (use.TargetKind == SpecialPowerTargetKind.Object && FindEntity(use.Target) is not { DestroyRequested: false }) return CommandRejection.InvalidSpecialPowerTarget;
         var owner = _players.GetValueOrDefault(source.Owner.Value) ?? player;
         if (found.RequiredScience >= 0 && !owner.CompletedSciences.Has(found.RequiredScience)) return CommandRejection.MissingScience;
-        if (source.HasStatus(ObjectStatusBits.UnderConstruction) || !module.IsReady(this)) return CommandRejection.SpecialPowerNotReady;
+        // doSpecialPower: "We are disabled, so ignore" - DISABLED_HELD too, which pauses no countdown.
+        if (source.HasStatus(ObjectStatusBits.UnderConstruction) || !module.IsReady(this) || DisabledFlagsOf(source) != DisabledMask.None) return CommandRejection.SpecialPowerNotReady;
         if (module.StartsAttack && SpecialPowerRouting.FindHandler(source, this, found.Index) is null) return CommandRejection.SpecialPowerHandlerMissing;
         if (SpecialPowerRouting.FindHandler(source, this, found.Index) is { } handler && !handler.ValidatesTarget(this, found.Index, use.AsTarget)) return CommandRejection.InvalidSpecialPowerTarget;
         return 0;

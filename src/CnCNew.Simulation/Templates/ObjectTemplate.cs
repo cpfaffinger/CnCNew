@@ -320,6 +320,9 @@ public sealed class ObjectTemplate
 
     /// <summary>Every locomotor set the object declares (<c>Locomotor = SET_X Name</c>, the first resolvable name of each), by set name (<c>SET_TAXIING</c>, <c>SET_SUPERSONIC</c>, ...); <see cref="Locomotor"/> is the <c>SET_NORMAL</c> entry.</summary>
     public ImmutableDictionary<string, LocomotorInfo> LocomotorSets { get; init; } = ImmutableDictionary<string, LocomotorInfo>.Empty;
+
+    /// <summary>What a set climbs with, by the name of the set; empty for an object that does not climb.</summary>
+    public ImmutableDictionary<string, LocomotorInfo> CliffLocomotors { get; init; } = ImmutableDictionary<string, LocomotorInfo>.Empty;
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
     /// <summary><c>ThingTemplate::m_crusherLevel</c> (<c>Object.cpp canCrushOrSquish</c>): crushes a <see cref="CrushableLevel"/> it exceeds; 0 (the reference default) crushes nothing.</summary>
@@ -548,6 +551,7 @@ public sealed class TemplateCatalog
                 defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable(), timing, rules ?? RuleProfile.Original)
             {
                 LocomotorSets = ResolveLocomotorSets(definition, locomotors),
+                CliffLocomotors = ResolveCliffLocomotors(definition, locomotors),
                 CrateUpgradeArmor = ResolveCrateUpgradeArmor(definition, armors),
                 SecondLifeArmor = ResolveSecondLifeArmor(definition, armors),
             });
@@ -990,6 +994,21 @@ public sealed class TemplateCatalog
             if (field.Value.Value is TaggedReferenceList tagged)
                 foreach (var reference in tagged.References)
                     if (locomotors.TryGetValue(reference.Name, out var info))
+                    {
+                        sets[tagged.Tag] = info;
+                        break;
+                    }
+        return sets.ToImmutable();
+    }
+
+    /// <summary>The locomotor of a set for its cliff cells, for the sets with more than one (<c>LocomotorSet::findLocomotor</c>): Colonel Burton, the Saboteur, the combat bike.</summary>
+    private static ImmutableDictionary<string, LocomotorInfo> ResolveCliffLocomotors(ObjectDefinition definition, ImmutableDictionary<string, LocomotorInfo> locomotors)
+    {
+        var sets = ImmutableDictionary.CreateBuilder<string, LocomotorInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in definition.Fields.Where(value => value.Name.Equals("Locomotor", StringComparison.OrdinalIgnoreCase)))
+            if (field.Value.Value is TaggedReferenceList tagged)
+                foreach (var reference in tagged.References.Skip(1))
+                    if (locomotors.TryGetValue(reference.Name, out var info) && (info.Surfaces & LocomotorSurfaces.Cliff) != 0)
                     {
                         sets[tagged.Tag] = info;
                         break;

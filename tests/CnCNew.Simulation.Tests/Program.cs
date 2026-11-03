@@ -375,6 +375,7 @@ run.Test("Phase 58: a crusher runs over a vehicle", Tests.ACrusherRunsOverAVehic
 run.Test("Phase 58: a vehicle loses its driver", Tests.AVehicleLosesItsDriver);
 run.Test("Phase 58: a rider arms its bike", Tests.ARiderArmsItsBike);
 run.Test("Phase 58: an upgrade changes the locomotor", Tests.AnUpgradeChangesTheLocomotor);
+run.Test("Phase 58: a climber crosses a cliff", Tests.AClimberCrossesACliff);
 run.Test("Phase 58: a carrier comes with its jets", Tests.ACarrierComesWithItsJets);
 run.Test("Phase 58: a carrier launches waves", Tests.ACarrierLaunchesWaves);
 run.Test("Phase 58: a carrier is saved", Tests.ACarrierIsSaved);

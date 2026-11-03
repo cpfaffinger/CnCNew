@@ -841,7 +841,31 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
     /// <summary>The locomotor set the object moves with right now (a jet picks its taxi, attack or return set).</summary>
     protected virtual LocomotorInfo? SelectedLocomotor
-        => _locomotorSet is not null && Entity.Template.LocomotorSets.TryGetValue(_locomotorSet, out var chosen) ? chosen : Entity.Template.Locomotor;
+    {
+        get
+        {
+            if (_onCliff && Entity.Template.CliffLocomotors.TryGetValue(_locomotorSet ?? "SET_NORMAL", out var climbing)) return climbing;
+            return _locomotorSet is not null && Entity.Template.LocomotorSets.TryGetValue(_locomotorSet, out var chosen) ? chosen : Entity.Template.Locomotor;
+        }
+    }
+
+    /// <summary><c>LocomotorSet::m_validLocomotorSurfaces</c>: where the set goes, which may be more than the locomotor it is on.</summary>
+    private LocomotorSurfaces PathSurfaces(LocomotorInfo locomotor)
+        => Entity.Template.CliffLocomotors.TryGetValue(_locomotorSet ?? "SET_NORMAL", out var climbing) ? locomotor.Surfaces | climbing.Surfaces | (Entity.Template.LocomotorSets.TryGetValue(_locomotorSet ?? "SET_NORMAL", out var walking) ? walking.Surfaces : LocomotorSurfaces.None) : locomotor.Surfaces;
+
+    /// <summary><c>chooseGoodLocomotorFromCurrentSet</c>: on a cliff cell the climbing locomotor of a set that has one. Written only when set.</summary>
+    private bool _onCliff;
+
+    /// <summary>Decided with the step of a frame, where the object stands at that frame's beginning.</summary>
+    private void ChooseLocomotorForCell(IWorldServices world)
+    {
+        if (_frameTicksLeft > 0 || world.Navigation is not { } navigation || Entity.Template.CliffLocomotors.IsEmpty) return;
+        var (cellX, cellY) = (TerrainMap.CellOf(Entity.X), TerrainMap.CellOf(Entity.Y));
+        var onCliff = navigation.Terrain.IsInside(cellX, cellY) && (navigation.Terrain.CellAt(cellX, cellY) & CellFlags.Cliff) != 0;
+        if (onCliff == _onCliff) return;
+        _onCliff = onCliff;
+        world.MarkDirty(Entity);
+    }
 
     /// <summary><see cref="SelectedLocomotor"/> for the world.</summary>
     public LocomotorInfo? CurrentLocomotor => SelectedLocomotor;
@@ -1101,11 +1125,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         for (var index = first; index < _column.Length; index++)
         {
             var last = index == _column.Length - 1;
-            var (x, y, layer) = last ? (Entity.MoveTargetX, Entity.MoveTargetY, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)) : (_column[index].X, _column[index].Y, _column[index].Layer);
-            if (fromLayer == layer && navigation.StraightWalkClear(fromX, fromY, x, y, locomotor.Surfaces, layer)) _path.Add(new PathPoint(x, y, layer));
+            var (x, y, layer) = last ? (Entity.MoveTargetX, Entity.MoveTargetY, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor))) : (_column[index].X, _column[index].Y, _column[index].Layer);
+            if (fromLayer == layer && navigation.StraightWalkClear(fromX, fromY, x, y, PathSurfaces(locomotor), layer)) _path.Add(new PathPoint(x, y, layer));
             else
             {
-                var leg = navigation.FindPath(fromX, fromY, x, y, locomotor.Surfaces, fromLayer, layer);
+                var leg = navigation.FindPath(fromX, fromY, x, y, PathSurfaces(locomotor), fromLayer, layer);
                 if (leg.Status != PathStatus.Found)
                 {
                     if (!last) continue;
@@ -1647,6 +1671,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // the action delays of the carriers lie on the frame grid by themselves.
         if (_dock is not null && (_dock.Active || world.Time.IsOriginalFrameBoundary(world.Tick)) && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
+        ChooseLocomotorForCell(world);
         // A shocked object in flight is moved by its physics (F-63): the movement keeps its order and goes on once the object rests on the ground again.
         if (Entity.InPhysicsFlight || HoldsMovement)
         {
@@ -2003,7 +2028,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                 {
                     // The movement profile: the detour is a question to the world's path queue; the path the object has stays until the answer comes.
                     _blockerReplanTick = world.Tick;
-                    world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [..ahead], true, 0, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)));
+                    world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), [..ahead], true, 0, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor))));
                     _pathWait = PathWait.Detour;
                     world.MarkDirty(Entity);
                 }
@@ -2062,7 +2087,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             var turn = Fixed.Min(coming / turnSpeed, Fixed.One) * turnRate * Fixed.FromInt(LookAheadSteps) / Fixed.FromInt(4);
             var angle = Entity.Angle + (difference.IsNegative ? -turn : turn);
             var (aheadX, aheadY) = (FixedTrig.Cos(angle) * coming * Fixed.FromInt(LookAheadSteps), FixedTrig.Sin(angle) * coming * Fixed.FromInt(LookAheadSteps));
-            bool Clear(Fixed x, Fixed y) => navigation.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), locomotor.Surfaces);
+            bool Clear(Fixed x, Fixed y) => navigation.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), PathSurfaces(locomotor));
             if (!Clear(Entity.X + aheadX / Fixed.FromInt(2), Entity.Y + aheadY / Fixed.FromInt(2)) || !Clear(Entity.X + aheadX, Entity.Y + aheadY)) return turnRate;
         }
         return Fixed.Min(speed.Abs() / turnSpeed, Fixed.One) * turnRate;
@@ -2702,7 +2727,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                 return true;
             }
             if (!_pathValid) { _path.Clear(); _pathIndex = 0; }
-            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false, _pathGroup, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)));
+            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), [], false, _pathGroup, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor))));
             _pathWait = PathWait.Plan;
             _pathValid = true;
             _pathObstacles = navigation.ObstacleSum;
@@ -2724,7 +2749,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     {
         _blockerReplanTick = tick;
         // Only a detour that arrives replaces the path: the grid may stop as soon as it knows there is none.
-        var result = navigation.FindPathToGoal(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, blockers, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces));
+        var result = navigation.FindPathToGoal(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), blockers, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor)));
         if (result is null || result.Points.IsDefaultOrEmpty) return;
         _path.Clear();
         _path.AddRange(result.Points);
@@ -2753,10 +2778,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         }
         if (_viaPending)
         {
-            var toDoor = navigation.FindPath(Entity.X, Entity.Y, _viaX, _viaY, locomotor.Surfaces, Entity.Layer, Entity.Layer);
+            var toDoor = navigation.FindPath(Entity.X, Entity.Y, _viaX, _viaY, PathSurfaces(locomotor), Entity.Layer, Entity.Layer);
             if (toDoor.Status == PathStatus.Found)
             {
-                var onward = navigation.FindPath(_viaX, _viaY, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces));
+                var onward = navigation.FindPath(_viaX, _viaY, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor)));
                 _pathComplete = onward.Status == PathStatus.Found;
                 _path.AddRange(toDoor.Points);
                 _path.AddRange(onward.Points);
@@ -2765,7 +2790,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             // The door point cannot be reached (something was built in front of the door): straight to the goal.
             _viaPending = false;
         }
-        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces));
+        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor)));
         _pathComplete = result.Status == PathStatus.Found;
         _path.AddRange(result.Points);
     }
@@ -2871,6 +2896,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_stoppingDistance > Fixed.Zero) writer.Fixed("stoppingDistance", _stoppingDistance);
         if (_locomotorSet is not null) writer.Text("locomotorSet", _locomotorSet);
         if (_upgradedLocomotors) writer.Bool("upgradedLocomotors", true);
+        if (_onCliff) writer.Bool("onCliff", true);
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
@@ -2965,6 +2991,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _stoppingDistance = reader.Has("stoppingDistance") ? reader.Fixed("stoppingDistance") : Fixed.Zero;
         _locomotorSet = reader.Has("locomotorSet") ? reader.Text("locomotorSet") : null;
         _upgradedLocomotors = reader.Has("upgradedLocomotors");
+        _onCliff = reader.Has("onCliff");
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
         var task = reader.Int("task");

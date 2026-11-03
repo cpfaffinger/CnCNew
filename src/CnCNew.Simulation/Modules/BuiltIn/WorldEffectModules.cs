@@ -120,8 +120,7 @@ public sealed record OclUpdateData(string Ocl, ImmutableArray<(string Side, stri
 /// <c>OCLUpdate::update</c>: an object (a supply drop zone, a reinforcement pad) that runs a creation list every random <c>MinDelay..MaxDelay</c>, at its own position or the nearest map edge
 /// (<c>CreateAtEdge</c>), not while it is under construction. The first time it is allowed to create it only starts the timer ("you don't get to actually spread the first try"). A
 /// <c>FactionTriggered</c> object (the reinforcement pads) does nothing while its owner is not a playable side; when one captures it the timer starts, a change of owner restarts it, and the list used
-/// is the <c>FactionOCL</c> whose side equals the owner's <c>PlayerTemplate</c> side. Not modeled: the secondary creation point
-/// (the object's own position, the target of a parachute delivery — <c>CreateFromList</c> has no such parameter).
+/// is the <c>FactionOCL</c> whose side equals the owner's <c>PlayerTemplate</c> side. The object's own position is the second point of the list, where a plane delivers.
 /// </summary>
 public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
 {
@@ -186,11 +185,11 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
                 foreach (var (factionSide, ocl) in data.FactionOcls)
                 {
                     if (!factionSide.Equals(side, StringComparison.Ordinal)) continue;
-                    world.CreateFromList(Entity, ocl, EntityId.Invalid, false, x, y, Entity.Z);
+                    world.CreateFromList(Entity, ocl, EntityId.Invalid, false, x, y, Entity.Z, Entity.X, Entity.Y, Entity.Z, true);
                     break;
                 }
             }
-            else if (data.Ocl.Length > 0 && !data.Ocl.Equals("None", StringComparison.OrdinalIgnoreCase)) world.CreateFromList(Entity, data.Ocl, EntityId.Invalid, false, x, y, Entity.Z);
+            else if (data.Ocl.Length > 0 && !data.Ocl.Equals("None", StringComparison.OrdinalIgnoreCase)) world.CreateFromList(Entity, data.Ocl, EntityId.Invalid, false, x, y, Entity.Z, Entity.X, Entity.Y, Entity.Z, true);
         }
         return SimulationTiming.SleepNone;
     }

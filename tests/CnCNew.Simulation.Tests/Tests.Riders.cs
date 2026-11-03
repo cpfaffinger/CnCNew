@@ -110,6 +110,77 @@ static partial class Tests
         End
         """;
 
+    private static readonly string ClimberIni = """
+        Locomotor ClimberGround
+          Surfaces = GROUND
+          Speed = 60
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 360
+        End
+        Locomotor ClimberCliff
+          Surfaces = CLIFF
+          Speed = 15
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 360
+        End
+        Object Climber
+          KindOf = INFANTRY SELECTABLE
+          Locomotor = SET_NORMAL ClimberGround ClimberCliff
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object Walker
+          KindOf = INFANTRY SELECTABLE
+          Locomotor = SET_NORMAL ClimberGround
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """;
+
+    /// <summary><c>LocomotorSet::findLocomotor</c>, <c>chooseGoodLocomotorFromCurrentSet</c>: a set with a cliff locomotor crosses a cliff, at that locomotor's speed; a set without one does not.</summary>
+    public static void AClimberCrossesACliff()
+    {
+        var frames = new List<long>();
+        foreach (var rate in new[] { SimulationRate.FromTicksPerSecond(30), SimulationRate.FromTicksPerSecond(60), SimulationRate.FromTicksPerSecond(120) })
+        {
+            var files = new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/Climbers.ini"] = ClimberIni };
+            var wall = Enumerable.Range(0, NavCells).Select(y => (15, y));
+            var (world, feeder, _) = RatedWorld(rate, files, NavTerrain(wall));
+            feeder.Spawn(1, "Climber", x: 100, y: 100);
+            feeder.Spawn(1, "Walker", x: 100, y: 160);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var climber = world.Entities.Single(value => value.Template.Name == "Climber");
+            var walker = world.Entities.Single(value => value.Template.Name == "Walker");
+            var (goalX, goalY) = (Fixed.FromInt(185), Fixed.FromInt(100));
+            Check.That(world.Submit(new CnCNew.Simulation.Commands.SetMoveTargetCommand(new PlayerId(1), 1000, world.Tick, climber.Id, goalX, goalY)).Accepted, $"{rate}: the climb is ordered.");
+            Check.That(world.Submit(new CnCNew.Simulation.Commands.SetMoveTargetCommand(new PlayerId(1), 1001, world.Tick, walker.Id, goalX, Fixed.FromInt(160))).Accepted, $"{rate}: the walk is ordered.");
+            var slowest = Fixed.FromInt(1000);
+            var ai = climber.Modules.OfType<AIUpdateInterface>().Single();
+            long steps = 0;
+            for (; steps < world.Frames(1500) && (steps < 2 || climber.HasMoveTarget); steps++)
+            {
+                world.Step();
+                if (ai.CurrentLocomotor!.Surfaces == CnCNew.Simulation.Templates.LocomotorSurfaces.Cliff) slowest = Fixed.Min(slowest, ai.CurrentLocomotor.Speed);
+            }
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            Check.That(climber.X == goalX, $"{rate}: the climber crosses ({climber.X}, {climber.Y}, steps {steps}, target {climber.HasMoveTarget}, cliff speed {slowest}, loco {ai.CurrentLocomotor!.Surfaces}).");
+            Check.That(slowest < Fixed.FromInt(1), $"{rate}: on the cliff it climbs with the cliff's locomotor ({slowest}).");
+            Check.That(walker.X < Fixed.FromInt(160), $"{rate}: the walker does not ({walker.X}).");
+            frames.Add(steps / rate.TicksPerOriginalFrame);
+        }
+        Check.That(frames.Max() - frames.Min() <= 1, $"The climb takes the same frames at every rate ({string.Join(", ", frames)}).");
+    }
+
     private static IReadOnlyDictionary<string, string> RiderFiles() => new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/Riders.ini"] = RiderIni };
 
     /// <summary><c>RiderChangeContain::onContaining</c>: who rides decides the weapon, the command set and the locomotor of the bike; the set of the rider is gone with him.</summary>
