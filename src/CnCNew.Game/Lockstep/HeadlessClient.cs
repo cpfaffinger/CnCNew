@@ -61,7 +61,10 @@ public sealed class HeadlessClient
     public long CorruptAtTick { get; set; } = -1;
     public string Corrupted { get; private set; } = string.Empty;
 
-    /// <summary>The test switch of the rejoin: the next state this client hands over is damaged on its way (one byte of the packed state).</summary>
+    /// <summary>
+    /// The test switch of the rejoin: the next state this client hands over is damaged on its way - cut off after half its packed bytes. One changed byte was not enough: where it fell
+    /// on a part the packing does not need, the state unpacked to the same hash, and the joiner rightly took it.
+    /// </summary>
     public bool DamageNextSnapshot { get; set; }
 
     /// <summary>Snapshots this client handed over, and what the last one cost: bytes of the state, bytes packed, microseconds to write and pack it.</summary>
@@ -100,7 +103,7 @@ public sealed class HeadlessClient
         if (DamageNextSnapshot)
         {
             DamageNextSnapshot = false;
-            packed[packed.Length / 2] ^= 0x5A;
+            packed = packed[..(packed.Length / 2)];
         }
         // Between two ticks: the state after the last step, with nothing of the next bundle in it yet.
         Client.OfferSnapshot(request, new ResumeState(session.World.Tick, session.StateHash(), session.HumanCommandCounts, packed));
