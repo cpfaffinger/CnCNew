@@ -377,6 +377,7 @@ run.Test("Phase 58: a rider arms its bike", Tests.ARiderArmsItsBike);
 run.Test("Phase 58: an upgrade changes the locomotor", Tests.AnUpgradeChangesTheLocomotor);
 run.Test("Phase 58: a climber crosses a cliff", Tests.AClimberCrossesACliff);
 run.Test("Phase 58: a player drives the beam", Tests.APlayerDrivesTheBeam);
+run.Test("Phase 58: a beam ends with its power", Tests.ABeamEndsWithItsPower);
 run.Test("Phase 58: a sale keeps its refund", Tests.ASaleKeepsItsRefund);
 run.Test("Phase 58: a captured derrick pays once", Tests.ACapturedDerrickPaysOnce);
 run.Test("Phase 58: enemies see a superweapon", Tests.EnemiesSeeASuperweapon);

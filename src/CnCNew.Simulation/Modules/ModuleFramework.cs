@@ -380,6 +380,9 @@ public interface IWorldServices
     /// <summary><c>aiGuardPosition(GUARDMODE_NORMAL)</c> for an order that does not come from a player's command.</summary>
     void GuardPlaceFor(Entity unit, Fixed x, Fixed y);
 
+    /// <summary><c>doShroudReveal</c> followed by <c>undoShroudReveal</c>: the player has seen the place once.</summary>
+    void RevealOnce(PlayerId player, Fixed x, Fixed y, Fixed range);
+
     /// <summary><c>DAMAGE_KILLPILOT</c> of <c>ActiveBody::attemptDamage</c> (<c>SimulationWorld.Unmanned.cs</c>).</summary>
     void KillPilot(Entity victim, in DamageInfo info);
 

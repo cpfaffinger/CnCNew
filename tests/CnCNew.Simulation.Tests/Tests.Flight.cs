@@ -613,6 +613,32 @@ static partial class Tests
         Check.That(slow > Fixed.Zero && slow < Fixed.FromInt(10), $"A click drives it at the manual speed ({slow}).");
     }
 
+    /// <summary><c>ParticleUplinkCannonUpdate::update</c>: "we must end the special power early": a beam whose building loses its power decays at once.</summary>
+    public static void ABeamEndsWithItsPower()
+    {
+        long Lasted(bool cut)
+        {
+            var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)], objects: [Placed("BetaCannon", 100m, 200m, "teamB", "Cannon")]);
+            var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+            Run(session, session.Frames(3));
+            var cannon = NamedIn(session, "Cannon")!;
+            var module = cannon.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
+            Check.That(session.Issue(cannon.Owner, (sequence, tick) => new UseSpecialPowerCommand(cannon.Owner, sequence, tick, cannon.Id, "UplinkPower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(300), Fixed.FromInt(200), 0)).Accepted, "The power is used.");
+            Run(session, 1);
+            Run(session, session.Frames(8));
+            if (cut) session.World.DisableByEmpUntil(cannon, session.World.Tick + session.Frames(600));
+            long frames = 0;
+            while (module.InUse && frames < session.Frames(300))
+            {
+                Run(session, 1);
+                frames++;
+            }
+            return frames;
+        }
+        var (whole, cut) = (Lasted(false), Lasted(true));
+        Check.That(cut < whole, $"A beam without its power ends early ({cut} against {whole}).");
+    }
+
     public static void FlightBattleBusHasTwoLives()
     {
         var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)],

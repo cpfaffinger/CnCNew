@@ -1178,7 +1178,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
 /// </summary>
 public sealed record ParticleUplinkData(string PowerName, string BeamObject, string RemnantObject, string GroundHitFx, string BeamLaunchFx, long LaunchFxTicks, long WidthGrowTicks, long BeamTravelTicks,
     long TotalFiringTicks, Fixed SwathDistance, Fixed SwathAmplitude, long TotalScorchMarks, int TotalDamagePulses, Fixed DamagePerSecond, int DamageType, int DeathType, Fixed DamageRadiusScalar,
-    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default, long BeginChargeTicks = 0, long RaiseAntennaTicks = 0, long ReadyDelayTicks = 0, long DoubleClickTicks = 0) : ModuleData
+    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default, long BeginChargeTicks = 0, long RaiseAntennaTicks = 0, long ReadyDelayTicks = 0, long DoubleClickTicks = 0, Fixed RevealRange = default) : ModuleData
 {
     public static ParticleUplinkData Parse(RatedModuleConfiguration configuration)
     {
@@ -1196,7 +1196,7 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
             ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
             ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
             ModuleConfigReader.Ticks(configuration, "BeginChargeTime", 0), ModuleConfigReader.Ticks(configuration, "RaiseAntennaTime", 0), ModuleConfigReader.Ticks(configuration, "ReadyDelayTime", 0),
-            ModuleConfigReader.Ticks(configuration, "DoubleClickToFastDriveDelay", 0));
+            ModuleConfigReader.Ticks(configuration, "DoubleClickToFastDriveDelay", 0), ModuleConfigReader.Real(configuration, "RevealRange", Fixed.Zero));
     }
 }
 
@@ -1208,7 +1208,7 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// — and the use ends when the beam has decayed. A computer-controlled owner (and so a scripted use) lets the beam sweep an S curve across the target
 /// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
 /// drives it by clicks (<see cref="Steer"/>, a second click soon after the first drives it fast), and without one the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
-/// stages (presentation, only visible through the power's own readiness), the shroud reveal around the beam, the abort of a beam whose building is underpowered or disabled, the
+/// stages (presentation, only visible through the power's own readiness),, the
 /// sounds and the scorch marks. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
 /// waypoint at <c>ManualFastDrivingSpeed</c> (the path is followed in order; the reference picks a random link at a fork) and stays at the last one.
 /// </summary>
@@ -1348,6 +1348,8 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         if (Entity.HasStatus(ObjectStatusBits.UnderConstruction)) return SimulationTiming.SleepNone;
         var now = world.Tick;
         if (_startAttack > now) return SimulationTiming.SleepNone;
+        // "We must end the special power early! ABORT! ABORT!"
+        if (_startDecay > now && (world.DisabledFlagsOf(Entity) & (DisabledMask.Underpowered | DisabledMask.Emp | DisabledMask.Subdued | DisabledMask.Hacked)) != 0) _startDecay = now;
         var birth = _startAttack + data.BeamTravelTicks;
         var decayStart = _startDecay + data.BeamTravelTicks;
         var death = decayStart + data.WidthGrowTicks;
@@ -1386,6 +1388,8 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
             if (_nextScorch <= now)
             {
                 _scorches++;
+                // "Also reveal vision because the owning player has full rights to watch the carnage he created!"
+                if (data.RevealRange > Fixed.Zero) world.RevealOnce(Entity.Owner, _current.X, _current.Y, data.RevealRange);
                 if (data.GroundHitFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.GroundHitFx, 0, _current.X, _current.Y, _current.Z);
                 // The n-th share of the beam's life is cut off in frames of the original, then scaled (the same frame at every rate).
                 _nextScorch = data.TotalScorchMarks > 0 ? birth + world.Time.OriginalFrames(world.Time.ToOriginalFrames(death - birth) * _scorches / data.TotalScorchMarks) : death + TickOrder.Next;

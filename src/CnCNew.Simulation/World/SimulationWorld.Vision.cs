@@ -144,6 +144,13 @@ public sealed partial class SimulationWorld
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
     private static readonly int DisguisedBit = ObjectStatusBits.Index("DISGUISED");
 
+    /// <inheritdoc cref="IWorldServices.RevealOnce"/>
+    public void RevealOnce(PlayerId player, Fixed x, Fixed y, Fixed range)
+    {
+        if (_vision is null || SlotOf(player) is not (>= 0 and var slot)) return;
+        _unlooks.Enqueue((Time.FramesIn(_tick), new LookRecord(x, y, range, 1UL << slot, 0, 0)));
+    }
+
     private void RevealTo(VisionMap vision, ulong viewers, Fixed x, Fixed y, Fixed range)
     {
         for (var slot = 0; viewers != 0; slot++, viewers >>= 1)
