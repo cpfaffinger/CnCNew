@@ -72,6 +72,9 @@ public sealed class FlightDeckBehavior(FlightDeckData deck) : ParkingPlaceBehavi
     /// <summary>Whether a runway's ramp stands up (<c>m_rampUp</c>), which the model shows as its door.</summary>
     public bool RampIsUp(int runway) => _rampUp[runway];
 
+    /// <summary>The ramp has come down again after a launch: the model's door is closing, or closed.</summary>
+    public bool RampHasComeDown(int runway) => !_rampUp[runway] && _nextWave[runway] != 0;
+
     /// <summary>What the carrier was last told.</summary>
     public DeckOrder Order => _order;
 
@@ -349,7 +352,11 @@ public sealed class FlightDeckBehavior(FlightDeckData deck) : ParkingPlaceBehavi
         if (_catapultTick[runway] <= now)
         {
             _catapultTick[runway] = Forever;
-            if (runway < 2 && deck.CatapultSystems[runway].Length > 0) world.Emit(SimEventKind.DeckCatapult, Entity.Id, EntityId.Invalid, deck.CatapultSystems[runway], runway);
+            if (runway < 2 && deck.CatapultSystems[runway].Length > 0)
+            {
+                var start = InfoOfSpace(world, runway).RunwayPrep;
+                world.EmitAt(SimEventKind.DeckCatapult, Entity.Id, EntityId.Invalid, deck.CatapultSystems[runway], runway, start.X, start.Y, start.Z);
+            }
         }
         if (_rampUp[runway] && _lowerRampTick[runway] <= now) _rampUp[runway] = false;
     }

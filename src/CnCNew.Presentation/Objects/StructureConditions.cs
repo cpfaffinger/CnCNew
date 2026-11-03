@@ -212,10 +212,12 @@ public sealed class StructureConditionTracker
         DeliverPayloadAIUpdate? plane = null;
         CheckpointUpdate? checkpoint = null;
         SlavedUpdate? drone = null;
+        FlightDeckBehavior? deck = null;
         foreach (var module in entity.Modules)
         {
             switch (module)
             {
+                case FlightDeckBehavior value: deck = value; break;
                 case ProductionUpdate value: production = value; break;
                 case DeliverPayloadAIUpdate value: plane = value; break;
                 case CheckpointUpdate value: checkpoint = value; break;
@@ -226,13 +228,25 @@ public sealed class StructureConditionTracker
         // A producer without door animations and without a construction-complete phase, and a drone that cannot repair, have nothing to remember.
         if (production is { Data: { NumDoorAnimations: 0, ConstructionCompleteTicks: 0 } }) production = null;
         if (drone is { CanRepair: false }) drone = null;
-        if (production is null && plane is null && checkpoint is null && drone is null) return ModelConditionSet.Empty;
+        if (production is null && plane is null && checkpoint is null && drone is null && deck is null) return ModelConditionSet.Empty;
         if (!_entries.TryGetValue(entity.Id.Value, out var entry)) _entries[entity.Id.Value] = entry = new Entry();
         var set = ModelConditionSet.Empty;
         if (production is not null) set = Production(entity, world, production, set);
         if (plane is not null) set = Plane(entry, plane, set);
         if (checkpoint is not null) set = Checkpoint(entry, checkpoint, set);
         if (drone is not null) set = Drone(entry, drone, set);
+        if (deck is not null) set = Ramps(deck, set);
+        return set;
+    }
+
+    /// <summary><c>FlightDeckBehavior::update</c>: the ramp of a runway is the door after the ones of production, "this code will need to be rewritten or more modelcondition flags will need to be added".</summary>
+    private static ModelConditionSet Ramps(FlightDeckBehavior deck, ModelConditionSet set)
+    {
+        for (var runway = 0; runway < Math.Min(deck.RunwayCount, 2); runway++)
+        {
+            if (deck.RampIsUp(runway)) set = set.With(runway == 0 ? ModelConditions.Parse("DOOR_2_OPENING") : ModelConditions.Parse("DOOR_3_OPENING"));
+            else if (deck.RampHasComeDown(runway)) set = set.With(runway == 0 ? ModelConditions.Parse("DOOR_2_CLOSING") : ModelConditions.Parse("DOOR_3_CLOSING"));
+        }
         return set;
     }
 

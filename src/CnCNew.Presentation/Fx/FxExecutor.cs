@@ -107,6 +107,10 @@ public sealed class FxExecutor
             case SimEventKind.WeaponFired:
                 WeaponFired(simEvent, view);
                 break;
+            case SimEventKind.DeckCatapult:
+                if (_catalog.FindParticleSystem(simEvent.Text) is { } steam) Particles.Spawn(steam, new ParticleSpawn(new Vector3(FixedConvert.ToSingle(simEvent.X), FixedConvert.ToSingle(simEvent.Y), FixedConvert.ToSingle(simEvent.Z))));
+                else Count("particle-system-missing");
+                break;
             case SimEventKind.EntityDamaged:
                 Damaged(simEvent, view);
                 break;
