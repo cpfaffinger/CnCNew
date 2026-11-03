@@ -262,7 +262,8 @@ public sealed class FxCatalog
         Fill(levels, level, tokens[1]);
     }
 
-    private static readonly ImmutableHashSet<string> ModuleSoundKeys = ImmutableHashSet.Create(Names, "EnterSound", "ExitSound", "ParachuteOpenSound", "PackSound", "UnpackSound", "TriggerSound");
+    private static readonly ImmutableHashSet<string> ModuleSoundKeys = ImmutableHashSet.Create(Names, "EnterSound", "ExitSound", "ParachuteOpenSound", "PackSound", "UnpackSound", "TriggerSound",
+        "RunningSound", "ClicketyClackSound", "WhistleSound", "PoweringUpSoundLoop", "UnpackToIdleSoundLoop", "FiringToPackSoundLoop", "GroundAnnihilationSoundLoop");
 
     private static ObjectFxInfo ParseObject(ObjectDefinition obj)
     {

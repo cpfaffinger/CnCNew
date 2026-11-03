@@ -1104,6 +1104,14 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     public EntityId Gattling => _gattling;
     public Point3 InitialTarget => _initialTarget;
 
+    /// <summary>Where the gattling's aim point stands as it creeps toward the target (<c>m_gattlingTargetPosition</c>).</summary>
+    public Point3 GattlingTarget => _gattlingTarget;
+
+    /// <summary>The ship orbits and its gattling has fired in the last frames: it strafes the ground toward its target.</summary>
+    public bool Strafing(IWorldServices world)
+        => _status == GunshipStatus.Orbiting && data.Strafes && world.FindEntity(_gattling) is { LastFireTick: >= 0 } gattling
+           && world.Tick - gattling.LastFireTick <= world.Time.OriginalFrames(GattlingFiringWindowFrames);
+
     /// <summary><c>isActive</c>: the gunship is inserting or orbiting.</summary>
     public bool IsActive => _status < GunshipStatus.Departing;
 

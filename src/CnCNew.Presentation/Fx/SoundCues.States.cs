@@ -6,7 +6,7 @@ namespace CnCNew.Presentation.Fx;
 
 /// <summary>
 /// The sounds the original plays where a state changes: the move (<c>AIInternalMoveToState::startMoveSound</c>), a worse condition (<c>ActiveBody::attemptDamage</c>), stealth
-/// (<c>StealthUpdate::update</c>), a chute that opens and an ability that packs or unpacks. The simulation raises no event for them, so they are read from the world once per logic frame of the
+/// (<c>StealthUpdate::update</c>), a chute that opens, an ability that packs or unpacks, and a locomotive's clatter and whistle. The simulation raises no event for them, so they are read from the world once per logic frame of the
 /// original. Loops are not played here: <c>SoundMoveLoop</c> and <c>PrepSoundLoop</c> need a voice that is ended with the state.
 /// </summary>
 public sealed partial class SoundCueDeriver
@@ -14,7 +14,7 @@ public sealed partial class SoundCueDeriver
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
 
-    private readonly record struct Seen(bool Moving, int Damage, bool Stealthed, bool Detected, bool Opened, byte Pack, int Triggers);
+    private readonly record struct Seen(bool Moving, int Damage, bool Stealthed, bool Detected, bool Opened, byte Pack, int Triggers, int TrackPoint = -1, long Whistle = -1);
 
     private readonly Dictionary<uint, Seen> _seen = [];
 
@@ -30,6 +30,12 @@ public sealed partial class SoundCueDeriver
             {
                 if (module is ParachuteContain chute) now = now with { Opened = chute.Opened };
                 else if (module is SpecialAbilityUpdate ability) now = now with { Pack = ability.PackPhase, Triggers = ability.Triggers };
+                else if (module is RailroadBehavior { IsLocomotive: true } train)
+                    now = now with
+                    {
+                        TrackPoint = train.InTunnel ? -1 : train.CurrentPoint,
+                        Whistle = train.Conductor == RailroadBehavior.ConductorStates.WaitAtStation && train.WaitAtStationTimer == world.Time.ToOriginalFrames(train.Data.WaitAtStationTicks) / 4 ? train.WaitAtStationTimer : -1,
+                    };
             }
             var known = _seen.TryGetValue(entity.Id.Value, out var was);
             _seen[entity.Id.Value] = now;
@@ -54,6 +60,9 @@ public sealed partial class SoundCueDeriver
                 else if (now.Pack == SpecialAbilityUpdate.PhaseUnpacking) Play("UnpackSound");
             }
             if (now.Triggers > was.Triggers) Play("TriggerSound");
+            // RailroadBehavior::updatePositionTrackDistance: a locomotive "just rode over a join IN the tracks"; a quarter of the station's wait before it leaves it whistles.
+            if (now.TrackPoint >= 0 && now.TrackPoint != was.TrackPoint) Play("ClicketyClackSound");
+            if (now.Whistle >= 0 && was.Whistle < 0) Play("WhistleSound");
         }
         if (_seen.Count > 2 * world.Entities.Count + 64)
             foreach (var id in _seen.Keys.Where(id => world.FindEntity(new Simulation.Ids.EntityId(id)) is null).ToArray()) _seen.Remove(id);

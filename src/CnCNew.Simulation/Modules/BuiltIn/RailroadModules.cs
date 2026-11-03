@@ -169,6 +169,13 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
 
     public bool IsLocomotive => data.IsLocomotive;
     public ConductorStates Conductor => _state;
+
+    /// <summary>The track point a locomotive passed last (<c>m_currentPointHandle</c>), -1 before the first; whether it is in a tunnel or on a bridge.</summary>
+    public int CurrentPoint => _currentPointHandle;
+    public bool InTunnel => _inTunnel;
+
+    /// <summary>The logic frames of the original left to wait at a station (<c>m_waitAtStationTimer</c>).</summary>
+    public long WaitAtStationTimer => _waitAtStationTimer;
     public EntityId Trailer => _trailer;
     public bool IsWaitingInWings => _waitingInWings;
     public bool IsEndOfLine => _endOfLine;

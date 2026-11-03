@@ -34,6 +34,7 @@ internal static class AttachedEffectsTests
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
         harness.Run("An effect projectile with Model = NULL draws no model", () => NullModel(data));
         harness.Run("A moving truck raises dust, a standing one none", () => TreadDebris(data));
+        harness.Run("The Spectre's gattling strafes the ground with smoke while the gunship is seen", () => SpectreStrafe(data));
         harness.Run("A muzzle on a turret turns with the turret", () => TurretMuzzle(data));
         harness.Run("The acceptance scene acc-flames: what burns and smokes, by system", () => AcceptanceScene(data));
         return harness.Failures;
@@ -196,6 +197,25 @@ internal static class AttachedEffectsTests
         var stats = scene.Attached.Stats;
         Console.WriteLine($"       treads: {stats}");
         TestHarness.Assert(beforeMove == 0 && stats.MotionSystems > 0, $"no debris while it stands, debris once it drives ({beforeMove}, {stats.MotionSystems})");
+    }
+
+    /// <summary><c>SpectreGunshipUpdate::update</c>: the gattling's smoke on the ground toward the target, once a frame while the gunship orbits and fires and the viewer sees it.</summary>
+    private static void SpectreStrafe(GameData data)
+    {
+        var scenario = new DemoScenario("attached-spectre", "attached-spectre", "attached-spectre", 2400,
+            [new ScenarioUnit("centre", "AirF_AmericaCommandCenter", 1, -260, -80, 0f)],
+            [new ScenarioOrder(30, "centre", ScenarioOrderKind.UsePower, X: 40f, Y: 0f, Template: "AirF_SuperweaponSpectreGunship")], 0f, 0f)
+        {
+            HumanFaction = "FactionAmericaAirForceGeneral",
+            OpponentFaction = "FactionChina",
+            PowersReady = true,
+            Sciences = ["SCIENCE_SpectreGunship1"],
+        };
+        var scene = LiveScenario.Create(data, scenario, Viewport);
+        long beforeOrbit = -1;
+        Run(scene, () => { if (beforeOrbit < 0 && scene.World.Tick >= scene.World.Time.OriginalFrames(60)) beforeOrbit = scene.Attached.StrafeSystemsStarted; });
+        Console.WriteLine($"       spectre: {scene.Attached.StrafeSystemsStarted} strafing systems");
+        TestHarness.Assert(beforeOrbit == 0 && scene.Attached.StrafeSystemsStarted > 30, $"no smoke before the gunship orbits, a system a frame while it strafes ({beforeOrbit}, {scene.Attached.StrafeSystemsStarted})");
     }
 
     private static void AcceptanceScene(GameData data)

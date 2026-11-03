@@ -223,6 +223,10 @@ models lack bones their states name - the original then puts those systems at th
 
 A bone read from the rest pose stands where it would stand with the turret facing forward. The owner saw every muzzle flash and every flame keep to the hull. `ModelBoneTable.FindPosed` poses the model with the turret's yaw and pitch (`TurretPose`, carried by `ProjectedEntity`), `AttachedEffects.PosedBones` reads the bones of a state through it, and `FxExecutor.WeaponFired` hands the bone's matrix on as the primary transform (`IFxWorldView.GetWeaponMuzzleTransform`), so a flash also points where the barrel points. `AttachedEffectsTests` turns a Crusader's turret by a quarter and reads both.
 
+### The Spectre's strafing smoke (Phase 59)
+
+`SpectreGunshipUpdate::update`: while the gunship orbits and its gattling fires, `GattlingStrafeFXParticleSystem` (`SpectreGattlingArmsSmoke` in the data) starts once a logic frame of the original within five units of the gattling's aim point - only when the gunship is visible to the local player. `AttachedEffectCatalog.StrafeSystems` names the system per template, `AttachedEffects` starts it for a gunship the projector shows (`SpectreGunshipUpdate.Strafing`, `GattlingTarget`), the client random draws the spread. Test `AttachedEffectsTests` "The Spectre's gattling strafes the ground" (298 systems in the scene, none before the gunship orbits). Not seen by a person.
+
 ## Sound cues
 
 `SoundCue(Tick, EventName, Kind, Position?, Entity, Player, Volume, Priority, Origin)` with `Kind` Effect, Voice, Eva,

@@ -91,6 +91,8 @@ internal static class AudioDirectorTests
         var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"), rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Director drives a real match: deterministic, audible, bounded, WAV dump", () => RealDataRun(data));
         harness.Run("State sounds on real data: a unit that moves is heard", () => StateSoundsOnRealData(data));
+        harness.Run("The train of Alpine Assault: it runs with its loop and clatters over the joins of its track", () => TrainSounds(data));
+        harness.Run("The particle cannon's loops follow its state: unpacked and ready, then firing with the beam's annihilation", () => CannonLoops(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
     }
@@ -904,6 +906,53 @@ internal static class AudioDirectorTests
         }
         Console.WriteLine($"       state sounds: {string.Join(", ", origins.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}={pair.Value}"))}");
         TestHarness.Assert(origins.GetValueOrDefault("Object.SoundMoveStart") > 0, "units that start to move are heard");
+    }
+
+    /// <summary>
+    /// <c>RailroadBehavior</c>: the locomotive's <c>RunningSound</c> while it runs, its <c>ClicketyClackSound</c> at the joins of the track outside tunnels. The session of the original AI places
+    /// every object of the map, the train among them.
+    /// </summary>
+    private static void TrainSounds(GameData data)
+    {
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard)
+            { AutoPlay = true, Ai = [new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original), new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original)] };
+        var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var view = new LiveAudioView(live);
+        var (clacks, running) = (0, 0);
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 120; frame++)
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            clacks += live.DrainSoundCues().Count(cue => cue.Origin == "Object.ClicketyClackSound");
+            if (frame % CnCNew.Tests.TestTime.FramesPerSecond == 0 && live.Frame.Drawables.Any(drawable => view.StateLoops(drawable).Any(loop => loop.Slot == 5))) running++;
+        }
+        Console.WriteLine($"       train: {clacks} joins heard, running in {running} of 120 seconds");
+        TestHarness.Assert(clacks > 0 && running > 0, $"the train clatters ({clacks}) and runs with its loop ({running})");
+    }
+
+    /// <summary><c>ParticleUplinkCannonUpdate::setLogicalStatus</c>: a ready cannon holds its unpacking loop; fired, the firing loop and the annihilation at the beam.</summary>
+    private static void CannonLoops(GameData data)
+    {
+        var scenario = new DemoScenario("cannon-loops", "cannon-loops", "cannon-loops", 600,
+            [new ScenarioUnit("cannon", "AmericaParticleCannonUplink", 1, -150, 0, 0f), new ScenarioUnit("plant1", "AmericaPowerPlant", 1, -150, 120, 0f), new ScenarioUnit("plant2", "AmericaPowerPlant", 1, -150, -120, 0f), new ScenarioUnit("plant3", "AmericaPowerPlant", 1, -270, 0, 0f)],
+            [new ScenarioOrder(60, "cannon", ScenarioOrderKind.UsePower, X: 150f, Y: 0f, Template: "SuperweaponParticleUplinkCannon")], 0f, 0f) { PowersReady = true };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var view = new LiveAudioView(live);
+        // SpecialPowerCreate starts the power's timer when the structure stands, after the scene made it ready: ready it again.
+        live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+        foreach (var module in live.World.FindEntity(live.Tags["cannon"])!.Modules)
+            if (module is CnCNew.Simulation.Modules.ISpecialPowerModule power) power.SetReadyFrame(live.World.Tick);
+        var seen = new SortedSet<int>();
+        var before = new SortedSet<int>();
+        while (!live.IsOver)
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            var cannon = live.World.FindEntity(live.Tags["cannon"]);
+            foreach (var drawable in live.Frame.Drawables.Where(drawable => cannon is not null && drawable.Entity == cannon.Id))
+                foreach (var loop in view.StateLoops(drawable)) (live.World.Tick < live.World.Time.OriginalFrames(60) ? before : seen).Add(loop.Slot);
+        }
+        Console.WriteLine($"       cannon loops before the shot: {string.Join(",", before)}; after: {string.Join(",", seen)}");
+        TestHarness.Assert(before.SetEquals([2]) && seen.IsSupersetOf([3, 4]), $"ready: the unpacking loop only ({string.Join(",", before)}); fired: the firing loop and the annihilation ({string.Join(",", seen)})");
     }
 
     private static void RealDataRun(GameData data)

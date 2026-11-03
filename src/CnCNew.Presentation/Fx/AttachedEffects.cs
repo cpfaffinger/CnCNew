@@ -63,6 +63,9 @@ public sealed class AttachedEffectCatalog
     /// <summary>The objects whose <c>SpecialAbilityUpdate</c> makes a laser, with the bone it leaves from (<c>SpecialObjectAttachToBone</c>).</summary>
     public ImmutableDictionary<string, string> LaserOwners { get; private init; } = ImmutableDictionary<string, string>.Empty;
 
+    /// <summary><c>GattlingStrafeFXParticleSystem</c> of a <c>SpectreGunshipUpdate</c>, by the object's template.</summary>
+    public ImmutableDictionary<string, string> StrafeSystems { get; private init; } = ImmutableDictionary<string, string>.Empty;
+
     /// <summary>Values the parser could not read, each with its place: counted, never guessed at.</summary>
     public ImmutableArray<string> Problems { get; private init; } = [];
 
@@ -80,6 +83,7 @@ public sealed class AttachedEffectCatalog
         var laserLives = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         var laserNames = new List<(string Weapon, string Name, string Bone)>();
         var abilities = new List<(string Owner, string Object, string Bone)>();
+        var strafes = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         var rules = new BodyParticleRule[BodyKeys.Length];
         for (var index = 0; index < rules.Length; index++) rules[index] = new BodyParticleRule(string.Empty, string.Empty, 0);
         foreach (var definition in graph.Definitions)
@@ -95,6 +99,7 @@ public sealed class AttachedEffectCatalog
                         if (module.Name.Equals("DeletionUpdate", StringComparison.Ordinal)) laserLives[obj.OriginalName] = (long)MathF.Ceiling(Amount("MinLifetime") * CnCNew.Data.OriginalFrame.PerSecond / 1000f);
                         if (module.Name.Equals("W3DLaserDraw", StringComparison.Ordinal)) lasers[obj.OriginalName] = new LaserSpec(Key("Texture"), Amount("InnerBeamWidth"), Math.Max(1, (int)Amount("Segments")), Amount("ArcHeight"));
                         if (module.Name.Equals("SpecialAbilityUpdate", StringComparison.Ordinal) && Key("SpecialObject").Length > 0) abilities.Add((obj.OriginalName, Key("SpecialObject"), Key("SpecialObjectAttachToBone")));
+                        if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
                     }
                     if (obj.Modules.FirstOrDefault(module => module.Name.Equals("W3DProjectileStreamDraw", StringComparison.Ordinal)) is { } stream)
                     {
@@ -147,7 +152,7 @@ public sealed class AttachedEffectCatalog
         var owners = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (owner, made, bone) in abilities)
             if (lasers.ContainsKey(made)) owners[owner] = bone;
-        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
+        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
     }
 
     private static string? Named(string token) => token.Length == 0 || token.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : token;
@@ -336,6 +341,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         public readonly List<int> MotionSystems = [];
         public bool Moving;
         public Vector3? LastPosition;
+        public long StrafeFrame = -1;
     }
 
     private readonly FxRandom _random = new(seed ^ 0xA77AC4EDUL);
@@ -444,8 +450,39 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             tracked.Aflame = aflame;
             if (template is not null && !template.BoneFx.IsDefaultOrEmpty) RunBoneFx(item, tracked, template, originalFrame, view, entity);
             UpdateMotion(item, tracked, view);
+            if (catalog.StrafeSystems.TryGetValue(item.Visual.TemplateName, out var strafe) && tracked.StrafeFrame != originalFrame)
+            {
+                tracked.StrafeFrame = originalFrame;
+                Strafe(world, entity, strafe);
+            }
         }
     }
+
+    /// <summary>
+    /// <c>SpectreGunshipUpdate::update</c>: "the client smoke effects of the gattling cannon strafing the ground toward the attack position", a system once a logic frame of the original within five
+    /// units of the gattling's aim point - only when the gunship is visible to the viewer ("Make sure the gunship is visible to the player before drawing effects"); an object projected here is.
+    /// </summary>
+    private void Strafe(SimulationWorld world, Entity entity, string system)
+    {
+        foreach (var module in entity.Modules)
+        {
+            if (module is not CnCNew.Simulation.Modules.BuiltIn.SpectreGunshipUpdate gunship || !gunship.Strafing(world)) continue;
+            if (fx.Catalog.FindParticleSystem(system) is not { } template)
+            {
+                _missingTemplates++;
+                return;
+            }
+            var target = gunship.GattlingTarget;
+            var position = new Vector3(FixedConvert.ToSingle(target.X) + _random.NextReal(-5f, 5f), FixedConvert.ToSingle(target.Y) + _random.NextReal(-5f, 5f), FixedConvert.ToSingle(target.Z));
+            fx.Particles.Spawn(template, new ParticleSpawn(position));
+            _strafeSystems++;
+        }
+    }
+
+    private long _strafeSystems;
+
+    /// <summary>The strafing systems started (<see cref="Strafe"/>).</summary>
+    public long StrafeSystemsStarted => _strafeSystems;
 
     private static readonly int AflameStatus = ObjectStatusBits.Index("AFLAME");
 

@@ -58,6 +58,9 @@ public interface IAudioGameView
 
     /// <summary>True when the local player cannot see the position.</summary>
     bool IsShrouded(Vector3 position);
+
+    /// <summary>The loops a drawable's state holds beside its <c>SoundAmbient</c> (the particle cannon's, a running locomotive's): a slot per loop, the event and where it sounds.</summary>
+    IEnumerable<(int Slot, string Event, Vector3 Position)> StateLoops(DrawableInstance drawable) => [];
 }
 
 public sealed class LiveAudioView(LiveGame live) : IAudioGameView
@@ -73,6 +76,39 @@ public sealed class LiveAudioView(LiveGame live) : IAudioGameView
     public bool LowPower => !live.World.HasSufficientPower(live.Human);
     public Relationship RelationshipOf(PlayerId from, PlayerId to) => live.World.RelationshipOf(from, to);
     public bool IsShrouded(Vector3 position) => live.FxView.IsShrouded(position);
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate::setLogicalStatus</c>: the power-up loop from charging until it is ready to fire, the unpacking loop from preparing until it fires, the firing loop from the shot
+    /// until it is idle again, and the annihilation at the beam while it burns. <c>RailroadBehavior</c>: a locomotive's running sound while it accelerates or runs (removed when it coasts or brakes).
+    /// </summary>
+    public IEnumerable<(int Slot, string Event, Vector3 Position)> StateLoops(DrawableInstance drawable)
+    {
+        if (!drawable.Entity.IsValid || live.World.FindEntity(drawable.Entity) is not { } entity || live.Data.Fx.FindObject(entity.Template.Name) is not { } info) yield break;
+        foreach (var module in entity.Modules)
+        {
+            if (module is CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate cannon)
+            {
+                var status = cannon.StatusAt(live.World);
+                if (status is CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Charging or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Preparing
+                    or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.AlmostReady && info.Sound("PoweringUpSoundLoop") is { } powerUp)
+                    yield return (1, powerUp, drawable.Position);
+                if (status is CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Preparing or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.AlmostReady
+                    or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.ReadyToFire && info.Sound("UnpackToIdleSoundLoop") is { } unpack)
+                    yield return (2, unpack, drawable.Position);
+                if (status is CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Firing or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.PostFire
+                    or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Packing && info.Sound("FiringToPackSoundLoop") is { } firing)
+                    yield return (3, firing, drawable.Position);
+                if (status == CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Firing && info.Sound("GroundAnnihilationSoundLoop") is { } annihilation)
+                {
+                    var beam = cannon.BeamPosition;
+                    yield return (4, annihilation, new Vector3(CnCNew.Presentation.FixedConvert.ToSingle(beam.X), CnCNew.Presentation.FixedConvert.ToSingle(beam.Y), CnCNew.Presentation.FixedConvert.ToSingle(beam.Z)));
+                }
+            }
+            else if (module is CnCNew.Simulation.Modules.BuiltIn.RailroadBehavior { IsLocomotive: true, Conductor: CnCNew.Simulation.Modules.BuiltIn.RailroadBehavior.ConductorStates.Accelerate }
+                     && info.Sound("RunningSound") is { } running)
+                yield return (5, running, drawable.Position);
+        }
+    }
 }
 
 /// <summary>Names of the per-cue outcomes counted in <see cref="AudioDirectorStats.Outcomes"/>; every cue ends in exactly one of them.</summary>
@@ -736,22 +772,28 @@ public sealed partial class AudioDirector : IDisposable
         if (_now - _lastAmbient < _options.AmbientUpdateSeconds) return;
         _lastAmbient = _now;
 
-        var candidates = new List<(float Distance, long Key, DrawableInstance Drawable, AudioEventInfo Info)>();
+        var candidates = new List<(float Distance, long Key, Vector3 Position, AudioEventInfo Info)>();
+        void Consider(long key, Vector3 position, AudioEventInfo info)
+        {
+            // A script-disabled event is not started at all (and a running loop of it is stopped below: it no longer ranks among the wanted ones).
+            if (_eventVolumes.TryGetValue(info.Name, out var scriptVolume) && (scriptVolume <= 0f || scriptVolume < _catalog.Settings.MinSampleVolume)) return;
+            var global = (info.SoundTypes & SoundTypeFlags.Global) != 0;
+            var max = global ? _catalog.Settings.GlobalMaxRange : info.MaxRange;
+            var distance = Vector3.Distance(position, _listenerPosition);
+            if (max > 0f && distance >= max) return;
+            if ((info.SoundTypes & SoundTypeFlags.Shrouded) == 0 && view.IsShrouded(position)) return;
+            candidates.Add((distance, key, position, info));
+        }
         foreach (var drawable in drawables)
         {
             if (drawable.IsGhost) continue;
             // SOUND_AMBIENT_PAUSE keeps every ambient loop silent; DISABLE_OBJECT_SOUND silences the loops of single named objects (Drawable::enableAmbientSoundFromScript).
             if (_ambientPaused || (drawable.Entity.IsValid && _objectSoundOff.Contains(drawable.Entity.Value))) continue;
-            var info = AmbientOf(drawable.TemplateName);
-            if (info is null) continue;
-            // A script-disabled event is not started at all (and a running loop of it is stopped below: it no longer ranks among the wanted ones).
-            if (_eventVolumes.TryGetValue(info.Name, out var scriptVolume) && (scriptVolume <= 0f || scriptVolume < _catalog.Settings.MinSampleVolume)) continue;
-            var global = (info.SoundTypes & SoundTypeFlags.Global) != 0;
-            var max = global ? _catalog.Settings.GlobalMaxRange : info.MaxRange;
-            var distance = Vector3.Distance(drawable.Position, _listenerPosition);
-            if (max > 0f && distance >= max) continue;
-            if ((info.SoundTypes & SoundTypeFlags.Shrouded) == 0 && view.IsShrouded(drawable.Position)) continue;
-            candidates.Add((distance, drawable.Entity.IsValid ? drawable.Entity.Value : -1L - drawable.SceneryIndex, drawable, info));
+            if (AmbientOf(drawable.TemplateName) is { } info) Consider(drawable.Entity.IsValid ? drawable.Entity.Value : -1L - drawable.SceneryIndex, drawable.Position, info);
+            if (!drawable.Entity.IsValid) continue;
+            // A state's loops get keys of their own beside the object's (its id with the slot above 2^40).
+            foreach (var (slot, name, position) in view.StateLoops(drawable))
+                if (EventOf(name) is { } loop) Consider(((long)slot << 40) | drawable.Entity.Value, position, loop);
         }
         candidates.Sort((a, b) => a.Distance != b.Distance ? a.Distance.CompareTo(b.Distance) : a.Key.CompareTo(b.Key));
         if (candidates.Count > _options.MaxAmbientVoices) candidates.RemoveRange(_options.MaxAmbientVoices, candidates.Count - _options.MaxAmbientVoices);
@@ -770,30 +812,40 @@ public sealed partial class AudioDirector : IDisposable
                 if (finished && entry.NextAllowed > _now && wanted.Contains(key)) _ambient[key] = new AmbientEntry(VoiceHandle.None, 0, entry.Position, entry.NextAllowed);
             }
         }
-        foreach (var (_, key, drawable, info) in candidates)
+        foreach (var (_, key, position, info) in candidates)
         {
             if (_ambient.TryGetValue(key, out var existing))
             {
-                if (existing.Handle.IsValid && Vector3.DistanceSquared(existing.Position, drawable.Position) > PositionChangeThreshold * PositionChangeThreshold)
+                if (existing.Handle.IsValid && Vector3.DistanceSquared(existing.Position, position) > PositionChangeThreshold * PositionChangeThreshold)
                 {
-                    existing.Position = drawable.Position;
-                    _mixer.SetVoicePosition(existing.Handle, drawable.Position);
+                    existing.Position = position;
+                    _mixer.SetVoicePosition(existing.Handle, position);
                 }
                 if (existing.Handle.IsValid || existing.NextAllowed > _now) continue;
                 _ambient.Remove(key);
             }
             _requested[(int)AudioSource.Ambient]++;
-            var handle = Play(AudioSource.Ambient, info, drawable.Position, AudioBus.Ambient, null, false, out var ambientShift);
+            var handle = Play(AudioSource.Ambient, info, position, AudioBus.Ambient, null, false, out var ambientShift);
             if (!handle.IsValid)
             {
                 // Keep the failure from being retried every 0.25 s.
-                _ambient[key] = new AmbientEntry(VoiceHandle.None, 0, drawable.Position, _now + _catalog.Settings.TimeBetweenDrawableSoundsMs / 1000.0);
+                _ambient[key] = new AmbientEntry(VoiceHandle.None, 0, position, _now + _catalog.Settings.TimeBetweenDrawableSoundsMs / 1000.0);
                 continue;
             }
             _ambientStarted++;
             var next = info.IsPermanent ? double.PositiveInfinity : _now + _catalog.Settings.TimeBetweenDrawableSoundsMs / 1000.0;
-            _ambient[key] = new AmbientEntry(handle, _mixer.Statistics.RenderedFrames, drawable.Position, next) { Event = info.Name, Shift = ambientShift };
+            _ambient[key] = new AmbientEntry(handle, _mixer.Statistics.RenderedFrames, position, next) { Event = info.Name, Shift = ambientShift };
         }
+    }
+
+    private readonly Dictionary<string, AudioEventInfo?> _eventsByName = new(StringComparer.OrdinalIgnoreCase);
+
+    private AudioEventInfo? EventOf(string name)
+    {
+        if (_eventsByName.TryGetValue(name, out var cached)) return cached;
+        var info = _catalog.Find(name);
+        if (info is null) _unresolved[name] = _unresolved.GetValueOrDefault(name) + 1;
+        return _eventsByName[name] = info;
     }
 
     private AudioEventInfo? AmbientOf(string template)
