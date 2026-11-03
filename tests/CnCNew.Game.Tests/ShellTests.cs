@@ -109,7 +109,9 @@ internal static class ShellTests
 
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
         TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "Start moves to match loading");
-        TestHarness.Assert(shell.CurrentScreen is LoadingScreen, "match loading shows the single-player load screen");
+        TestHarness.Assert(shell.CurrentScreen is NetLoadingScreen { LayoutName: ShellLayoutNames.MultiplayerLoadScreen }, "a skirmish loads behind the multiplayer load screen, as GameLogic::getLoadScreen gives it");
+        var loadImages = shell.BuildDrawList().Commands.OfType<UiImageDraw>().Select(image => image.Image).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        TestHarness.Assert((loadImages.Contains("MDSkirmishLoadB") || shell.Skin.IsModern) && !loadImages.Contains("LoadPageHuge"), $"its background is the skirmish's (the modern skin's canvas), not the campaign's page ({string.Join(", ", loadImages)})");
         Capture(shell, "MatchLoading", baselines, updating);
 
         shell.Update(CnCNew.Tests.TestTime.FrameSeconds);

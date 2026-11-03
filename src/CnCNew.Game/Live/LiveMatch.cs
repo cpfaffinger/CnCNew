@@ -93,6 +93,9 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     /// </summary>
     public int LocalSlot { get; init; }
 
+    /// <summary>The name the player typed in the setup (<c>TextEntryPlayerName</c>), shown on the load screen; null for none.</summary>
+    public string? PlayerName { get; init; }
+
     /// <summary>The setup's game speed as a factor of the original's (<c>SliderGameSpeed</c> / 30): a match of this machine alone runs that much faster or slower.</summary>
     public double Speed { get; init; } = 1.0;
 

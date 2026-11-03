@@ -714,8 +714,7 @@ public sealed class GameShell
         var room = session.Lobby.Room;
         var rows = room is null ? [] : NetLoadingScreen.RowsOf(room);
         var relay = session.Lobby.TakeRelay();
-        var mapPath = room?.Settings.MapPath ?? relay?.Client.Description?.MapPath ?? string.Empty;
-        var mapName = mapPath.Length == 0 ? string.Empty : MapCatalog.ContainsKey(mapPath) ? MapNames.DisplayName(mapPath, MapCatalog, TextSource) : Path.GetFileNameWithoutExtension(mapPath);
+        var localFaction = rows.FirstOrDefault(row => !row.Computer && row.ConnectionId == session.Lobby.ConnectionId)?.Faction;
         session.Relay = relay;
         if (relay is { Client.RejoinToken: not 0 and var token })
         {
@@ -726,7 +725,7 @@ public sealed class GameShell
         _netStartSent = false;
         _loadingFrameShown = false;
         Phase = ShellPhase.MatchLoading;
-        Replace(new NetLoadingScreen(this, rows, mapName));
+        Replace(new NetLoadingScreen(this, rows, localFaction));
     }
 
     /// <summary>The host of the shell built the match and the server let it begin: the shell draws nothing until <see cref="MatchFinished(MatchResult, string?)"/>.</summary>
@@ -1034,7 +1033,7 @@ public sealed class GameShell
     /// </summary>
     public string? ScreenMusic => (_stack.Count == 0 ? null : CurrentScreen) switch
     {
-        LoadingScreen when _pendingMatchSetup is { } setup => MusicOf(setup.HumanFaction)?.LoadScreen,
+        LoadingScreen or NetLoadingScreen when _pendingMatchSetup is { } setup => MusicOf(setup.Spectator ? null : setup.HumanFaction)?.LoadScreen,
         ScoreScreenScreen score => MusicOf(score.ViewerFaction)?.ScoreScreen,
         _ => null,
     };
@@ -1048,7 +1047,26 @@ public sealed class GameShell
         _playedSkirmish = setup;
         _loadingFrameShown = false;
         Phase = ShellPhase.MatchLoading;
-        Replace(new LoadingScreen(this, ShellLayoutNames.SinglePlayerLoadScreen));
+        // GameLogic::getLoadScreen: a skirmish loads behind MultiPlayerLoadScreen, as a network match does (SinglePlayerLoadScreen, the campaign's page, is a campaign mission's).
+        Replace(new NetLoadingScreen(this, SkirmishLoadRows(setup), setup.Spectator ? null : setup.HumanFaction));
+    }
+
+    /// <summary>The rows of a skirmish's load screen: the player's name, then each computer army by its strength, with team and colour of the setup.</summary>
+    private ImmutableArray<NetLoadRow> SkirmishLoadRows(MatchSetup setup)
+    {
+        var names = new ShellSkirmishText(Data.Graph, TextSource);
+        var rows = ImmutableArray.CreateBuilder<NetLoadRow>();
+        string Army(int slot) => (!setup.Ai.IsDefault && slot < setup.Ai.Length ? setup.Ai[slot].Difficulty : CnCNew.Simulation.Scripting.ScriptDifficulty.Normal) switch
+        {
+            CnCNew.Simulation.Scripting.ScriptDifficulty.Easy => names.EasyArmy,
+            CnCNew.Simulation.Scripting.ScriptDifficulty.Hard => names.HardArmy,
+            _ => names.ComputerArmy,
+        };
+        var computerFirst = setup.Spectator || setup.AutoPlay;
+        rows.Add(new NetLoadRow(computerFirst ? Army(0) : setup.PlayerName ?? names.Player, setup.HumanFaction, setup.DetailsOf(0).Team, 0, computerFirst, setup.DetailsOf(0).Color));
+        for (var opponent = 0; opponent < setup.Opponents.Length; opponent++)
+            rows.Add(new NetLoadRow(Army(opponent + 1), setup.Opponents[opponent], setup.DetailsOf(opponent + 1).Team, 0, true, setup.DetailsOf(opponent + 1).Color));
+        return rows.ToImmutable();
     }
 
     internal string FormatMoney(int amount) => RawText is { } text && text.TryGet("GUI:StartingMoneyFormat", out _) ? text.Format("GUI:StartingMoneyFormat", amount) : $"${amount}";

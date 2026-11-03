@@ -67,6 +67,36 @@ public sealed class ShellSkirmishText
         return Field("MedallionRegular") is { Length: > 0 } regular && Field("MedallionHilite") is { Length: > 0 } hilite && Field("MedallionSelect") is { Length: > 0 } select ? (regular, hilite, select) : null;
     }
 
+    /// <summary><c>PlayerTemplate::getGeneralFeatures</c>: the text of the template's <c>Features</c> label, <c>GUI:PlayerObserver</c> for a template without one.</summary>
+    public string Features(string templateName)
+    {
+        var definition = _definitions.FirstOrDefault(value => value.Id.Kind == DefinitionKind.Faction && value.Id.Name.Equals(templateName, StringComparison.OrdinalIgnoreCase));
+        var label = definition?.Fields.FirstOrDefault(field => field.Name.Equals("Features", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
+        return Resolve(label is { Length: > 0 } ? label : "GUI:PlayerObserver", label is { Length: > 0 } ? label : "Observer");
+    }
+
+    /// <summary>A label of the string table, or <paramref name="fallback"/> (counted).</summary>
+    public string Label(string label, string fallback) => Resolve(label, fallback);
+
+    /// <summary>The <c>RGBColor</c> of the multiplayer colors in file order (the house colours a slot's colour index names).</summary>
+    public ImmutableArray<CnCNew.Ui.Wnd.WndColor> Colors()
+    {
+        var colors = ImmutableArray.CreateBuilder<CnCNew.Ui.Wnd.WndColor>();
+        foreach (var definition in _definitions
+                     .Where(value => value.Id.Kind == DefinitionKind.Compatibility && value.Id.Name.StartsWith("multiplayercolor/", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(value => value.Location.Line))
+        {
+            var text = definition.Fields.FirstOrDefault(field => field.Name.Equals("RGBColor", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText ?? string.Empty;
+            byte Channel(string name)
+            {
+                var token = text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(part => part.StartsWith(name + ":", StringComparison.OrdinalIgnoreCase));
+                return token is not null && byte.TryParse(token[(name.Length + 1)..], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : (byte)255;
+            }
+            colors.Add(new CnCNew.Ui.Wnd.WndColor(Channel("R"), Channel("G"), Channel("B"), 255));
+        }
+        return colors.ToImmutable();
+    }
+
     /// <summary>The names of the multiplayer colors in file order (<c>MultiplayerColor</c> blocks of <c>multiplayer.ini</c>).</summary>
     public ImmutableArray<string> ColorNames()
     {

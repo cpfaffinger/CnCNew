@@ -281,7 +281,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         // A person plays until the match is decided (D-8); a check's short match (the client's --skirmish-seconds) has its length in game time.
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney, MaxTicks = SkirmishMatchOptions.NoTimeLimit };
         if (Shell.SkirmishMatchSeconds > 0) options = options with { MaxTicks = Shell.Data.Rate.Time.WholeSecondsToTicks(Shell.SkirmishMatchSeconds) };
-        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable(), Speed = GameSpeedFactor };
+        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable(), Speed = GameSpeedFactor,
+            PlayerName = W("TextEntryPlayerName").TextEntry?.Text is { Length: > 0 } typed ? typed : null };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         _ = Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney, GameSpeed = _gameSpeed } });
         Shell.BeginMatchLoading(setup);

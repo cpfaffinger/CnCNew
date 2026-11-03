@@ -408,7 +408,7 @@ internal static class NetScreenTests
         Capture(shell, "Net-Loading-Begin", baselines, updating);
         loading.SetProgress(new Dictionary<uint, byte> { [7] = 60, [8] = 100 });
         TestHarness.Assert(loading.Tree.FindByName("MultiplayerLoadScreen.wnd:ProgressLoad0")!.ProgressPercent == 60 && loading.Tree.FindByName("MultiplayerLoadScreen.wnd:ProgressLoad1")!.ProgressPercent == 100
-                           && loading.Tree.FindByName("MultiplayerLoadScreen.wnd:ProgressLoad2")!.ProgressPercent == 100, "every bar shows what that member's game reported; a computer player has nothing to load");
+                           && !loading.Tree.FindByName("MultiplayerLoadScreen.wnd:ProgressLoad2")!.IsVisible, "every bar shows what that member's game reported; a computer player has nothing to load and no bar (MultiPlayerLoadScreen::init)");
         Capture(shell, "Net-Loading-Progress", baselines, updating);
         Step(shell);
         TestHarness.Assert(shell.DrainOutputs().OfType<StartNetMatchOutput>().Count() == 1, "after the screen was drawn the host of the shell is asked to build the match, once");

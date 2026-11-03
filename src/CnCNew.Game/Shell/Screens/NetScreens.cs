@@ -834,40 +834,57 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(), PreviewOf(Settings.MapPath.Length == 0 ? null : Settings.MapPath, Settings.MapPath.Length == 0 ? null : MapName(Settings.MapPath)), Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
 }
 
-/// <summary>What the shared loading screen shows of one participant.</summary>
-public sealed record NetLoadRow(string Name, string Faction, int Team, uint ConnectionId, bool Computer);
+/// <summary>What the shared loading screen shows of one participant; a computer player's <paramref name="Name"/> is its army's ("Hard Army"), empty for the medium one.</summary>
+/// <param name="Color">The slot's colour index, -1 for a random one.</param>
+public sealed record NetLoadRow(string Name, string Faction, int Team, uint ConnectionId, bool Computer, int Color = -1);
 
 /// <summary>
-/// <c>MultiplayerLoadScreen.wnd</c> (docs/GAME-SHELL.md section 15.5): one row per participant of the match with its name, army, team and how far its game has
-/// loaded - what every member reports to the server and the server tells everybody. A computer player has nothing to load. The start-position bubbles and the
-/// portrait of the local general have no data behind them here and stay hidden.
+/// <c>MultiplayerLoadScreen.wnd</c> (docs/GAME-SHELL.md section 15.5), <c>MultiPlayerLoadScreen::init</c>: the load screen of a skirmish and of a network match. One row per participant of the
+/// match with its name, army and team in its house colour and how far its game has loaded - what every member reports to the server and the server tells everybody; a computer player has
+/// nothing to load and no bar. Beside them the local general: the portrait, the features and the name of the persona that plays the local player's army
+/// (<c>TheChallengeGenerals->getGeneralByTemplateName</c>), the faction's large logo for the three armies without a general. The start-position bubbles have no data behind them here and stay hidden.
 /// </summary>
 public sealed class NetLoadingScreen : ShellScreen
 {
     private const int Rows = 8;
     private readonly ImmutableArray<NetLoadRow> _rows;
 
-    public NetLoadingScreen(GameShell shell, ImmutableArray<NetLoadRow> rows, string mapName) : base(shell, ShellLayoutNames.MultiplayerLoadScreen)
+    /// <param name="localFaction">The player template of the local player, null for who only watches (<c>FactionObserver</c>).</param>
+    public NetLoadingScreen(GameShell shell, ImmutableArray<NetLoadRow> rows, string? localFaction) : base(shell, ShellLayoutNames.MultiplayerLoadScreen)
     {
         _rows = rows;
         var names = new ShellSkirmishText(Shell.Data.Graph, Shell.TextSource);
+        var colors = names.Colors();
         for (var row = 0; row < Rows; row++)
         {
             var shown = row < rows.Length;
             W($"StaticTextPlayer{row}").SetHidden(!shown);
             W($"StaticTextSide{row}").SetHidden(!shown);
             W($"StaticTextTeam{row}").SetHidden(!shown);
-            W($"ProgressLoad{row}").SetHidden(!shown);
+            W($"ProgressLoad{row}").SetHidden(!shown || rows[row].Computer);
             W($"ButtonMapStartPosition{row}").SetHidden(true);
             if (!shown) continue;
-            W($"StaticTextPlayer{row}").SetText(rows[row].Computer ? names.ComputerArmy : rows[row].Name);
+            W($"StaticTextPlayer{row}").SetText(rows[row].Computer && rows[row].Name.Length == 0 ? names.ComputerArmy : rows[row].Name);
             W($"StaticTextSide{row}").SetText(rows[row].Faction == MatchSetup.RandomFaction ? names.Random : names.Faction(rows[row].Faction));
             W($"StaticTextTeam{row}").SetText(names.Team(rows[row].Team));
-            W($"ProgressLoad{row}").SetProgress(rows[row].Computer ? 100 : 0);
+            W($"ProgressLoad{row}").SetProgress(0);
+            if (rows[row].Color >= 0 && rows[row].Color < colors.Length)
+                foreach (var text in new[] { "StaticTextPlayer", "StaticTextSide", "StaticTextTeam" }) W($"{text}{row}").SetTextColor(colors[rows[row].Color]);
         }
-        W("LocalGeneralPortrait").SetHidden(true);
-        W("LocalGeneralFeatures").SetHidden(true);
-        W("LocalGeneralName").SetText(mapName);
+
+        var faction = string.IsNullOrEmpty(localFaction) ? "FactionObserver" : localFaction;
+        var persona = Shell.Campaigns?.Personas.FirstOrDefault(candidate => candidate.PlayerTemplate.Equals(faction, StringComparison.OrdinalIgnoreCase));
+        var portrait = persona is not null ? persona.BioPortraitLarge : faction switch
+        {
+            "FactionAmerica" => "SAFactionLogoLg_US",
+            "FactionGLA" => "SUFactionLogoLg_GLA",
+            "FactionChina" => "SNFactionLogoLg_China",
+            _ => string.Empty,
+        };
+        if (portrait.Length > 0) W("LocalGeneralPortrait").SetEnabledImage0(portrait);
+        else W("LocalGeneralPortrait").SetHidden(true);
+        W("LocalGeneralFeatures").SetText(names.Features(faction));
+        W("LocalGeneralName").SetText(persona is not null ? names.Label(persona.BioName, persona.BioName) : names.Faction(faction));
     }
 
     public void SetProgress(IReadOnlyDictionary<uint, byte> progress)
@@ -885,7 +902,7 @@ public sealed class NetLoadingScreen : ShellScreen
             if (!description.TakesPart) continue;
             var member = room.Members.Cast<RoomMember?>().FirstOrDefault(candidate => candidate!.Value.Slot == slot);
             if (description.Kind == MatchSlotKind.Human && member is null) continue;
-            rows.Add(new NetLoadRow(member?.Name ?? string.Empty, description.Faction, description.Team, member?.ConnectionId ?? 0, description.Kind == MatchSlotKind.Computer));
+            rows.Add(new NetLoadRow(member?.Name ?? string.Empty, description.Faction, description.Team, member?.ConnectionId ?? 0, description.Kind == MatchSlotKind.Computer, description.Color));
         }
         return rows.ToImmutable();
     }
