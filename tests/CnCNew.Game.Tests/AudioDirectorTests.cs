@@ -918,6 +918,8 @@ internal static class AudioDirectorTests
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard)
             { AutoPlay = true, Ai = [new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original), new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original)] };
         var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        // The whole world: a match explores the map from the start (GameLogic::startNewGame), and the player's units need not walk to where the train runs.
+        live.ShowWorldAs(null);
         var view = new LiveAudioView(live);
         var (clacks, running) = (0, 0);
         for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 120; frame++)

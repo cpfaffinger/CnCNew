@@ -295,7 +295,8 @@ internal static class SpectatorTests
         watch.Spectator.Do(SpectatorAction.CycleFog);
         TestHarness.Assert(watch.Spectator.FogViewer == new PlayerId(1) && match.FogViewer == new PlayerId(1), "then the view of player 1");
         TestHarness.Assert(Owned(1) == one && Owned(2) == 0, $"player 1 sees its own objects and nothing of player 2 after 30 s: {Owned(1)} and {Owned(2)}");
-        TestHarness.Assert(Cells(FogCellState.Unexplored) > all / 2 && Cells(FogCellState.Visible) > 0, "most of the map is unexplored for player 1");
+        // GameLogic::startNewGame explores the map for every player of a match of several players: nothing is unexplored, most of it lies under the fog.
+        TestHarness.Assert(Cells(FogCellState.Unexplored) == 0 && Cells(FogCellState.Fogged) > all / 2 && Cells(FogCellState.Visible) > 0, "for player 1 the map is explored and most of it fogged");
         RunTo(watch, match.Tick + TestTime.Ticks(match.World, 2));
         TestHarness.Assert(Owned(1) > 0 && Owned(2) == 0, "and it stays that way while the match runs");
 
