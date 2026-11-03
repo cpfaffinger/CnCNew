@@ -4873,8 +4873,54 @@ One manifest commit for the whole phase (`4fcce5f7`), because the causes were bu
 
 ### 79.6 Named, not built
 
-`GroupMovementPriority` and the columns of a group move (`friend_moveInfantryToPos`, `friend_moveVehicleToPos`), a design of 350 lines that the port's individual destinations stand in for; `FlightDeckBehavior` (one object, a shell); `InitialRoster` (two lines, one of them 0); the car alarm of `CrushDie` (and its draw of the logic stream); the sound loops of the particle cannon, the train's sounds.
+Built in Phase 58 (§80): the columns, the flight deck, `InitialRoster`, the car alarm. Named then: `GroupMovementPriority` and the columns of a group move (`friend_moveInfantryToPos`, `friend_moveVehicleToPos`), a design of 350 lines that the port's individual destinations stand in for; `FlightDeckBehavior` (one object, a shell); `InitialRoster` (two lines, one of them 0); the car alarm of `CrushDie` (and its draw of the logic stream); the sound loops of the particle cannon, the train's sounds.
 
 ### 79.7 Reference values
 
 The retail reference match a stalemate at tick 108,000, `F489EA0CB26F3FAE` / `694B1CB7B501CA64`, 184,463 commands; stress test `9EE9F730D124C3BD` / `139E5E5F077F4DA3`; 12 of 16 pairings decided; every mission keeps its outcome and end tick; world fingerprint `5B1B400AD8BDA032`; compatibility baseline 649. The pivot of a reversing wheel (`moveTowardsPositionWheels` hands `rotateObjAroundLocoPivot` the goal mirrored about the object, `backwardPos`) was found by the scene `acc-reverse` after the first manifests: a pivot behind the unit passed a goal close behind it before the unit did, and the Humvee swung round its goal until the next order.
+
+## 80. What a player of the original would miss (Phase 58, F-113 to F-118)
+
+A sweep of the code by a reader (not by a test) named what the port still lacked that a player of the original would notice; every entry was checked against the original before it was built, and one (a disabled superweapon fires) turned out wrong: the disable edge pauses the powers since Phase 40.
+
+### 80.1 The columns of a group move
+
+`AIGroup::friend_computeGroundPath`, `friend_moveInfantryToPos`, `friend_moveVehicleToPos`: a group of at least `MinInfantryForGroup` infantry or `MinVehiclesForGroup` vehicles that goes further than `MinDistanceForGroup` searches one ground path for its width (`findGroundPath`, a diameter of `InfantryPathfindDiameter`/`VehiclePathfindDiameter` cells clear around every cell), and marches along it in lanes: up to five for infantry, three for vehicles, sorted by `GroupMovementPriority` (front, middle, back); each member follows the column's points and searches a path of its own only where a straight leg is blocked (`NavigationGrid.FindGroundPath`, `SimulationWorld.GroupColumns.cs`). A group attack-move keeps no offsets (`groupAttackMoveToPosition`). Not done: `UNIT_PRESENT_FIXED` cells, pinched cells, the zones of the original's search.
+
+### 80.2 What a garrison comes with
+
+`GarrisonContain::m_initialRoster`: a building enters its roster on its first update (the train's caboose of terrorists).
+
+### 80.3 The flight deck
+
+`FlightDeckBehavior.cpp`: an aircraft carrier is an airfield whose spaces lie in columns along its runways (`FlightDeckBehavior : ParkingPlaceBehavior`). It comes with a jet on every space (`buildInfo`), moves the jets forward as the front row empties (`ParkingCleanupPeriod`, `HumanFollowPeriod`), launches one jet per runway and wave while it has an order (`LaunchWaveDelay`, the ramp's `LaunchRampDelay` and `LowerRampDelay`, the catapult's steam after `CatapultFireDelay`), lands them over its own strip (`RunwayNLanding`), lets them taxi by its bones (`RunwayNTaxi`, `RunwayNCreation`), replaces what it lost through its production (`ReplacementDelay` plus `DockAnimationDelay`, no cost: `queueCreateUnit`) and heals what stands on it. "The carrier is a dumb stump that only propagates orders to it's aircraft": an attack, an attack on a place, an attack-move and a guard of the carrier become its order, which goes to the jets in the air at once and to the front row by waves; a target that dies ends it. The bones its module names are a table of the model geometry (`FlightDeckLayout`, part of the world fingerprint). Not done: the carrier's stop (`AICMD_IDLE`, the port has no stop order for an object without AI), `defectAllParkedUnits`.
+
+### 80.4 Crushing
+
+`PhysicsBehavior::checkForOverlapCollision`: a mover with a crusher level above the victim's crushable level kills it once it has passed the crush point nearest its line of travel (front, middle or back, half the major radius apart; `perpsLogicallyEqual` and the straight distance break ties; no further than 1.5 of that). An Overlord drives over a Humvee. `CrushDie::onDie` plays the end's sound with its percent (the car alarm), drawn from the logic stream when the end has one. Not done: the first contact's damage of 0 (only the minor `DamageFX`).
+
+### 80.5 A vehicle without its driver
+
+`DAMAGE_KILLPILOT` did nothing, so Jarmen Kell's rifle hit nothing. A sniped vehicle stops, goes to the neutral player, loses its veterancy and what it healed by, throws its passengers out; a car bomb goes off ("dead-man's trigger"); a combat bike loses its rider (moving: it dies). Any infantry but a `REJECT_UNMANNED` hero takes an unmanned vehicle over by walking into it and is gone (`PhysicsBehavior::onCollide`). The state is the object's (`Entity.Unmanned`), so the script VM's unmanned actions see sniped vehicles too.
+
+### 80.6 Riders, locomotors and climbing
+
+`RiderChangeContain::onContaining`: the rider's line gives the bike its weapon set flag (`WEAPON_RIDERn`), its command set and its locomotor set; a combat bike had no gun. `LocomotorSetUpgrade` makes `SET_NORMAL` mean `SET_NORMAL_UPGRADED` (Nuclear Tanks). A set with a cliff locomotor (Burton, the Saboteur, the bike) plans over all its surfaces and moves with the cliff locomotor on a cliff cell (`LocomotorSet::findLocomotor`, `chooseGoodLocomotorFromCurrentSet`).
+
+### 80.7 Small rules
+
+`OCLUpdate` hands the object's own position as the list's second point: the supply drop zone's plane delivers to the zone, not to the map edge. A held object uses no special power (`doSpecialPower`). The first capture of an oil derrick pays `InitialCaptureBonus`. A sale pays `RefundValue` where there is one. Enemies see around a superweapon at `ShroudRevealToAllRange`. Nothing aims at what is `MASKED` or `UNATTACKABLE`, and nobody's own choice falls on what is `NO_ATTACK_FROM_AI`. A player drives the Particle Cannon's beam and the Spectre by clicks (`SteerPowerCommand`, `MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION`; two clicks in a row drive the beam fast); a beam ends with its power and shows its owner what it burns (`RevealRange`). A mine clearer is immune to the mine it touches. What an Overlord's add-on kills earns for the Overlord (`setExperienceSink`). Search & Destroy lengthens the sight for targets.
+
+### 80.8 Stealth
+
+`STEALTH_NOT_WHILE_ATTACKING` read a status nothing set, so 33 kinds of object stayed hidden while they fired; it reads the attack now. `RIDERS_ATTACKING` ends the stealth of a Listening Outpost or a Palace whose riders fire; `UseRiderStealth` lets the rider's rules decide a bike's and the GPS scrambler's grant reaches the rider. Burton shows himself for the last `PreTriggerUnstealthTime` of a charge. A stealthed supply center hides its trucks for `GrantTemporaryStealth`.
+
+### 80.9 A computer's tank
+
+`wantToSquishTarget`: in range of something it can crush, a computer's tank with a turret goes on towards it with the turret firing. Such a shooter fires while it drives, and above 30 Hz its shot
+left in a frame's first tick from half a step back: the flight of a shot without a projectile (`distance / WeaponSpeed`) is now counted from where the shooter's frame ends, like the rest of the shot,
+or a slow shot landed a frame later than at 30 Hz (found when the default match America against China parted at frame 8,764; it is the same game at 30 and 60 Hz to its end again).
+
+### 80.10 Reference values
+
+The retail reference match a stalemate at tick 108,000, `F14CB4C2D2D919D7` / `788FC04B2661B4F0`, 244,169 commands; stress test `20359BA8A2093B99` / `C51ABB66197067E5` (the synthetic fixture's tanks now crush and are unmanned; before, `9EE9F730D124C3BD` / `139E5E5F077F4DA3`); 12 of 16 pairings decided, four outcomes moved (Alpine Assault China-GLA and Armored Fury GLA-America now stalemates, Armored Fury China-GLA won by China, Death Valley China-GLA by GLA; balance not judged); every mission keeps its outcome; world fingerprint `8E15FB16ED00728D`; compatibility baseline 632; `CommandTypes.Version` 24, replay 23 (`SteerPowerCommand`); `WorldSnapshot` 11, `MissionSnapshot` 4, protocol 8 unchanged.
