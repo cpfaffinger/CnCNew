@@ -300,6 +300,7 @@ public sealed partial class SkirmishAi
         foreach (var expired in _boarding.Where(pair => pair.Value <= _tick).Select(pair => pair.Key).ToList()) _boarding.Remove(expired);
         var before = Stats.Commands;
         Stats.Thinks++;
+        if (_world.Navigation is { } seen) StampVisibleCells(seen);
         ProduceWorkers();
         BuildStructures();
         ManageSites();
@@ -748,7 +749,7 @@ public sealed partial class SkirmishAi
                 if (++checks > PlacementChecksPerThink) return null;
                 if (!SpotFree(template, radius, x, y)) continue;
                 if (_world.CheckBuildGround(template, x, y, Fixed.Zero) != LegalBuildCode.Ok) continue;
-                if (!_world.IsPositionExploredBy(_player, x, y)) continue;
+                if (!_world.IsPositionVisibleTo(_player, x, y)) continue;
                 if (_world.Navigation is { } grid && !Reachable(grid, builder, x, y)) continue;
                 return (x, y);
             }
@@ -810,8 +811,8 @@ public sealed partial class SkirmishAi
     /// <summary>
     /// <c>AIPlayer::buildBySupplies</c>: a supply center goes next to a supply source — three cells from the warehouse toward the base, and if that spot is not legal the first legal
     /// one on growing squares around it (two cells wider each time, up to twice <see cref="SupplyCenterCloseDistance"/>; the whole walk in one think, as the original does: a shipped dock with
-    /// its border and the AI's bib pushes the first legal spot some 14 cells out). A spot the player has not explored yet cannot be built on (<c>ConstructCommand</c>), so the builder is first
-    /// sent there to look. Without any supply source on the map the center goes up at the base like every other structure.
+    /// its border and the AI's bib pushes the first legal spot some 14 cells out). A spot the player does not have in sight cannot be built on (<c>ConstructCommand</c>, <c>SHROUD_REVEALED</c>:
+    /// only <c>CELLSHROUD_CLEAR</c>), so the builder is first sent there to look - explored is not enough since a match explores the whole map at its start. Without any supply source on the map the center goes up at the base like every other structure.
     /// </summary>
     private (Fixed X, Fixed Y)? FindSupplyPlacement(ObjectTemplate template, Entity builder, HashSet<uint> used, out bool looking)
     {
@@ -823,7 +824,7 @@ public sealed partial class SkirmishAi
         var back = Fixed.FromInt(3 * TerrainMap.CellSize);
         var originX = length > Fixed.Zero ? source.X - dx / length * back : source.X;
         var originY = length > Fixed.Zero ? source.Y - dy / length * back : source.Y;
-        if (!_world.IsPositionExploredBy(_player, originX, originY))
+        if (!_world.IsPositionVisibleTo(_player, originX, originY))
         {
             looking = LookAt(builder, originX, originY, used);
             return null;
@@ -839,7 +840,7 @@ public sealed partial class SkirmishAi
             foreach (var entity in _sites) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var (spotX, spotY) in _badSpots) if (DistanceSquared(spotX, spotY, x, y) < Fixed.FromInt(900)) return null;
             if (_world.CheckBuildGround(template, x, y, Fixed.Zero) != LegalBuildCode.Ok) return null;
-            if (!_world.IsPositionExploredBy(_player, x, y)) { unseen ??= (x, y); return null; }
+            if (!_world.IsPositionVisibleTo(_player, x, y)) { unseen ??= (x, y); return null; }
             if (_world.Navigation is { } grid && (++paths > 12 || !Reachable(grid, builder, x, y))) return null;
             return (x, y);
         }
@@ -1466,7 +1467,7 @@ public sealed partial class SkirmishAi
         if (_scout is { } current)
         {
             var key = CoarseKey(grid, current);
-            var reached = _world.IsPositionExploredBy(_player, current.X, current.Y) && (!_scoutRevisit || _seenAt.GetValueOrDefault(key, -1) >= _scoutAt);
+            var reached = _seenAt.ContainsKey(key) && (!_scoutRevisit || _seenAt.GetValueOrDefault(key, -1) >= _scoutAt);
             if (!reached && _tick - _scoutAt < _time.OriginalFrames(ScoutReachFrames)) return current;
             if (!reached) _unreachable.Add(key);
         }
@@ -1510,6 +1511,11 @@ public sealed partial class SkirmishAi
         return pick;
     }
 
+    /// <summary>
+    /// The nearest cell of the coarse grid this player's units have never had in sight (<see cref="StampVisibleCells"/>, every think). Not the world's explored cells: a skirmish begins with the
+    /// whole map explored when <c>Multiplayer.ini</c> has no shroud (<c>GameLogic::startNewGame</c>), and the sweep would have nothing left to look at - the army then walked to the cells nearest
+    /// to it and found the enemy late.
+    /// </summary>
     private (Fixed X, Fixed Y)? NearestUnexplored(NavigationGrid grid, Fixed cx, Fixed cy)
     {
         var terrain = grid.Terrain;
@@ -1520,7 +1526,7 @@ public sealed partial class SkirmishAi
             {
                 var wx = Fixed.FromInt(x * TerrainMap.CellSize + TerrainMap.CellSize / 2);
                 var wy = Fixed.FromInt(y * TerrainMap.CellSize + TerrainMap.CellSize / 2);
-                if (_world.IsPositionExploredBy(_player, wx, wy) || _unreachable.Contains(y / 8 * terrain.CellsX + x / 8) || !grid.IsPassable(x, y, LocomotorSurfaces.Ground)) continue;
+                if (_seenAt.ContainsKey(y / 8 * terrain.CellsX + x / 8) || _unreachable.Contains(y / 8 * terrain.CellsX + x / 8) || !grid.IsPassable(x, y, LocomotorSurfaces.Ground)) continue;
                 var distance = DistanceSquared(wx, wy, cx, cy);
                 if (distance < best) { best = distance; pick = (wx, wy); }
             }
