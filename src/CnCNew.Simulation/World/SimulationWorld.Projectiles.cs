@@ -102,7 +102,8 @@ public sealed partial class SimulationWorld
         var damageX = weapon.DamageDealtAtSelfPosition ? sourceX : x;
         var damageY = weapon.DamageDealtAtSelfPosition ? sourceY : y;
         var damageZ = weapon.DamageDealtAtSelfPosition ? sourceZ : z;
-        var delay = !contained ? FlightTicks(source.X, source.Y, source.Z, x, y, z, weapon.WeaponSpeed) : FlightTicks(sourceX, sourceY, sourceZ, x, y, z, weapon.WeaponSpeed);
+        // From where the shot leaves: above 30 Hz a shooter that keeps moving (a tank that runs infantry over) is measured where its frame ends, as the 30 Hz shot is.
+        var delay = FlightTicks(sourceX, sourceY, sourceZ, x, y, z, weapon.WeaponSpeed);
         if (delay == 0)
             return DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, conditions, weapon, victimId.IsValid ? victim : null, damageX, damageY, damageZ);
         var due = _tick + delay;

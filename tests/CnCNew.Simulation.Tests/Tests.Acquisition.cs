@@ -25,6 +25,38 @@ static partial class Tests
     private static IReadOnlyDictionary<string, string> AcquisitionFiles() => new Dictionary<string, string>(TurretAttackFiles())
     {
         ["Data/INI/Object/AcquisitionFixture.ini"] = """
+        Weapon AcqSlowGun
+          PrimaryDamage = 10
+          AttackRange = 150.0
+          WeaponSpeed = 30
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 300
+        End
+        Object AcqSlowTank
+          CrusherLevel = 2
+          KindOf = SELECTABLE VEHICLE
+          VisionRange = 150.0
+          Locomotor = SET_NORMAL ChaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY AcqSlowGun
+          End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            MoodAttackCheckRate = 250
+            Turret
+              TurretTurnRate = 360
+              AllowsPitch = No
+              RecenterTime = 500
+              ControlledWeaponSlots = PRIMARY
+            End
+          End
+        End
         Weapon AcqGun
           AcceptableAimDelta = 180
           PrimaryDamage = 10
@@ -210,10 +242,13 @@ static partial class Tests
     private static readonly ImmutableArray<PlayerConfiguration> ComputerAgainstHuman = [new(new PlayerId(1), "Alpha", IsComputer: true), new(new PlayerId(2), "Beta")];
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) AcquisitionWorld(bool computer, params (string Template, int Owner, int X, int Y)[] objects)
+        => AcquisitionWorld(TestRate.Default, computer, objects);
+
+    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) AcquisitionWorld(SimulationRate rate, bool computer, params (string Template, int Owner, int X, int Y)[] objects)
     {
-        var fixture = new SyntheticFixture(TestRate.Default, files: AcquisitionFiles());
+        var fixture = new SyntheticFixture(rate, files: AcquisitionFiles());
         var world = computer
-            ? new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates)
+            ? new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates)
             : NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y);
@@ -238,6 +273,38 @@ static partial class Tests
         }
         Check.That(Driven(false) == Fixed.Zero, "A human player's tank stands and fires.");
         Check.That(Driven(true) > Fixed.FromInt(5), $"A computer's tank drives at what it can crush ({Driven(true)}).");
+    }
+
+    /// <summary>
+    /// A shot's flight is counted from where the shooter's frame ends: a computer's tank that runs infantry over fires while it drives, and above 30 Hz its shot left in a frame's first
+    /// tick from half a step back, so a slow shot landed a frame later than at 30 Hz.
+    /// </summary>
+    public static void AMovingShooterHitsInTheSameFrameAtEveryRate()
+    {
+        List<long> Hits(SimulationRate rate)
+        {
+            var (world, _, _) = AcquisitionWorld(rate, true, ("AcqSlowTank", 1, 0, 50), ("AcqDummy", 2, 140, 50));
+            var dummy = world.Entities.Single(value => value.Template.Name == "AcqDummy");
+            var tank = world.Entities.Single(value => value.Template.Name == "AcqSlowTank");
+            var hits = new List<long>();
+            var health = dummy.Body!.Health;
+            var start = tank.X;
+            for (var frame = 1; frame <= 90 && dummy.Body.Health > Fixed.Zero; frame++)
+            {
+                for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
+                if (dummy.Body.Health != health) hits.Add(frame);
+                health = dummy.Body.Health;
+            }
+            Check.That(tank.X - start > Fixed.FromInt(5), $"{rate}: the tank drives while it fires ({tank.X - start}).");
+            return hits;
+        }
+        var thirty = Hits(SimulationRate.Hz30);
+        Check.That(thirty.Count >= 2, $"The slow shots land in the frames {string.Join(", ", thirty)}.");
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var hits = Hits(rate);
+            Check.That(hits.SequenceEqual(thirty), $"{rate}: the hits land in the frames {string.Join(", ", hits)} (30 Hz: {string.Join(", ", thirty)}).");
+        }
     }
 
     private static int ShotsOf(TickResult result, Entity source) => result.Events.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == source.Id);

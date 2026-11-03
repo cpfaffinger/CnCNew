@@ -383,6 +383,7 @@ run.Test("Phase 58: a sale keeps its refund", Tests.ASaleKeepsItsRefund);
 run.Test("Phase 58: a captured derrick pays once", Tests.ACapturedDerrickPaysOnce);
 run.Test("Phase 58: enemies see a superweapon", Tests.EnemiesSeeASuperweapon);
 run.Test("Phase 58: a computer tank runs infantry over", Tests.AComputerTankRunsInfantryOver);
+run.Test("Phase 58: a moving shooter's slow shot lands in the same frame at every rate", Tests.AMovingShooterHitsInTheSameFrameAtEveryRate);
 run.Test("Phase 58: an attacker shows itself", Tests.AnAttackerShowsItself);
 run.Test("Phase 58: a hidden building hides its truck", Tests.AHiddenBuildingHidesItsTruck);
 run.Test("Phase 58: a carrier comes with its jets", Tests.ACarrierComesWithItsJets);
