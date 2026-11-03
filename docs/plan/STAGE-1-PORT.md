@@ -321,9 +321,11 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-121 | `EnterGuard` and `HijackGuard` were unread: a hijacker on guard stood | `AIGuardMachine::lookForInnerTarget`, `AIGuardInnerState` | Phase 58 list, item 24 | **done** (§80.12) |
 | F-122 | A captured airfield kept its parked jets with their old owner | `ParkingPlaceBehavior::defectAllParkedUnits` | Phase 58 list | **done** (§80.13) |
 | F-123 | `CanDetectWhileGarrisoned` and `CanDetectWhileContained` were unread: a detector detected from inside anything | `StealthDetectorUpdate::update` | Phase 58 list | **done** (§80.13) |
-| F-124 | The attackers of an Aurora aim at it while it attacks; the original makes them aim behind it and lets nothing hit it for `AttackersMissPersistTime` | `JetAIUpdate::getSneakyTargetingOffset`, `Weapon::privateFireWeapon` | Phase 58 list | open (Phase 59) |
+| F-124 | The attackers of an Aurora aim at it while it attacks; the original makes them aim behind it and lets nothing hit it for `AttackersMissPersistTime` | `JetAIUpdate::getSneakyTargetingOffset`, `Weapon::privateFireWeapon` | Phase 58 list | **done** (§81.1) |
 | F-125 | A path through standing allies has them make way only for dozers and harvesters (and infantry for a vehicle, F-119); the original's `moveAllies` asks any idle ally on a path it found through allies, which it finds when that costs less than the way round | `Pathfinder::moveAllies`, `examineNeighboringCells` (`setBlockedByAlly`) | Phase 58, `acc-march` | open (Phase 59) |
 | F-126 | Infantry planned its detour round standing infantry; the original lets infantry path through infantry (`INFANTRY_MOVES_THROUGH_INFANTRY`) | `Pathfinder::checkForMovement` | tier 4 of Phase 58, `acc-march` | **done** (§80.14) |
+| F-127 | `OrderIdleEnemiesToAttackMeUponReveal` was unread: a detected object woke nobody | `StealthUpdate::markAsDetected`, `setWakeupIfInRange` | Phase 58 list | **done** (§81.2) |
+| F-128 | `TransferAttackers` was unread: who attacked a structure stopped when it became a rebuild hole | `AIUpdateInterface::transferAttack`, `RebuildHoleExposeDie::onDie`, `RebuildHoleBehavior::update`, `CreateObjectDie::onDie` | Phase 58 list | **done** (§81.3; not: the sticky bombs) |
 | F-33 | Installer: Steam outside the default path untested; manifest hash Windows-only; client not self-contained (**Phase 56:** the export leaves out the program files, manuals and metadata of the original) | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog
