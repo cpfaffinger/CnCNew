@@ -256,6 +256,43 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>MSG_ENABLE_RETALIATION_MODE</c>: a human player who switched the option "Retaliation" off has an idle rifleman that stays when a sniper shoots its friend; switched on again it drives at the
+    /// sniper. The mode is the player's, carried by a save. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void RetaliationCanBeSwitchedOff()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            Fixed Moved(bool enabled, ulong sequence)
+            {
+                var (world, feeder, fixture) = GuardWorld(rate, computer: true);
+                var human = new PlayerId(2);
+                var rifleman = GdSpawn(world, feeder, "FcRifleman", 2, 0, 0);
+                var friend = GdSpawn(world, feeder, "GdRunner", 2, 100, 0);
+                var sniper = GdSpawn(world, feeder, "GdSniper", 1, 260, 0);
+                Check.That(world.Submit(new SetRetaliationCommand(human, sequence, world.Tick, false)).Accepted, "Retaliation off is accepted.");
+                if (enabled) Check.That(world.Submit(new SetRetaliationCommand(human, sequence + 1, world.Tick, true)).Accepted, "Retaliation on is accepted.");
+                for (var step = 0; step < world.Frames(10); step++) world.Step();
+                Check.That(world.RetaliationEnabled(human) == enabled, $"{rate}: the player's mode is {(enabled ? "on" : "off")}.");
+                var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                Check.That(restored.RetaliationEnabled(human) == enabled && restored.StateHash == world.StateHash, $"{rate}: a save keeps the mode.");
+                var start = rifleman.X;
+                feeder.FireWeapon(1, sniper.Id.Value, friend.Id.Value);
+                var furthest = Fixed.Zero;
+                for (var step = 0; step < world.Frames(120); step++)
+                {
+                    world.Step();
+                    furthest = Fixed.Max(furthest, rifleman.X - start);
+                }
+                return furthest;
+            }
+
+            Check.That(Moved(enabled: false, 1_000_000) < Fixed.FromInt(5), $"{rate}: with retaliation off the idle rifleman stays.");
+            Check.That(Moved(enabled: true, 1_000_000) > Fixed.FromInt(30), $"{rate}: switched on again it drives at the sniper.");
+        }
+    }
+
+    /// <summary>
     /// The rule fix <c>guard-answers-only-when-idle</c> (the community source; Reforged's R-35): a guard (flying units only, so its own scans pass a ground sniper by) walks back to its post
     /// 200 away and is shot by a sniper on the way. Under the original rules RETURN answers at once and turns to the sniper; with the fix it walks on to its post and answers there.
     /// At 30, 60 and 120 Hz.

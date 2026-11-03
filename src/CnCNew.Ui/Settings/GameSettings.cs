@@ -45,7 +45,8 @@ public sealed record AudioSettings(float Master, float Music, float Effects, flo
 /// <summary>Scroll and rotate speeds are slider positions from 0 to 1 (the original options slider runs 0..100).</summary>
 /// <param name="AlternateMouse">The original's "alternate mouse setup" (<c>GlobalData::m_useAlternateMouse</c>): the left button only selects, the right
 /// button orders. The original ships with it off; this client ships with it on (owner's decision, docs/PRESENTATION-INPUT.md section 2a).</param>
-public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling, bool AlternateMouse = true);
+/// <param name="Retaliation">The original's option "Retaliation" (<c>GlobalData::m_clientRetaliationModeEnabled</c>, on by default): the player's idle units answer an attack on a friend nearby.</param>
+public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling, bool AlternateMouse = true, bool Retaliation = true);
 
 /// <param name="UiTextScalePercent">100, 125 or 150.</param>
 public sealed record AccessibilitySettings(bool HighContrastUi, int UiTextScalePercent, bool ColorBlindSafeTeamColors);
@@ -89,7 +90,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

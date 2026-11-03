@@ -112,7 +112,7 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 
 ## Settings
 
-`GameSettings` (schema 3 since Phase 53: `general.tickRate`, 60 or 120 Hz, D-22, and the modern skin as the default of a first start, D-21; schemas 1 and 2 migrate, and a file that names a skin keeps it) with sub-records and value ranges:
+`GameSettings` (schema 4 since Phase 59: `controls.retaliation`; schema 3 since Phase 53: `general.tickRate`, 60 or 120 Hz, D-22, and the modern skin as the default of a first start, D-21; schemas 1 to 3 migrate, and a file that names a skin keeps it) with sub-records and value ranges:
 
 | JSON path | Type, range | Default |
 |---|---|---|
@@ -126,6 +126,8 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 | `audio.device` | the name of a sound output device as waveOut lists it, at most 255 characters, no control characters; empty is the system's default (a name that is not there any more plays on the default, said once) | empty |
 | `controls.scrollSpeed`/`cameraRotateSpeed` | 0..1 | 0.5 / 0.5 |
 | `controls.edgeScrolling` | bool | `true` |
+| `controls.alternateMouse` | bool: the right button orders | `true` |
+| `controls.retaliation` | bool: the player's idle units answer an attack on a friend nearby (`OptionsMenu.wnd:Retaliation`, `MSG_ENABLE_RETALIATION_MODE`; the match follows the option within a second, `SimulationWorld.RetaliationEnabled`) | `true` |
 | `accessibility.highContrastUi` | bool | `false` |
 | `accessibility.uiTextScalePercent` | 100, 125, 150 (snapped to the nearest value) | 100 |
 | `accessibility.colorBlindSafeTeamColors` | bool | `false` |
@@ -148,9 +150,9 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
   message `corrupt` (`RecoveredFromCorruptFile`). A UTF-8 BOM is accepted.
 - Newer schema version: `SettingsVersionException`, the file stays unchanged. Older version: the chain
   `SettingsMigration` (JSON object → JSON object, one step each) runs, every step is reported as `migrated`,
-  a gap is a `SettingsVersionException`. `SettingsStore.Migrations` holds the one step from schema 1 to 2 (Phase 38): `display.skin` = `original`,
-  `audio.device` = empty, and `display.aspect` = `keepHorizontal` - schema 1's three aspect values were never applied by any client; tests inject further steps
-  through the constructor.
+  a gap is a `SettingsVersionException`. `SettingsStore.Migrations` holds the step from schema 1 to 2 (Phase 38): `display.skin` = `original`,
+  `audio.device` = empty, and `display.aspect` = `keepHorizontal` - schema 1's three aspect values were never applied by any client; from 2 to 3 (Phase 53) `general.tickRate` = 60;
+  from 3 to 4 (Phase 59) `controls.retaliation` = `true`, what every game did. Tests inject further steps through the constructor.
 - Binding without guessing: missing sections/properties (`missing`), wrong types (`invalid-type`), unknown
   properties (`unknown-property`), after that `SettingsValidator.Normalize` with `clamped`, `snapped`, `invalid-value`.
   `Save` stores the normalised values and returns the messages.

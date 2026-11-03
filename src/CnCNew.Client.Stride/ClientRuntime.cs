@@ -908,6 +908,7 @@ internal sealed class ClientRuntime : IDisposable
                 break;
             case SettingsChangedOutput changed:
                 _settings = changed.Settings;
+                if (_running is { } running) running.Hud.Retaliation = changed.Settings.Controls.Retaliation;
                 _audio.Game.ApplySettings(changed.Settings.Audio);
                 _audio.SwitchDevice(changed.Settings.Audio.Device);
                 break;

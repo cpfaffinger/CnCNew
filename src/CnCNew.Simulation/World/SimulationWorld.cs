@@ -135,6 +135,12 @@ public sealed partial class SimulationWorld : IWorldServices
         public bool CanBuildBase { get; set; } = true;
         public bool CanBuildUnits { get; set; } = true;
 
+        /// <summary>
+        /// <c>Player::m_logicalRetaliationModeEnabled</c> switched off by the player (<see cref="SetRetaliationCommand"/>). The original starts it off and the human's client switches it on with its
+        /// first message, a frame or two into the match; the port starts it on, which the option's default would make it at once.
+        /// </summary>
+        public bool RetaliationOff { get; set; }
+
         /// <summary>The computer player of the original skirmish AI: <c>AIPlayer::buildStructureWithDozer</c> has judged the place itself and <c>DozerAIUpdate::construct</c> asks no more (<see cref="SetValidatesOwnSites"/>).</summary>
         public bool ValidatesOwnSites { get; set; }
 
@@ -955,6 +961,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 break;
             }
             case PlayerLeaveCommand:
+            case SetRetaliationCommand:
                 if (command.Player.IsSystem) return CommandRejection.NotPermitted;
                 break;
             case GuardCommand guard:
@@ -1468,6 +1475,9 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             case PlayerLeaveCommand leave:
                 ExecutePlayerLeave(leave.Player, leave.TransferToAlly);
+                break;
+            case SetRetaliationCommand retaliation:
+                if (_players.TryGetValue(retaliation.Player.Value, out var retaliating)) retaliating.RetaliationOff = !retaliation.Enabled;
                 break;
             case PursueCommand pursue:
             {
@@ -2612,6 +2622,7 @@ public sealed partial class SimulationWorld : IWorldServices
             // Written only when switched off, so a world no script ever restricted keeps the serialized form (and hash) it had before the switches existed.
             if (!player.CanBuildBase) writer.Bool("canBuildBase", false);
             if (!player.CanBuildUnits) writer.Bool("canBuildUnits", false);
+            if (player.RetaliationOff) writer.Bool("retaliationOff", true);
             if (player.ValidatesOwnSites) writer.Bool("validatesOwnSites", true);
             DescribeCostModifiers(writer, player);
             writer.BeginArray("sharedReadyFrames");

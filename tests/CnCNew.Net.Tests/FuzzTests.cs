@@ -445,6 +445,7 @@ static partial class NetTests
         {
             encoded.Add(ReplayFormat.EncodeCommand(new SetMineClearingCommand(move.Player, move.Sequence, move.Tick, [move.Target])));
             encoded.Add(ReplayFormat.EncodeCommand(new SteerPowerCommand(move.Player, move.Sequence, move.Tick, [move.Target], move.X, move.Y)));
+            encoded.Add(ReplayFormat.EncodeCommand(new SetRetaliationCommand(move.Player, move.Sequence, move.Tick, move.X.Raw % 2 == 0)));
         }
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(70).Take(10))
             encoded.Add(ReplayFormat.EncodeCommand(new ExecuteRailedTransportCommand(move.Player, move.Sequence, move.Tick, [move.Target])));

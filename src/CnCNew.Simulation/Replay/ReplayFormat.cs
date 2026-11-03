@@ -50,7 +50,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 23;
+    public const int CurrentVersion = 24;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -392,6 +392,9 @@ public static class ReplayFormat
             case PlayerLeaveCommand leave:
                 writer.Write(leave.TransferToAlly);
                 break;
+            case SetRetaliationCommand retaliation:
+                writer.Write(retaliation.Enabled);
+                break;
             case CombatDropCommand drop:
                 writer.Write(drop.Units.Length);
                 foreach (var unit in drop.Units) writer.Write(unit.Value);
@@ -503,6 +506,7 @@ public static class ReplayFormat
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean(), reader.ReadBoolean()),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.ReadBoolean()),
+            CommandTypes.SetRetaliation => new SetRetaliationCommand(player, sequence, tick, reader.ReadBoolean()),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()),
                 reader.ReadBoolean(), reader.ReadSByte(), reader.ReadInt32()),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, ReadUnits(reader)),

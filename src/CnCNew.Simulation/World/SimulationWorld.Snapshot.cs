@@ -77,6 +77,7 @@ public sealed partial class SimulationWorld
             known.CashBounty = player.Fixed("cashBounty");
             known.CanBuildBase = !player.Has("canBuildBase") || player.Bool("canBuildBase");
             known.CanBuildUnits = !player.Has("canBuildUnits") || player.Bool("canBuildUnits");
+            known.RetaliationOff = player.Has("retaliationOff") && player.Bool("retaliationOff");
             known.ValidatesOwnSites = player.Has("validatesOwnSites") && player.Bool("validatesOwnSites");
             LoadCostModifiers(player, known);
             known.SharedReadyFrames.Clear();

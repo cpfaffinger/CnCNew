@@ -113,13 +113,16 @@ public sealed partial class SimulationWorld
     /// </remarks>
     public void RetaliateFor(Entity victim, EntityId damagerId)
     {
-        if (victim.Owner.IsSystem || IsComputerPlayer(victim.Owner) || !_players.ContainsKey(victim.Owner.Value) || !damagerId.IsValid || damagerId == victim.Id) return;
+        if (victim.Owner.IsSystem || IsComputerPlayer(victim.Owner) || !_players.TryGetValue(victim.Owner.Value, out var owner) || owner.RetaliationOff || !damagerId.IsValid || damagerId == victim.Id) return;
         if (victim.Template.IsKindOf("DRONE")) return;
         var (vx, vy, _) = victim.FrameEnd(_tick);
         _retaliations.Add(new RetaliationCall(victim.Id, victim.Owner, vx, vy, victim.Template.BoundingCircleRadius, damagerId));
         // A hit from outside a step (a host's or a test's direct damage) is decided at once: between ticks nothing may stay pending that a snapshot would not carry.
         if (!_stepping) ProcessRetaliations();
     }
+
+    /// <summary>Whether the player's units answer an attack on a friend nearby (<c>Player::isLogicalRetaliationModeEnabled</c>); what a client compares its option with.</summary>
+    public bool RetaliationEnabled(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || !state.RetaliationOff;
 
     /// <summary>A step of the world is running (<see cref="Step"/>).</summary>
     private bool _stepping;

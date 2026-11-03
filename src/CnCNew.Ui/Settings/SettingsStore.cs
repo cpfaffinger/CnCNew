@@ -59,6 +59,11 @@ public sealed class SettingsStore
             if (root["general"] is JsonObject general && !general.ContainsKey("tickRate")) general["tickRate"] = 60;
             return root;
         }),
+        new SettingsMigration(3, "controls.retaliation added (on, what every game did)", root =>
+        {
+            if (root["controls"] is JsonObject controls && !controls.ContainsKey("retaliation")) controls["retaliation"] = true;
+            return root;
+        }),
     ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
@@ -180,6 +185,7 @@ public static class SettingsJson
             writer.WriteNumber("cameraRotateSpeed", settings.Controls.CameraRotateSpeed);
             writer.WriteBoolean("edgeScrolling", settings.Controls.EdgeScrolling);
             writer.WriteBoolean("alternateMouse", settings.Controls.AlternateMouse);
+            writer.WriteBoolean("retaliation", settings.Controls.Retaliation);
             writer.WriteEndObject();
 
             writer.WriteStartObject("accessibility");
@@ -222,7 +228,7 @@ public static class SettingsJson
 
         var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect", "skin"]);
         var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient", "device"]);
-        var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse"]);
+        var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
         var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty", "tickRate"]);
         var skirmish = reader.Section(root, "skirmish", ["lastMap", "lastFactions", "lastStartMoney"]);
@@ -247,7 +253,8 @@ public static class SettingsJson
                 reader.Float(controls, "controls.scrollSpeed", d.Controls.ScrollSpeed),
                 reader.Float(controls, "controls.cameraRotateSpeed", d.Controls.CameraRotateSpeed),
                 reader.Bool(controls, "controls.edgeScrolling", d.Controls.EdgeScrolling),
-                reader.Bool(controls, "controls.alternateMouse", d.Controls.AlternateMouse)),
+                reader.Bool(controls, "controls.alternateMouse", d.Controls.AlternateMouse),
+                reader.Bool(controls, "controls.retaliation", d.Controls.Retaliation)),
             new AccessibilitySettings(
                 reader.Bool(accessibility, "accessibility.highContrastUi", d.Accessibility.HighContrastUi),
                 reader.Int(accessibility, "accessibility.uiTextScalePercent", d.Accessibility.UiTextScalePercent),

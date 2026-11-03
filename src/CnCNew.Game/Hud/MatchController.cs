@@ -75,6 +75,7 @@ public sealed partial class MatchController
         ArgumentNullException.ThrowIfNull(settings);
         Match = match;
         Stats = new MatchStatsTracker();
+        Retaliation = settings.Controls.Retaliation;
 
         _assets = HudAssets.Load(match.Data, language);
         _tooltips = new TooltipPainter(match.Data.Graph);
@@ -576,6 +577,9 @@ public sealed partial class MatchController
         }
     }
 
+    /// <summary>The viewer's option "Retaliation" (<see cref="CnCNew.Ui.Settings.ControlSettings.Retaliation"/>); the match follows it within a second.</summary>
+    public bool Retaliation { get; set; }
+
     private void OnTickStepped(TickResult result)
     {
         Stats.Observe(result, Match.World);
@@ -587,6 +591,13 @@ public sealed partial class MatchController
         }
         // InGameUI::update runs once per original frame: the lines fade on the game clock's 1/30 s grid, not per simulation tick.
         if (OwnsMessageList && Match.Clock.IsOriginalFrameBoundary) Messages.Log.Update(Match.Clock.OriginalFrames);
+        // Player::update: once a second the client posts its option when it differs from the player's mode in the world (MSG_ENABLE_RETALIATION_MODE).
+        if (Match.Clock.IsOriginalFrameBoundary && Match.Clock.OriginalFrames % CnCNew.Data.OriginalFrame.PerSecond == 0 && !Match.IsOver
+            && Match.World.RetaliationEnabled(Match.Human) != Retaliation)
+        {
+            var enabled = Retaliation;
+            Match.Commands.Issue((sequence, tick) => new CnCNew.Simulation.Commands.SetRetaliationCommand(Match.Human, sequence, tick, enabled));
+        }
         if (Match.IsOver && !_matchEndedFired)
         {
             _matchEndedFired = true;

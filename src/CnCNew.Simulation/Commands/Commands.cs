@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 24;
+    public const int Version = 25;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -127,7 +127,11 @@ public static class CommandTypes
     /// <summary><c>MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION</c> to a group (<c>AIGroup::groupOverrideSpecialPowerDestination</c>): the running beam or gunship goes for the place.</summary>
     public const ushort SteerPower = 43;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= SteerPower;
+    // ------------------------------------------------------------------------------------------------------ retaliation off (v25)
+    /// <summary><c>MSG_ENABLE_RETALIATION_MODE</c>: the player's units answer an attack on a friend nearby, or not (<c>Player::setLogicalRetaliationModeEnabled</c>).</summary>
+    public const ushort SetRetaliation = 44;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetRetaliation;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -216,6 +220,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
                 new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
+            CommandTypes.SetRetaliation => new SetRetaliationCommand(player, sequence, tick, reader.Bool("enabled")),
             CommandTypes.CombatDrop => new CombatDropCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))],
                 new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"),
@@ -822,6 +827,16 @@ public sealed record PlayerLeaveCommand(PlayerId Player, ulong Sequence, long Ti
 {
     public override ushort TypeCode => CommandTypes.PlayerLeave;
     protected override void DescribeBody(IStateWriter writer) => writer.Bool("transfer", TransferToAlly);
+}
+
+/// <summary>
+/// <c>MSG_ENABLE_RETALIATION_MODE</c>: the option "Retaliation" of the player's client (<c>OptionsMenu.wnd:CheckRetaliation</c>, on by default). The client posts it when its option and the
+/// player's logical mode differ (<c>Player::update</c>, once a second); every machine then switches the player's mode at the same tick.
+/// </summary>
+public sealed record SetRetaliationCommand(PlayerId Player, ulong Sequence, long Tick, bool Enabled) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SetRetaliation;
+    protected override void DescribeBody(IStateWriter writer) => writer.Bool("enabled", Enabled);
 }
 
 /// <summary><c>GuardMode</c>: the three guard buttons (<c>GUARD</c>, <c>GUARD_WITHOUT_PURSUIT</c>, <c>GUARD_FLYING_UNITS_ONLY</c>).</summary>
