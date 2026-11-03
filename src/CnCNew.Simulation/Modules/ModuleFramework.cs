@@ -188,6 +188,12 @@ public interface IWorldServices
     /// <summary><c>AIUpdateInterface::wakeUpAndAttemptToTarget</c>.</summary>
     void WakeUpAndAttemptToTarget(Entity entity);
 
+    /// <summary>
+    /// <c>StealthUpdate::markAsDetected</c> with <c>OrderIdleEnemiesToAttackMeUponReveal</c>, <c>setWakeupIfInRange</c>: every object with an AI of a player that is an enemy of the
+    /// revealed object's, and that has it within its vision range, looks for a victim at once.
+    /// </summary>
+    void WakeEnemiesThatSee(Entity revealed);
+
     /// <summary><c>aiAttackPosition(pos, shots, CMD_FROM_AI)</c> (F-64): the unit attacks the place for <paramref name="shots"/> shots (0 or less: no limit); false when it cannot.</summary>
     bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots);
 

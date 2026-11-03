@@ -391,6 +391,7 @@ run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkC
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);
 run.Test("Phase 58: a captured airfield takes its parked jets", Tests.AirCapturedAirfieldTakesItsParkedJets);
 run.Test("Phase 59 (F-124): attackers aim behind an attacking Aurora", Tests.AirAttackersAimBehindASneakyJet);
+run.Test("Phase 59 (F-127): a reveal wakes the enemies that see it", Tests.ARevealWakesTheEnemiesThatSeeIt);
 run.Test("Phase 58: a detector in a transport detects only when allowed", Tests.ADetectorInATransportDetectsOnlyWhenAllowed);
 run.Test("Phase 58: an attacker shows itself", Tests.AnAttackerShowsItself);
 run.Test("Phase 58: a hidden building hides its truck", Tests.AHiddenBuildingHidesItsTruck);

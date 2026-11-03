@@ -127,6 +127,20 @@ public sealed partial class SimulationWorld
         MarkDirty(entity);
     }
 
+    /// <inheritdoc cref="IWorldServices.WakeEnemiesThatSee"/>
+    public void WakeEnemiesThatSee(Entity revealed)
+    {
+        // Each enemy player's objects in the original; who is woken first changes nothing, as a wake only sets the time of the next look.
+        foreach (var other in Entities)
+        {
+            if (other.EffectivelyDead || other.DestroyRequested || RelationshipOf(other.Owner, revealed.Owner) != Relationship.Enemies) continue;
+            var vision = other.Template.VisionRange;
+            var (dx, dy) = (other.X - revealed.X, other.Y - revealed.Y);
+            if (FurtherThan(other.X, revealed.X, vision) || FurtherThan(other.Y, revealed.Y, vision) || !SquaredReach.Of(vision).Contains(dx * dx + dy * dy)) continue;
+            WakeUpAndAttemptToTarget(other);
+        }
+    }
+
     /// <summary>
     /// <c>MM_Controller_AI | MM_Mood_Sleep</c>: "AI Units that are asleep actually ignore all commands" (<c>isAllowedToRespondToAiCommands</c>), acquire nothing while idle
     /// (<c>MAA_Affect_Range_IgnoreAll</c>) and do not fire (<c>AIAttackFireWeaponState::onEnter</c>).

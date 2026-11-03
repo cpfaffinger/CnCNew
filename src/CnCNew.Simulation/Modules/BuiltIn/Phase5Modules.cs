@@ -58,7 +58,7 @@ internal static class Phase5Modules
 /// <see cref="RequiredStatus"/>/<see cref="ForbiddenStatus"/> and <see cref="InnateStealth"/>. The remaining typed-but-not-
 /// applied fields are cosmetic or belong to systems phase 5 does not model: <c>FriendlyOpacityMin/Max</c>, <c>PulseFrequency</c>,
 /// the disguise fields, <c>EnemyDetectionEvaEvent</c>/<c>OwnDetectionEvaEvent</c> (presentation), <c>RevealDistanceFromTarget</c>,
-/// <c>OrderIdleEnemiesToAttackMeUponReveal</c>, <c>BlackMarketCheckDelay</c> (no
+/// <c>BlackMarketCheckDelay</c> (no
 /// black-market economy hack) and <c>GrantedBySpecialPower</c> (no special-power system). None of the object's targeting
 /// consumes the resulting <c>STEALTHED</c> status bit yet either: phase 5's <c>FireWeaponCommand</c> is direct-target only,
 /// with no automatic target acquisition or line of sight to hide from — see docs/GAME-RULES.md.
@@ -83,7 +83,11 @@ public sealed record StealthData(
         UseRiderStealth = ModuleConfigReader.Bool(configuration, "UseRiderStealth", false),
         DisguiseFx = ModuleConfigReader.Text(configuration, "DisguiseFX"),
         DisguiseRevealFx = ModuleConfigReader.Text(configuration, "DisguiseRevealFX"),
+        OrderIdleEnemiesToAttack = ModuleConfigReader.Bool(configuration, "OrderIdleEnemiesToAttackMeUponReveal", false),
     };
+
+    /// <summary><c>m_orderIdleEnemiesToAttackMeUponReveal</c>: when the object is detected, the enemies that see it look for a victim at once.</summary>
+    public bool OrderIdleEnemiesToAttack { get; init; }
 
     /// <summary><c>m_useRiderStealth</c>: the rider decides by its own rules whether the vehicle is stealthed.</summary>
     public bool UseRiderStealth { get; init; }
@@ -274,6 +278,10 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule, 
         Entity.Status |= 1UL << DetectedBit;
         // Called from the detector's update, not this entity's: the change needs its own mark (finding D8).
         world.MarkDirty(Entity);
+        // "The rider determines if the container can stealth or not": its rules decide, as for the delay of the original.
+        var owner = StealthOwner(world);
+        var rules = ReferenceEquals(owner, Entity) ? data : owner.Modules.OfType<StealthUpdate>().FirstOrDefault()?.Data ?? data;
+        if (rules.OrderIdleEnemiesToAttack) world.WakeEnemiesThatSee(Entity);
     }
 
     public long Update(IWorldServices world)
