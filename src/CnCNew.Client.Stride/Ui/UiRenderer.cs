@@ -368,7 +368,11 @@ internal sealed class UiRenderer : IDisposable
         DrawBorder(destination, PlaceholderLine);
     }
 
-    private void Solid(UiRect rect, WndColor color) => DrawClipped(rect, color, _clips.Current);
+    private void Solid(UiRect rect, WndColor color) => DrawClipped(rect, GammaBlack(color), _clips.Current);
+
+    /// <summary>The original blends in gamma space: on a linear-light device black at alpha <c>a</c> darkens as much only at the alpha <see cref="UiAlphaCurves.BlackOver"/> gives.</summary>
+    private WndColor GammaBlack(WndColor color)
+        => _device.ColorSpace == ColorSpace.Linear && color is { R: 0, G: 0, B: 0, A: > 0 and < 255 } ? color with { A = UiAlphaCurves.BlackOver[color.A] } : color;
 
     private void DrawClipped(UiRect rect, WndColor color, UiRect clip)
     {

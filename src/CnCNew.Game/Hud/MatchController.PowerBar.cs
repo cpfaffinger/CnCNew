@@ -51,15 +51,16 @@ public sealed partial class MatchController
         {
             if (_tree.FindByName($"{_powerLayout}:ButtonCommand{index + 1}") is not { IsHidden: false } window) continue;
             var power = _powers[index];
+            // updateSpecialPowerShortcut: the buttons use the overlay states - a power that is not ready keeps its colours under the clock, one restricted is grey.
             if (power.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(power.Button.ButtonImage, out _))
-                commands.Add(new UiImageDraw(power.Button.ButtonImage, window.Rect, WndColor.White, false, false));
-            if (power.Availability == ButtonAvailability.NotReady && power.ReadyFraction is { } fraction)
-            {
-                var wipe = (int)(window.Rect.Height * (1 - fraction));
-                if (wipe > 0) commands.Add(new UiFillRect(new CnCNew.Ui.Layout.UiRect(window.Rect.X, window.Rect.Y, window.Rect.Width, wipe), cooldown));
-            }
+                commands.Add(new UiImageDraw(power.Button.ButtonImage, window.Rect, power.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false)
+                    { Grayscale = power.Availability == ButtonAvailability.Restricted });
+            AddCameoState(commands, window, power, cooldown);
         }
     }
+
+    /// <summary>Where button <paramref name="number"/> (from 1) of the bar stands on the screen.</summary>
+    public CnCNew.Ui.Layout.UiRect PowerButtonRect(int number) => _tree.FindByName($"{_powerLayout}:ButtonCommand{number}")?.Rect ?? default;
 
     /// <summary>A press on button <paramref name="number"/> (from 1) of the bar, as a click on it would be.</summary>
     public bool PressPowerButton(int number) => PressPower($"{_powerLayout}:ButtonCommand{number}");

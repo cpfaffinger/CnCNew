@@ -1211,16 +1211,31 @@ public sealed partial class MatchController
 
     private static readonly WndColor CantAffordTint = new(144, 144, 144, 255);
 
+    /// <summary>
+    /// What <c>W3DGadgetPushButtonImageDraw</c> lays over a cameo button (<c>WIN_STATUS_USE_OVERLAY_STATES</c>): the clock of a power or a clip that is not ready (<c>GadgetButtonDrawInverseClock</c>),
+    /// then, on an enabled button, <c>Cameo_push</c> while it is pushed (held down, or a check-like button that is on) and <c>Cameo_hilited</c> while the pointer lies on it - the press and
+    /// release a person sees.
+    /// </summary>
+    private void AddCameoState(ImmutableArray<UiDrawCommand>.Builder commands, UiWindow window, CommandBarButton button, WndColor clock)
+    {
+        if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction) commands.AddRange(UiClock.Remaining(window.Rect, (int)(fraction * 100), clock));
+        if (!window.IsEnabled) return;
+        var overlay = window.IsSelected ? "Cameo_push" : window.IsHilited ? "Cameo_hilited" : null;
+        if (overlay is not null && _assets.Images.TryGet(overlay, out _)) commands.Add(new UiImageDraw(overlay, window.Rect, WndColor.White, false, false));
+    }
+
     private ImmutableArray<UiDrawCommand> BuildDynamicCommands()
     {
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        // ControlBarScheme's BuildUpClockColor (R:0 G:0 B:0 A:160 in every shipped scheme).
         var cooldown = new WndColor(0, 0, 0, 160);
 
         for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
         {
             var button = CommandBar[slot];
             if (button is null || button.Availability == ButtonAvailability.Hidden) continue;
-            var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
+            var window = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!;
+            var rect = window.Rect;
             // populateInvDataCallback: an exit button wears the cameo and the rank of who sits there.
             var rider = button.Rider.IsValid ? Match.World.FindEntity(button.Rider) : null;
             var cameo = rider is not null && Match.Data.Visuals.TryGet(rider.Template.Name, out var seated) && seated.ButtonImage is { Length: > 0 } own ? own : button.Button.ButtonImage;
@@ -1231,11 +1246,7 @@ public sealed partial class MatchController
                 commands.Add(new UiImageDraw($"SSChevron{rider.VeterancyLevel}L", rect, WndColor.White, false, false));
             // W3DGadgetPushButtonImageDraw: WIN_STATUS_FLASHING lays the pushed overlay over the cameo.
             if (_flashing.Contains(button.Button.Name) && _assets.Images.TryGet("Cameo_push", out _)) commands.Add(new UiImageDraw("Cameo_push", rect, WndColor.White, false, false));
-            if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)
-            {
-                var wipe = (int)(rect.Height * (1 - fraction));
-                if (wipe > 0) commands.Add(new UiFillRect(new UiRect(rect.X, rect.Y, rect.Width, wipe), cooldown));
-            }
+            AddCameoState(commands, window, button, cooldown);
         }
 
         for (var index = 0; index < CommandBar.Queue.Length; index++)
@@ -1244,11 +1255,8 @@ public sealed partial class MatchController
             var rect = _tree.FindByName($"ControlBar.wnd:ButtonQueue{(index + 1):00}")!.Rect;
             if (entry.ButtonImage.Length > 0 && _assets.Images.TryGet(entry.ButtonImage, out _))
                 commands.Add(new UiImageDraw(entry.ButtonImage, rect, WndColor.White, false, false));
-            if (index == 0 && entry.Progress > 0f)
-            {
-                var wipe = (int)(rect.Height * (1 - entry.Progress));
-                if (wipe > 0) commands.Add(new UiFillRect(new UiRect(rect.X, rect.Y, rect.Width, wipe), cooldown));
-            }
+            // ControlBar::updateContextCommand: the first entry is in production and wears the inverse clock of its percent.
+            if (index == 0) commands.AddRange(UiClock.Remaining(rect, (int)(entry.Progress * 100), cooldown));
         }
 
         if (_modernBar is { } modern)

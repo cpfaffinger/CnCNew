@@ -28,8 +28,39 @@ public static class UiRenderingTests
         Test(TextRunsPlaceGlyphsOnTheBaseline);
         Test(FontCatalogInterpretsRegistryNames);
         Test(CountersSnapshotIsSortedAndResettable);
+        Test(TheRemainingClockSweepsClockwiseFromTwelve);
+        Test(BlackOverDarkensAsTheGammaBlendDoes);
         Console.WriteLine(_failures == 0 ? "UI rendering tests passed." : $"UI rendering tests: {_failures} failure(s).");
         return _failures;
+    }
+
+    /// <summary>Black at 160 over white: the gamma blend leaves 95, the linear blend at the table's alpha the same; below white within five steps (sRGB is no pure power curve; without the table 33 at mid grey).</summary>
+    private static void BlackOverDarkensAsTheGammaBlendDoes()
+    {
+        static double Decode(double value) => value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
+        static double Encode(double value) => value <= 0.0031308 ? value * 12.92 : 1.055 * Math.Pow(value, 1 / 2.4) - 0.055;
+        foreach (var (alpha, below) in new[] { (160, 255), (160, 128), (100, 200), (220, 255) })
+        {
+            var gamma = below * (1 - alpha / 255.0);
+            var linear = Encode(Decode(below / 255.0) * (1 - UiAlphaCurves.BlackOver[alpha] / 255.0)) * 255;
+            Check(Math.Abs(gamma - linear) <= (below == 255 ? 2 : 5), $"black at {alpha} over {below}: gamma {gamma:F1}, linear at the table's alpha {linear:F1}");
+        }
+        Check(UiAlphaCurves.BlackOver[0] == 0 && UiAlphaCurves.BlackOver[255] == 255, "the ends stay");
+    }
+
+    /// <summary>W3DDisplay::drawRemainingRectClock: at 25 % the quarter from twelve to three o'clock is open and the rest covered; at 0 % all is covered, at 100 % nothing.</summary>
+    private static void TheRemainingClockSweepsClockwiseFromTwelve()
+    {
+        var rect = new UiRect(100, 50, 40, 40);
+        var color = new WndColor(0, 0, 0, 160);
+        bool Covered(System.Collections.Immutable.ImmutableArray<UiFillRect> spans, int x, int y) => spans.Any(span => span.Rect.Contains(x, y));
+        var quarter = UiClock.Remaining(rect, 25, color);
+        Check(!Covered(quarter, 130, 60), "25 %: the top right quarter is open");
+        Check(Covered(quarter, 130, 80) && Covered(quarter, 110, 80) && Covered(quarter, 110, 60), "25 %: the other three quarters are covered");
+        Check(quarter.Sum(span => span.Rect.Width * span.Rect.Height) == 1200, $"25 %: three quarters of 1,600 pixels ({quarter.Sum(span => span.Rect.Width * span.Rect.Height)})");
+        var late = UiClock.Remaining(rect, 95, color);
+        Check(Covered(late, 117, 52) && !Covered(late, 123, 52), "95 %: only a sliver left of twelve o'clock is covered");
+        Check(UiClock.Remaining(rect, 0, color) is [{ } whole] && whole.Rect == rect && UiClock.Remaining(rect, 100, color).IsEmpty, "0 % covers the button, 100 % nothing");
     }
 
     private static void Test(Action test)

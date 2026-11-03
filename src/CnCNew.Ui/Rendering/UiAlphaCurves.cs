@@ -15,6 +15,12 @@ public static class UiAlphaCurves
     /// <summary>Alpha table that maps a coverage byte to the alpha whose linear-light blend equals the gamma-space blend over black.</summary>
     public static byte[] LightOnDark { get; } = Build();
 
+    /// <summary>
+    /// Alpha table for black laid over the picture (the clock of a cameo, a darkened panel): maps an alpha byte to the alpha whose linear-light blend darkens what lies below as much as the
+    /// original's gamma-space blend, which leaves <c>1 - a</c> of it. Black at 160 left a light cameo at about 165 instead of 95 (the owner's playtest of 3 November 2026 saw no clock on a power).
+    /// </summary>
+    public static byte[] BlackOver { get; } = [.. Enumerable.Range(0, 256).Select(alpha => (byte)(255 - LightOnDark[255 - alpha]))];
+
     /// <summary>True for colors that get <see cref="LightOnDark"/>: relative luminance of the color bytes at or above one half.</summary>
     public static bool IsLight(WndColor color) => 2126 * color.R + 7152 * color.G + 722 * color.B >= 127 * 10000;
 
