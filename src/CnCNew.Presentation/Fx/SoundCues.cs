@@ -56,6 +56,10 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
                 if (FxCatalog.IsAudible(simEvent.Text) && view.GetPose(simEvent.Entity) is { } gatherer)
                     Add(output, tick, simEvent.Text, SoundCueKind.Voice, gatherer.Position, simEvent.Entity, gatherer.Owner, "SupplyTruckAIUpdate.gainOneBox");
                 break;
+            case SimEventKind.PilotKilled:
+                if (catalog.MiscAudio.TryGetValue("SplatterVehiclePilotsBrain", out var splatter) && FxCatalog.IsAudible(splatter) && view.GetPose(simEvent.Entity) is { } sniped)
+                    Add(output, tick, splatter, SoundCueKind.Effect, sniped.Position, simEvent.Entity, sniped.Owner, "Object.setDisabled");
+                break;
             case SimEventKind.CrushSound:
                 if (FxCatalog.IsAudible(simEvent.Text) && view.GetPose(simEvent.Entity) is { } crushed)
                     Add(output, tick, simEvent.Text, SoundCueKind.Effect, crushed.Position, simEvent.Entity, crushed.Owner, "CrushDie.onDie");

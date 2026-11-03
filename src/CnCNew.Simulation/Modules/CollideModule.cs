@@ -9,6 +9,9 @@ public enum CollideEntry : byte
     Hijack,
     CarBomb,
     Sabotage,
+
+    /// <summary>The target is an unmanned vehicle, which any infantry may take over (the actor needs no collide module for it).</summary>
+    Unmanned,
 }
 
 /// <summary>

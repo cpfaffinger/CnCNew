@@ -140,6 +140,9 @@ public enum SimEventKind : byte
     /// <summary><c>CrushDie::onDie</c>: this object was crushed and <see cref="SimEvent.Text"/> plays at it.</summary>
     CrushSound = 90,
 
+    /// <summary><c>Object::setDisabled(DISABLED_UNMANNED)</c>: this vehicle's driver was killed.</summary>
+    PilotKilled = 91,
+
     /// <summary><c>CrateCollide::onCollide</c>: the crate plays its <c>ExecuteAnimation</c> (<see cref="SimEvent.Text"/>); the value is <see cref="CrateAnimation"/>.</summary>
     CrateAnimation = 88,
 }

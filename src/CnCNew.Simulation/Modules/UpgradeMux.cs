@@ -57,6 +57,9 @@ public sealed class UpgradeMuxState(UpgradeMuxData data)
     }
 
     /// <summary>The un-upgrade path: re-arms the module so a fresh <see cref="WouldUpgrade"/>/activation can fire again later.</summary>
+    /// <summary><c>UpgradeMux::undoUpgrade</c>.</summary>
+    public void UndoUpgrade() => Executed = false;
+
     public bool ResetUpgrade(UpgradeMask keyMask)
     {
         if (!keyMask.TestForAny(data.Activation) || !Executed) return false;

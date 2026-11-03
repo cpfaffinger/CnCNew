@@ -405,6 +405,13 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
 
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
+    /// <summary><c>undoUpgrade</c>: "it also loses any healing bonuses it may have earned in its prior life".</summary>
+    public void UndoUpgrade()
+    {
+        _mux.UndoUpgrade();
+        _active = false;
+    }
+
     public void TryReset(IWorldServices world, UpgradeMask keyMask)
     {
         if (_mux.ResetUpgrade(keyMask)) _active = false;
@@ -1728,6 +1735,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var dy = goalY - ownY;
         var near = SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
         if (near && _frameTicksLeft > 0) SettleFrame(world.Tick);
+        if (near && world.TakesOver(Entity, goal)) return;
         if (near)
             foreach (var module in Entity.Modules)
             {

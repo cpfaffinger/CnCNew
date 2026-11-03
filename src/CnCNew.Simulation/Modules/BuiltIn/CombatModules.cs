@@ -120,6 +120,9 @@ internal sealed class CrushDie(CrushDieData data) : DieModuleBase(data.Mux)
 {
     private static readonly int CrushDamage = NameTables.DamageType.TryIndexOf("CRUSH", out var crush) ? crush : throw new InvalidOperationException("CRUSH is not a damage type.");
 
+    /// <summary>"be sure that 0==never, 100==always".</summary>
+    private const int HighestPercent = 99;
+
     public override string ModuleName => "CrushDie";
 
     public override void OnDie(IWorldServices world, in DamageInfo info)
@@ -127,7 +130,7 @@ internal sealed class CrushDie(CrushDieData data) : DieModuleBase(data.Mux)
         if (!Mux.IsApplicable(Entity, info) || info.DamageType != CrushDamage) return;
         var (sound, percent) = world.FindEntity(info.Source) is { } crusher ? EndNearest(crusher) : (data.TotalSound, data.TotalPercent);
         if (sound.Length == 0) return;
-        if (world.LogicRandom.Range(0, 99) < percent) world.Emit(SimEventKind.CrushSound, Entity.Id, info.Source, sound, 0);
+        if (world.LogicRandom.Range(0, HighestPercent) < percent) world.Emit(SimEventKind.CrushSound, Entity.Id, info.Source, sound, 0);
     }
 
     private (string Sound, int Percent) EndNearest(Entity crusher)

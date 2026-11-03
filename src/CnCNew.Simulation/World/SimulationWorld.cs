@@ -1052,6 +1052,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public CollideEntry CollideEntryOf(PlayerId player, Entity actor, Entity target)
     {
         if (actor == target || target.DestroyRequested || target.EffectivelyDead || !CanPlayerSee(player, target)) return CollideEntry.None;
+        if (CanTakeOver(actor, target)) return CollideEntry.Unmanned;
         var enemies = RelationshipOf(player, target.Owner) == Relationship.Enemies;
         foreach (var module in actor.Modules)
         {

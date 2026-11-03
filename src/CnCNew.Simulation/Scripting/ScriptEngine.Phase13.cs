@@ -280,7 +280,7 @@ public sealed partial class ScriptEngine
         foreach (var member in members) { sumX += member.X.Floor(); sumY += member.Y.Floor(); }
         var centreX = Fixed.FromInt(sumX / members.Length);
         var centreY = Fixed.FromInt(sumY / members.Length);
-        var target = _unmanned.Select(id => _world.FindEntity(new EntityId(id))).Where(candidate => candidate is { EffectivelyDead: false, DestroyRequested: false }).Select(candidate => candidate!)
+        var target = _world.Entities.Where(candidate => candidate is { Unmanned: true, EffectivelyDead: false, DestroyRequested: false })
             .OrderBy(candidate => Distance2(candidate, centreX, centreY)).ThenBy(candidate => candidate.Id.Value).FirstOrDefault();
         if (target is null) return;
         foreach (var member in members) { _captureOrders[member.Id.Value] = target.Id.Value; MoveTo(member, target.X, target.Y); }
@@ -299,7 +299,7 @@ public sealed partial class ScriptEngine
         {
             var member = _world.FindEntity(new EntityId(memberId));
             var target = _world.FindEntity(new EntityId(targetId));
-            if (member is null || member.EffectivelyDead || member.DestroyRequested || target is null || target.EffectivelyDead || target.DestroyRequested || !_unmanned.Contains(targetId))
+            if (member is null || member.EffectivelyDead || member.DestroyRequested || target is null || target.EffectivelyDead || target.DestroyRequested || !target.Unmanned)
             {
                 _captureOrders.Remove(memberId);
                 continue;
@@ -308,7 +308,7 @@ public sealed partial class ScriptEngine
             var dy = member.Y - target.Y;
             if (SquaredReach.Of(reach).Contains(dx * dx + dy * dy))
             {
-                if (_world.TransferOwnership(target.Id, member.Owner)) { _unmanned.Remove(targetId); target.Captured = true; }
+                _world.TakeOver(member, target);
                 foreach (var key in _captureOrders.Where(pair => pair.Value == targetId).Select(pair => pair.Key).ToArray()) _captureOrders.Remove(key);
             }
             else if (resend && !Marching(member)) MoveTo(member, target.X, target.Y);
@@ -617,7 +617,7 @@ public sealed partial class ScriptEngine
                 return true;
             // evaluateSkirmishUnownedFactionUnitComparison: the neutral player's unmanned objects.
             case "SKIRMISH_UNOWNED_FACTION_UNIT_EXISTS":
-                result = Has(type, p, 3) && Compare(Int(p, 1), _unmanned.Count(id => _world.FindEntity(new EntityId(id)) is { EffectivelyDead: false, DestroyRequested: false }), Int(p, 2));
+                result = Has(type, p, 3) && Compare(Int(p, 1), _world.Entities.Where(candidate => candidate.Unmanned).Select(candidate => candidate.Id.Value).Count(id => _world.FindEntity(new EntityId(id)) is { EffectivelyDead: false, DestroyRequested: false }), Int(p, 2));
                 return true;
             // evaluateSkirmishPlayerTechBuildingWithinDistancePerimeter: a tech building of somebody else (not the player, not an ally) within the area's radius + distance of its centre; cached for good.
             case "SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE":

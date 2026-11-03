@@ -172,7 +172,12 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
             RecordDamage(world, info);
             return DamageOutcome.Applied;
         }
-        if (info.DamageType == DamageTypes.KillPilot) return DamageOutcome.NoEffect;
+        if (info.DamageType == DamageTypes.KillPilot)
+        {
+            // "This type of damage doesn't actually damage the unit, but it does kill it's pilot, in the case of a vehicle."
+            world.KillPilot(Entity, info);
+            return DamageOutcome.NoEffect;
+        }
         // ActiveBody::attemptDamage: the body's damage scalar (the strategy center's hold-the-line plan) applies to everything but unresistable damage.
         if (info.DamageType != DamageTypes.Unresistable) amount *= world.DamageScalarOf(Entity);
         if (amount <= Fixed.Zero && !info.Kill) return DamageOutcome.NoEffect;

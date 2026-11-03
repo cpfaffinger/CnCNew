@@ -22,7 +22,6 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<long, int> _relTeamTeam = [];
     private readonly SortedDictionary<long, int> _relTeamPlayer = [];
     private readonly SortedDictionary<long, int> _relPlayerTeam = [];
-    private readonly SortedSet<uint> _unmanned = [];
     private readonly SortedDictionary<string, int> _priorityDelta = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, string> _buttonHunts = [];
     private readonly SortedDictionary<uint, long> _buttonHuntNext = [];
@@ -160,9 +159,7 @@ public sealed partial class ScriptEngine
                         foreach (var member in LiveMembers(team).ToArray()) Unman(member);
                 return true;
             case "DELETE_ALL_UNMANNED":
-                foreach (var id in _unmanned.ToArray())
-                    if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false } unmannedObject) _world.RequestDestroy(unmannedObject.Id);
-                _unmanned.Clear();
+                foreach (var unmannedObject in _world.Entities.Where(candidate => candidate is { Unmanned: true, DestroyRequested: false }).ToArray()) _world.RequestDestroy(unmannedObject.Id);
                 return true;
 
             // ---- production priority (doTeamIncreasePriority / doTeamDecreasePriority: TeamPrototype::increaseAIPriorityForSuccess / decreaseAIPriorityForFailure)
@@ -564,8 +561,7 @@ public sealed partial class ScriptEngine
         if (entity.Owner.IsSystem) return;
         _followers.Remove(entity.Id.Value);
         _buttonHunts.Remove(entity.Id.Value);
-        _world.TransferOwnership(entity.Id, PlayerId.System);
-        _unmanned.Add(entity.Id.Value);
+        _world.Unman(entity, EntityId.Invalid);
     }
 
     // ------------------------------------------------------------------------------------------------ state
@@ -575,7 +571,6 @@ public sealed partial class ScriptEngine
         DescribeRelations(writer, "relTeamTeam", _relTeamTeam);
         DescribeRelations(writer, "relTeamPlayer", _relTeamPlayer);
         DescribeRelations(writer, "relPlayerTeam", _relPlayerTeam);
-        if (_unmanned.Count > 0) { writer.BeginArray("unmanned"); foreach (var id in _unmanned) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
         if (_priorityDelta.Count > 0)
         {
             writer.BeginArray("priorityDelta");
@@ -603,8 +598,6 @@ public sealed partial class ScriptEngine
         LoadRelations(reader, "relTeamTeam", _relTeamTeam);
         LoadRelations(reader, "relTeamPlayer", _relTeamPlayer);
         LoadRelations(reader, "relPlayerTeam", _relPlayerTeam);
-        _unmanned.Clear();
-        if (reader.Has("unmanned")) foreach (var item in reader.Array("unmanned")) _unmanned.Add(checked((uint)item.UInt("id")));
         _priorityDelta.Clear();
         if (reader.Has("priorityDelta")) foreach (var item in reader.Array("priorityDelta")) _priorityDelta[item.Text("name")] = checked((int)item.Int("delta"));
         _buttonHunts.Clear();

@@ -183,7 +183,9 @@ public sealed class StressScenario
                 // Rubble structures survive their own death (KeepObjectDie), so they are removed explicitly.
                 if (victim.Rubble || _random.Range(0, 99) < 30)
                 {
-                    Add(new DestroyCommand(new PlayerId(victim.Owner), Next(victim.Owner), tick, new EntityId(victim.Id)), world);
+                    // By whoever owns it now: a vehicle whose driver was shot belongs to nobody.
+                    var owner = world.FindEntity(new EntityId(victim.Id))?.Owner.Value ?? victim.Owner;
+                    Add(new DestroyCommand(new PlayerId(owner), Next(owner), tick, new EntityId(victim.Id)), world);
                     RemoveAlive(victim.Id);
                 }
                 else
