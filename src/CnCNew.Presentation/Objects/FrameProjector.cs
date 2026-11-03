@@ -457,6 +457,21 @@ public sealed class FrameProjector
             if (_current.ContainsKey(id) || !previous.Visual.IsStructure || previous.Owner == viewer || world.AreAllies(viewer, previous.Owner)) continue;
             if (!world.IsPositionVisibleTo(viewer, previous.FixedX, previous.FixedY)) _ghosts[id] = previous;
         }
+
+        // PartitionManager::revealMapForPlayer: a match of several players explores the map before the players' buildings are placed, and every cell passes from clear to fogged at once,
+        // so the ghost of every structure the map placed is taken then (W3DGhostObject). Here a structure of no playable side that the viewer has never had in sight stands on explored
+        // ground as its ghost: the supply docks and the map's buildings show darkened across the map, the players' bases and every unit out of sight do not.
+        if (world.Tick % world.Time.OriginalFrames(SceneryFogIntervalFrames) != 0) return;
+        foreach (var entity in world.Entities)
+        {
+            if (entity.DestroyRequested || entity.ContainedBy.IsValid || _known.Contains(entity.Id.Value) || entity.Owner == viewer || world.IsPlayableSide(entity.Owner)) continue;
+            if (!_catalog.TryGet(entity.Template.Name, out var visual) || !visual.IsStructure) continue;
+            if (!world.IsPositionExploredBy(viewer, entity.X, entity.Y) || world.IsPositionVisibleTo(viewer, entity.X, entity.Y)) continue;
+            var ghost = CaptureEntity(entity, world, visual, null);
+            _known.Add(entity.Id.Value);
+            Claim(ghost);
+            _ghosts[entity.Id.Value] = ghost;
+        }
     }
 
     private void Claim(Capture capture)
