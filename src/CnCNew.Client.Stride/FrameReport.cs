@@ -16,6 +16,7 @@ internal static class FrameReport
 
     private static readonly List<double> Frames = [];
     private static readonly List<string> LongFrames = [];
+    private static readonly List<string> Marks = [];
     private static double _modelMilliseconds, _textureMilliseconds, _modelTotal, _textureTotal, _modelWorst, _textureWorst;
     private static int _models, _textures, _modelCount, _textureCount, _longCount, _longWithLoading, _longWithCollection;
     private static int _gen0, _gen1, _gen2;
@@ -27,6 +28,12 @@ internal static class FrameReport
     }
 
     public static long Start() => Enabled ? Stopwatch.GetTimestamp() : 0;
+
+    /// <summary>Names what happened after the frames counted so far (the intro ended), so a long frame can be placed.</summary>
+    public static void Mark(string what)
+    {
+        if (Enabled) Marks.Add(string.Create(CultureInfo.InvariantCulture, $"frame-report: after frame {Frames.Count}: {what}"));
+    }
 
     public static void Model(long start)
     {
@@ -77,6 +84,7 @@ internal static class FrameReport
         double Quantile(double share) => sorted[Math.Min(sorted.Length - 1, (int)(sorted.Length * share))];
         yield return string.Create(CultureInfo.InvariantCulture, $"frame-report: {Frames.Count} frames, median {Quantile(0.5):F1} ms, 99 % {Quantile(0.99):F1} ms, longest {sorted[^1]:F1} ms; {_longCount} of at least {LongFrameMilliseconds} ms, {_longWithLoading} of them while loading, {_longWithCollection} with a collection");
         yield return string.Create(CultureInfo.InvariantCulture, $"frame-report: in frames: {_modelCount} models in {_modelTotal:F0} ms (longest {_modelWorst:F1}), {_textureCount} textures in {_textureTotal:F0} ms (longest {_textureWorst:F1})");
+        foreach (var line in Marks) yield return line;
         foreach (var line in LongFrames) yield return line;
     }
 }

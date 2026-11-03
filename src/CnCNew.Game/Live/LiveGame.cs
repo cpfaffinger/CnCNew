@@ -35,6 +35,12 @@ public abstract class LiveGame
     private readonly double _tickSeconds;
     private readonly long _maxTicksPerFrame;
 
+    /// <summary>
+    /// Whether the load reads the armies of the sides that play as well as what stands on the map (<see cref="PreloadedModels"/>). The scene behind the menus has nobody who builds, and
+    /// reading every army there held the menu back for seconds after the intro (the original reads nothing ahead unless <c>m_preloadAssets</c> is set).
+    /// </summary>
+    public bool PreloadsArmies { get; set; } = true;
+
     private FrameProjector _projector;
     private readonly FrameProjectorOptions _projectorOptions;
     private readonly SimulationFxWorldView _fxView;

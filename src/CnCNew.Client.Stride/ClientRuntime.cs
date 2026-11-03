@@ -619,6 +619,11 @@ internal sealed class ClientRuntime : IDisposable
             events.Add(new CnCNew.Presentation.Input.MouseMoveEvent(_clockMs, staged));
             _pointer = staged;
         }
+        if (_intro is not null && !_shellMapPrepared)
+        {
+            WarmUpBehindIntro(gameTime, width, height);
+            return;
+        }
         if (UpdateMovies(events, seconds)) return;
         // Scripted input enters exactly where the device's does, so it meets the same HUD layout, text measure and update/draw order.
         if (_script is not null && _running is not null) events.AddRange(_script.EventsFor(_frame, _clockMs));
@@ -746,19 +751,46 @@ internal sealed class ClientRuntime : IDisposable
             return;
         }
 
-        if (_shellMap is null)
-        {
-            var run = MissionRun.Load(MissionContext.From(_data), MapEnvironment.ShellMapPath(_data.Graph), MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
-            var shown = LiveMission.Create(_data, run, BackBufferSize());
-            _shellMap = new LiveMatchHost(_game, shown.Data, shown);
-        }
+        EnsureShellMap();
 
-        var map = _shellMap.Match;
-        _shellMap.Update(gameTime, _game.GraphicsContext.CommandList, width, height, fixedSeconds, elapsed =>
+        var map = _shellMap!.Match;
+        _shellMap!.Update(gameTime, _game.GraphicsContext.CommandList, width, height, fixedSeconds, elapsed =>
         {
             map.Advance(elapsed);
             map.DrainSoundCues();
         });
+    }
+
+    private bool _shellMapPrepared;
+    private bool _warmingUp;
+
+    /// <summary>
+    /// The original loads the shell before its movies: here the frame before the intro's first picture builds the scene behind the menus, lays out its objects and draws it and the menu once
+    /// under black, so the shaders and pictures of both are made then and the menu stands at once when the intro ends. The owner's playtest of 3 November 2026 saw the game stop after the
+    /// intro; on the development machine that first look was one frame of 6 s (5 s of drawing, 1.1 s of laying out).
+    /// </summary>
+    private void WarmUpBehindIntro(GameTime gameTime, int width, int height)
+    {
+        _shellMapPrepared = true;
+        _warmingUp = _shell is not null;
+        if (!ShellMapEnabled || _shell is null || _netLoad is not null) return;
+        EnsureShellMap();
+        // One original frame of the scene: its first tick is when the simulation's code is made, and the frames after the intro would catch up behind it.
+        var map = _shellMap!.Match;
+        _shellMap.Update(gameTime, _game.GraphicsContext.CommandList, width, height, 0, _ => map.Advance(1.0 / CnCNew.Data.OriginalFrame.PerSecond));
+        map.DrainSoundCues();
+        FrameReport.Mark("the scene behind the menus is laid out");
+    }
+
+    /// <summary>Builds the scene behind the menus once: the map's world, its scripts and what draws it.</summary>
+    private void EnsureShellMap()
+    {
+        if (_shellMap is not null) return;
+        var run = MissionRun.Load(MissionContext.From(_data), MapEnvironment.ShellMapPath(_data.Graph), MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
+        var shown = LiveMission.Create(_data, run, BackBufferSize());
+        shown.PreloadsArmies = false;
+        _shellMap = new LiveMatchHost(_game, shown.Data, shown);
+        FrameReport.Mark("the scene behind the menus is built");
     }
 
     private void StopShellMap()
@@ -784,6 +816,7 @@ internal sealed class ClientRuntime : IDisposable
             intro.Update(seconds);
             if (intro.IsDone)
             {
+                FrameReport.Mark("the intro ended");
                 _intro = null;
                 _audio.Game.EnterShell();
             }
@@ -1118,7 +1151,7 @@ internal sealed class ClientRuntime : IDisposable
 
         // The mission scripts' screen filters (grey-scale, motion blur) go over the finished world and under the HUD. Asking for them is what makes the director count them as displayed.
         if (_running?.Host.Match is LiveMission filtered && filtered.Director.PostEffects is { Any: true } effects) _filters.Apply(context, back, effects);
-        var list = alone ? null : _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
+        var list = alone && !_warmingUp ? null : _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
         _ui.Begin(context, back.Width, back.Height);
         if (list is not null)
         {
@@ -1129,6 +1162,12 @@ internal sealed class ClientRuntime : IDisposable
                 if (hideCanvas && command is UiFillRect { Rect: var rect } && rect.Width * 10 >= back.Width * 9 && rect.Height * 10 >= back.Height * 9) continue;
                 _ui.Execute(command);
             }
+        }
+        if (_warmingUp)
+        {
+            // The menu was drawn to be made, not to be seen: the intro's black lies over it.
+            _ui.Execute(new UiFillRect(new CnCNew.Ui.Layout.UiRect(0, 0, back.Width, back.Height), new CnCNew.Ui.Wnd.WndColor(0, 0, 0, 255)));
+            _warmingUp = false;
         }
         if (Caption is { Length: > 0 } caption) DrawCaption(caption, back.Width);
         // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.

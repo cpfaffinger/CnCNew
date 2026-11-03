@@ -14,9 +14,10 @@ public static class PreloadedModels
         var sides = match.Players.Select(player => match.World.FactionSideOf(player.Id)).Where(side => side.Length > 0 && !side.Equals(NobodysArmy, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var visual in match.Data.Visuals.Visuals)
-            if (match.Data.Templates.TryGet(visual.TemplateName, out var template) && Fielded(template.Side, visual.IsKindOf("PRELOAD")))
-                Add(visual);
+        if (match.PreloadsArmies)
+            foreach (var visual in match.Data.Visuals.Visuals)
+                if (match.Data.Templates.TryGet(visual.TemplateName, out var template) && Fielded(template.Side, visual.IsKindOf("PRELOAD")))
+                    Add(visual);
 
         foreach (var entity in match.World.Entities)
             if (match.Data.Visuals.TryGet(entity.Template.Name, out var visual))
