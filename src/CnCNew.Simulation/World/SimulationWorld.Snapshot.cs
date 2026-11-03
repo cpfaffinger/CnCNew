@@ -217,6 +217,7 @@ public sealed partial class SimulationWorld
             Captured = reader.Has("captured"),
             Unmanned = reader.Has("unmanned"),
             RiderWeaponBit = reader.Has("riderWeapon") ? checked((int)reader.Int("riderWeapon")) : -1,
+            ExperienceSink = reader.Has("experienceSink") ? new EntityId(checked((uint)reader.UInt("experienceSink"))) : EntityId.Invalid,
             MineClearingDetail = reader.Has("mineClearingDetail"),
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),

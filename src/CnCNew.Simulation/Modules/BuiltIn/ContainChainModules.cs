@@ -332,7 +332,7 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
 
 /// <summary>
 /// <c>OverlordContainModuleData</c> (<c>OverlordContain.cpp</c>): the transport fields plus <c>PayloadTemplateName</c> (the objects created inside at construction) and
-/// <c>ExperienceSinkForRider</c> (the rider's experience goes to the Overlord; no experience sinks exist here, so it is typed and unused).
+/// <c>ExperienceSinkForRider</c> (what the rider earns goes to the Overlord).
 /// </summary>
 public sealed record OverlordContainData(TransportContainData Transport, bool PassengersAllowedToFire, ImmutableArray<string> Payload, bool ExperienceSinkForRider) : ModuleData
 {
@@ -414,6 +414,12 @@ public sealed class OverlordContain(OverlordContainData data) : TransportContain
         {
             _redirectionActivated = true;
             Follow(candidate);
+            // "And this contain style explicitly sucks XP from our little friend."
+            if (data.ExperienceSinkForRider)
+            {
+                candidate.ExperienceSink = Entity.Id;
+                world.MarkDirty(candidate);
+            }
             world.WakeAt(Entity, this, world.Tick);
         }
     }

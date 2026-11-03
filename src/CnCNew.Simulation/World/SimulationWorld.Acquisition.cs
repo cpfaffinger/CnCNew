@@ -605,8 +605,10 @@ public sealed partial class SimulationWorld
         // AI::getAdjustedVisionRangeForObject gives a contained object its largest weapon range (with its bonuses), and getNextMoodTarget adds the container's bounding circle
         // "so that large buildings can auto acquire everything in outer ranges".
         if (FiringContainerOf(entity) is { } container) return reach + container.Template.BoundingCircleRadius;
-        if (!chase) return IsComputerPlayer(entity.Owner) ? reach : Fixed.Min(reach, entity.Template.VisionRange * AcquireVisionFactorHuman);
-        var vision = entity.Template.VisionRange * AcquireVisionFactorComputer;
+        // localApplyBattlePlanBonusesToObject: Search & Destroy sets the vision range of the army, not its shroud alone.
+        var seen = entity.Template.VisionRange * BattlePlanSightScalarOf(entity);
+        if (!chase) return IsComputerPlayer(entity.Owner) ? reach : Fixed.Min(reach, seen * AcquireVisionFactorHuman);
+        var vision = seen * AcquireVisionFactorComputer;
         if (IsComputerPlayer(entity.Owner))
         {
             switch (AttitudeOf(entity))

@@ -369,6 +369,12 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private void AddExperience(Entity entity, int amount)
     {
+        // ExperienceTracker::addExperiencePoints: "if I have a Sink set up, then that guy gets the experience".
+        if (entity.ExperienceSink.IsValid)
+        {
+            if (FindEntity(entity.ExperienceSink) is { } sink) AddExperience(sink, amount);
+            return;
+        }
         if (!entity.IsTrainable) return;
         entity.Experience = checked(entity.Experience + (int)(Fixed.FromInt(amount) * entity.ExperienceScalar).Floor());
         var level = 0;

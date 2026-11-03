@@ -533,6 +533,7 @@ static partial class Tests
 
         var overlord = FcSpawn(world, feeder, "FcOverlord", 1, 500, 0);
         var gattling = FcInside(world, feeder, "FcGattling", 1, overlord);
+        Check.That(gattling.ExperienceSink == overlord.Id, "What stands on an Overlord earns for it (setExperienceSink).");
         Check.That(world.ContainerLetsFire(gattling), "The Overlord's portable structure fires.");
         Check.That(Of(overlord).Allows(humveeRider) && !Of(overlord).Allows(jeep), "An Overlord lets infantry fire and no vehicle.");
         var carrier = FcSpawn(world, feeder, "FcCarrier", 1, 600, 0);
