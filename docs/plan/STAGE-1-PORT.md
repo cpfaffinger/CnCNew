@@ -316,6 +316,9 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-116 | `IS_ATTACKING` was never set, so the 33 kinds with `STEALTH_NOT_WHILE_ATTACKING` stayed hidden while they fired | `AIAttackState`, `StealthUpdate::allowedToStealth` | found by reading, Phase 58 | **done** (§80.8) |
 | F-117 | A rider gave its bike no weapon set, command set or locomotor: a combat bike had no gun; a cliff locomotor was never chosen | `RiderChangeContain::onContaining`, `LocomotorSet::findLocomotor` | found by reading, Phase 58 | **done** (§80.6) |
 | F-118 | Above 30 Hz the flight of a shot without a projectile was counted from the shooter's place inside its frame: a shooter that fires while it drives landed a slow shot a frame late | `WeaponTemplate::fireWeaponTemplate` | found by the rate comparison, Phase 58 | **done** (§80.9) |
+| F-119 | Standing infantry never stepped out of a vehicle's way: the vehicle planned round it | `AIUpdateInterface::processCollision`, `aiMoveAwayFromUnit` | Phase 58 list, item 12 | **done** (§80.10) |
+| F-120 | What fell in a physics flight met nothing: a hulk falling into a building neither blew up nor was gone | `PhysicsBehavior::onCollide` | Phase 58 list, item 21 | **done** (§80.11) |
+| F-121 | `EnterGuard` and `HijackGuard` were unread: a hijacker on guard stood | `AIGuardMachine::lookForInnerTarget`, `AIGuardInnerState` | Phase 58 list, item 24 | **done** (§80.12) |
 | F-33 | Installer: Steam outside the default path untested; manifest hash Windows-only; client not self-contained (**Phase 56:** the export leaves out the program files, manuals and metadata of the original) | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog

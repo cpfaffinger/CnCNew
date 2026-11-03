@@ -4921,6 +4921,22 @@ A sweep of the code by a reader (not by a test) named what the port still lacked
 left in a frame's first tick from half a step back: the flight of a shot without a projectile (`distance / WeaponSpeed`) is now counted from where the shooter's frame ends, like the rest of the shot,
 or a slow shot landed a frame later than at 30 Hz (found when the default match America against China parted at frame 8,764; it is the same game at 30 and 60 Hz to its end again).
 
-### 80.10 Reference values
+### 80.10 Making way
+
+`AIUpdateInterface::processCollision`: a vehicle that infantry holds up tells it to move away (`aiMoveAwayFromUnit`, `Pathfinder::getMoveAwayFromPath`; "Prevent busy units from being told to move out of the way!"). The port's step plans round what stands ahead (`StationaryBlockersAhead`) and, when it does, asks the idle infantry of its own player or an ally on its way to step to the nearest free place across it, its own side first (`RequestStepAside`, `StepInfantryAside`). The original asks any infantry it touches, but its path search goes round enemies, so an enemy is never touched that way. Asked at the end of the mover's frame, where every object has decided at every rate, and saved while it waits (`stepAsides`, beside the clear-path claims of F-84). The deadlock between two movers (the one with the lower path priority moves away) is still the port's step round the other.
+
+### 80.11 What falls into a building
+
+`PhysicsBehavior::onCollide` for an object in a physics flight (`MeetWhatStands`): "AI objects move under their own initiative, not by getting bounced", so a dead unit, a hulk or a piece of debris meets what is immobile - falling into a building it is destroyed (not killed), and a vehicle fires `VehicleCrashesIntoBuildingWeapon` first; falling onto anything else immobile a vehicle fires `VehicleCrashesIntoNonBuildingWeapon`; either way it stops and is pushed back by `StructureStiffness`. The height test compares the world height with `DefaultStructureRubbleHeight`, as the original does. Not done: the partition's shape test before the spheres, the push between two movers. The community's later fix (the crash damages only what it hits, `TheSuperHackers @bugfix` of 2026) is not adopted.
+
+### 80.12 A hijacker's guard
+
+`lookForInnerTarget` with `isEnterGuard` and `isHijackGuard` (the GLA hijacker and four variants): the guard looks for the closest enemy vehicle it could hijack within its guard range of the post and approaches it as an enter state (`AIGuardInnerState`); the port's guard looked only for something to shoot, and a hijacker on guard stood. Not built: a plain enter guard into a neutral container (no shipped object has one).
+
+### 80.13 Named, not built
+
+The cheer and a player's formation (`MSG_DO_CHEER`, "currently only activated via test key", and `MSG_META_CREATE_FORMATION`): the shipped `CommandMap.ini` binds neither, so no player reaches them. The tunnel network's guard (`AITNGuard.cpp`): only the original AI's scripts give it. The carrier's stop (`AICMD_IDLE`; the port has no stop order for an object without an AI).
+
+### 80.14 Reference values
 
 The retail reference match a stalemate at tick 108,000, `F14CB4C2D2D919D7` / `788FC04B2661B4F0`, 244,169 commands; stress test `20359BA8A2093B99` / `C51ABB66197067E5` (the synthetic fixture's tanks now crush and are unmanned; before, `9EE9F730D124C3BD` / `139E5E5F077F4DA3`); 12 of 16 pairings decided, four outcomes moved (Alpine Assault China-GLA and Armored Fury GLA-America now stalemates, Armored Fury China-GLA won by China, Death Valley China-GLA by GLA; balance not judged); every mission keeps its outcome; world fingerprint `8E15FB16ED00728D`; compatibility baseline 632; `CommandTypes.Version` 24, replay 23 (`SteerPowerCommand`); `WorldSnapshot` 11, `MissionSnapshot` 4, protocol 8 unchanged.
