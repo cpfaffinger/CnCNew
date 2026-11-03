@@ -1090,9 +1090,12 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <c>ActionManager::canHijackVehicle</c>, <c>canConvertObjectToCarBomb</c>, <c>canSabotageBuilding</c>: what <paramref name="actor"/> would do on reaching
     /// <paramref name="target"/>, or <see cref="CollideEntry.None"/>. The target must be alive and seen; hijacking and sabotage are for enemies, and a hijacker leaves aircraft and drones alone.
     /// </summary>
-    public CollideEntry CollideEntryOf(PlayerId player, Entity actor, Entity target)
+    public CollideEntry CollideEntryOf(PlayerId player, Entity actor, Entity target) => CollideEntryOf(player, actor, target, true);
+
+    /// <summary><see cref="CollideEntryOf(PlayerId, Entity, Entity)"/>; without <paramref name="mustSee"/> as the guard's partition filters ask it, which look past the fog.</summary>
+    private CollideEntry CollideEntryOf(PlayerId player, Entity actor, Entity target, bool mustSee)
     {
-        if (actor == target || target.DestroyRequested || target.EffectivelyDead || !CanPlayerSee(player, target)) return CollideEntry.None;
+        if (actor == target || target.DestroyRequested || target.EffectivelyDead || (mustSee && !CanPlayerSee(player, target))) return CollideEntry.None;
         if (CanTakeOver(actor, target)) return CollideEntry.Unmanned;
         var enemies = RelationshipOf(player, target.Owner) == Relationship.Enemies;
         foreach (var module in actor.Modules)

@@ -1,5 +1,6 @@
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Scripting;
@@ -390,10 +391,11 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>AIGuardMachine::lookForInnerTarget</c>: none for a unit that cannot attack; the team's common target if it has one; otherwise the closest enemy within the inner range of the
     /// centre that the unit could attack, here or after moving (<c>PartitionFilterPossibleToAttack(ATTACK_NEW_TARGET, CMD_FROM_AI)</c>; no fog filter, as in the original), only flying
-    /// ones in <see cref="GuardMode.FlyingUnitsOnly"/>. The find becomes the nemesis. Not modelled: the enter guard of templates with <c>isEnterGuard</c> (none shipped acts on it here).
+    /// ones in <see cref="GuardMode.FlyingUnitsOnly"/>. The find becomes the nemesis. An enter guard looks for something to enter instead (<see cref="LookForGuardEntry"/>).
     /// </summary>
     private Entity? LookForGuardTarget(Entity entity, GuardState guard)
     {
+        if (entity.Template.EnterGuard) return LookForGuardEntry(entity, guard);
         if (!MayAct(entity, _tick) || !TurretsLetAttack(entity) || ActiveWeaponSet(entity) is null) return null;
         UpdateWeaponSet(entity);
         if (AcquisitionAdvisor is { } teams && teams.CommonTargetOf(entity) is { } common && IsGuardVictim(entity, common) && CanAttack(entity, common, false, out _))
@@ -433,6 +435,53 @@ public sealed partial class SimulationWorld
         }
         if (best is not null) guard.Nemesis = best.Id;
         return best;
+    }
+
+    /// <summary>
+    /// <c>lookForInnerTarget</c> for a template with <c>isEnterGuard</c> (the hijackers): "Enter Guard state" - the closest object within the guard range of the centre that it could enter,
+    /// with <c>isHijackGuard</c> an enemy it could hijack (<c>PartitionFilterPossibleToHijack</c>), without a neutral one (<c>ALLOW_NEUTRAL</c>); the object needs no weapon, only to be able
+    /// to act (<c>isAbleToAttack</c>). Not built: entering a neutral container by an enter guard without hijacking (no shipped object has one), and the team's common target.
+    /// </summary>
+    private Entity? LookForGuardEntry(Entity entity, GuardState guard)
+    {
+        if (!MayAct(entity, _tick)) return null;
+        var (cx, cy) = GuardCentre(guard);
+        var limit = SquaredReach.Of(GuardRange(entity, true));
+        var area = GuardedArea(guard);
+        if (area is not null) limit = SquaredReach.Of(AreaGeometry(area).Radius);
+        Entity? best = null;
+        var bestDistance = Fixed.MaxValue;
+        foreach (var candidate in _entities)
+        {
+            if (candidate.Id == entity.Id || candidate.DestroyRequested || candidate.EffectivelyDead || candidate.ContainedBy.IsValid) continue;
+            var relationship = RelationshipOf(entity.Owner, candidate.Owner);
+            if (entity.Template.HijackGuard ? relationship != Relationship.Enemies : relationship != Relationship.Neutral) continue;
+            var entry = CollideEntryOf(entity.Owner, entity, candidate, false);
+            if (entity.Template.HijackGuard ? entry != CollideEntry.Hijack : entry == CollideEntry.None) continue;
+            var (x, y, _) = candidate.FrameEnd(_tick);
+            var dx = x - cx;
+            var dy = y - cy;
+            var distance = dx * dx + dy * dy;
+            if (!limit.Contains(distance) || distance >= bestDistance) continue;
+            if (guard.Mode == GuardMode.FlyingUnitsOnly && !IsSignificantlyAboveTerrainAtFrameEnd(candidate)) continue;
+            if (area is not null && !area.Contains(x, y)) continue;
+            best = candidate;
+            bestDistance = distance;
+        }
+        if (best is not null) guard.Nemesis = best.Id;
+        return best;
+    }
+
+    /// <summary>
+    /// <c>AIGuardInnerState::onEnter</c> with <c>isEnterGuard</c>: "See if we try to enter the target" - the enter state on the nemesis, which the object's collide module ends on arrival.
+    /// </summary>
+    private bool StartGuardEntry(Entity entity, AIUpdateInterface ai, GuardState guard)
+    {
+        if (FindEntity(guard.Nemesis) is not { DestroyRequested: false, EffectivelyDead: false } nemesis) return false;
+        if (CollideEntryOf(entity.Owner, entity, nemesis, false) == CollideEntry.None || !ai.StartGuardApproach(this, nemesis)) return false;
+        ai.BeginMoveWithNextFrame(this);
+        WakeAt(entity, ai, Math.Min(ai.NextWake, _tick + _turretFrameTicks));
+        return true;
     }
 
     /// <summary>
@@ -510,6 +559,7 @@ public sealed partial class SimulationWorld
     /// <summary>The attack of INNER, OUTER and ATTACK_AGGRESSOR (<c>AIAttackState</c> on the nemesis): false when there is no nemesis to attack.</summary>
     private bool StartGuardAttack(Entity entity, AIUpdateInterface ai, GuardState guard, long tick, Fixed radius)
     {
+        if (entity.Template.EnterGuard && guard.Phase == GuardPhase.Inner) return StartGuardEntry(entity, ai, guard);
         if (FindEntity(guard.Nemesis) is not { } nemesis || !IsGuardVictim(entity, nemesis)) return false;
         var (cx, cy) = GuardCentre(guard);
         if (!WithinGuardRadius(nemesis, cx, cy, radius)) return false;
@@ -527,6 +577,8 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool GuardAttackGoesOn(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
     {
+        // The enter state goes on while the object is on its way; its arrival or the goal's end finishes it.
+        if (entity.Template.EnterGuard && guard.Phase == GuardPhase.Inner) return ai.IsApproaching(guard.Nemesis);
         if (entity.Acquisition is not { Victim.IsValid: true } state || FindEntity(state.Victim) is not { } victim || !IsGuardVictim(entity, victim)) return false;
         var (cx, cy) = GuardCentre(guard);
         var inner = GuardRange(entity, true);

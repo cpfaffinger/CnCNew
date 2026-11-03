@@ -162,6 +162,8 @@ public sealed class ObjectTemplate
         EnergyBonus = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyBonus", StringComparison.OrdinalIgnoreCase))?.Value.Value is long bonus ? checked((int)bonus) : 0;
         MaxSimultaneousOfType = definition.Fields.LastOrDefault(field => field.Name.Equals("MaxSimultaneousOfType", StringComparison.OrdinalIgnoreCase))?.Value.Value is long maxType ? checked((int)maxType) : 0;
         IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        EnterGuard = definition.Fields.LastOrDefault(field => field.Name.Equals("EnterGuard", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        HijackGuard = definition.Fields.LastOrDefault(field => field.Name.Equals("HijackGuard", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         ExperienceValue = IntegerArray(definition, "ExperienceValue");
         SkillPointValue = definition.Fields.Any(field => field.Name.Equals("SkillPointValue", StringComparison.OrdinalIgnoreCase)) ? IntegerArray(definition, "SkillPointValue") : [];
         ExperienceRequired = IntegerArray(definition, "ExperienceRequired");
@@ -271,6 +273,12 @@ public sealed class ObjectTemplate
     public int MaxSimultaneousOfType { get; }
     /// <summary><c>ThingTemplate::m_isTrainable</c>: only trainable objects take over a veterancy level from an object creation list.</summary>
     public bool IsTrainable { get; }
+
+    /// <summary><c>ThingTemplate::isEnterGuard</c>: on guard the object enters what it finds instead of attacking it (the hijackers).</summary>
+    public bool EnterGuard { get; }
+
+    /// <summary><c>ThingTemplate::isHijackGuard</c>: what an enter guard finds is an enemy vehicle to hijack, not a neutral object to enter.</summary>
+    public bool HijackGuard { get; }
     /// <summary><c>ThingTemplate::m_experienceValue</c>: the experience a killer earns for destroying this object, by the victim's own veterancy level (absent key: all zero, the reference default).</summary>
     public ImmutableArray<int> ExperienceValue { get; }
 

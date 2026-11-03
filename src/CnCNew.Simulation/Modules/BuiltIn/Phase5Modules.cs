@@ -1300,6 +1300,19 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _goal = goal.Id;
     }
 
+    /// <summary>The approach of a guard's enter state (<c>AIGuardInnerState</c> with <c>isEnterGuard</c>: <c>AIEnterState</c> on the nemesis): <see cref="OrderApproachGoal"/> that leaves the guard on.</summary>
+    internal bool StartGuardApproach(IWorldServices world, Entity goal)
+    {
+        if (Entity.Template.Locomotor is null) return false;
+        var (goalX, goalY, _) = goal.FrameEnd(world.Tick);
+        if (!StartInternalMove(goalX, goalY)) return false;
+        _goal = goal.Id;
+        return true;
+    }
+
+    /// <summary>Whether this object is still on its way to <paramref name="goal"/> (an approach of <see cref="OrderApproachGoal"/> or <see cref="StartGuardApproach"/>).</summary>
+    internal bool IsApproaching(EntityId goal) => _goal.IsValid && _goal == goal;
+
     /// <summary><c>aiIdle</c>: drops the move order and the goal object; the object stands where it is.</summary>
     public void OrderIdle(IWorldServices world, bool fromPlayer = false)
     {
