@@ -743,14 +743,16 @@ public sealed class FireWeaponWhenDeadBehavior(FireWeaponWhenDeadData data) : Si
 /// </summary>
 public sealed record StealthDetectorData(
     long UpdateRateTicks, Fixed DetectionRange, bool InitiallyDisabled,
-    ImmutableArray<string> ExtraRequiredKindOf, ImmutableArray<string> ExtraForbiddenKindOf) : ModuleData
+    ImmutableArray<string> ExtraRequiredKindOf, ImmutableArray<string> ExtraForbiddenKindOf, bool CanDetectWhileGarrisoned = false, bool CanDetectWhileContained = false) : ModuleData
 {
     public static StealthDetectorData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "DetectionRate", 1),
         ModuleConfigReader.Real(configuration, "DetectionRange", Fixed.Zero),
         ModuleConfigReader.Bool(configuration, "InitiallyDisabled", false),
         ModuleConfigReader.Flags(configuration, "ExtraRequiredKindOf")?.Names ?? [],
-        ModuleConfigReader.Flags(configuration, "ExtraForbiddenKindOf")?.Names ?? []);
+        ModuleConfigReader.Flags(configuration, "ExtraForbiddenKindOf")?.Names ?? [],
+        ModuleConfigReader.Bool(configuration, "CanDetectWhileGarrisoned", false),
+        ModuleConfigReader.Bool(configuration, "CanDetectWhileContained", false));
 }
 
 /// <summary>
@@ -759,8 +761,8 @@ public sealed record StealthDetectorData(
 /// object within range and calls <see cref="StealthUpdate.MarkDetected"/> on it. Two reference simplifications, both
 /// project-wide and pre-existing, not introduced by this module: no team/diplomacy system exists yet, so "ally" is
 /// approximated as same <see cref="World.Entity.Owner"/> (the reference excludes only actual allies via
-/// <c>PartitionFilterRelationship::ALLOW_ENEMIES|ALLOW_NEUTRAL</c>); <c>CanDetectWhileGarrisoned</c>/<c>CanDetectWhileContained</c>
-/// are typed but inert. A rider its container encloses is not scanned; a garrison with a rider of kind <c>STEALTH_GARRISON</c> is, and its
+/// <c>PartitionFilterRelationship::ALLOW_ENEMIES|ALLOW_NEUTRAL</c>). A detector inside a garrison detects only with <c>CanDetectWhileGarrisoned</c>, inside
+/// anything else only with <c>CanDetectWhileContained</c> (both no without the key, "Contained means being in a transport or tunnel network"). A rider its container encloses is not scanned; a garrison with a rider of kind <c>STEALTH_GARRISON</c> is, and its
 /// riders with a <c>StealthUpdate</c> are marked (F-54, <c>PartitionFilterStealthedOrStealthGarrisoned</c> and the building branch of
 /// <c>update</c>). <c>UNDER_CONSTRUCTION</c>/<c>SOLD</c> are ported
 /// (matching every other module that checks them) even though nothing sets either status bit yet.
@@ -790,6 +792,10 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         if (Entity.HasStatus(ObjectStatusBits.UnderConstruction)) return SimulationTiming.SleepNone;
         if (Entity.HasStatus(SoldBit)) return SimulationTiming.SleepForever;
+        // "Are we eligible to detect stealth while in a container?"
+        if (Entity.ContainedBy.IsValid && world.FindEntity(Entity.ContainedBy)?.Container is { } contain
+            && (contain.IsGarrisonable ? !data.CanDetectWhileGarrisoned : !data.CanDetectWhileContained))
+            return world.Time.AtLeastOneFrame(data.UpdateRateTicks);
 
         var range = data.DetectionRange > Fixed.Zero ? data.DetectionRange : Entity.Template.VisionRange;
         foreach (var candidate in world.Entities)
