@@ -24,6 +24,18 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object MapWreck
+          KindOf = STRUCTURE IMMOBILE SELECTABLE
+          Geometry = BOX
+          GeometryMajorRadius = 15.0
+          GeometryMinorRadius = 15.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 400.0
+            InitialHealth = 400.0
+          End
+        End
         Object MapTree
           KindOf = OPTIMIZED_TREE
           Body = ActiveBody Body01
@@ -73,16 +85,20 @@ static partial class Tests
             Check.That(world.Submit(Place("MapHut", 1, 40, 50, MapObjectFlags.Indestructible | MapObjectFlags.Unsellable | MapObjectFlags.Targetable)).Accepted, "The system places an indestructible hut.");
             Check.That(world.Submit(Place("MapHut", 1, 100, 100, MapObjectFlags.None)).Accepted, "The system places a plain hut.");
             Check.That(world.Submit(Place("Marcher", 0, 150, 100, MapObjectFlags.Disabled, -2)).Accepted, "The system places a sleeping soldier.");
+            // Scorched Earth places wrecks at objectInitialHealth 0: rubble before they stand (the grid gave a footprint that was never there back, and overflowed).
+            Check.That(world.Submit(Place("MapWreck", 1, 170, 0, MapObjectFlags.None)).Accepted, "The system places a wreck.");
             Check.That(!world.Submit(new PlaceMapObjectCommand(new PlayerId(1), 1, world.Tick, "MapHut", new PlayerId(1), Fixed.FromInt(10), Fixed.FromInt(10), Fixed.Zero, Fixed.Zero, 100, MapObjectFlags.None, 0)).Accepted,
                 "A player places nothing.");
             world.Step();
+            var wreck = world.Entities.Single(entity => entity.Template.Name == "MapWreck");
+            Check.That(wreck.IsRubble && wreck.Body!.Health == Fixed.Zero, $"{rate}: a wreck at 0 % stands as rubble.");
             var huts = world.Entities.Where(entity => entity.Template.Name == "MapHut").OrderBy(entity => entity.X).ToArray();
             var soldier = world.Entities.Single(entity => entity.Template.Name == "Marcher");
             Check.That(huts.Length == 2 && huts[0].Body!.Health == Fixed.FromInt(200) && huts[1].Body!.Health == Fixed.FromInt(400), $"{rate}: the map's health ({huts[0].Body?.Health}).");
             Check.That((huts[0].ScriptDisableMask & (Entity.ScriptUnsellable | Entity.ScriptTargetable)) == (Entity.ScriptUnsellable | Entity.ScriptTargetable) && huts[1].ScriptDisableMask == 0,
                 $"{rate}: the script statuses of the map.");
             Check.That(soldier.OwnAttitude == -2 && (soldier.ScriptDisableMask & Entity.ScriptDisabled) != 0, $"{rate}: the soldier sleeps and is disabled ({soldier.OwnAttitude}).");
-            // The system's own sequence numbers: the placements above took 100 to 102.
+            // The system's own sequence numbers: the placements above took 100 to 103.
             foreach (var hut in huts) Check.That(world.Submit(new DamageCommand(PlayerId.System, sequence++, world.Tick, hut.Id, Fixed.FromInt(150), 0, 0)).Accepted, "The damage is accepted.");
             world.Step();
             Check.That(huts[0].Body!.Health == Fixed.FromInt(200) && huts[1].Body!.Health == Fixed.FromInt(250), $"{rate}: the indestructible hut takes nothing ({huts[0].Body?.Health}, {huts[1].Body?.Health}).");

@@ -142,7 +142,8 @@ public sealed partial class SimulationWorld
         entity.IsRubble = true;
         entity.Status |= 1UL << NoCollisionsBit;
         MarkDirty(entity);
-        if (Navigation is not { } navigation || !BlocksGrid(entity)) return;
+        // An object that is rubble before it stands (a map object at objectInitialHealth 0) has no footprint yet: Register gives it its rubble.
+        if (!entity.Registered || Navigation is not { } navigation || !BlocksGrid(entity)) return;
         navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
         navigation.AddRubble(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
     }
