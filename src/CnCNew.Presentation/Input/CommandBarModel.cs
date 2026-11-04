@@ -260,6 +260,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         var player = selection.LocalPlayer;
         var selected = selection.Selected.Select(world.FindEntity).OfType<Entity>().ToList();
         if (selected.Count == 0) return Empty(CommandBarContext.Empty);
+        // "The only case we can actually see a non-controlled controlbar is a neutral garrisonable structure" (ControlBar::evaluateContextUI).
+        if (selected is [{ } peeked] && peeked.Owner != player && (peeked.Owner.IsSystem || world.RelationshipOf(player, peeked.Owner) == Relationship.Neutral)
+            && StructureInventory(world, peeked, false) is { } neutral) return neutral;
         if (selected.Any(entity => entity.Owner != player)) return Empty(CommandBarContext.Foreign);
         var units = selected.Where(entity => !entity.Template.IsKindOf("IGNORED_IN_GUI") && !entity.HasStatus(ObjectStatusBits.Sold)).ToList();
         if (units.Count == 0) return Empty(CommandBarContext.BeingSold);
@@ -275,6 +278,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         if (entity.HasStatus(ObjectStatusBits.UnderConstruction))
             return Empty(CommandBarContext.UnderConstruction) with { CanCancelConstruction = true, Producer = entity.Id };
         var setName = ActiveCommandSet(world, entity);
+        if (setName is null && StructureInventory(world, entity, true) is { } inventory) return inventory;
         if (setName is null || !Catalog.TryGetSet(setName, out var set)) return Empty(CommandBarContext.NoCommandSet) with { CommandSet = setName ?? string.Empty };
         var slots = new CommandBarButton?[GridSlots];
         var hotkeys = new HashSet<char>();
@@ -308,6 +312,36 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 ? new CommandBarButton(index + 1, button, ButtonAvailability.Restricted, ButtonReason.EmptyPlace, null, default, 0, null, [])
                 : new CommandBarButton(index + 1, button, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id };
         }
+    }
+
+    /// <summary>The places of a structure's inventory (<c>MAX_STRUCTURE_INVENTORY_BUTTONS</c>) and the slots of Stop and Evacuate (<c>STOP_ID</c> 10, <c>EVACUATE_ID</c> 11).</summary>
+    private const int InventoryPlaces = 10, InventoryStopSlot = 11, InventoryEvacuateSlot = 12;
+
+    /// <summary>
+    /// <c>ControlBar::populateStructureInventory</c>: a garrisonable structure without a command set of its own (the civilian buildings) shows its inventory - one
+    /// <c>Command_StructureExit</c> per place with the cameo of who sits there, which lets that one out, a free place disabled, a place beyond <c>ContainMax</c> hidden - and
+    /// Stop and Evacuate, enabled while somebody is inside. A neutral building shows the same, every button disabled. Null for anything else.
+    /// </summary>
+    private CommandBarView? StructureInventory(SimulationWorld world, Entity entity, bool own)
+    {
+        if (entity.Container is not { IsGarrisonable: true } container || entity.HasStatus(ObjectStatusBits.UnderConstruction)
+            || ActiveCommandSet(world, entity) is not null || !Catalog.TryGetButton("Command_StructureExit", out var exit)) return null;
+        var slots = new CommandBarButton?[GridSlots];
+        var riders = container.Contained.Select(world.FindEntity).OfType<Entity>().ToList();
+        for (var place = 0; place < InventoryPlaces; place++)
+        {
+            if (container.ContainMax >= 0 && place + 1 > container.ContainMax) continue;
+            var rider = place < riders.Count ? riders[place] : null;
+            slots[place] = rider is null || !own
+                ? new CommandBarButton(place + 1, exit, ButtonAvailability.Restricted, ButtonReason.EmptyPlace, null, default, 0, null, [])
+                : new CommandBarButton(place + 1, exit, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id };
+        }
+        var full = own && riders.Count > 0;
+        foreach (var (slot, name) in new[] { (InventoryStopSlot, "Command_Stop"), (InventoryEvacuateSlot, "Command_Evacuate") })
+            if (Catalog.TryGetButton(name, out var button))
+                slots[slot - 1] = new CommandBarButton(slot, button, full ? ButtonAvailability.Available : ButtonAvailability.Restricted, full ? ButtonReason.None : ButtonReason.EmptyContainer,
+                    null, default, 0, null, full ? [entity.Id] : []);
+        return new CommandBarView(CommandBarContext.Command, string.Empty, [..slots], [], entity.Id, [], false);
     }
 
     private CommandBarView BuildMulti(SimulationWorld world, PlayerId player, List<Entity> units)

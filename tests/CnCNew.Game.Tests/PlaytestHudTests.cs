@@ -25,6 +25,7 @@ internal static class PlaytestHudTests
         harness.Run("The general's window keeps its original art in the modern skin; an owned science in colour, one without points grey", () => GeneralsWindow(data));
         harness.Run("A general's power on the bar at the side shows its recharge as a clock over its cameo", () => PowerRecharge(data));
         harness.Run("At a skirmish's start what the map placed stands darkened across the explored map, the enemy's base does not", () => RevealGhosts(data));
+        harness.Run("A building the player holds shows who is inside on the bar, lets one out and empties; a neutral one shows its places disabled", () => GarrisonInventory(data));
         harness.Run("Over the own bunker the infantry's pointer is enter, over a building the enemy holds it is attack", () => BuildingCursors(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
         return harness.Failures;
@@ -42,6 +43,54 @@ internal static class PlaytestHudTests
         TestHarness.Assert(ghosts.All(ghost => !live.World.IsPlayableSide(ghost.Owner)), "no ghost of a player's building: the original places them after the reveal");
         TestHarness.Assert(drawables.Where(drawable => !drawable.IsGhost && drawable.Entity.IsValid).All(drawable => live.World.FindEntity(drawable.Entity) is { } shown && live.World.IsPositionVisibleTo(live.Human, shown.X, shown.Y)),
             "everything else that is drawn is in sight");
+    }
+
+    private static void GarrisonInventory(GameData data)
+    {
+        var scenario = new DemoScenario("hud-inventory", "hud-inventory", "hud-inventory", 900,
+            [
+                new ScenarioUnit("guard", "ChinaInfantryRedguard", 1, 60, 0, 0f),
+                new ScenarioUnit("house", "GermanTownHouse1", 0, 130, 0, 0f),
+                new ScenarioUnit("empty", "GermanTownHouse1", 0, 130, 120, 0f),
+            ],
+            [new ScenarioOrder(5, "guard", ScenarioOrderKind.Enter, "house")], 100f, 40f)
+        {
+            HumanFaction = "FactionChina",
+            OpponentFaction = "FactionAmerica",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Frame()
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        var (guard, house) = (live.Tags["guard"], live.Tags["house"]);
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 20 && !live.World.FindEntity(guard)!.ContainedBy.IsValid; frame++) Frame();
+        TestHarness.Assert(live.World.FindEntity(guard)!.ContainedBy == house, "the red guard is inside the house");
+
+        controller.Input.Selection.Replace([live.Tags["empty"]]);
+        Frame();
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.CommandBar is { Context: CommandBarContext.Command } empty && empty[1] is { Availability: ButtonAvailability.Restricted } && empty[12] is { Availability: ButtonAvailability.Restricted },
+            $"a neutral building shows its places, disabled ({controller.CommandBar.Context})");
+
+        controller.Input.Selection.Replace([house]);
+        Frame();
+        controller.BuildDrawList(1280, 720);
+        var bar = controller.CommandBar;
+        TestHarness.Assert(bar[1] is { Availability: ButtonAvailability.Available } first && first.Rider == guard && first.Button.Name == "Command_StructureExit", $"place 1 is the red guard ({bar[1]?.Button.Name}, {bar[1]?.Rider})");
+        TestHarness.Assert(bar[2] is { Availability: ButtonAvailability.Restricted } && bar[11]?.Button.Name == "Command_Stop" && bar[12] is { Availability: ButtonAvailability.Available } evacuate && evacuate.Button.Name == "Command_Evacuate",
+            "a free place is disabled, Stop and Evacuate stand at the end");
+        TestHarness.Assert(controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().Any(image => image.Destination == controller.WindowRect("ControlBar.wnd:ButtonCommand01") && live.Data.Visuals.TryGet("ChinaInfantryRedguard", out var cameo) && image.Image == cameo.ButtonImage),
+            "the place shows the red guard's cameo");
+        var rect = controller.WindowRect("ControlBar.wnd:ButtonCommand01")!.Value;
+        var at = new Vector2(rect.CenterX, rect.CenterY);
+        controller.Process(new MouseMoveEvent(50_000, at));
+        controller.Process(new MouseButtonEvent(50_010, MouseButton.Left, true, at));
+        controller.Process(new MouseButtonEvent(50_060, MouseButton.Left, false, at));
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 5 && live.World.FindEntity(guard)!.ContainedBy.IsValid; frame++) Frame();
+        TestHarness.Assert(!live.World.FindEntity(guard)!.ContainedBy.IsValid, "a click on the place lets the red guard out");
     }
 
     private static void BuildingCursors(GameData data)
