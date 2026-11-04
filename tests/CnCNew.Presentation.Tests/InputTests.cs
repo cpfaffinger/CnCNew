@@ -1065,8 +1065,8 @@ static class InputTests
 
         Assert(controller.Hover(world, view, Screen(40, 110)) is { Action: ContextAction.Enter, Cursor: CursorKind.EnterFriendly }, "infantry over an own bunker: enter");
         var enter = Issued(() => controller.IssueContext(world, view, Screen(40, 110)));
-        Assert(enter.Count == 2 && enter.OfType<EnterContainerCommand>().Select(command => (command.Actor, command.Container)).SequenceEqual([(r1.Id, bunker.Id), (r2.Id, bunker.Id)]),
-            "EnterContainerCommand for each ranger");
+        Assert(enter.Count == 2 && enter.OfType<MoveAndEnterCommand>().Select(command => (command.Actor, command.Container)).SequenceEqual([(r1.Id, bunker.Id), (r2.Id, bunker.Id)]),
+            "a move-and-enter order for each ranger: they walk there (MSG_ENTER)");
         Assert(!controller.Orders.TryGet(r1.Id, out _), "a new order replaces the standing attack");
 
         selection.Replace([hauler.Id]);
@@ -1096,7 +1096,9 @@ static class InputTests
 
         arena.Step();
         Assert(world.RejectionCounts.Sum() == 0, $"every issued command was accepted by the simulation ({string.Join(",", world.RejectionCounts)})");
-        Assert(r1.ContainedBy == bunker.Id && r2.ContainedBy == bunker.Id && barracks.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ProductionUpdate>().Any(), "the orders took effect");
+        Assert(!r1.ContainedBy.IsValid && !r2.ContainedBy.IsValid, "an enter order is a walk: nobody is inside a tick later");
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(world, 600) && !(r1.ContainedBy == bunker.Id && r2.ContainedBy == bunker.Id); tick++) arena.Step();
+        Assert(r1.ContainedBy == bunker.Id && r2.ContainedBy == bunker.Id && barracks.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ProductionUpdate>().Any(), "the orders took effect: the rangers walked in");
 
         // A garrisoned building takes an attack order for its riders (F-60, step 6): the attack cursor over an enemy in their reach, and one PursueCommand the simulation passes on.
         arena.Spawn("Ranger", Enemy, 40, 150);

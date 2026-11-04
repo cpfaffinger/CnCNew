@@ -343,7 +343,7 @@ public sealed class CommandModeController
             case ContextAction.EnterAggressively when target is not null:
                 return Infiltrate(world, Infiltrators(world, own, target), target);
             case ContextAction.Enter when target is not null:
-                return ForEach(Entrants(world, own, target).ToList(), unit => Issue((sequence, tick) => new EnterContainerCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
+                return ForEach(Entrants(world, own, target).ToList(), unit => Issue((sequence, tick) => new MoveAndEnterCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
             case ContextAction.SetRallyPoint:
                 return SetRally(world, own, ground);
             case ContextAction.Invalid:

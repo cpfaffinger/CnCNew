@@ -147,7 +147,7 @@ public static class CommandTypes
     /// (<see cref="Spawn"/>, <see cref="Destroy"/>): a session accepts those from a player for its own objects, which is fine in a test and a free army over a wire.
     /// </summary>
     public static bool IsPlayerOrder(ushort code)
-        => IsKnown(code) && code is not (Spawn or Destroy or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap or PlaceMapObject);
+        => IsKnown(code) && code is not (Spawn or Destroy or EnterContainer or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap or PlaceMapObject);
 }
 
 /// <summary>
@@ -422,7 +422,8 @@ public sealed record PurchaseScienceCommand(PlayerId Player, ulong Sequence, lon
 /// <summary>
 /// Places <see cref="Actor"/> inside <see cref="Container"/> (<c>ContainModuleInterface::addToContain</c>). Phase 5 has no
 /// pathfinding/movement-to-enter (matches the rest of phase 5's "instant, no real spatial gameplay" economy/production
-/// commands): entry succeeds immediately if <c>IsValidContainerFor</c> allows it, regardless of distance.
+/// commands): entry succeeds immediately if <c>IsValidContainerFor</c> allows it, regardless of distance. A tool's and a fixture's command, never a player's: the client sends
+/// <see cref="MoveAndEnterCommand"/> (the owner's playtest of 4 November 2026 saw units jump into a building from anywhere), and a wire does not let this one through.
 /// </summary>
 public sealed record EnterContainerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor, EntityId Container) : SimCommand(Player, Sequence, Tick)
 {
