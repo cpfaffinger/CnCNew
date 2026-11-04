@@ -1116,9 +1116,11 @@ static class InputTests
         arena.System(sequence => new PlaceMapObjectCommand(PlayerId.System, sequence, world.Tick, "Plant", PlayerId.System, SimulationQueries.ToFixed(170), SimulationQueries.ToFixed(160), Fixed.Zero, Fixed.Zero,
             100, MapObjectFlags.None, 0));
         arena.Spawn("Ranger", Me, 140, 175);
-        arena.Step();
+        // What the system places stands at the end of the original frame the order falls in (one tick at 30 Hz, up to four at 120 Hz).
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(world, 1); tick++) arena.Step();
         selection.Replace([arena.Find("Ranger", Me, 140, 175).Id]);
-        Assert(controller.Hover(world, view, Screen(120, 160)) is { Action: ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving }, "a neutral object the map made targetable: attack");
+        var targetable = controller.Hover(world, view, Screen(120, 160));
+        Assert(targetable is { Action: ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving }, $"a neutral object the map made targetable: attack ({targetable.Action}, {world.FindEntity(targetable.Target)?.Template.Name}, tick {world.Tick})");
         Assert(controller.Hover(world, view, Screen(170, 160)) is { Action: ContextAction.Select }, "another neutral object: select");
     }
 
