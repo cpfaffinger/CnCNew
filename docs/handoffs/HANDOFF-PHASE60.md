@@ -1,6 +1,6 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 60
 > **Status:** current (written 3 November 2026 at the end of Phase 59)
-> **Predecessor:** HANDOFF-PHASE59.md · **Results in:** `docs/SIMULATION-CORE.md` §82, `docs/SKIRMISH-AI.md`, `docs/PERFORMANCE.md`, fidelity register `docs/plan/STAGE-1-PORT.md` §3
+> **Predecessor:** HANDOFF-PHASE59.md · **Results in:** `docs/SIMULATION-CORE.md` §83, `docs/SKIRMISH-AI.md`, `docs/PERFORMANCE.md`, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
 N+1 handoff (Phase 60): a skirmish with the built-in AI places every object of its map, as the original's does.
@@ -18,6 +18,8 @@ Phase 59 closed on 3 November 2026 (numbers in `CLAUDE.md`, paragraph "Phase 59"
 What the maps hold (counted on 3 November 2026 over the 62 skirmish maps of the content with `Player_N_Start` waypoints, outside waypoints, road and bridge points): 56,453 objects, 30,846 of the team `teamPlyrCivilian`, 25,602 of no team, 5 of `teamSkirmishGLA`. Properties `updateObjValuesFromMapProperties` reads, as the maps set them: `objectIndestructible` yes on 281 (fortress walls, drain pipes, broken wall pieces, train tunnels, rocks, water towers), `objectAggressiveness` -2 on 283 (the civilian cars, tractors and scorch marks: asleep), `objectTargetable` yes on 50 (barrels, gas tanks, watch towers: a player may attack them without force), `objectPowered` no on 14 (cars), `objectInitialHealth` not 100 on 15, `objectMaxHPs` -1 on 10 (ignored), `objectEnabled` no on none. The original's placement in a multiplayer game (`GameLogic::startNewGame`): bridges and wall tops first, `OPTIMIZED_TREE` only drawn, `PROP` and fluff (`CLEARED_BY_BUILD` without a fence width) only drawn (`forceFluffToProp` is always on in multiplayer), trees always (`useTrees`), everything else a logic object of the team its `originalOwner` names (`validateTeam`: an unknown team is the neutral one).
 
 ## What is already done - do not build twice
+
+Since the brief was written, the owner's playtest of 3 November 2026 was worked off (`docs/SIMULATION-CORE.md` §82): a skirmish explores the map at its start (`ExploreMapCommand`, `CommandTypes.Version` 26, replay 25 - a new command of this phase takes the next number), the built-in AI looks at a site it cannot see, and the reference manifest decides 12 of its 16 pairings (P4's yardstick is 12, not 13).
 
 The placement of every map object by the original AI's session (`ScriptedSkirmishSession.Attach`, `MissionSession`); the train (`RailroadBehavior`) and its cost cut (§6.4 there); bridges as objects (Phase 54); the sounds of a train and a cannon (§81.7).
 

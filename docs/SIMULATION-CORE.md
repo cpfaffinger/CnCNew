@@ -5008,3 +5008,23 @@ The survey reproduces Phase 56's 62 at its commit, so the tool and the content m
 ### 81.10 Reference values at the end of the phase
 
 After F-125 and retaliation (each its own manifest commit, `592a2e14`, `94bb0015`): the reference match a stalemate at tick 108,000, `6A869CB230C7AF60` / `225863E817955EEE`, 321,313 commands - F-125 moved no field of it -; stress test `20359BA8A2093B99` / `C51ABB66197067E5`; **13 of 16 pairings decided** (7 after F-128); every mission keeps its outcome. Versions: `CommandTypes.Version` **25**, replay **24** (the retaliation command); `WorldSnapshot` 11, `MissionSnapshot` 4, protocol 8 unchanged; compatibility baseline 632 entries.
+
+## 82. What the owner's playtest of 3 November 2026 found in the simulation (F-130 to F-132)
+
+The owner played a skirmish on `8e6655d1` and named nine findings (`docs/ACCEPTANCE-FINDINGS.md`, "The owner's playtest of 3 November 2026"). Three of them reach the simulation.
+
+### 82.1 A match explores the map at its start (F-130)
+
+`GameLogic::startNewGame` calls `PartitionManager::revealMapForPlayer` for every player of a match of several players unless `Multiplayer.ini` says `UseShroud`; the shipped data say no. The reveal adds a looker to every cell and removes it again, so every cell passes from clear to fogged: the ground and what the map placed lie under the fog from the first frame, units out of sight stay hidden. It comes before `placeNetworkBuildingsForPlayer`, so the players' own buildings are placed after it. The port lacked it: a skirmish began black outside the players' sight, and the minimap showed nothing. `ExploreMapCommand` (a system command at tick 0; `CommandTypes.Version` **26**, replay **25**; `1320e708`, manifest `08c23b60`) explores the map for every player of a skirmish whose catalog reads `UseShroud = No`; the session of the original AI explores directly. The presentation takes the ghosts the original takes at the reveal (`W3DGhostObject`): a structure of no playable side that the viewer has never had in sight stands on explored ground as its ghost (`FrameProjector.UpdateGhosts`, `9716081a`).
+
+### 82.2 The built-in AI looks at a site it cannot see (F-131)
+
+The build order is refused for a site not in sight (`BuildAssistant::isLocationLegalToBuild`, `SHROUD_REVEALED`: only `CELLSHROUD_CLEAR`). The built-in AI sent its worker to look at a supply site only while the site was unexplored; with the map explored at the start it ordered the build from home and the order was refused, so supply centres far from the base were not built. On the reference manifest the reveal alone took the decided pairings from 13 to 8. The AI now asks what the build check asks, in sight, and calls a coarse cell unexplored when its own units never had it in sight (stamped every think), not by the world's explored cells, so its army still sweeps for the enemy (`b3136a86`, manifest `7c1c7511`). Measured on the 16 pairings: the sight test alone 12 decided, with the own memory 12 as well and fewer winners changed against the state before the reveal. The original's AI builds through its own path and does not scout; the built-in AI is not the original's (Stage 3).
+
+### 82.3 A special power's `RadiusCursorRadius` is read (F-132)
+
+The key was typed and never read; the radius cursor of a power (`InGameUI::setRadiusCursor`) is as wide as it says (`8c8a5b15`, the input manifest `260fb969`).
+
+### 82.4 Reference values
+
+The reference match a stalemate at tick 108,000, `6A869CB230C7AF60` / `225863E817955EEE`, 321,313 commands - unchanged by the three causes; stress test `20359BA8A2093B99` / `C51ABB66197067E5`; **12 of 16 pairings decided** (13 at Phase 59's end; 8 with the reveal alone); every mission keeps its outcome. Versions: `CommandTypes.Version` **26**, replay **25**; `WorldSnapshot` 11, `MissionSnapshot` 4, protocol 8 unchanged; settings schema **5** (the game speed).
