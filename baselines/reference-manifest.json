@@ -1853,10 +1853,10 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "atTickBudget": 63,
+        "atTickBudget": 64,
         "attempted": 64,
-        "combinedSha256": "7DF892AA5331AC487579708BA64A19F98832AC2E5FA13A5903819468BB052DFE",
-        "failed": 1,
+        "combinedSha256": "3195E888EC2DCA7FB7F60F05D883E8B98236274F758B72491E122E0F71C37589",
+        "failed": 0,
         "maps": {
           "Maps/Alpine Assault/Alpine Assault.map": {
             "chainHash": "BA1362AE44BCDA10",
@@ -2300,13 +2300,16 @@
             "status": "ended"
           },
           "maps/Scorched Earth/Scorched Earth.map": {
-            "error": "OverflowException: Arithmetic operation resulted in an overflow.",
-            "status": "failed"
+            "chainHash": "89396D3FCB3B2AC2",
+            "endTick": 6000,
+            "finalHash": "6EA12D95674BE880",
+            "outcome": "stalemate",
+            "status": "ended"
           }
         },
         "mapsWithOneStart": 11,
         "mapsWithoutStart": 75,
-        "startedAndEnded": 63,
+        "startedAndEnded": 64,
         "withWinner": 0
       },
       "set": "full"
