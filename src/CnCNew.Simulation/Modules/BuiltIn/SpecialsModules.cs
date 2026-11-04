@@ -105,6 +105,13 @@ public sealed class StickyBombUpdate(StickyBombData data) : SimModule, IUpdateMo
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
+    /// <summary><c>StickyBombUpdate::setTargetObject</c>: the bomb is stuck to another object (a rebuild hole hands its bombs to the site rebuilt on it), where it stands.</summary>
+    public void Retarget(IWorldServices world, EntityId target)
+    {
+        _target = target;
+        world.MarkDirty(Entity);
+    }
+
     /// <summary><see cref="InitStickyBomb"/> at a point given relative to the victim (the perimeter offset of the booby-trap script actions; the victim's heading is the caller's business).</summary>
     public void InitStickyBombAtOffset(IWorldServices world, Entity target, Fixed offsetX, Fixed offsetY)
         => InitStickyBomb(world, target, null, true, target.X + offsetX, target.Y + offsetY);

@@ -200,6 +200,9 @@ public interface IWorldServices
     /// </summary>
     void TransferAttack(EntityId from, EntityId to);
 
+    /// <summary><c>RebuildHoleBehavior::transferBombs</c>: every mine with a <c>StickyBombUpdate</c> stuck to <paramref name="from"/> is stuck to <paramref name="to"/> from now on.</summary>
+    void TransferBombs(EntityId from, EntityId to);
+
     /// <summary><c>aiAttackPosition(pos, shots, CMD_FROM_AI)</c> (F-64): the unit attacks the place for <paramref name="shots"/> shots (0 or less: no limit); false when it cannot.</summary>
     bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots);
 

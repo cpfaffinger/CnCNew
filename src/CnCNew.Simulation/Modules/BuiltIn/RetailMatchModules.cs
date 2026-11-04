@@ -463,7 +463,7 @@ public sealed record RebuildHoleBehaviorData(string WorkerName, long WorkerRespa
 /// reconstructs the destroyed structure. Where the world's rule says so (<see cref="IWorldServices.HolesRebuild"/>, the session of the original skirmish AI) that happens: the worker comes up
 /// from the hole, builds free of charge where the hole lies, the hole is masked meanwhile, a worker or a site that is lost starts the wait over, and the finished building takes the hole away.
 /// Without the rule a <see cref="SimEventKind.CreationSkipped"/> event (<see cref="CreationSkipReasons.SettingNotSimulated"/>) records the missing rebuild and the countdown stops. The attackers of
-/// the hole go over to the site, and back to the hole when the site is lost (<c>transferAttack</c>). Not modelled: the sticky bombs (<c>transferBombs</c>).
+/// the hole go over to the site, and back to the hole when the site is lost (<c>transferAttack</c>), and so do the sticky bombs on it (<c>transferBombs</c>).
 /// </summary>
 public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModule, IUpdateModule, ISpawnOriginReceiver, IDieModule
 {
@@ -543,7 +543,11 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
             CrateModules.AiOf(worker)?.OrderConstruct(world, reconstructing);
         }
         // "Just like the building transfers attackers to the hole when it creates us, we need to transfer attackers to our replacement building before we mask ourselves."
-        if (_reconstructing != reconstructing.Id) world.TransferAttack(Entity.Id, reconstructing.Id);
+        if (_reconstructing != reconstructing.Id)
+        {
+            world.TransferAttack(Entity.Id, reconstructing.Id);
+            world.TransferBombs(Entity.Id, reconstructing.Id);
+        }
         _reconstructing = reconstructing.Id;
         worker.Status |= 1UL << UnselectableBit;
         Entity.Status |= 1UL << MaskedBit;

@@ -142,6 +142,17 @@ public sealed partial class SimulationWorld
     }
 
     /// <inheritdoc cref="IWorldServices.TransferAttack"/>
+    /// <inheritdoc cref="IWorldServices.TransferBombs"/>
+    public void TransferBombs(EntityId from, EntityId to)
+    {
+        foreach (var entity in Entities)
+        {
+            if (!entity.Template.IsKindOf("MINE")) continue;
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.StickyBombUpdate bomb && bomb.Target == from) bomb.Retarget(this, to);
+        }
+    }
+
     public void TransferAttack(EntityId from, EntityId to)
     {
         if (!from.IsValid || !to.IsValid) return;

@@ -1095,6 +1095,15 @@ static partial class Tests
     }
 
     private const string AiHoleObjects = """
+        Object AlphaCharge
+          KindOf = PROJECTILE MINE NO_COLLIDE
+          Body = HighlanderBody Body01
+            MaxHealth = 1.0
+            InitialHealth = 1.0
+          End
+          Behavior = StickyBombUpdate Sticky01
+          End
+        End
         Object AlphaWorker
           Side = Alpha
           KindOf = SELECTABLE INFANTRY DOZER
@@ -1178,9 +1187,17 @@ static partial class Tests
             var hole = session.World.Entities.SingleOrDefault(entity => entity.Template.Name == "AlphaHole");
             Check.That(hole is not null && waiting == hole.Id.Value, $"{rate}: the entry holds the hole ({waiting}).");
 
+            // A charge stuck to the hole goes over to the site rebuilt on it (RebuildHoleBehavior::transferBombs).
+            var chargeId = session.World.RequestSpawn(fixture.Templates.TryGet("AlphaCharge", out var chargeTemplate) ? chargeTemplate.Index : -1, new PlayerId(2), hole!.X, hole.Y, Fixed.Zero, Fixed.Zero);
+            StepFrames(session, 1);
+            var charge = session.World.FindEntity(chargeId)!.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StickyBombUpdate>().Single();
+            charge.InitStickyBomb(session.World, hole, null);
+
             // Saved while the worker builds: the hole's state travels.
             session.World.SetMoney(player, Fixed.FromInt(1_000));
             StepFrames(session, 90);
+            var siteNow = session.World.Entities.SingleOrDefault(entity => entity.Template.Name == "AlphaShack");
+            Check.That(siteNow is not null && charge.Target == siteNow.Id, $"{rate}: the charge is stuck to the site now ({charge.Target}).");
             Check.That(session.World.Entities.Any(entity => entity.Template.Name == "AlphaWorker"), $"{rate}: the worker is at work.");
             var restored = ScriptedSkirmishSession.Restore(session.Save(), fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
             Check.That(restored.StateHash() == session.StateHash(), $"{rate}: the state of the hole is saved.");
