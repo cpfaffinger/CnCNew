@@ -5028,3 +5028,42 @@ The key was typed and never read; the radius cursor of a power (`InGameUI::setRa
 ### 82.4 Reference values
 
 The reference match a stalemate at tick 108,000, `6A869CB230C7AF60` / `225863E817955EEE`, 321,313 commands - unchanged by the three causes; stress test `20359BA8A2093B99` / `C51ABB66197067E5`; **12 of 16 pairings decided** (13 at Phase 59's end; 8 with the reveal alone); every mission keeps its outcome. Versions: `CommandTypes.Version` **26**, replay **25**; `WorldSnapshot` 11, `MissionSnapshot` 4, protocol 8 unchanged; settings schema **5** (the game speed).
+
+## 83. Every object of a skirmish map (Phase 60, F-129)
+
+### 83.1 The objects of the map
+
+F-129. `GameLogic::startNewGame` makes every object of a map's `ObjectsList` that has a template; in a match of several players it leaves out the bridges and wall tops (built before the objects), draws `KINDOF_OPTIMIZED_TREE`, `KINDOF_PROP` and fluff (`KINDOF_CLEARED_BY_BUILD` without a fence width - `forceFluffToProp` is always on in a match of several players) without a logic object, and makes everything else a logic object of the team its `originalOwner` names (`validateTeam`: a team the match does not have is the neutral one). A skirmish of the built-in AI placed only the supply warehouses (`SkirmishMatchSession.SpawnWarehouses`): the tech and civilian buildings, the cars, the trees and the train of a skirmish map stood on it as scenery the presentation drew (`StaticScenery`) and did nothing - no garrison, no capture, no oil money, no train on Alpine Assault. Now `SkirmishMatchSession.SpawnMapObjects` places every object `MapObjectPlacement.Classify` calls a logic object, for the neutral player (a skirmish has none of the map's own sides), by a new system command that carries the map's properties (`474da575`, manifest `5e5ea720`). The players' starting objects are placed first and the map's after them, as the warehouses were; the original places the map's first, so the object ids differ from the original's order (named, not changed: ids decide no rule here but the order of equal candidates).
+
+### 83.2 What a map object brings
+
+`Object::updateObjValuesFromMapProperties`, as the maps set it (over the 62 skirmish maps, counted in `docs/handoffs/HANDOFF-PHASE60.md`: 281 objects indestructible, 283 asleep, 50 targetable, 14 unpowered, 15 with another health): `PlaceMapObjectCommand` (command 46: **`CommandTypes.Version` 27, replay 26**; only the system gives it) places the object with `objectInitialHealth`, `objectAggressiveness` (the AI's attitude), and the yes-or-no properties `MapObjectFlags`: `objectIndestructible` (`ActiveBody::setIndestructible`: `attemptDamage` returns before it does anything; the body writes `indestructible` only when set), `objectEnabled` no (`OBJECT_STATUS_SCRIPT_DISABLED`), `objectPowered` no (`OBJECT_STATUS_SCRIPT_UNPOWERED`, kept, read by nothing yet: the original reads it for a builder's and a factory's buttons and a drawable's lights), `objectUnsellable` (`OBJECT_STATUS_SCRIPT_UNSELLABLE`: no sale) and `objectTargetable` (`OBJECT_STATUS_SCRIPT_TARGETABLE`: a player's units attack it without forcing although it is no enemy, `WeaponSet::getAbleToAttackSpecificObject`; the context of the client asks it). Tests `MapObjectsComeWithTheirProperties` (30, 60 and 120 Hz, a save, both codecs, the classification), `RealSkirmishPlacesItsMap` (Alpine Assault: 202 logic objects, 461 drawn only, every one where the map puts it, the train runs, the same at 30, 60 and 120 Hz; threshold P1) and the input test of the targetable object.
+
+### 83.3 A wreck that is rubble before it stands
+
+Found by the reference manifest's map sweep once the map's objects stood: Scorched Earth places wrecks at `objectInitialHealth` 0. The body's health is set before the object is registered, so the structure became rubble then, and `BecomeRubble` took its footprint out of the navigation grid before it had been put in - the cell counters went below zero and the match ended in an `OverflowException`. `Register` gives such an object its rubble; until then `BecomeRubble` leaves the grid alone (`c9b28f90`, the sweep `8abfbf54`: 64 of 64 maps again). A session of the original AI places the map's objects too and would have met it on that map.
+
+### 83.4 A rebuild hole's sticky bombs
+
+F-128's rest. `RebuildHoleBehavior::transferBombs`: when the worker begins the site on the hole, every mine with a `StickyBombUpdate` stuck to the hole is stuck to the site from now on (`StickyBombUpdate::setTargetObject`, `SimulationWorld.TransferBombs`; `cb4288af`, no field of either manifest moved); it stays where it stands. Test: `OriginalAiWaitsForTheHole` sticks a charge to the hole of the original AI's rebuilt structure, and the charge is the site's once the worker builds, at 30, 60 and 120 Hz; without the transfer it fails.
+
+### 83.5 The thresholds
+
+| | Threshold | Measured |
+| --- | --- | --- |
+| P1 | every object a map places in a match of several players is a logic object of a skirmish of the built-in AI, where the map puts it | met: `RealSkirmishPlacesItsMap` at 30, 60 and 120 Hz |
+| P2 | the mean tick of the eight-player run at most 25 % above the binaries before | met: 832.1 against 904.3 µs (-8 %; another match: final hash `74D6861EDA99850C` against `3483D9660C716D7D`) |
+| P3 | its longest tick, warmed up, at most 25 % above | met: after the first 300 ticks 17.2 against 36.9 ms (`scripts/perf-profile.ps1 -Only large-8p` runs the match once, without `--warm-up`; the longest tick of either run is tick 22, 59 ms, the computer players' first think) |
+| P4 | the 16 pairings decide at least as many as before (12 since the playtest's fixes, §82.4) | met: 13 of 16 |
+
+### 83.6 Reference values
+
+The reference match a stalemate at tick 108,000, `6A869CB230C7AF60` / `225863E817955EEE`, 321,313 commands, and the stress test `20359BA8A2093B99` / `C51ABB66197067E5` - unchanged; 23 runs move (the 16 pairings, the eight-player runs, the sweep): **13 of 16 pairings decided**, eight outcomes changed - Alpine Assault and Armored Fury America against China won by America instead of China, Death Valley America against China by China instead of America, Bitter Winter and Death Valley China against GLA decided for China and Armored Fury ChinaTank against AirForce for ChinaTank, Armored Fury China against GLA and Death Valley GLA against America end without a winner; every mission keeps its outcome. Balance not judged. Versions: `CommandTypes.Version` **27**, replay **26**; `WorldSnapshot` 11, `MissionSnapshot` 4, protocol 8 unchanged.
+
+### 83.7 Named, not built
+
+**The computer with the map's objects** (item 2 of the brief): no defect found - the 16 pairings decide 13 instead of 12 and the sweep starts and ends all 64 maps; the built-in AI neither garrisons nor captures what the map placed (the original's AI does both by its scripts), and that stays a difference of the built-in AI (Stage 3). **The train's whistle on a collision** (`RailroadBehavior::onCollide`, "Alert all the players of recent disaster"): it needs an event of the simulation, which moves the event counter of every Alpine Assault run, and a test whether the whistle still plays that the audio director does not have. **The carriages' clatter** is none: in the data only the locomotives name a `ClicketyClackSound`. **The clatter's volume by speed** (`setVolume(speed / 10)`) is not built. **F-40's rest** changes when an attack ends and moves the manifests: a cause of its own.
+
+### 83.8 The survey and the rate comparison
+
+The survey of the handoff (`SimTool ai-survey --seeds 4 --minutes 45`, the 16 pairings of the manifest x 4 seeds, 60 Hz, from the binaries of the phase's end) decides **56 of 64** within 45 game minutes (47 at the end of Phase 58, §81.9), GLA wins 8 of its 32, the median end of a decided match 1,040 s. Not run: the survey with 90 minutes. The rate comparison of the pairings (`SimTool rate-compare ... --map-diff`) parts on Alpine Assault America against China at frame 1, at the train: the locomotive's conductor speed is 0.2093 at 30 Hz and 0.2362 at 60 Hz after the first frame, and its place, angle and hitch follow (F-133, the next phase). The other pairings were not compared.

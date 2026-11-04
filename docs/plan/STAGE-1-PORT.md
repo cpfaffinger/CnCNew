@@ -326,10 +326,11 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-126 | Infantry planned its detour round standing infantry; the original lets infantry path through infantry (`INFANTRY_MOVES_THROUGH_INFANTRY`) | `Pathfinder::checkForMovement` | tier 4 of Phase 58, `acc-march` | **done** (§80.14) |
 | F-127 | `OrderIdleEnemiesToAttackMeUponReveal` was unread: a detected object woke nobody | `StealthUpdate::markAsDetected`, `setWakeupIfInRange` | Phase 58 list | **done** (§81.2) |
 | F-128 | `TransferAttackers` was unread: who attacked a structure stopped when it became a rebuild hole | `AIUpdateInterface::transferAttack`, `RebuildHoleExposeDie::onDie`, `RebuildHoleBehavior::update`, `CreateObjectDie::onDie` | Phase 58 list | **done** (§81.3; not: the sticky bombs) |
-| F-129 | A skirmish of the built-in AI places from its map only the supply warehouses; the tech and civilian buildings, trees, props and the train exist only in a match of the original AI | `GameLogic::startNewGame` | Phase 59, the train's sounds | open (Phase 60) |
+| F-129 | A skirmish of the built-in AI places from its map only the supply warehouses; the tech and civilian buildings, trees, props and the train exist only in a match of the original AI | `GameLogic::startNewGame` | Phase 59, the train's sounds | done (Phase 60, §83) |
 | F-130 | A skirmish began unexplored: `GameLogic::startNewGame` explores the map for every player of a match of several players unless `Multiplayer.ini` says `UseShroud` | `PartitionManager::revealMapForPlayer` | the owner's playtest of 3 November 2026 | done (§82.1) |
 | F-131 | The built-in AI took an explored site for one it could build on; the order needs it in sight | `BuildAssistant::isLocationLegalToBuild` | §82.1 | done (§82.2; the built-in AI is Stage 3) |
 | F-132 | `RadiusCursorRadius` was typed and never read | `InGameUI::setRadiusCursor` | the owner's playtest of 3 November 2026 | done (§82.3) |
+| F-133 | The train is not the same game at 30 and 60 Hz: on Alpine Assault the locomotive's conductor speed parts in the first frame (0.2093 against 0.2362), and the pairing with it | `RailroadBehavior::update` | Phase 60, the rate comparison of the pairings | open (Phase 61) |
 | F-33 | Installer: Steam outside the default path untested; manifest hash Windows-only; client not self-contained (**Phase 56:** the export leaves out the program files, manuals and metadata of the original) | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog

@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 60
-> **Status:** current (written 3 November 2026 at the end of Phase 59)
+> **Status:** done (4 November 2026; `docs/SIMULATION-CORE.md` §83)
 > **Predecessor:** HANDOFF-PHASE59.md · **Results in:** `docs/SIMULATION-CORE.md` §83, `docs/SKIRMISH-AI.md`, `docs/PERFORMANCE.md`, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
