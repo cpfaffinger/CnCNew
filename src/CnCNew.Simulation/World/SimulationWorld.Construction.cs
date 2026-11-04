@@ -262,7 +262,8 @@ public sealed partial class SimulationWorld
         target = FindEntity(sell.Target);
         if (target is null || target.DestroyRequested) return CommandRejection.UnknownEntity;
         if (!MayCommand(issuer, target)) return CommandRejection.NotPermitted;
-        if (!target.Template.IsKindOf("STRUCTURE") || target.EffectivelyDead || target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold))
+        if (!target.Template.IsKindOf("STRUCTURE") || target.EffectivelyDead || target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold)
+            || (target.ScriptDisableMask & Entity.ScriptUnsellable) != 0)
             return CommandRejection.CannotSell;
         return 0;
     }

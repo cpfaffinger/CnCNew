@@ -84,6 +84,9 @@ public sealed class SkirmishMatchSession
     public long VictoryTick { get; private set; } = -1;
     public long EndTick => _endTick;
     public int WarehousesSpawned { get; private set; }
+
+    /// <summary>The objects of the map placed at tick 0 (<see cref="SpawnMapObjects"/>), the warehouses among them.</summary>
+    public int MapObjectsPlaced { get; private set; }
     public ImmutableArray<string> Notes { get; private set; } = [];
 
     /// <summary>The match is over once the winner is known and the grace period has passed, or the tick limit is reached.</summary>
@@ -130,7 +133,7 @@ public sealed class SkirmishMatchSession
         var session = Create(match, catalog, terrain, checkpointInterval, world: null);
         var notes = ImmutableArray.CreateBuilder<string>();
         session.SpawnStartingObjects(catalog, terrain, notes);
-        session.SpawnWarehouses(catalog, mapObjects, notes);
+        session.SpawnMapObjects(catalog, mapObjects, notes);
         session.Notes = notes.ToImmutable();
         return session;
     }
@@ -469,21 +472,29 @@ public sealed class SkirmishMatchSession
         }
     }
 
-    private void SpawnWarehouses(TemplateCatalog catalog, ImmutableArray<MapObject> mapObjects, ImmutableArray<string>.Builder notes)
+    /// <summary>
+    /// <c>GameLogic::startNewGame</c>: every object of the map's <c>ObjectsList</c> that is a logic object in a match of several players (<see cref="MapObjectPlacement"/>) - the civilian and
+    /// tech buildings, the supply warehouses, the trees, the cars and the train - for the neutral player (a skirmish has none of the map's own sides, so <c>validateTeam</c> gives every
+    /// team the neutral one), at its place and angle, with the properties of the map (<see cref="PlaceMapObjectCommand"/>). Until Phase 60 only the warehouses were placed (F-129).
+    /// </summary>
+    private void SpawnMapObjects(TemplateCatalog catalog, ImmutableArray<MapObject> mapObjects, ImmutableArray<string>.Builder notes)
     {
         var skipped = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var unknown = new SortedDictionary<string, int>(StringComparer.Ordinal);
         foreach (var mapObject in mapObjects)
         {
-            if (mapObject.IsWaypoint || !catalog.TryGet(mapObject.Name, out var template) || !template.Modules.Any(module => module.Name == "SupplyWarehouseDockUpdate")) continue;
-            if (!template.IsInstantiable)
-            {
-                skipped[template.Name] = skipped.GetValueOrDefault(template.Name) + 1;
-                continue;
-            }
+            var kind = MapObjectPlacement.Classify(mapObject, catalog, out var template);
+            if (kind == MapObjectPlacement.Kind.Unknown) unknown[mapObject.Name] = unknown.GetValueOrDefault(mapObject.Name) + 1;
+            if (kind == MapObjectPlacement.Kind.NotInstantiable) skipped[template!.Name] = skipped.GetValueOrDefault(template.Name) + 1;
+            if (kind != MapObjectPlacement.Kind.Placed) continue;
+            var name = template!.Name;
             var (x, y, z, angle) = (Fixed.FromDecimal(mapObject.X), Fixed.FromDecimal(mapObject.Y), Fixed.FromDecimal(mapObject.Z), Fixed.FromDecimal(mapObject.Angle));
-            System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, template.Name, PlayerId.System, x, y, z, angle));
-            WarehousesSpawned++;
+            var (health, flags, attitude) = (MapObjectPlacement.HealthPercent(mapObject.Properties), MapObjectPlacement.Flags(mapObject.Properties), MapObjectPlacement.Attitude(mapObject.Properties));
+            System(sequence => new PlaceMapObjectCommand(PlayerId.System, sequence, 0, name, PlayerId.System, x, y, z, angle, health, flags, attitude));
+            MapObjectsPlaced++;
+            if (template.Modules.Any(module => module.Name == "SupplyWarehouseDockUpdate")) WarehousesSpawned++;
         }
-        foreach (var (name, count) in skipped) notes.Add($"map warehouse {name} x{count} skipped (not instantiable)");
+        foreach (var (name, count) in skipped) notes.Add($"map object {name} x{count} skipped (not instantiable)");
+        foreach (var (name, count) in unknown) notes.Add($"map object {name} x{count} skipped (no such template)");
     }
 }

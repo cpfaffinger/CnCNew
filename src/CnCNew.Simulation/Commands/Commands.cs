@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 26;
+    public const int Version = 27;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -135,7 +135,11 @@ public static class CommandTypes
     /// <summary><c>PartitionManager::revealMapForPlayer</c>: every cell of the map seen once by the player. Only the system gives it.</summary>
     public const ushort ExploreMap = 45;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= ExploreMap;
+    // ------------------------------------------------------------------------------------------------------ the objects of a map (v27)
+    /// <summary><c>GameLogic::startNewGame</c>: an object the map places, with the properties <c>updateObjValuesFromMapProperties</c> reads. Only the system gives it.</summary>
+    public const ushort PlaceMapObject = 46;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= PlaceMapObject;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -143,7 +147,7 @@ public static class CommandTypes
     /// (<see cref="Spawn"/>, <see cref="Destroy"/>): a session accepts those from a player for its own objects, which is fine in a test and a free army over a wire.
     /// </summary>
     public static bool IsPlayerOrder(ushort code)
-        => IsKnown(code) && code is not (Spawn or Destroy or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap);
+        => IsKnown(code) && code is not (Spawn or Destroy or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap or PlaceMapObject);
 }
 
 /// <summary>
@@ -226,6 +230,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
             CommandTypes.SetRetaliation => new SetRetaliationCommand(player, sequence, tick, reader.Bool("enabled")),
+            CommandTypes.PlaceMapObject => new PlaceMapObjectCommand(player, sequence, tick, reader.Text("template"), new PlayerId(checked((int)reader.Int("owner"))), reader.Fixed("x"), reader.Fixed("y"),
+                reader.Fixed("z"), reader.Fixed("angle"), checked((int)reader.Int("health")), (MapObjectFlags)reader.Int("flags"), checked((int)reader.Int("attitude"))),
             CommandTypes.CombatDrop => new CombatDropCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))],
                 new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"),
@@ -853,6 +859,48 @@ public sealed record SetRetaliationCommand(PlayerId Player, ulong Sequence, long
 {
     public override ushort TypeCode => CommandTypes.SetRetaliation;
     protected override void DescribeBody(IStateWriter writer) => writer.Bool("enabled", Enabled);
+}
+
+/// <summary>The yes-or-no properties of a placed map object (<c>Object::updateObjValuesFromMapProperties</c>), as they differ from an object made any other way.</summary>
+[Flags]
+public enum MapObjectFlags : byte
+{
+    None = 0,
+    /// <summary><c>objectIndestructible</c>: <c>ActiveBody::setIndestructible</c>, the body takes no damage at all.</summary>
+    Indestructible = 1,
+    /// <summary><c>objectEnabled</c> no: <c>OBJECT_STATUS_SCRIPT_DISABLED</c>.</summary>
+    Disabled = 2,
+    /// <summary><c>objectPowered</c> no: <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>.</summary>
+    Unpowered = 4,
+    /// <summary><c>objectUnsellable</c>: <c>OBJECT_STATUS_SCRIPT_UNSELLABLE</c>.</summary>
+    Unsellable = 8,
+    /// <summary><c>objectTargetable</c>: <c>OBJECT_STATUS_SCRIPT_TARGETABLE</c>, a player may attack it without forcing although it is no enemy.</summary>
+    Targetable = 16,
+}
+
+/// <summary>
+/// <c>GameLogic::startNewGame</c>: an object of the map's <c>ObjectsList</c> made for <paramref name="Owner"/> (the neutral player for an object whose team the match does not have) at
+/// its place, with <c>objectInitialHealth</c> (<paramref name="HealthPercent"/>), the yes-or-no properties (<paramref name="Flags"/>) and <c>objectAggressiveness</c>
+/// (<paramref name="Attitude"/>, 0 when the map names none). Only the system gives it, in tick 0 of a match.
+/// </summary>
+public sealed record PlaceMapObjectCommand(PlayerId Player, ulong Sequence, long Tick, string Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, int HealthPercent,
+    MapObjectFlags Flags, int Attitude) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.PlaceMapObject;
+    public override bool RequiresSystem => true;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Text("template", Template);
+        writer.Int("owner", Owner.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+        writer.Fixed("z", Z);
+        writer.Fixed("angle", Angle);
+        writer.Int("health", HealthPercent);
+        writer.Int("flags", (long)Flags);
+        writer.Int("attitude", Attitude);
+    }
 }
 
 /// <summary><c>GuardMode</c>: the three guard buttons (<c>GUARD</c>, <c>GUARD_WITHOUT_PURSUIT</c>, <c>GUARD_FLYING_UNITS_ONLY</c>).</summary>

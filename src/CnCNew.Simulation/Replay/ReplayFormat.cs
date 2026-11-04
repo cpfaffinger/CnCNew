@@ -50,7 +50,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 25;
+    public const int CurrentVersion = 26;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -398,6 +398,17 @@ public static class ReplayFormat
             case SetRetaliationCommand retaliation:
                 writer.Write(retaliation.Enabled);
                 break;
+            case PlaceMapObjectCommand placed:
+                WriteString(writer, placed.Template);
+                writer.Write(placed.Owner.Value);
+                writer.Write(placed.X.Raw);
+                writer.Write(placed.Y.Raw);
+                writer.Write(placed.Z.Raw);
+                writer.Write(placed.Angle.Raw);
+                writer.Write(placed.HealthPercent);
+                writer.Write((byte)placed.Flags);
+                writer.Write(placed.Attitude);
+                break;
             case CombatDropCommand drop:
                 writer.Write(drop.Units.Length);
                 foreach (var unit in drop.Units) writer.Write(unit.Value);
@@ -511,6 +522,8 @@ public static class ReplayFormat
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean(), reader.ReadBoolean()),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.ReadBoolean()),
             CommandTypes.SetRetaliation => new SetRetaliationCommand(player, sequence, tick, reader.ReadBoolean()),
+            CommandTypes.PlaceMapObject => new PlaceMapObjectCommand(player, sequence, tick, ReadString(reader), new PlayerId(reader.ReadInt32()), Fixed.FromRaw(reader.ReadInt64()),
+                Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadInt32(), (MapObjectFlags)reader.ReadByte(), reader.ReadInt32()),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()),
                 reader.ReadBoolean(), reader.ReadSByte(), reader.ReadInt32()),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, ReadUnits(reader)),

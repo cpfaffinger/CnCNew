@@ -318,6 +318,15 @@ public sealed class Entity
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
+    /// <summary><c>OBJECT_STATUS_SCRIPT_UNPOWERED</c> (a map's <c>objectPowered</c> no, <c>NAMED_SET_POWERED</c>): kept, read by nothing of the simulation yet.</summary>
+    public const byte ScriptUnpowered = 4;
+
+    /// <summary><c>OBJECT_STATUS_SCRIPT_UNSELLABLE</c>: its player cannot sell it.</summary>
+    public const byte ScriptUnsellable = 8;
+
+    /// <summary><c>OBJECT_STATUS_SCRIPT_TARGETABLE</c>: a player's units attack it without forcing although it is no enemy (<c>WeaponSet::getAbleToAttackSpecificObject</c>).</summary>
+    public const byte ScriptTargetable = 16;
+
     /// <summary>The object's own disables at <paramref name="tick"/> (EMP, paralyzed, script hold, script disable); <see cref="Modules.IWorldServices.DisabledFlagsOf"/> adds its container's hold.</summary>
     public DisabledMask DisabledFlags(long tick)
     {

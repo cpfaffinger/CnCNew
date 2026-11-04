@@ -135,7 +135,9 @@ public sealed partial class SimulationWorld
                     pending.Has("floating"),
                     pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("stickTo"))) : default,
                     pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("bomber"))) : default,
-                    pending.Has("spawner") ? new EntityId(checked((uint)pending.UInt("spawner"))) : default),
+                    pending.Has("spawner") ? new EntityId(checked((uint)pending.UInt("spawner"))) : default,
+                    pending.Has("mapFlags") ? (MapObjectFlags)pending.Int("mapFlags") : MapObjectFlags.None,
+                    pending.Has("attitude") ? checked((int)pending.Int("attitude")) : 0),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));

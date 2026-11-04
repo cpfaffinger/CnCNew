@@ -389,6 +389,7 @@ run.Test("Phase 58: infantry plans no way round infantry", Tests.InfantryPlansNo
 run.Test("Phase 58: a step-aside request survives a save inside its frame", Tests.AStepAsideRequestSurvivesASave);
 run.Test("Phase 59 (F-125): allies make way when the way round costs more", Tests.AlliesMakeWayWhenTheWayRoundCostsMore);
 run.Test("Phase 59: a player's retaliation can be switched off", Tests.RetaliationCanBeSwitchedOff);
+run.Test("Phase 60 (F-129): a map object comes with its properties", Tests.MapObjectsComeWithTheirProperties);
 run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkCrashesIntoABuilding);
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);
 run.Test("Phase 58: a captured airfield takes its parked jets", Tests.AirCapturedAirfieldTakesItsParkedJets);
@@ -883,6 +884,7 @@ if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a player starts with one builder at every rate", () => Tests.RealPlayersStartWithOneBuilder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a skirmish starts with the map explored", () => Tests.RealSkirmishStartsWithTheMapExplored(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (F-129): a skirmish of the built-in AI holds the objects of its map, the train runs", () => Tests.RealSkirmishPlacesItsMap(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the retail reference match gives the same commands in the same frames at 30, 60 and 120 Hz", () => Tests.RealReferenceMatchAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));

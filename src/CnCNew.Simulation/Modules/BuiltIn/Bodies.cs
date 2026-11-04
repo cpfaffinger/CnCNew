@@ -122,8 +122,12 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         }
     }
 
+    /// <summary><c>ActiveBody::setIndestructible</c> (a map's <c>objectIndestructible</c>): <c>attemptDamage</c> returns before it does anything.</summary>
+    public bool Indestructible { get; set; }
+
     public virtual DamageOutcome AttemptDamage(IWorldServices world, in DamageInfo info)
     {
+        if (Indestructible) return DamageOutcome.NoEffect;
         // "sorry, once yer dead, yer dead. Special case for bridges, cause the system now things they're dead."
         if (Entity.EffectivelyDead && !Entity.Template.IsKindOf("BRIDGE") && !Entity.Template.IsKindOf("BRIDGE_TOWER")) return DamageOutcome.NoEffect;
         // ActiveBody::attemptDamage and attemptHealing: the body applies its armour to whatever reaches it - a weapon's damage, burning, crushing, falling, healing -; the caller
@@ -311,6 +315,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         writer.Fixed("maxHealth", MaxHealth);
         writer.Fixed("previousHealth", PreviousHealth);
         writer.Int("damageState", DamageState);
+        if (Indestructible) writer.Bool("indestructible", true);
         if (SubdualDamage != Fixed.Zero)
         {
             writer.Fixed("subdualDamage", SubdualDamage);
@@ -324,6 +329,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         MaxHealth = reader.Fixed("maxHealth");
         PreviousHealth = reader.Fixed("previousHealth");
         DamageState = checked((int)reader.Int("damageState"));
+        Indestructible = reader.Has("indestructible") && reader.Bool("indestructible");
         if (reader.Has("subdualDamage"))
         {
             SubdualDamage = reader.Fixed("subdualDamage");

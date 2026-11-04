@@ -115,6 +115,22 @@ public sealed partial class SimulationWorld
         MarkDirty(entity);
     }
 
+    /// <summary>
+    /// <c>Object::updateObjValuesFromMapProperties</c> for what a placed map object brings besides its health: the body takes no damage (<c>objectIndestructible</c>), the script statuses
+    /// (<c>objectEnabled</c>, <c>objectPowered</c>, <c>objectUnsellable</c>, <c>objectTargetable</c>) and the attitude of its AI (<c>objectAggressiveness</c>).
+    /// </summary>
+    private void ApplyMapProperties(Entity entity, Commands.MapObjectFlags flags, int attitude)
+    {
+        if ((flags & Commands.MapObjectFlags.Indestructible) != 0 && entity.Body is Modules.BuiltIn.ActiveBody body) body.Indestructible = true;
+        byte bits = 0;
+        if ((flags & Commands.MapObjectFlags.Disabled) != 0) bits |= Entity.ScriptDisabled;
+        if ((flags & Commands.MapObjectFlags.Unpowered) != 0) bits |= Entity.ScriptUnpowered;
+        if ((flags & Commands.MapObjectFlags.Unsellable) != 0) bits |= Entity.ScriptUnsellable;
+        if ((flags & Commands.MapObjectFlags.Targetable) != 0) bits |= Entity.ScriptTargetable;
+        if (bits != 0) entity.ScriptDisableMask |= bits;
+        if (attitude != 0 && AiOf(entity) is not null) SetAttitude(entity, attitude);
+    }
+
     public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, int healthPercent)
     {
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));

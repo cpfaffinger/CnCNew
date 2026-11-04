@@ -195,7 +195,9 @@ public sealed class CommandModeController
             if (Entrants(world, own, target).Any()) return Hint(ContextAction.Enter, CursorKind.EnterFriendly);
         }
 
-        if (target is not null && world.AreEnemies(Player, target.Owner) && target.Body is not null)
+        // WeaponSet::getAbleToAttackSpecificObject: a player attacks an enemy, or what is no ally and its map made targetable (OBJECT_STATUS_SCRIPT_TARGETABLE: a barrel, a gas tank).
+        if (target is not null && (world.AreEnemies(Player, target.Owner) || (target.ScriptDisableMask & Entity.ScriptTargetable) != 0 && world.RelationshipOf(Player, target.Owner) != Relationship.Allies)
+            && target.Body is not null)
         {
             var armed = own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).ToList();
             if (armed.Any(entity => SimulationQueries.InRangeOrRiders(world, entity, target))) return Hint(ContextAction.AttackObject, CursorKind.AttackObj);

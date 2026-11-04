@@ -183,7 +183,8 @@ public sealed partial class SimulationWorld : IWorldServices
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
-        SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default, EntityId Spawner = default);
+        SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default, EntityId Spawner = default, MapObjectFlags MapFlags = MapObjectFlags.None,
+        int Attitude = 0);
 
     /// <summary>
     /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
@@ -908,6 +909,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (spawn.Owner.Value != 0 && !_players.ContainsKey(spawn.Owner.Value)) return CommandRejection.UnknownPlayer;
                 if (spawn.Owner.Value != 0 && !command.Player.IsSystem && spawn.Owner != command.Player) return CommandRejection.NotPermitted;
                 break;
+            case PlaceMapObjectCommand placed:
+                if (!_templates.TryGet(placed.Template, out var placedTemplate) || !placedTemplate.IsInstantiable) return CommandRejection.UnknownTemplate;
+                if (!placed.Owner.IsSystem && !_players.ContainsKey(placed.Owner.Value)) return CommandRejection.UnknownPlayer;
+                if (placed.HealthPercent < 0 || ((int)placed.Flags & ~0x1F) != 0) return CommandRejection.InvalidArguments;
+                break;
             case DamageCommand damage:
                 if (damage.Amount.IsNegative || !DamageTypes.IsValid(damage.DamageType) || !DeathTypes.IsValid(damage.DeathType)) return CommandRejection.InvalidArguments;
                 break;
@@ -1279,6 +1285,15 @@ public sealed partial class SimulationWorld : IWorldServices
                 var template = _templates.TryGet(spawn.Template, out var found) ? found : throw new InvalidOperationException("Validated template disappeared.");
                 var owner = spawn.Owner.Value == 0 ? command.Player : spawn.Owner;
                 _spawnQueue.Add(new PendingSpawn(Ids.AllocateEntity(), template.Index, owner, spawn.X, spawn.Y, spawn.Z, spawn.Angle));
+                break;
+            }
+            case PlaceMapObjectCommand placed:
+            {
+                var template = _templates.TryGet(placed.Template, out var found) ? found : throw new InvalidOperationException("Validated template disappeared.");
+                // Body::setInitialHealth takes any percentage; 100 is what every object starts with.
+                var setup = new SpawnSetup(placed.HealthPercent != 100, placed.HealthPercent, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
+                    MapFlags: placed.Flags, Attitude: placed.Attitude);
+                _spawnQueue.Add(new PendingSpawn(Ids.AllocateEntity(), template.Index, placed.Owner, placed.X, placed.Y, placed.Z, placed.Angle, setup));
                 break;
             }
             case DestroyCommand destroy:
@@ -2100,6 +2115,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.MaxHealth > Fixed.Zero && entity.Body is IMaxHealthAdjustable adjustable)
             adjustable.AdjustMaxHealth(this, setup.MaxHealth - entity.Body.MaxHealth, "SAME_CURRENTHEALTH");
         if (setup.HasHealth && entity.Body is IInitialHealthSettable health) health.SetInitialHealth(this, setup.HealthPercent);
+        if (setup.MapFlags != MapObjectFlags.None || setup.Attitude != 0) ApplyMapProperties(entity, setup.MapFlags, setup.Attitude);
         if (builder.IsValid && entity.Body is IConstructionBody site)
             site.ChangeHealthForConstruction(this, Fixed.One - entity.Body.Health);
         Register(entity);
@@ -2701,6 +2717,8 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("rallyX", setup.RallyX);
             writer.Fixed("rallyY", setup.RallyY);
             if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
+            if (setup.MapFlags != MapObjectFlags.None) writer.Int("mapFlags", (long)setup.MapFlags);
+            if (setup.Attitude != 0) writer.Int("attitude", setup.Attitude);
             if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
             if (setup.DeletionTicks > 0) writer.Int("deletionTicks", setup.DeletionTicks);
             if (setup.ShroudRange > Fixed.Zero) writer.Fixed("shroudRange", setup.ShroudRange);

@@ -1109,6 +1109,17 @@ static class InputTests
                && !controller.Orders.TryGet(bunker.Id, out _), "one PursueCommand for the bunker, no standing order");
         arena.Step();
         Assert(world.AcquiredVictimOf(r1) == near.Id && world.AcquiredVictimOf(r2) == near.Id, "the riders attack the ordered enemy");
+
+        // A map's objectTargetable (F-129): a neutral object the map made targetable takes a player's attack without forcing; another neutral object is only selected.
+        arena.System(sequence => new PlaceMapObjectCommand(PlayerId.System, sequence, world.Tick, "Plant", PlayerId.System, SimulationQueries.ToFixed(120), SimulationQueries.ToFixed(160), Fixed.Zero, Fixed.Zero,
+            100, MapObjectFlags.Targetable, 0));
+        arena.System(sequence => new PlaceMapObjectCommand(PlayerId.System, sequence, world.Tick, "Plant", PlayerId.System, SimulationQueries.ToFixed(170), SimulationQueries.ToFixed(160), Fixed.Zero, Fixed.Zero,
+            100, MapObjectFlags.None, 0));
+        arena.Spawn("Ranger", Me, 140, 175);
+        arena.Step();
+        selection.Replace([arena.Find("Ranger", Me, 140, 175).Id]);
+        Assert(controller.Hover(world, view, Screen(120, 160)) is { Action: ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving }, "a neutral object the map made targetable: attack");
+        Assert(controller.Hover(world, view, Screen(170, 160)) is { Action: ContextAction.Select }, "another neutral object: select");
     }
 
     private static void StandingOrderBehaviour()
