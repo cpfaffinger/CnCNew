@@ -825,6 +825,12 @@ public enum CommandRejection : byte
 
     /// <summary><c>GameLogic::onPlaceBeacon</c>: the player has <c>MaxBeaconsPerPlayer</c> beacons up.</summary>
     TooManyBeacons = 43,
+
+    /// <summary>
+    /// <c>CANMAKE_FACTORY_IS_DISABLED</c> (<c>BuildAssistant::canMakeUnit</c>): a script disabled the producer or the builder (<c>OBJECT_STATUS_SCRIPT_DISABLED</c>: <c>PLAYER_DISABLE_FACTORIES</c>,
+    /// a map's <c>objectEnabled</c> no) or took its power (<c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>: a map's <c>objectPowered</c> no), so it makes nothing.
+    /// </summary>
+    FactoryIsDisabled = 44,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

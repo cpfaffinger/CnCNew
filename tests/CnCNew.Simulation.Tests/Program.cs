@@ -392,6 +392,7 @@ run.Test("Phase 58: a step-aside request survives a save inside its frame", Test
 run.Test("Phase 59 (F-125): allies make way when the way round costs more", Tests.AlliesMakeWayWhenTheWayRoundCostsMore);
 run.Test("Phase 59: a player's retaliation can be switched off", Tests.RetaliationCanBeSwitchedOff);
 run.Test("Phase 60 (F-129): a map object comes with its properties", Tests.MapObjectsComeWithTheirProperties);
+run.Test("Phase 61: a script-unpowered object is disabled as DISABLED_SCRIPT_UNDERPOWERED and makes nothing", Tests.ScriptUnpoweredMakesNothing);
 run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkCrashesIntoABuilding);
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);
 run.Test("Phase 58: a captured airfield takes its parked jets", Tests.AirCapturedAirfieldTakesItsParkedJets);

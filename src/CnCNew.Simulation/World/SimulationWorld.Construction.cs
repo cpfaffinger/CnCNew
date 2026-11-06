@@ -61,6 +61,8 @@ public sealed partial class SimulationWorld
         if (!_templates.TryGet(construct.Template, out var found) || !found.IsInstantiable) return CommandRejection.UnknownTemplate;
         template = found;
         if (!_players.TryGetValue(builder.Owner.Value, out var owner)) return CommandRejection.NotPermitted;
+        // DozerAIUpdate::construct asks BuildAssistant::canMakeUnit for a human player only ("the ai will validate, or cheat"), and its first answer is the script statuses.
+        if (!owner.IsComputer && builder.IsScriptDisabledOrUnpowered) return CommandRejection.FactoryIsDisabled;
         if (!CanBuildTemplate(owner, builder, found) || !owner.CanBuildBase) return CommandRejection.CannotConstruct;
         if (!BuildableOf(found).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, found))
             return CommandRejection.MissingPrerequisite;

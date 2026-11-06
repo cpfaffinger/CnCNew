@@ -297,7 +297,10 @@ public sealed class Entity
     /// <summary><c>DISABLED_PARALYZED</c> (<c>BattlePlanUpdate</c>'s change of plan) up to this tick (the first tick it no longer holds); 0 when never paralyzed.</summary>
     public long ParalyzedUntil { get; internal set; }
 
-    /// <summary>Script disables: bit 1 = <c>DISABLED_HELD</c> (<c>NAMED_SET_HELD</c>: nothing acts), bit 2 = <c>OBJECT_STATUS_SCRIPT_DISABLED</c> (<c>PLAYER_DISABLE_FACTORIES</c>: the object produces nothing). 0 when never touched.</summary>
+    /// <summary>
+    /// Script disables and statuses: bit 1 = <c>DISABLED_HELD</c> (<c>NAMED_SET_HELD</c>: nothing acts), bit 2 = <c>OBJECT_STATUS_SCRIPT_DISABLED</c> (<c>PLAYER_DISABLE_FACTORIES</c>: the
+    /// object produces nothing), then <see cref="ScriptUnpowered"/>, <see cref="ScriptUnsellable"/>, <see cref="ScriptTargetable"/>. 0 when never touched.
+    /// </summary>
     public byte ScriptDisableMask { get; internal set; }
 
     /// <summary>
@@ -325,7 +328,10 @@ public sealed class Entity
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
-    /// <summary><c>OBJECT_STATUS_SCRIPT_UNPOWERED</c> (a map's <c>objectPowered</c> no, <c>NAMED_SET_POWERED</c>): kept, read by nothing of the simulation yet.</summary>
+    /// <summary>
+    /// <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c> (a map's <c>objectPowered</c> no, the panel flag "Powered" of <c>UNIT_/TEAM_AFFECT_OBJECT_PANEL_FLAGS</c>): the object is disabled as
+    /// <c>DISABLED_SCRIPT_UNDERPOWERED</c> (<c>Object::setScriptStatus</c>), makes nothing (<c>BuildAssistant::canMakeUnit</c>) and shows no buttons.
+    /// </summary>
     public const byte ScriptUnpowered = 4;
 
     /// <summary><c>OBJECT_STATUS_SCRIPT_UNSELLABLE</c>: its player cannot sell it.</summary>
@@ -334,7 +340,10 @@ public sealed class Entity
     /// <summary><c>OBJECT_STATUS_SCRIPT_TARGETABLE</c>: a player's units attack it without forcing although it is no enemy (<c>WeaponSet::getAbleToAttackSpecificObject</c>).</summary>
     public const byte ScriptTargetable = 16;
 
-    /// <summary>The object's own disables at <paramref name="tick"/> (EMP, paralyzed, script hold, script disable); <see cref="Modules.IWorldServices.DisabledFlagsOf"/> adds its container's hold.</summary>
+    /// <summary><c>BuildAssistant::canMakeUnit</c>, <c>ControlBar::getCommandAvailability</c>: a script disabled or unpowered the object, so it makes nothing and shows no buttons.</summary>
+    public bool IsScriptDisabledOrUnpowered => (ScriptDisableMask & (ScriptDisabled | ScriptUnpowered)) != 0;
+
+    /// <summary>The object's own disables at <paramref name="tick"/> (EMP, paralyzed, script hold, script disable, script unpowered); <see cref="Modules.IWorldServices.DisabledFlagsOf"/> adds its container's hold.</summary>
     public DisabledMask DisabledFlags(long tick)
     {
         var mask = EmpDisabledUntil > tick ? DisabledMask.Emp : DisabledMask.None;
@@ -345,6 +354,7 @@ public sealed class Entity
         if (Subdued) mask |= DisabledMask.Subdued;
         if ((ScriptDisableMask & ScriptHeld) != 0) mask |= DisabledMask.Held;
         if ((ScriptDisableMask & ScriptDisabled) != 0) mask |= DisabledMask.ScriptDisabled;
+        if ((ScriptDisableMask & ScriptUnpowered) != 0) mask |= DisabledMask.ScriptUnderpowered;
         return mask;
     }
 
