@@ -2629,9 +2629,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>Above 30 Hz: a share of the frame the object has begun is still to come (always false at 30 Hz).</summary>
     internal bool CoversFrame => _frameTicksLeft > 0;
 
-    /// <summary>The object is covering a frame's turn: whether it looks at a victim is decided when that is done. Always false at 30 Hz, where the turn is taken at once.</summary>
-    internal bool IsCoveringTurn => _frameTicksLeft > 0 && Entity.HasAheadAngle;
-
     // The tick of the last turn on the spot; derived within a tick, not state: a unit turns one step per logic frame of the original, however many orders ask for it.
     private long _spotTurnTick = -1;
 
@@ -2644,7 +2641,22 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // "Skip moveTowardsAngle if physics say you're stunned": a unit in the air, or one whose movement is held, does not turn.
         if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick || Entity.InPhysicsFlight || HoldsMovement) return;
         if (_stride == 0) ResolveBlockerTiming(world.Time);
-        if (_frameTicksLeft > 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+        if (_frameTicksLeft > 0)
+        {
+            // An arrival decided in this tick, the first tick of the frame: the 30 Hz unit arrives and turns in the same step, so the rest of the frame carries the turn too (F-138).
+            if (!_frameArriving || _frameTicksLeft != _stride - 1 || _frameDue != world.Tick + TickOrder.Next) return;
+            _spotTurnTick = world.Tick;
+            FrameConstants(locomotor, out _, out _, out _, out var arrivalTurnRate, out _);
+            var fromAngle = _frameAngle;
+            var arrivalDifference = FixedTrig.AngleDifference(fromAngle, desired);
+            _frameAngle = arrivalTurnRate > Fixed.Zero && arrivalDifference.Abs() > arrivalTurnRate
+                ? FixedTrig.Normalize(fromAngle + (arrivalDifference.IsNegative ? -arrivalTurnRate : arrivalTurnRate))
+                : desired;
+            if (Entity.Angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
+            world.MarkDirty(Entity);
+            return;
+        }
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         _spotTurnTick = world.Tick;
         FrameConstants(locomotor, out _, out _, out _, out var turnRate, out _);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
