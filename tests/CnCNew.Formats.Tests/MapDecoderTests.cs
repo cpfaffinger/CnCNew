@@ -90,7 +90,14 @@ internal static class MapDecoderTests
             ..I(1), ..b.Dict(("teamName", "teamPlayer_1")),
             ..b.Nested("PlayerScriptsList", 1, PlayerScripts(b)),
         ]);
-        b.Chunk("GlobalLighting", 3, [9, 9]);
+        // ParseLightingDataChunk, version 3: afternoon; per time of day the first terrain light, the first object light, two more object lights, two more terrain lights
+        // (each ambient, diffuse, position); then the shadow colour. A light coded n of time t has an ambient red of t + n / 16 (exact in a float).
+        var lighting = new List<byte>(I(2));
+        for (var time = 0; time < 4; time++)
+            foreach (var light in new[] { 0, 10, 11, 12, 1, 2 })
+                for (var value = 0; value < 9; value++) lighting.AddRange(F(value == 0 ? time + light / 16f : value == 8 ? -1f : 0.5f));
+        lighting.AddRange(I(unchecked((int)0xFFA8A0BF)));
+        b.Chunk("GlobalLighting", 3, [..lighting]);
 
         var map = SageMapDecoder.Decode("CkMp", b.Build());
         Assert(map.HeightField is { Width: 5, Height: 5, Border: 1 }, "height field size");
@@ -110,7 +117,9 @@ internal static class MapDecoderTests
         Assert(map.WaypointLinks.SequenceEqual([new MapWaypointLink(7, 8), new MapWaypointLink(8, 9)]), "links");
         Assert(map.Sides.Length == 1 && map.Sides[0].BuildList.Single() is { BuildingName: "Barracks", Template: "AmericaBarracks", X: 100, Y: 200, Rebuilds: 3, Health: 80, Repairable: true, Script: "Script" }, "build list");
         Assert(map.Teams.Single().GetText("teamName") == "teamPlayer_1", "teams");
-        Assert(map.SkippedChunks.Select(s => s.Path).SequenceEqual(["GlobalLighting"]), "scripts are no longer reported as skipped");
+        Assert(map.SkippedChunks.IsEmpty, "scripts and lighting are no longer reported as skipped");
+        Assert(map.Lighting is { TimeOfDay: 2, ShadowColor: 0xFFA8A0BFu } lit && lit.Terrain[1][0].AmbientRed == 1m && lit.Terrain[1][2].AmbientRed == 1.125m
+            && lit.Objects[1][0].AmbientRed == 1.625m && lit.Objects[1][2].AmbientRed == 1.75m && lit.Objects[3][1].Z == -1m, "the map's lighting: time of day, terrain and object lights by version, shadow colour");
         var list = map.PlayerScripts.Single();
         Assert(list.Scripts.Length == 1 && list.Groups.Length == 1, "one top-level script and one group");
         var script = list.Scripts[0];
