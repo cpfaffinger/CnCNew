@@ -1324,8 +1324,8 @@ internal static class HudTests
             var onScreen = controller.WindowRect($"ControlBar.wnd:{window}")!.Value;
             TestHarness.Assert(!rect.IsEmpty && onScreen.X == rect.Left * width / america.CreationWidth && onScreen.Right == rect.Right * width / america.CreationWidth && onScreen.Y >= bar.Y - height / 20 && onScreen.Bottom <= height,
                 $"{window} lies at the scheme's rectangle ({onScreen} for {rect})");
-            // The idle worker button is disabled in the layout: it shows its disabled image.
-            var expected = window == "ButtonIdleWorker" ? images.Disabled : images.Enabled;
+            // The idle worker button is enabled while the local player has an idle worker (InGameUI::updateIdleWorker), disabled otherwise: it shows that image.
+            var expected = window == "ButtonIdleWorker" && controller.Input.Selection.IdleWorkerCount == 0 ? images.Disabled : images.Enabled;
             TestHarness.Assert(expected.Length > 0 && commands.OfType<UiImageDraw>().Any(draw => draw.Image == expected && draw.Destination == onScreen), $"{window} shows the scheme's image");
         }
         TestHarness.Assert(!commands.OfType<UiCustomDraw>().Any(draw => draw.Callback is "W3DCommandBarBackgroundDraw" or "W3DCommandBarForegroundDraw" || draw is { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" }),
