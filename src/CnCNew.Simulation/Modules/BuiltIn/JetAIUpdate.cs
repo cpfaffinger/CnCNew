@@ -459,6 +459,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         if (Array.Find(airfield.ModuleArray, module => module is ParkingPlaceBehavior) is not ParkingPlaceBehavior parking) return;
         if (!HelipadKind && !parking.ReserveSpace(world, Entity, data.ParkingOffset, out _)) return;
         if (ParkingOf(world) is { } old && !ReferenceEquals(old, parking)) old.ReleaseSpace(world, Entity);
+        // JetAIUpdate's landing moves the aircraft's goal along its path to the pad (updateGoal): the goal it held in the field is free from now on.
+        Entity.Goal = null;
         _airfield = airfield.Id;
         _pending = PendingKind.None;
         _useReturnLocomotor = false;

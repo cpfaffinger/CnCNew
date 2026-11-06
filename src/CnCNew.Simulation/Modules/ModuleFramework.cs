@@ -565,6 +565,13 @@ public interface IWorldServices
     bool FindPossibleDestination(Entity mover, ref Fixed x, ref Fixed y);
 
     /// <summary>
+    /// <c>AIInternalMoveToState::onEnter</c> for an aircraft that hovers or has wings (<c>isAircraftThatAdjustsDestination</c>): <c>Pathfinder::adjustDestination</c> moves the point to
+    /// the first cell on the reference's spiral (at most 400 cells) where its box of goal cells holds no other such aircraft's goal (<c>checkDestination</c>), so aircraft sent to
+    /// one point do not end in one another. Anything else keeps the point.
+    /// </summary>
+    void AdjustAircraftDestination(Entity mover, ref Fixed x, ref Fixed y);
+
+    /// <summary>
     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
     /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every

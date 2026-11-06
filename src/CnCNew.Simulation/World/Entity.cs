@@ -309,6 +309,13 @@ public sealed class Entity
     /// <summary>The tick a civilian's <c>REPULSOR</c> status ends (<c>ObjectRepulsorHelper</c>); 0 when it is not timed.</summary>
     public long RepulsorUntil { get; internal set; }
 
+    /// <summary>
+    /// <c>Pathfinder::updateAircraftGoal</c>: the point whose box of goal cells this aircraft holds since its last adjusted move (<see cref="SimulationWorld.AdjustAircraftDestination"/>),
+    /// with the one it held before and the logic frame of the original it took the present one in: another aircraft deciding in that same frame reads the earlier one, so that what it
+    /// sees does not depend on which of the two decides first, which above 30 Hz the phases of their frames decide.
+    /// </summary>
+    internal AircraftGoal? Goal { get; set; }
+
     /// <summary><c>AI_WANDER_IN_PLACE</c> or <c>AI_MOVE_AWAY_FROM_REPULSORS</c>; null in every other state.</summary>
     internal RoamState? Roam { get; set; }
 
@@ -511,6 +518,7 @@ public sealed class Entity
         if (CrateWeaponLevel != 0) writer.Int("crateWeaponLevel", CrateWeaponLevel);
         if (TrainableOverride is { } trainable) writer.Bool("trainable", trainable);
         if (CrateArmorLevel != 0) writer.Int("crateArmorLevel", CrateArmorLevel);
+        Goal?.Describe(writer);
         if (IsInsideFrameStep)
         {
             writer.Fixed("aheadX", AheadX);

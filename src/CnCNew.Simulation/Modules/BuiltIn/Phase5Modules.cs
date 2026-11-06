@@ -1106,6 +1106,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _returning = false;
         _lastCommandFromPlayer = fromPlayer;
         EndExitPath();
+        // AIInternalMoveToState::onEnter: a hovering or winged aircraft takes a goal cell nobody else of its kind holds (not for the stop order onto its own place).
+        if (!IsGroundMover)
+        {
+            var (standsX, standsY, _) = Entity.FrameEnd(world.Tick);
+            if ((x != standsX || y != standsY) && (x != Entity.X || y != Entity.Y)) world.AdjustAircraftDestination(Entity, ref x, ref y);
+        }
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;

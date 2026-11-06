@@ -122,10 +122,13 @@ internal sealed class DockMachine(EntityId dockId)
             case DockState.Approach:
                 if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock is null || !dock.ReserveApproachPosition(world, ai.Entity, out _approachPosition, out var x, out var y)) return DockStatus.Failure;
+                // AIDockApproachState is an AIInternalMoveToState that adjusts its destination: a hovering docker waits in a cell no other flyer holds, not in the one at the dock.
+                world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
             case DockState.AdvancePosition:
                 if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock is null || !dock.AdvanceApproachPosition(world, ai.Entity, ref _approachPosition, out x, out y)) return DockStatus.Failure;
+                world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
             case DockState.WaitForClearance:
                 _enterTick = world.Tick;
