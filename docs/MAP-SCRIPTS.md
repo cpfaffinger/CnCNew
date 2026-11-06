@@ -113,4 +113,4 @@ conditions and the six most frequent actions were implemented first; the runtime
   cases, the decoder does not abort (it reads what is on disk), but the parameter list then does not match
   what `ScriptActions`/`ScriptConditions` expect for execution – the VM handles a parameter list that is too short
   explicitly (`Has(...)`: diagnostic `<type>: n of m parameters`, the action/condition does nothing), the decoder stays unchanged.
-- `GlobalLighting` remains, independently of this, a skipped chunk (see `docs/PRESENTATION-WORLD.md`).
+- `GlobalLighting` is decoded since 6 November 2026 (`MapData.Lighting`, F-135; see `docs/PRESENTATION-WORLD.md`).

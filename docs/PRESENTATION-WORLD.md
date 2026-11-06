@@ -240,8 +240,10 @@ Every other unresolved name makes the audit fail.
 
 ## 7. Limits
 
-- Map lighting: the `GlobalLighting` chunk of the map is not decoded by the map decoder (`CnCNew.Formats`); all
-  maps use the `GameData` lighting. Night maps therefore look too bright. Request to Formats: decode the chunk.
+- Map lighting (since 6 November 2026, F-135): `SageMapDecoder` decodes the map's `GlobalLighting` chunk (`WorldHeightMap::ParseLightingDataChunk`: the time of day, three
+  terrain and three object lights per time of day, the shadow colour), and terrain, objects, clouds, water, roads, bridges and shadows use it (`TerrainLighting.ForMap`,
+  `ObjectsForMap`, `ShadowSun.StencilColor`). Of the 150 shipped maps 47 play in the morning, 85 in the afternoon, 3 in the evening, 15 at night; 86 name a shadow colour of
+  their own. Before, every map used `GameData`'s afternoon.
 - `map.ini` overlays (e.g. map-specific `WaterTransparency`) are not taken into account; the
   retail base graph applies.
 - Roads (`MapObject.IsRoadPoint`, `Roads.ini`), bridges (`IsBridgePoint`, bridge models, bridge picking and

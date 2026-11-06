@@ -227,7 +227,7 @@ Screenshots were in the scratchpad of the session (`…/scratchpad/s1/`), not in
 - The first rendered frame after `Attach` shows complete shroud before the first
   `Update` tick uploads the fog sample (see the fog section).
 - Object lighting (units/buildings) is not part of this layer (since Phase 15: `Rendering/SceneLighting`
-  with the object values from `GameData`, not from the `GlobalLighting` chunk of the map, which is skipped);
+  with the object values of the map's `GlobalLighting` chunk since 6 November 2026, F-135; `GameData`'s only for a map without it);
   `FogTexture`/`FogUvScale` are ready, but nobody consumes them so far – objects in the fog are
   not darkened.
 - Roads (map road objects) are drawn by the layer as alpha-blended strips on the terrain (`docs/CLIENT-ROADS.md`); bridges (`FLAG_BRIDGE_POINT*`) are not roads and are not drawn here.

@@ -148,8 +148,8 @@ back faces and missing turrets are superseded by the Phase 15 corrections.
   approximation (the simulation has no door; the opening begins `DoorOpeningTime` before the appearance of the unit).
 - **Suspension and steering** have been built since 4 October 2026 (`SuspensionTracker`: tilt to the terrain and when accelerating, steering angle, four suspension travels, cabin sway); what is missing is
   the lift effect when rolling over something, the powerslide and the travel limit of the cabin.
-- **Roads** are drawn (`docs/CLIENT-ROADS.md`); the `GlobalLighting` chunk of the map is still skipped: the object lighting comes from `GameData`
-  (`TerrainObjectsLighting*`), not from the map.
+- **Roads** are drawn (`docs/CLIENT-ROADS.md`). Since 6 November 2026 the objects are lit with the map's own `GlobalLighting` (`TerrainLighting.ObjectsForMap`), and the stencil
+  shadows take its shadow colour (`ShadowSun.StencilColor`); `GameData`'s `TerrainObjectsLighting*` only for a map without the chunk (F-135).
 - **Fog:** map objects without a simulation entity are hidden until their ground is explored; remembered buildings and explored scenery that is currently not visible are
   darkened (`DrawableInstance.Fogged`, brightness 0.25 like the squared fog value of the terrain; test aid `CNCNEW_OBJECT_FOG=1`). Skinned parts (infantry) are not darkened.
 - **Hiding of parts (correction 4 October 2026):** toggling the `EnableRender` bit of a skeleton node hides **no** mesh in the running client (a test that hid all parts of a

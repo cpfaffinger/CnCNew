@@ -32,6 +32,7 @@ One product (D-3, D-4, D-32, D-33). The original's way is the yardstick (Stage 1
 | 3 | The train's whistle on a collision (`onCollide`, "Alert all the players of recent disaster"): an event of the simulation and a test of the audio director whether the whistle still plays; the clatter's volume by speed (`setVolume(speed / 10)`) | `RailroadModules.cs`, `SoundCues.States.cs`, `AudioDirector` | `RailroadGuideAIUpdate.cpp` |
 | 4 | F-40's rest (an attack ends while firing, the original's at the next approach), its own manifest | | `AIAttackApproachTargetState::updateInternal` |
 | 5 | The order of the start: the map's objects before the players' (§83.1), measured; `objectPowered` read where the original reads it (a builder's and a factory's buttons, a drawable's lights) | `SkirmishMatchSession.Start` | `GameLogic::startNewGame`, `Object::isScriptUnpowered` callers |
+| 6 | F-138, then F-134: why a tunnel defender killed and flung in the reference match turns above 30 Hz by the arrival its AI planned (frame 1706); fixed with a test, adopt `docs/proposals/F-134-aircraft-goals.patch` (helicopters and Chinooks take goal cells of their own, the owner's playtest of 4 November 2026, items 3 and 12) and measure its manifests | `AIUpdateInterface` (arrival, `StopAtDeath`), `PhysicsBehavior.Fly`; the patch | `Pathfinder::adjustDestination`, `updateAircraftGoal` |
 
 ## Thresholds (to be committed before the first measurement)
 

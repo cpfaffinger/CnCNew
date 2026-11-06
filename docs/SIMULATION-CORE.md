@@ -5067,3 +5067,25 @@ The reference match a stalemate at tick 108,000, `6A869CB230C7AF60` / `225863E81
 ### 83.8 The survey and the rate comparison
 
 The survey of the handoff (`SimTool ai-survey --seeds 4 --minutes 45`, the 16 pairings of the manifest x 4 seeds, 60 Hz, from the binaries of the phase's end) decides **56 of 64** within 45 game minutes (47 at the end of Phase 58, §81.9), GLA wins 8 of its 32, the median end of a decided match 1,040 s. Not run: the survey with 90 minutes. The rate comparison of the pairings (`SimTool rate-compare ... --map-diff`) parts on Alpine Assault America against China at frame 1, at the train: the locomotive's conductor speed is 0.2093 at 30 Hz and 0.2362 at 60 Hz after the first frame, and its place, angle and hitch follow (F-133, the next phase). The other pairings were not compared.
+
+## 84. The owner's playtest of 4 November 2026
+
+Twelve findings of a skirmish (`docs/ACCEPTANCE-FINDINGS.md`); what the simulation changed, or was built for it and not adopted, is here. Both manifests are unchanged by the adopted causes (`reference-manifest check --set full` at `2e5dbe32`: 50 of 50 runs identical).
+
+### 84.1 An order to enter walks
+
+The client sent the instant `EnterContainerCommand` for a player's order to enter, so a unit was inside a building from anywhere. The order is `MoveAndEnterCommand` (`aiEnter`, `MSG_ENTER`), and `CommandTypes.IsPlayerOrder` no longer lets the instant entry through a wire (`71b5a5a3`): it stays the command of fixtures, tools and the system. **`CommandTypes.Version` is unchanged** (no type is added or changed; 33 types are orders of a player, 34 before).
+
+### 84.2 What cannot be captured
+
+`ActionManager::canCaptureBuilding` refuses `KINDOF_IMMUNE_TO_CAPTURE` before anything else; `StagedCaptureRules.CanCapture` did not know the kind (`2e5dbe32`). `SimulationWorld.HasCapturePower` tells the client which units carry a capture power, for the context order of the original (`handleCaptureBuildingCommand`).
+
+### 84.3 Aircraft goal cells: built, not adopted
+
+`AIInternalMoveToState::onEnter` adjusts the destination of every move that adjusts at all: for an aircraft whose locomotor hovers or has wings (`AIUpdateInterface::isAircraftThatAdjustsDestination`) `Pathfinder::adjustDestination` takes the point's cell (a box without a centre cell half a cell on), then walks the counter-clockwise spiral of at most 400 cells until the aircraft's box of goal cells - `getRadiusAndCenter`: twice the bounding circle in cells plus 0.3, a diameter between one and two cells counted as two, at most two cells each way - lies on the map and holds no other such aircraft's goal (`checkDestination` with `isAircraftGoal`), and moves the point to that cell (`adjustCoordToCell`); `updateAircraftGoal` then holds the box. The port gives aircraft no goal at all: three Comanches sent to one rally point stand in one another, and a computer player's supply Chinooks waiting at a warehouse hover in the one that docks, so that three of four look idle (F-134; reproduced with `SimTool ai-match` on Alpine Assault: the Chinooks collect and deliver, the waiting ones at the docking one's place).
+
+`docs/proposals/F-134-aircraft-goals.patch` builds it: `SimulationWorld.AdjustAircraftDestination` where a move of such an aircraft begins (`AIUpdateInterface.OrderMove` - an order, the rally point; the dock machine's approach and advance, `AIDockApproachState`), an aircraft's goal as state (`Entity.Goal`: the point, the logic frame it was taken in, the one held before - another aircraft deciding in that frame reads the earlier one, so that above 30 Hz the phases of their frames decide nothing), the goal given up when the aircraft lands, drones left out (their moves do not all fall in the same frame at every rate). Its test `RealHelicoptersTakeGoalsOfTheirOwn` passes at 30, 60 and 120 Hz and fails on the code without it. **It is not adopted:** with it the retail reference match is no longer the same commands at 30, 60 and 120 Hz (the test of the simulation's real data, first difference at frame 1980). The cause is older (F-138): a tunnel defender killed and flung at frame 1706 turns above 30 Hz by the arrival its AI planned in the frame's first tick, the 30 Hz one does not, its flight then takes another friction, and its place parts by a rounding at frame 1761 - the reference match kept its commands equal by chance, and the patch's other courses carry the difference into them. F-138 first, then the patch.
+
+### 84.4 What is the original's and stays
+
+A Comanche fires its missiles at a tank or a building and waits while they reload: `WeaponSet::chooseBestWeaponForTarget` makes a weapon `PreferredAgainst` the victim's kind win and counts it ready "if they are merely reloading", and the Comanche's data prefer the missiles against `VEHICLE STRUCTURE` and the cannon against `INFANTRY`; `SimulationWorld.ChooseWeapon` does the same. A computer player does not give up: `ALLOW_SURRENDER` is defined nowhere, and a player is defeated when it has no objects left (`VictoryConditions::hasSinglePlayerBeenDefeated`).

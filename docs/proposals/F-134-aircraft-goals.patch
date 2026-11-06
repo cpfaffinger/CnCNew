@@ -1,0 +1,340 @@
+diff --git a/src/CnCNew.Simulation/Modules/BuiltIn/DockMachine.cs b/src/CnCNew.Simulation/Modules/BuiltIn/DockMachine.cs
+index 8481362f..fac0b71c 100644
+--- a/src/CnCNew.Simulation/Modules/BuiltIn/DockMachine.cs
++++ b/src/CnCNew.Simulation/Modules/BuiltIn/DockMachine.cs
+@@ -122,10 +122,13 @@ private DockStatus EnterState(DockState state, IWorldServices world, AIUpdateInt
+             case DockState.Approach:
+                 if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
+                 if (dock is null || !dock.ReserveApproachPosition(world, ai.Entity, out _approachPosition, out var x, out var y)) return DockStatus.Failure;
++                // AIDockApproachState is an AIInternalMoveToState that adjusts its destination: a hovering docker waits in a cell no other flyer holds, not in the one at the dock.
++                world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
+                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
+             case DockState.AdvancePosition:
+                 if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
+                 if (dock is null || !dock.AdvanceApproachPosition(world, ai.Entity, ref _approachPosition, out x, out y)) return DockStatus.Failure;
++                world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
+                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
+             case DockState.WaitForClearance:
+                 _enterTick = world.Tick;
+diff --git a/src/CnCNew.Simulation/Modules/BuiltIn/JetAIUpdate.cs b/src/CnCNew.Simulation/Modules/BuiltIn/JetAIUpdate.cs
+index c3d5e58c..e794d1e5 100644
+--- a/src/CnCNew.Simulation/Modules/BuiltIn/JetAIUpdate.cs
++++ b/src/CnCNew.Simulation/Modules/BuiltIn/JetAIUpdate.cs
+@@ -459,6 +459,8 @@ private void BeginLanding(IWorldServices world, Entity airfield)
+         if (Array.Find(airfield.ModuleArray, module => module is ParkingPlaceBehavior) is not ParkingPlaceBehavior parking) return;
+         if (!HelipadKind && !parking.ReserveSpace(world, Entity, data.ParkingOffset, out _)) return;
+         if (ParkingOf(world) is { } old && !ReferenceEquals(old, parking)) old.ReleaseSpace(world, Entity);
++        // JetAIUpdate's landing moves the aircraft's goal along its path to the pad (updateGoal): the goal it held in the field is free from now on.
++        Entity.Goal = null;
+         _airfield = airfield.Id;
+         _pending = PendingKind.None;
+         _useReturnLocomotor = false;
+diff --git a/src/CnCNew.Simulation/Modules/BuiltIn/Phase5Modules.cs b/src/CnCNew.Simulation/Modules/BuiltIn/Phase5Modules.cs
+index 3ff21fe7..9fab32e4 100644
+--- a/src/CnCNew.Simulation/Modules/BuiltIn/Phase5Modules.cs
++++ b/src/CnCNew.Simulation/Modules/BuiltIn/Phase5Modules.cs
+@@ -1106,6 +1106,12 @@ public virtual void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromP
+         _returning = false;
+         _lastCommandFromPlayer = fromPlayer;
+         EndExitPath();
++        // AIInternalMoveToState::onEnter: a hovering or winged aircraft takes a goal cell nobody else of its kind holds (not for the stop order onto its own place).
++        if (!IsGroundMover)
++        {
++            var (standsX, standsY, _) = Entity.FrameEnd(world.Tick);
++            if ((x != standsX || y != standsY) && (x != Entity.X || y != Entity.Y)) world.AdjustAircraftDestination(Entity, ref x, ref y);
++        }
+         Entity.HasMoveTarget = true;
+         Entity.MoveTargetX = x;
+         Entity.MoveTargetY = y;
+diff --git a/src/CnCNew.Simulation/Modules/ModuleFramework.cs b/src/CnCNew.Simulation/Modules/ModuleFramework.cs
+index 305fffcb..d25629ff 100644
+--- a/src/CnCNew.Simulation/Modules/ModuleFramework.cs
++++ b/src/CnCNew.Simulation/Modules/ModuleFramework.cs
+@@ -564,6 +564,13 @@ void BuilderAttacks(Entity builder, Entity victim) { }
+     /// </summary>
+     bool FindPossibleDestination(Entity mover, ref Fixed x, ref Fixed y);
+ 
++    /// <summary>
++    /// <c>AIInternalMoveToState::onEnter</c> for an aircraft that hovers or has wings (<c>isAircraftThatAdjustsDestination</c>): <c>Pathfinder::adjustDestination</c> moves the point to
++    /// the first cell on the reference's spiral (at most 400 cells) where its box of goal cells holds no other such aircraft's goal (<c>checkDestination</c>), so aircraft sent to
++    /// one point do not end in one another. Anything else keeps the point.
++    /// </summary>
++    void AdjustAircraftDestination(Entity mover, ref Fixed x, ref Fixed y);
++
+     /// <summary>
+     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
+     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
+diff --git a/src/CnCNew.Simulation/World/Entity.cs b/src/CnCNew.Simulation/World/Entity.cs
+index 6596dfee..b3495d0f 100644
+--- a/src/CnCNew.Simulation/World/Entity.cs
++++ b/src/CnCNew.Simulation/World/Entity.cs
+@@ -309,6 +309,13 @@ internal void SetAheadAngle(Fixed angle)
+     /// <summary>The tick a civilian's <c>REPULSOR</c> status ends (<c>ObjectRepulsorHelper</c>); 0 when it is not timed.</summary>
+     public long RepulsorUntil { get; internal set; }
+ 
++    /// <summary>
++    /// <c>Pathfinder::updateAircraftGoal</c>: the point whose box of goal cells this aircraft holds since its last adjusted move (<see cref="SimulationWorld.AdjustAircraftDestination"/>),
++    /// with the one it held before and the logic frame of the original it took the present one in: another aircraft deciding in that same frame reads the earlier one, so that what it
++    /// sees does not depend on which of the two decides first, which above 30 Hz the phases of their frames decide.
++    /// </summary>
++    internal AircraftGoal? Goal { get; set; }
++
+     /// <summary><c>AI_WANDER_IN_PLACE</c> or <c>AI_MOVE_AWAY_FROM_REPULSORS</c>; null in every other state.</summary>
+     internal RoamState? Roam { get; set; }
+ 
+@@ -511,6 +518,7 @@ public void Describe(IStateWriter writer)
+         if (CrateWeaponLevel != 0) writer.Int("crateWeaponLevel", CrateWeaponLevel);
+         if (TrainableOverride is { } trainable) writer.Bool("trainable", trainable);
+         if (CrateArmorLevel != 0) writer.Int("crateArmorLevel", CrateArmorLevel);
++        Goal?.Describe(writer);
+         if (IsInsideFrameStep)
+         {
+             writer.Fixed("aheadX", AheadX);
+diff --git a/src/CnCNew.Simulation/World/SimulationWorld.AircraftGoals.cs b/src/CnCNew.Simulation/World/SimulationWorld.AircraftGoals.cs
+new file mode 100644
+index 00000000..c71ecf97
+--- /dev/null
++++ b/src/CnCNew.Simulation/World/SimulationWorld.AircraftGoals.cs
+@@ -0,0 +1,141 @@
++using CnCNew.Simulation.Numerics;
++using CnCNew.Simulation.Templates;
++using CnCNew.Simulation.Terrain;
++
++namespace CnCNew.Simulation.World;
++
++public sealed partial class SimulationWorld
++{
++    /// <summary><c>AIUpdateInterface::isAircraftThatAdjustsDestination</c>: a flyer whose locomotor hovers or has wings ("For now, we are only doing HOVER, and WINGS").</summary>
++    internal static bool AdjustsAsAircraft(Entity unit)
++        => unit.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) != 0 && (locomotor.IsHover || locomotor.IsWings);
++
++    /// <inheritdoc cref="Modules.IWorldServices.AdjustAircraftDestination"/>
++    public void AdjustAircraftDestination(Entity mover, ref Fixed x, ref Fixed y)
++    {
++        // A drone (the Hellfire drone) is left out, a named difference: the original adjusts its moves as well, but here a drone's moves - following its master, ending an
++        // attack - do not all fall in the same logic frame of the original at every rate, and what one drone saw of another's goal then differed between the rates.
++        if (!AdjustsAsAircraft(mover) || mover.Template.IsKindOf("DRONE")) return;
++        // The world frame the tick lies in: a decision a 30 Hz world makes in its step of frame f is made above 30 Hz in one of the ticks of that frame.
++        var frame = Time.ToOriginalFrames(_tick);
++        Search(mover, frame, ref x, ref y);
++        // updateAircraftGoal: the aircraft holds the cell it was given from now on.
++        mover.Goal = AircraftGoal.Take(mover.Goal, frame, x, y);
++        MarkDirty(mover);
++    }
++
++    private void Search(Entity mover, long frame, ref Fixed x, ref Fixed y)
++    {
++        var (radius, center) = GoalCellRadius(mover);
++        // adjustDestination: the cell of the point (a box without a centre cell is anchored half a cell on), then the counter-clockwise spiral around it.
++        var half = Fixed.FromInt(TerrainMap.CellSize) / Fixed.FromInt(2);
++        var i = TerrainMap.CellOf(center ? x : x + half);
++        var j = TerrainMap.CellOf(center ? y : y + half);
++        if (TryAircraftCell(mover, frame, i, j, radius, center, ref x, ref y)) return;
++        var limit = MaxCellsToTry;
++        var segment = 1;
++        while (limit > 0)
++        {
++            for (var leg = 0; leg < 4; leg++)
++            {
++                for (var count = segment; count > 0; count--)
++                {
++                    switch (leg)
++                    {
++                        case 0: i++; break;
++                        case 1: j++; break;
++                        case 2: i--; break;
++                        default: j--; break;
++                    }
++                    limit--;
++                    if (TryAircraftCell(mover, frame, i, j, radius, center, ref x, ref y)) return;
++                }
++                if (leg % 2 == 1) segment++;
++            }
++        }
++        // No free cell: the point stays as ordered (snapClosestGoalPosition keeps a hovering aircraft's point).
++    }
++
++    /// <summary>
++    /// <c>checkDestination</c> for an aircraft that adjusts its destination: every cell of its goal box is on the map and no other such aircraft holds it as its goal
++    /// (<c>isAircraftGoal</c>, <c>getGoalAircraft</c>); then <c>adjustCoordToCell</c>. Another aircraft's goal is the one it held before <paramref name="frame"/> (<see cref="AircraftGoal"/>).
++    /// </summary>
++    private bool TryAircraftCell(Entity mover, long frame, int i, int j, int radius, bool center, ref Fixed x, ref Fixed y)
++    {
++        var above = center ? radius + 1 : radius;
++        if (Navigation is { } navigation && (!navigation.Terrain.IsInside(i - radius, j - radius) || !navigation.Terrain.IsInside(i + above - 1, j + above - 1))) return false;
++        foreach (var other in _mobiles)
++        {
++            if (other.Id == mover.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid || !AdjustsAsAircraft(other) || other.Goal is null) continue;
++            if (other.Goal?.HeldBefore(frame) is not { } held) continue;
++            var (goalX, goalY) = held;
++            var (otherRadius, otherCenter) = GoalCellRadius(other);
++            var (gi, gj) = GoalCellOf(goalX, goalY, otherCenter);
++            var otherAbove = otherCenter ? otherRadius + 1 : otherRadius;
++            // Two boxes of cells [lo, hi) overlap.
++            if (i - radius < gi + otherAbove && gi - otherRadius < i + above && j - radius < gj + otherAbove && gj - otherRadius < j + above) return false;
++        }
++        var cell = Fixed.FromInt(TerrainMap.CellSize);
++        x = Fixed.FromInt(i) * cell + (center ? cell / Fixed.FromInt(2) : Fixed.Zero);
++        y = Fixed.FromInt(j) * cell + (center ? cell / Fixed.FromInt(2) : Fixed.Zero);
++        return true;
++    }
++
++    /// <summary><c>updateAircraftGoal</c>: the goal cell of a point (a box with a centre cell is the cell the point lies in, one without the nearest corner).</summary>
++    private static (int I, int J) GoalCellOf(Fixed x, Fixed y, bool center)
++    {
++        var half = Fixed.FromInt(TerrainMap.CellSize) / Fixed.FromInt(2);
++        return center ? (TerrainMap.CellOf(x), TerrainMap.CellOf(y)) : (TerrainMap.CellOf(x + half), TerrainMap.CellOf(y + half));
++    }
++
++    /// <summary>
++    /// <c>Pathfinder::getRadiusAndCenter</c>: the half width of an object's box of goal cells from its bounding circle (a diameter between one and two cells counts as two;
++    /// at most two cells), and whether the box has a centre cell.
++    /// </summary>
++    private static (int Radius, bool Center) GoalCellRadius(Entity entity)
++    {
++        var cell = Fixed.FromInt(TerrainMap.CellSize);
++        var diameter = entity.Template.BoundingCircleRadius * Fixed.FromInt(2);
++        if (diameter > cell && diameter < cell * Fixed.FromInt(2)) diameter = cell * Fixed.FromInt(2);
++        // REAL_TO_INT_FLOOR(diameter / PATHFIND_CELL_SIZE_F + 0.3f)
++        var radius = (diameter / cell + Fixed.FromInt(3) / Fixed.FromInt(10)).Floor();
++        var cells = checked((int)radius);
++        if (cells == 0) cells = 1;
++        var center = (cells & 1) != 0;
++        cells /= 2;
++        if (cells > 2) return (2, true);
++        return (cells, center);
++    }
++}
++
++/// <summary>An aircraft's goal (<see cref="Entity.Goal"/>): the point it holds, the logic frame of the original it took it in, and the point it held before that frame (if any).</summary>
++internal sealed record AircraftGoal(Fixed X, Fixed Y, long Frame, bool HadBefore, Fixed BeforeX, Fixed BeforeY)
++{
++    /// <summary>The goal another aircraft deciding in <paramref name="frame"/> sees: the earlier one when this was taken in that frame, else this one.</summary>
++    public (Fixed X, Fixed Y)? HeldBefore(long frame) => Frame != frame ? (X, Y) : HadBefore ? (BeforeX, BeforeY) : null;
++
++    /// <summary>A new goal taken in <paramref name="frame"/>; a second one in the same frame keeps what was held before the frame.</summary>
++    public static AircraftGoal Take(AircraftGoal? last, long frame, Fixed x, Fixed y)
++    {
++        if (last is null) return new(x, y, frame, false, Fixed.Zero, Fixed.Zero);
++        return last.Frame == frame ? last with { X = x, Y = y } : new(x, y, frame, true, last.X, last.Y);
++    }
++
++    public void Describe(CnCNew.Simulation.State.IStateWriter writer)
++    {
++        writer.Fixed("aircraftGoalX", X);
++        writer.Fixed("aircraftGoalY", Y);
++        writer.Int("aircraftGoalFrame", Frame);
++        if (!HadBefore) return;
++        writer.Fixed("aircraftGoalBeforeX", BeforeX);
++        writer.Fixed("aircraftGoalBeforeY", BeforeY);
++    }
++
++    public static AircraftGoal? Load(CnCNew.Simulation.State.IStateReader reader)
++    {
++        if (!reader.Has("aircraftGoalX")) return null;
++        var before = reader.Has("aircraftGoalBeforeX");
++        return new(reader.Fixed("aircraftGoalX"), reader.Fixed("aircraftGoalY"), reader.Int("aircraftGoalFrame"), before,
++            before ? reader.Fixed("aircraftGoalBeforeX") : Fixed.Zero, before ? reader.Fixed("aircraftGoalBeforeY") : Fixed.Zero);
++    }
++}
+diff --git a/src/CnCNew.Simulation/World/SimulationWorld.Snapshot.cs b/src/CnCNew.Simulation/World/SimulationWorld.Snapshot.cs
+index 52e9981d..1e776cf8 100644
+--- a/src/CnCNew.Simulation/World/SimulationWorld.Snapshot.cs
++++ b/src/CnCNew.Simulation/World/SimulationWorld.Snapshot.cs
+@@ -247,6 +247,7 @@ private void LoadEntity(IStateReader reader)
+         if (reader.Has("crateWeaponLevel")) entity.CrateWeaponLevel = checked((int)reader.Int("crateWeaponLevel"));
+         if (reader.Has("trainable")) entity.TrainableOverride = reader.Bool("trainable");
+         if (reader.Has("crateArmorLevel")) entity.CrateArmorLevel = checked((int)reader.Int("crateArmorLevel"));
++        entity.Goal = AircraftGoal.Load(reader);
+         if (entity.CrateWeaponLevel is < 0 or > 2 || entity.CrateArmorLevel is < 0 or > 2) throw new InvalidDataException("Crate upgrade level out of range.");
+         if (reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadTick"), reader.Fixed("aheadX"), reader.Fixed("aheadY"), reader.Fixed("aheadZ"));
+         if (reader.Has("destroyNotBefore")) entity.DestroyNotBefore = reader.Int("destroyNotBefore");
+diff --git a/tests/CnCNew.Simulation.Tests/Program.cs b/tests/CnCNew.Simulation.Tests/Program.cs
+index 5029c993..96fbd772 100644
+--- a/tests/CnCNew.Simulation.Tests/Program.cs
++++ b/tests/CnCNew.Simulation.Tests/Program.cs
+@@ -878,6 +878,7 @@
+ if (contentDirectory is not null) run.Test("Real data: word descriptions of every shipped object equal the sequential hash, every update moves the description", () => Tests.HashWorkOnRealData(contentDirectory));
+ if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
+ if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
++if (contentDirectory is not null) run.Test("Real data: helicopters take goals of their own at the rally point and at one ordered point", () => Tests.RealHelicoptersTakeGoalsOfTheirOwn(contentDirectory));
+ if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
+ if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
+ if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on the bridge of a skirmish map, and with the bridge down the way is gone", () => Tests.RealDataUnitsCrossABridge(contentDirectory));
+diff --git a/tests/CnCNew.Simulation.Tests/Tests.HelicopterGoals.cs b/tests/CnCNew.Simulation.Tests/Tests.HelicopterGoals.cs
+new file mode 100644
+index 00000000..6a45e2da
+--- /dev/null
++++ b/tests/CnCNew.Simulation.Tests/Tests.HelicopterGoals.cs
+@@ -0,0 +1,71 @@
++using System.Collections.Generic;
++using System.Collections.Immutable;
++using System.Linq;
++using CnCNew.Content;
++using CnCNew.Data.Compilation;
++using CnCNew.Data.Registry;
++using CnCNew.Simulation.Commands;
++using CnCNew.Simulation.Ids;
++using CnCNew.Simulation.Modules;
++using CnCNew.Simulation.Numerics;
++using CnCNew.Simulation.Templates;
++using CnCNew.Simulation.World;
++
++static partial class Tests
++{
++    /// <summary>
++    /// Real data, the owner's playtest of 4 November 2026: three Comanches of one airfield fly to its rally point and stood in one another. The original gives a hovering aircraft a goal
++    /// cell of its own (<c>AIInternalMoveToState::onEnter</c>: <c>Pathfinder::adjustDestination</c>, <c>checkDestination</c> with <c>isAircraftThatAdjustsDestination</c>,
++    /// <c>updateAircraftGoal</c>); so they end at different places, and so do three sent to one point one after another.
++    /// </summary>
++    public static void RealHelicoptersTakeGoalsOfTheirOwn(string directory)
++    {
++        var content = ContentFileSystem.Open(directory);
++        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
++        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
++        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
++        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
++        var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
++        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-heli", fingerprint), catalog);
++        ulong sequence = 0;
++        SubmitResult Send(System.Func<ulong, SimCommand> make) => world.Submit(make(++sequence));
++        Check.That(Send(next => new SpawnCommand(new PlayerId(1), next, world.Tick, "AmericaAirfield", new PlayerId(1), Fixed.FromInt(2000), Fixed.FromInt(2000), Fixed.Zero, Fixed.Zero)).Accepted, "The airfield spawns.");
++        world.Step();
++        Check.That(world.Submit(new GiveMoneyCommand(PlayerId.System, 1, world.Tick, new PlayerId(1), Fixed.FromInt(50000))).Accepted, "Money is granted.");
++        world.Step();
++        var airfield = world.Entities.First(value => value.Template.Name == "AmericaAirfield");
++        Check.That(Send(next => new SetRallyPointCommand(new PlayerId(1), next, world.Tick, airfield.Id, Fixed.FromInt(2400), Fixed.FromInt(2100))).Accepted, "The rally point is set.");
++        for (var index = 0; index < 3; index++)
++            Check.That(Send(next => new QueueProductionCommand(new PlayerId(1), next, world.Tick, airfield.Id, "AmericaVehicleComanche")).Accepted, "A Comanche is queued.");
++        List<Entity> Comanches() => [..world.Entities.Where(value => value.Template.Name == "AmericaVehicleComanche").OrderBy(value => value.Id.Value)];
++        for (var tick = 0; tick < world.Frames(30 * 120) && !(Comanches().Count == 3 && Comanches().All(heli => !heli.HasMoveTarget && world.IsAiIdle(heli))); tick++) world.Step();
++        for (var tick = 0; tick < world.Frames(30 * 5); tick++) world.Step();
++        var helis = Comanches();
++        Check.That(helis.Count == 3, $"The airfield produced three Comanches ({helis.Count}).");
++        string Where() => string.Join("; ", helis.Select(heli => $"{heli.Id.Value}@({heli.X.ToDecimal():0.#}, {heli.Y.ToDecimal():0.#})"));
++        bool Apart(Fixed least)
++        {
++            for (var a = 0; a < helis.Count; a++)
++                for (var b = a + 1; b < helis.Count; b++)
++                {
++                    var dx = helis[a].X - helis[b].X;
++                    var dy = helis[a].Y - helis[b].Y;
++                    if (dx * dx + dy * dy < least * least) return false;
++                }
++            return true;
++        }
++        System.Console.WriteLine("       comanches at the rally point: " + Where());
++        Check.That(Apart(Fixed.FromInt(10)), $"The three Comanches at the rally point stand at places of their own ({Where()}).");
++
++        foreach (var heli in helis)
++        {
++            Check.That(Send(next => new SetMoveTargetCommand(new PlayerId(1), next, world.Tick, heli.Id, Fixed.FromInt(2800), Fixed.FromInt(2600))).Accepted, "A Comanche is sent to the point.");
++            // One logic frame of the original between the orders: aircraft that decide in one frame do not see each other's new goals (AircraftGoal.HeldBefore).
++            for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
++        }
++        for (var tick = 0; tick < world.Frames(30 * 60) && helis.Any(heli => heli.HasMoveTarget); tick++) world.Step();
++        for (var tick = 0; tick < world.Frames(30 * 5); tick++) world.Step();
++        System.Console.WriteLine("       comanches at the ordered point: " + Where());
++        Check.That(Apart(Fixed.FromInt(10)), $"Sent to one point one after another, they stand at places of their own ({Where()}).");
++    }
++}
