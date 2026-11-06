@@ -1718,6 +1718,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var late = dying && _dyingSince != world.Tick;
         _turnTick = world.Tick;
         var sleep = late ? SimulationTiming.SleepForever : UpdateLiving(world);
+        // A share of the frame still to come wakes the module for it, whatever else it would sleep for.
+        if (_frameTicksLeft > 0 && _frameDue > world.Tick) sleep = Math.Min(sleep, _frameDue - world.Tick);
         if (!dying) return sleep;
         if (_frameTicksLeft > 0) SettleFrame(world.Tick);
         StopForDeath(world);
@@ -2678,6 +2680,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private void Coast(IWorldServices world)
     {
         if (_stride == 0) ResolveBlockerTiming(world.Time);
+        // A frame begun earlier in this tick - a turn on the spot that a command asked for (TurnInPlace from an attack order) - has its next share still to come; the
+        // 30 Hz object took that turn whole in the command (F-138).
+        if (world.Tick < _frameDue) return;
         if (world.Tick == _frameDue && ActiveLocomotor is { } locomotor)
         {
             AdvanceFrame(world, locomotor);
