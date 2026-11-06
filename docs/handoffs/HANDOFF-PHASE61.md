@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 61
-> **Status:** current (written 4 November 2026 at the end of Phase 60)
+> **Status:** done by machine (6 November 2026; `docs/SIMULATION-CORE.md` §85; written 4 November 2026 at the end of Phase 60)
 > **Predecessor:** HANDOFF-PHASE60.md · **Results in:** `docs/SIMULATION-CORE.md` §84, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -57,3 +57,16 @@ Tier 4 at the final state; the train the same at 30, 60 and 120 Hz by a test; ev
 ## Final report and N+1
 
 Numbers with commit hashes, the tier that ran, what was not run, what no human has seen; the registers of `docs/plan/` brought up to date; the next brief written.
+
+## Result (6 November 2026)
+
+Done by machine, on one machine; no human has seen or heard any of it. Per item:
+
+1. **The train (F-133):** built (`docs/SIMULATION-CORE.md` §85.3). The locomotive waited a tick instead of a frame for its carriages, a carriage turned about where the frame's last tick had left it and kept that tick's height in a tunnel. Threshold: the train's place agrees at 120 Hz over 10,000 frames (met); the four Alpine Assault pairings to their ends at 30 and 60 Hz - met for GLA against America, the other three part late and elsewhere (frames 13,111, 18,927, 17,405, measured before the start order of item 5 changed every pairing; Phase 62, item 2).
+2. **The other 12 pairings:** not compared on the final state (Phase 62, item 2).
+3. **The whistle and the clatter:** built (§85.5).
+4. **F-40:** the premise was wrong; the port already ends such an attack in the original's frame, pinned by a test (§85.6). What remains goes with F-140.
+5. **The start and `objectPowered`:** the map's objects are made first (§85.4); the script status "unpowered" disables, a disabled or unpowered factory makes nothing, the bar hides its buttons, the panel flags are executed, and a mission's map objects come with their properties (§85.7, F-141, F-142).
+6. **F-138, then F-134:** five shares of a frame (§85.1), then the aircraft's goal cells adopted (§85.2); the reference match is the same at 30 and 60 Hz over 14,400 frames.
+
+Found on the way: F-139 (a dead builder's idle stamp) and F-140 (the original's attack machine fires every other frame after a shot), the next brief's first item.

@@ -329,8 +329,11 @@ Second session (all output types that campaign maps emit, see the tables below; 
   uses this set** (`GameLogic::setControlBarOverride`, key set name + slot; `CommandBarModel.RemoveButton/AddButton`, state in `ControlBarScriptState`), `…_ADD_BUTTON_…_SLOT` puts it into
   a slot (1-based); `PLAYER_SCIENCE_AVAILABILITY` (only for the local side) makes sciences in `PurchaseScience` buttons hidden/locked; `OPTIONS_SET_DRAWICON_UI_MODE` omits the
   healing icons; `DISABLE_/ENABLE_SPECIAL_POWER_DISPLAY` and `NAMED_HIDE_/NAMED_SHOW_SPECIAL_POWER_DISPLAY` switch the **superweapon list** (top right "Name: m:ss" per power with a public
-  timer, new in this session, `SuperweaponTimers`, `docs/GAME-HUD.md` §14) off and on entirely or per object; `UNIT_/TEAM_AFFECT_OBJECT_PANEL_FLAGS` has a consumer for **Selectable** (`EntityPicker.SetScriptSelectable`: not selectable, drops out of the selection), the other flags
-  (`Enabled`, `Powered`, `Indestructible`, `Unsellable`, `AI Recruitable`, `Player Targetable`) need simulation state and are listed as a problem in the report.
+  timer, new in this session, `SuperweaponTimers`, `docs/GAME-HUD.md` §14) off and on entirely or per object; `UNIT_/TEAM_AFFECT_OBJECT_PANEL_FLAGS` are executed since Phase 61 (`8e341924`, `docs/SIMULATION-CORE.md` §85.7): `changeObjectPanelFlagForSingleObject` with the names of
+  `TheObjectFlagsNames` compared exactly - "Enabled" and "Powered" off set the script disable and the script underpower, "Indestructible" is the body's (a bridge passes it to its towers),
+  "Unsellable" and "Player Targetable" are script statuses, "AI Recruitable" off keeps a unit out of `Team::tryToRecruit` (VM state; `TEAM_STOP_AND_DISBAND` clears it), and
+  **Selectable** stays the presentation's (`EntityPicker.SetScriptSelectable`), the one flag still handed out as a `ScriptOutput`; an unknown flag changes nothing and is counted as a
+  diagnosis. The team action reaches the one team instance `getTeamNamed` finds. Action coverage: 219 executed, 125 forwarded of 344.
 
 **Screen texts according to `InGameUI` (Phase 16, mission texts).** Sources: `InGameUI.cpp` (`message`/`addMessageText`, `update`, `postDraw`, `militarySubtitle`, `addNamedTimer`, `popupMessage`), `ScriptActions.cpp`
 (`doDisplayText`, `doMilitaryCaption`, `doDisplayCinematicText`, `doInGamePopupMessage`, `doDisplayCounter`/`…CountdownTimer`), `W3DDisplay.cpp` (`draw`: cinematic text), `InGamePopupMessage.cpp`; rewritten, not copied.
