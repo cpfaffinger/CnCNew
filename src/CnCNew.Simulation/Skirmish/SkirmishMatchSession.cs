@@ -132,8 +132,10 @@ public sealed class SkirmishMatchSession
         var match = description.Resolve(catalog, terrain, definitionFingerprint, simulationId);
         var session = Create(match, catalog, terrain, checkpointInterval, world: null);
         var notes = ImmutableArray.CreateBuilder<string>();
-        session.SpawnStartingObjects(catalog, terrain, notes);
+        // GameLogic::startNewGame makes the objects of the map's ObjectsList first and then the players' buildings and units (placeNetworkBuildingsForPlayer), so the map's
+        // objects hold the lower ids - the order of equal candidates wherever the original breaks a tie by it.
         session.SpawnMapObjects(catalog, mapObjects, notes);
+        session.SpawnStartingObjects(catalog, terrain, notes);
         session.Notes = notes.ToImmutable();
         return session;
     }
@@ -475,7 +477,8 @@ public sealed class SkirmishMatchSession
     /// <summary>
     /// <c>GameLogic::startNewGame</c>: every object of the map's <c>ObjectsList</c> that is a logic object in a match of several players (<see cref="MapObjectPlacement"/>) - the civilian and
     /// tech buildings, the supply warehouses, the trees, the cars and the train - for the neutral player (a skirmish has none of the map's own sides, so <c>validateTeam</c> gives every
-    /// team the neutral one), at its place and angle, with the properties of the map (<see cref="PlaceMapObjectCommand"/>). Until Phase 60 only the warehouses were placed (F-129).
+    /// team the neutral one), at its place and angle, with the properties of the map (<see cref="PlaceMapObjectCommand"/>). Until Phase 60 only the warehouses were placed (F-129); until
+    /// Phase 61 they were placed after the players' objects.
     /// </summary>
     private void SpawnMapObjects(TemplateCatalog catalog, ImmutableArray<MapObject> mapObjects, ImmutableArray<string>.Builder notes)
     {

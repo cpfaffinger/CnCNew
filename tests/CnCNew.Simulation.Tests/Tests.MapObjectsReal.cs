@@ -41,6 +41,9 @@ static partial class Tests
             var world = session.World;
             var missing = placed.Where(item => catalog.TryGet(item.Name, out var template) && !world.Entities.Any(entity => entity.Template == template
                 && (entity.X - Fixed.FromDecimal(item.X)).Abs() < Fixed.One && (entity.Y - Fixed.FromDecimal(item.Y)).Abs() < Fixed.One)).Select(item => item.Name).Distinct().ToArray();
+            var lastOfTheMap = world.Entities.Where(entity => entity.Owner.IsSystem).Max(entity => entity.Id.Value);
+            var firstOfAPlayer = world.Entities.Where(entity => !entity.Owner.IsSystem).Min(entity => entity.Id.Value);
+            Check.That(lastOfTheMap < firstOfAPlayer, $"{rate}: the map's objects are made before the players' (GameLogic::startNewGame): last of the map {lastOfTheMap}, first of a player {firstOfAPlayer}.");
             Check.That(session.MapObjectsPlaced == placed.Length && missing.Length == 0, $"{rate}: {session.MapObjectsPlaced} of {placed.Length} objects of the map placed ({drawn} drawn only); missing: {string.Join(", ", missing.Take(8))}.");
             var train = world.Entities.FirstOrDefault(entity => entity.Modules.OfType<RailroadBehavior>().Any(rail => rail.IsLocomotive));
             Check.That(train is not null && world.Entities.Any(entity => entity.Template.IsKindOf("STRUCTURE") && entity.Owner.IsSystem && entity.Template.Name.Contains("Civilian", StringComparison.Ordinal) || entity.Template.IsKindOf("CAPTURABLE") && entity.Owner.IsSystem),
