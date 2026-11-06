@@ -33,9 +33,13 @@ public static class ShadowSun
     /// factor of 255, the alpha unused), or <see cref="StencilBrightness"/> grey for a map that names none.
     /// </summary>
     public static Vector3 StencilColor(CnCNew.Data.World.MapData? map)
-        => map?.Lighting?.ShadowColor is { } color
-            ? new Vector3(((color >> 16) & 0xFF) / 255f, ((color >> 8) & 0xFF) / 255f, (color & 0xFF) / 255f)
-            : new Vector3(StencilBrightness);
+    {
+        if (map?.Lighting?.ShadowColor is not { } color) return new Vector3(StencilBrightness);
+        // 0xAARRGGBB: in little-endian order the bytes are blue, green, red, alpha.
+        Span<byte> bytes = stackalloc byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes, color);
+        return new Vector3(bytes[2] / 255f, bytes[1] / 255f, bytes[0] / 255f);
+    }
 
     /// <summary>The direction the light travels: the first light of the objects, or straight down without one.</summary>
     public static Vector3 Direction(TerrainLighting lighting)

@@ -139,7 +139,11 @@ internal static class WorldRealDataTests
                 && terrain.TimeOfDay == (lighting.TimeOfDay switch { 1 => "MORNING", 2 => "AFTERNOON", 3 => "EVENING", _ => "NIGHT" }), $"{path}: the terrain is lit by the map's own first light");
             var shadow = Shadows.ShadowSun.StencilColor(map);
             if (lighting.ShadowColor is { } own)
-                Assert(shadow == new Vector3(((own >> 16) & 0xFF) / 255f, ((own >> 8) & 0xFF) / 255f, (own & 0xFF) / 255f), $"{path}: the shadows take the map's colour");
+            {
+                var hex = own.ToString("X8", CultureInfo.InvariantCulture);
+                float Channel(int at) => int.Parse(hex.AsSpan(at, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture) / 255f;
+                Assert(shadow == new Vector3(Channel(2), Channel(4), Channel(6)), $"{path}: the shadows take the map's colour");
+            }
         }
         Console.WriteLine($"       maps by time of day: {string.Join(", ", times.Select(pair => $"{pair.Key}={pair.Value}"))}; shadow colours: {string.Join(", ", colours.Select(pair => $"{pair.Key}={pair.Value}"))}");
         Assert(without.Count == 0, $"every shipped map has GlobalLighting (without: {string.Join(", ", without)})");
