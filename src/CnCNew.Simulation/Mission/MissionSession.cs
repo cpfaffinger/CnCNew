@@ -242,7 +242,8 @@ public sealed class MissionSession
             if (template.IsBridge) continue;
             var prototype = placed.TeamName.Length > 0 ? Program.FindTeam(placed.TeamName) : null;
             var owner = prototype is not null && Program.FindPlayer(prototype.Owner) is { } side && World.HasPlayer(side.Id) ? side.Id : PlayerId.System;
-            var id = World.RequestSpawn(template.Index, owner, placed.X, placed.Y, placed.Z, placed.Angle, placed.HealthPercent);
+            // GameLogic::startNewGame calls Object::updateObjValuesFromMapProperties for a mission's object as for a skirmish's: the body, the script statuses.
+            var id = World.RequestSpawn(template.Index, owner, placed.X, placed.Y, placed.Z, placed.Angle, placed.HealthPercent, placed.Flags);
             if (placed.ScriptName.Length > 0) Engine.RegisterNamed(placed.ScriptName, id);
             if (prototype is not null) Engine.AssignToTeam(prototype.Name, id);
             if (placed.Aggressiveness is { } mood && mood != (prototype?.Aggressiveness ?? 0)) _placedMoods.Add((id, mood));

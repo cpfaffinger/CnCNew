@@ -140,4 +140,29 @@ static partial class Tests
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission keeps who is unrecruitable.");
     }
+
+    /// <summary>
+    /// <c>GameLogic::startNewGame</c> applies a mission's map object properties as a skirmish's (<c>Object::updateObjValuesFromMapProperties</c>): <c>objectPowered</c> no and
+    /// <c>objectEnabled</c> no disable it, <c>objectIndestructible</c> keeps its body whole, and a script's panel flag powers it again. The port placed a mission's objects without them.
+    /// </summary>
+    public static void MissionMapObjectsComeWithTheirProperties()
+    {
+        MapObject With(MapObject placed, params MapProperty[] extra) => placed with { Properties = new MapProperties([..placed.Properties.Items, ..extra]) };
+        MapProperty Bool(string key, bool value) => new(key, MapPropertyType.Bool, value ? 1 : 0, 0m, string.Empty);
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Power", [Scr.And(Scr.If("FLAG", Scr.Flag("power"), Scr.Bool(true)))],
+                [Scr.Do("UNIT_AFFECT_OBJECT_PANEL_FLAGS", Scr.Unit("Dark"), Scr.Named(MapScriptParameterType.ObjectPanelFlag, "Powered"), Scr.Bool(true))], oneShot: true),
+        ], objects: [With(Placed("AlphaBunker", 100m, 60m, "teamA", "Dark"), Bool("objectPowered", false), Bool("objectIndestructible", true)),
+            With(Placed("AlphaBunker", 200m, 60m, "teamA", "Off"), Bool("objectEnabled", false), Bool("objectUnsellable", true)), Placed("AlphaBunker", 300m, 60m, "teamA", "Plain")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(4));
+        var (dark, off, plain) = (NamedIn(session, "Dark")!, NamedIn(session, "Off")!, NamedIn(session, "Plain")!);
+        Check.That(session.World.DisabledFlagsOf(dark) == DisabledMask.ScriptUnderpowered && session.World.DisabledFlagsOf(off) == DisabledMask.ScriptDisabled
+                   && session.World.DisabledFlagsOf(plain) == DisabledMask.None, $"A mission's objects bring objectPowered and objectEnabled ({session.World.DisabledFlagsOf(dark)}, {session.World.DisabledFlagsOf(off)}).");
+        Check.That(dark.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: true } && (off.ScriptDisableMask & Entity.ScriptUnsellable) != 0
+                   && plain.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: false } && plain.ScriptDisableMask == 0, "And objectIndestructible and objectUnsellable.");
+        session.Engine.SignalUiInteraction("power");
+        Run(session, session.Frames(4));
+        Check.That(session.World.DisabledFlagsOf(dark) == DisabledMask.None, "The script's panel flag powers it again.");
+    }
 }

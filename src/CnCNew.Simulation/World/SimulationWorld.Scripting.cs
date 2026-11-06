@@ -151,11 +151,12 @@ public sealed partial class SimulationWorld
         if (attitude != 0 && AiOf(entity) is not null) SetAttitude(entity, attitude);
     }
 
-    public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, int healthPercent)
+    /// <param name="flags">A mission's map object brings its yes-or-no properties (<c>Object::updateObjValuesFromMapProperties</c>, as <see cref="ApplyMapProperties"/> sets them).</param>
+    public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, int healthPercent, Commands.MapObjectFlags flags = Commands.MapObjectFlags.None)
     {
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
         var id = Ids.AllocateEntity();
-        var setup = new SpawnSetup(healthPercent is > 0 and < 100, healthPercent, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid);
+        var setup = new SpawnSetup(healthPercent is > 0 and < 100, healthPercent, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid, MapFlags: flags);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
