@@ -100,9 +100,11 @@ static partial class Tests
             for (var tick = 0; tick < world.Frames(2000) && raptor.WeaponClip > 0; tick++)
             {
                 var target = world.Entities.Where(value => value.Template.Name == "AmericaTankCrusader" && !value.EffectivelyDead).OrderBy(value => value.Id.Value).FirstOrDefault();
-                if (target is not null && world.Tick >= raptor.WeaponReadyTick)
-                    if (Send(1, next => new FireWeaponCommand(new PlayerId(1), next, world.Tick, raptor.Id, target.Id)).Accepted) shots++;
-                hashes.Add(world.Step().StateHash);
+                if (target is not null && world.Tick >= raptor.WeaponReadyTick) Send(1, next => new FireWeaponCommand(new PlayerId(1), next, world.Tick, raptor.Id, target.Id));
+                // F-140 (AIAttackFireWeaponState): an order's shot comes on the attack machine's frame, not in the order's tick - the shots are counted, not the orders.
+                var result = world.Step();
+                hashes.Add(result.StateHash);
+                shots += result.Events.Count(value => value.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired && value.Entity == raptor.Id);
             }
             Check.That(raptor.WeaponClip == 0 && shots == weapon.ClipSize, $"The Raptor emptied its clip ({shots} shots).");
             Check.That(jetAi.IsOutOfSpecialReloadAmmo(world), "It knows it is out of ammunition.");

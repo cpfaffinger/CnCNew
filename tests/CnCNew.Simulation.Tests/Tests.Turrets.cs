@@ -521,7 +521,8 @@ static partial class Tests
 
         var first = Duel(out var crusaderShot, out var battleMasterShot, out var error);
         Console.WriteLine($"       turrets: tank duel - the Battlemaster fires after {battleMasterShot} ticks (already aimed), the Crusader after {crusaderShot} ticks (45 degrees at 6 per tick), aim error {error.Raw / (double)Fixed.ScaleRaw * 180 / Math.PI:F2} degrees");
-        Check.That(battleMasterShot == 0, "The Battlemaster, aimed from the start, fires on its first order.");
+        // F-140 (TurretAIAimTurretState succeeds in the order's frame, TURRETAI_FIRE fires in the next).
+        Check.That(InTheOrdersNextFrame(battleMasterShot), "The Battlemaster, aimed from the start, fires on its first order, in the next frame.");
         Check.That(TestRate.InFrames(crusaderShot) is >= 7 and <= 9 && error < Degrees(2m), $"The Crusader's turret turns 45 degrees at 6 degrees per tick before the shot ({crusaderShot} ticks, error {error.Raw} raw).");
         Check.That(first == Duel(out _, out _, out _), "The retail duel is deterministic.");
     }
