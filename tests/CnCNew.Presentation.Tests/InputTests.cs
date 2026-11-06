@@ -39,6 +39,7 @@ static class InputTests
         run.Test("Input: placement validity, ghost rotation and the construct command", PlacementRules);
         run.Test("Input: a placement starts at the template's PlacementViewAngle and a click without a drag keeps it", PlacementViewAngle);
         run.Test("Input: command bar slots, availability reasons, queue and multi-select", CommandBarStates);
+        run.Test("Input: a script-disabled or script-unpowered object shows no buttons", CommandBarHidesScriptDisabled);
         run.Test("Input: camera intent from keys, edges, drag, wheel and metas", CameraIntents);
         run.Test("Input: acceptance sequence through the event pipeline is replayable", AcceptanceSequence);
         run.Test("Input: the alternate mouse setup is the default, the original's setup stays selectable", MouseSchemes);
@@ -1368,6 +1369,50 @@ static class InputTests
         arena.Step();
         selection.Replace([world.Entities.First(entity => entity.Owner == Enemy).Id]);
         Assert(bar.Build(world, selection).Context == CommandBarContext.Foreign, "a foreign object shows no buttons");
+    }
+
+    /// <summary>
+    /// <c>ControlBar::getCommandAvailability</c>: "if the object status is disabled or unpowered, you cannot do anything to it" - every button of an object with
+    /// <c>OBJECT_STATUS_SCRIPT_DISABLED</c> or <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c> is hidden, also in a selection of several, and comes back when the script lets go.
+    /// </summary>
+    private static void CommandBarHidesScriptDisabled()
+    {
+        var (arena, controller, _) = OrderSetup(arena =>
+        {
+            arena.Spawn("Dozer", Me, 40, 40);
+            arena.Spawn("Barracks", Me, 100, 100);
+            arena.Spawn("Plant", Me, 150, 150);
+            arena.Spawn("Ranger", Me, 60, 40);
+            arena.Spawn("Tank", Me, 70, 40);
+        }, money: 450);
+        var world = arena.World;
+        var catalog = CommandButtonCatalog.Build(Fixture.Graph);
+        var bar = new CommandBarModel(catalog);
+        var selection = controller.Selection;
+        var (dozer, barracks, ranger, tank) = (arena.Find("Dozer", Me, 40, 40), arena.Find("Barracks", Me, 100, 100), arena.Find("Ranger", Me, 60, 40), arena.Find("Tank", Me, 70, 40));
+        int Shown(CommandBarView view) => view.Slots.Count(slot => slot is not null);
+
+        selection.Replace([barracks.Id]);
+        var before = Shown(bar.Build(world, selection));
+        Assert(before > 0, "Setup: the barracks shows its buttons.");
+        world.SetScriptDisable(barracks, Entity.ScriptUnpowered, true);
+        var unpowered = bar.Build(world, selection);
+        Assert(unpowered.Context == CommandBarContext.Command && Shown(unpowered) == 0, $"a script-unpowered barracks shows none ({Shown(unpowered)})");
+        Assert(catalog.TryGetButton("Command_SetRallyPoint", out var rally) && bar.Evaluate(world, Me, barracks, rally) is { Availability: ButtonAvailability.Hidden, Reason: ButtonReason.ScriptDisabled },
+            "not even the rally point, which an underpowered building keeps; the reason is the script");
+        world.SetScriptDisable(barracks, Entity.ScriptUnpowered, false);
+        Assert(Shown(bar.Build(world, selection)) == before, "powered again, they come back");
+
+        selection.Replace([dozer.Id]);
+        world.SetScriptDisable(dozer, Entity.ScriptDisabled, true);
+        Assert(Shown(bar.Build(world, selection)) == 0, "a script-disabled dozer shows none");
+
+        selection.Replace([ranger.Id, tank.Id]);
+        world.SetScriptDisable(ranger, Entity.ScriptUnpowered, true);
+        var multi = bar.Build(world, selection);
+        Assert(multi[11] is { Button.Kind: GuiCommandKind.AttackMove } attackMove && attackMove.Sources.SequenceEqual([tank.Id]), "in a selection only the others give the order");
+        world.SetScriptDisable(tank, Entity.ScriptUnpowered, true);
+        Assert(Shown(bar.Build(world, selection)) == 0, "with every member unpowered nothing is shown");
     }
 
     private static void CameraIntents()

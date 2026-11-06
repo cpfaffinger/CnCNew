@@ -56,6 +56,9 @@ public enum ButtonReason
 
     /// <summary><c>Object::affectedByUpgrade</c> is false: no module of the object would answer the upgrade (it conflicts with one it has).</summary>
     NotAffected,
+
+    /// <summary>A script disabled the object or took its power (<c>OBJECT_STATUS_SCRIPT_DISABLED</c>, <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>): "you cannot do anything to it".</summary>
+    ScriptDisabled,
 }
 
 /// <param name="Slot">1..14 as in the <c>CommandSet</c>.</param>
@@ -251,7 +254,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         for (var index = 0; index < CommandSetInfo.MaxSlots; index++)
         {
             if (ButtonOf(set, index) is not { } button) continue;
-            var state = Evaluate(world, player, anyone, button);
+            // The original evaluates the power's most ready source (Player::findMostReadyShortcutSpecialPowerOfType), which the bar does not model: the script statuses of the
+            // arbitrary stand-in are not asked.
+            var state = EvaluateButton(world, player, anyone, button);
             if (state.Availability == ButtonAvailability.Hidden || state.Reason is ButtonReason.MissingScience or ButtonReason.MissingUpgrade) continue;
             buttons.Add(Make(index + 1, button, state, [anyone.Id], hotkeys));
         }
@@ -302,7 +307,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     /// </summary>
     private void AddRiders(SimulationWorld world, Entity entity, CommandSetInfo set, CommandBarButton?[] slots)
     {
-        if (entity.Container is not { } container || (entity.DisabledFlags(world.Tick) & DisabledMask.Unmanned) != 0) return;
+        if (entity.Container is not { } container || (entity.DisabledFlags(world.Tick) & DisabledMask.Unmanned) != 0 || entity.IsScriptDisabledOrUnpowered) return;
         var riders = container.Contained.Select(world.FindEntity).OfType<Entity>().ToList();
         var room = container.ContainMax - (container is TransportContain ? riders.Sum(rider => Math.Max(rider.Template.TransportSlotCount - 1, 0)) : 0);
         var (place, next) = (0, 0);
@@ -394,10 +399,18 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     }
 
     /// <summary>
-    /// <c>ControlBar::getCommandAvailability</c> for one object, reduced to the state the simulation exposes and ordered like the reference: hidden
-    /// buttons, the underpowered disable, <c>NEED_UPGRADE</c>, <c>NOT_QUEUEABLE</c>, then the per-kind checks.
+    /// <c>ControlBar::getCommandAvailability</c> for one object, reduced to the state the simulation exposes and ordered like the reference: an object a script disabled or took the
+    /// power of shows nothing, then hidden buttons, the underpowered disable, <c>NEED_UPGRADE</c>, <c>NOT_QUEUEABLE</c>, then the per-kind checks.
     /// </summary>
     public (ButtonAvailability Availability, ButtonReason Reason, float? Ready, Fixed Cost, long Ticks) Evaluate(SimulationWorld world, PlayerId player, Entity entity, CommandButtonInfo button)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        // "If the object status is disabled or unpowered, you cannot do anything to it."
+        if (entity.IsScriptDisabledOrUnpowered) return (ButtonAvailability.Hidden, ButtonReason.ScriptDisabled, null, default, 0);
+        return EvaluateButton(world, player, entity, button);
+    }
+
+    private (ButtonAvailability Availability, ButtonReason Reason, float? Ready, Fixed Cost, long Ticks) EvaluateButton(SimulationWorld world, PlayerId player, Entity entity, CommandButtonInfo button)
     {
         (ButtonAvailability, ButtonReason, float?, Fixed, long) State(ButtonAvailability availability, ButtonReason reason, float? ready = null, Fixed cost = default, long ticks = 0)
             => (availability, reason, ready, cost, ticks);
