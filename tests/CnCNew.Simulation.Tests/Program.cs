@@ -855,6 +855,13 @@ run.Test("Turret attack: starting a unit ability ends the attack and the move", 
 run.Test("Turret attack: snapshot mid-pursuit, determinism and the replay of PursueCommand", Tests.TurretAttackSnapshotAndReplay);
 run.Test("Firing tracker: consecutive shots spin the weapon up, a victim change coasts, idling cools it down", Tests.FiringTrackerSpinsUpCoastsAndCoolsDown);
 run.Test("Pre-attack delay: the weapon winds up per shot, per attack or per clip; an order drops it", Tests.PreAttackDelayWindsUpBeforeTheShot);
+run.Test("F-140 fire cycle: a delay of D frames fires on the first even frame from max(D, 2) on", Tests.FireCycleDelaysFireOnEvenFrames);
+run.Test("F-140 fire cycle: a clip and its reload, on the body and on a turret, keep the even frames", Tests.FireCycleClipReloadsOnTheCycle);
+run.Test("F-140 fire cycle: a contact weapon on the body does not aim and fires every max(D, 1) frames", Tests.FireCycleContactWeaponChecksEveryFrame);
+run.Test("F-140 fire cycle: a wind-up starts when the fire state is entered, on the odd frames after a shot", Tests.FireCycleWindUpStartsWhenTheFireStateIsEntered);
+run.Test("F-140 fire cycle: a turret that turns again while it reloads fires the frame after it points, then on the even frames", Tests.FireCycleTurretThatTurnsAgainShiftsTheCycle);
+run.Test("F-140 fire cycle: an ordered attack fires on the frames of the unit's own, whatever the order stream", Tests.FireCycleOrderedAttackIsTheAcquiredOne);
+run.Test("F-140 fire cycle: a snapshot between two shots continues on the same frames", Tests.FireCycleSnapshotBetweenShotsContinues);
 run.Test("Damaged locomotor: a really damaged object moves with SpeedDamaged", Tests.DamagedLocomotorSlowsAReallyDamagedObject);
 run.Test("Turret idle scan: random angle and interval, hold, return, determinism, snapshot", Tests.TurretIdleScanGlancesAroundDeterministically);
 run.Test("Turret idle scan: an attack interrupts it and it resumes afterwards", Tests.TurretIdleScanYieldsToAnAttackAndResumes);
