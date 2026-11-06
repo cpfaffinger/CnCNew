@@ -68,12 +68,13 @@ public enum AbilityStage : byte
 public static class StagedCaptureRules
 {
     /// <summary>
-    /// Reduced <c>ActionManager::canCaptureBuilding</c> target rules: a complete, unsold, alive <c>STRUCTURE</c> owned by an enemy, or <c>KINDOF_CAPTURABLE</c> and not an ally's; never
+    /// Reduced <c>ActionManager::canCaptureBuilding</c> target rules: never <c>IMMUNE_TO_CAPTURE</c>; a complete, unsold, alive <c>STRUCTURE</c> owned by an enemy, or <c>KINDOF_CAPTURABLE</c> and not an ally's; never
     /// the actor's own.
     /// </summary>
     public static bool CanCapture(IWorldServices world, Entity actor, Entity target)
     {
         if (target.DestroyRequested || target.EffectivelyDead) return false;
+        if (target.Template.IsKindOf("IMMUNE_TO_CAPTURE")) return false;
         if (!target.Template.IsKindOf("STRUCTURE") || target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold)) return false;
         if (target.Owner == actor.Owner) return false;
         var relationship = world.RelationshipOf(actor.Owner, target.Owner);
