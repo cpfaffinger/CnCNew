@@ -9,9 +9,9 @@ public sealed record TerrainLight(Vector3 Ambient, Vector3 Diffuse, Vector3 Posi
 
 /// <summary>
 /// Static terrain vertex lighting (<c>BaseHeightMapRenderObjClass::doTheLight</c>): the ambient of the first light plus, for every global
-/// light, <c>clamp(dot(-LightPos, normal), 0, 1) * Diffuse</c>, clamped to [0, 1]. Source: the <c>TerrainLighting&lt;TimeOfDay&gt;*</c> keys of
-/// <c>GameData.ini</c> for the configured <c>TimeOfDay</c>. A map's own <c>GlobalLighting</c> chunk would override them; the map decoder does
-/// not decode that chunk yet, so the GameData lighting is used for every map (documented limit).
+/// light, <c>clamp(dot(-LightPos, normal), 0, 1) * Diffuse</c>, clamped to [0, 1]. Source: the map's own <c>GlobalLighting</c> chunk
+/// (<c>WorldHeightMap::ParseLightingDataChunk</c> writes its time of day and lights over <c>GlobalData</c>), and for a map without one the
+/// <c>TerrainLighting&lt;TimeOfDay&gt;*</c> keys of <c>GameData.ini</c> for the configured <c>TimeOfDay</c>.
 /// </summary>
 public sealed record TerrainLighting(string TimeOfDay, ImmutableArray<TerrainLight> Lights)
 {
@@ -19,6 +19,37 @@ public sealed record TerrainLighting(string TimeOfDay, ImmutableArray<TerrainLig
     public const int EngineDefaultGlobalLights = 3;
 
     public static TerrainLighting FromDefinitions(CompiledDefinitionGraph graph) => Read(graph, "TerrainLighting");
+
+    /// <summary>The lights of the terrain a map is played with: its own <c>GlobalLighting</c>, or <see cref="FromDefinitions"/> without one.</summary>
+    public static TerrainLighting ForMap(CompiledDefinitionGraph graph, CnCNew.Data.World.MapData? map)
+        => map?.Lighting is { } own ? FromMap(graph, own, own.Terrain) : FromDefinitions(graph);
+
+    /// <summary>The lights of the objects a map is played with: its own <c>GlobalLighting</c>, or <see cref="ObjectsFromDefinitions"/> without one.</summary>
+    public static TerrainLighting ObjectsForMap(CompiledDefinitionGraph graph, CnCNew.Data.World.MapData? map)
+        => map?.Lighting is { } own ? FromMap(graph, own, own.Objects) : ObjectsFromDefinitions(graph);
+
+    private static TerrainLighting FromMap(CompiledDefinitionGraph graph, CnCNew.Data.World.MapLighting lighting, ImmutableArray<ImmutableArray<CnCNew.Data.World.MapLight>> table)
+    {
+        var count = LightCount(WorldDefinitionReader.GameData(graph));
+        var name = lighting.TimeOfDay switch { 1 => "MORNING", 2 => "AFTERNOON", 3 => "EVENING", _ => "NIGHT" };
+        var lights = ImmutableArray.CreateBuilder<TerrainLight>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var light = table[lighting.TimeOfDay - 1][index];
+            lights.Add(new TerrainLight(
+                new Vector3((float)light.AmbientRed, (float)light.AmbientGreen, (float)light.AmbientBlue),
+                new Vector3((float)light.DiffuseRed, (float)light.DiffuseGreen, (float)light.DiffuseBlue),
+                new Vector3((float)light.X, (float)light.Y, (float)light.Z)));
+        }
+        return new TerrainLighting(name, lights.MoveToImmutable());
+    }
+
+    private static int LightCount(GameDefinition gameData)
+    {
+        var count = WorldDefinitionReader.Has(gameData, "NumberGlobalLights") ? WorldDefinitionReader.Integer(gameData, "NumberGlobalLights") : EngineDefaultGlobalLights;
+        if (count is < 1 or > 3) throw new InvalidDataException($"GameData NumberGlobalLights {count} is outside 1..3.");
+        return count;
+    }
 
     /// <summary>
     /// The lights of objects (<c>TerrainObjectsLighting&lt;TimeOfDay&gt;*</c> keys, <c>GlobalData::m_terrainObjectsLighting</c>): what <c>RTS3DScene</c> hands to the W3D renderer for
@@ -38,10 +69,7 @@ public sealed record TerrainLighting(string TimeOfDay, ImmutableArray<TerrainLig
             "NIGHT" => "Night",
             _ => throw new InvalidDataException($"GameData TimeOfDay '{timeOfDay}' is not MORNING, AFTERNOON, EVENING or NIGHT."),
         };
-        var count = WorldDefinitionReader.Has(gameData, "NumberGlobalLights")
-            ? WorldDefinitionReader.Integer(gameData, "NumberGlobalLights")
-            : EngineDefaultGlobalLights;
-        if (count is < 1 or > 3) throw new InvalidDataException($"GameData NumberGlobalLights {count} is outside 1..3.");
+        var count = LightCount(gameData);
         var lights = ImmutableArray.CreateBuilder<TerrainLight>(count);
         for (var index = 0; index < count; index++)
         {

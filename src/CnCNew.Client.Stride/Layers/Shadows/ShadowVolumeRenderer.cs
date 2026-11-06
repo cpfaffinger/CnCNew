@@ -53,7 +53,8 @@ internal sealed class ShadowVolumeRenderer : IDisposable
     private readonly ModelComponent _fill;
     private int _quads;
 
-    public ShadowVolumeRenderer(RenderServices services)
+    /// <param name="color">The colour the shadows multiply the picture by, in gamma space (<see cref="ShadowSun.StencilColor"/>).</param>
+    public ShadowVolumeRenderer(RenderServices services, System.Numerics.Vector3 color)
     {
         _services = services;
         var device = services.GraphicsDevice;
@@ -80,8 +81,8 @@ internal sealed class ShadowVolumeRenderer : IDisposable
         var volumeMaterial = Create(new ComputeColor(new Color4(0f, 0f, 0f, 1f)), new BlendStateDescription(Blend.One, Blend.Zero), ShadowStencilRole.Volume, StackedBackToFrontSortMode.ShadowVolumeLayer);
         // D3DBLEND_DESTCOLOR, D3DBLEND_ZERO: the target times the colour. The original multiplies in gamma space, and a product in linear space differs only by a power, so the factor is the
         // colour's linear value.
-        var brightness = device.ColorSpace == ColorSpace.Linear ? MathUtil.SRgbToLinear(ShadowSun.StencilBrightness) : ShadowSun.StencilBrightness;
-        var fillMaterial = Create(new ComputeColor(new Color4(brightness, brightness, brightness, 1f)), Multiply(Blend.DestinationColor, Blend.Zero), ShadowStencilRole.Fill, StackedBackToFrontSortMode.ShadowFillLayer);
+        float Channel(float value) => device.ColorSpace == ColorSpace.Linear ? MathUtil.SRgbToLinear(value) : value;
+        var fillMaterial = Create(new ComputeColor(new Color4(Channel(color.X), Channel(color.Y), Channel(color.Z), 1f)), Multiply(Blend.DestinationColor, Blend.Zero), ShadowStencilRole.Fill, StackedBackToFrontSortMode.ShadowFillLayer);
 
         _volumeMesh = new Mesh
         {

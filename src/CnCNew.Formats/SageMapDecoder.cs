@@ -42,6 +42,7 @@ public static class SageMapDecoder
         var triggers = ImmutableArray<MapPolygonTrigger>.Empty;
         var links = ImmutableArray<MapWaypointLink>.Empty;
         var playerScripts = ImmutableArray<MapScriptList>.Empty;
+        MapLighting? lighting = null;
         var skipped = ImmutableArray.CreateBuilder<MapSkippedChunk>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -75,6 +76,10 @@ public static class SageMapDecoder
                     links = ReadLinks(reader);
                     reader.ExpectEnd();
                     break;
+                case "GlobalLighting":
+                    lighting = ReadLighting(reader, chunk.Version);
+                    reader.ExpectEnd();
+                    break;
                 default:
                     skipped.Add(new MapSkippedChunk(chunk.Name, chunk.Version, chunk.Bytes));
                     break;
@@ -85,7 +90,33 @@ public static class SageMapDecoder
             container,
             height ?? throw new InvalidDataException("Map has no HeightMapData chunk."),
             blend ?? throw new InvalidDataException("Map has no BlendTileData chunk."),
-            worldInfo, sides, teams, objects, triggers, links, playerScripts, skipped.ToImmutable());
+            worldInfo, sides, teams, objects, triggers, links, playerScripts, skipped.ToImmutable()) { Lighting = lighting };
+    }
+
+    /// <summary>
+    /// <c>WorldHeightMap::ParseLightingDataChunk</c>: the time of day; for each of the four times the first terrain light, the first object light, from version 2 the second and third object
+    /// lights, from version 3 the second and third terrain lights; then, if the chunk goes on, the shadow colour.
+    /// </summary>
+    private static MapLighting ReadLighting(ChunkReader reader, int version)
+    {
+        var timeOfDay = reader.ReadInt();
+        if (timeOfDay is < 1 or > 4) throw new InvalidDataException($"GlobalLighting names time of day {timeOfDay} (1..4).");
+        MapLight Light() => new(reader.ReadReal(), reader.ReadReal(), reader.ReadReal(), reader.ReadReal(), reader.ReadReal(), reader.ReadReal(), reader.ReadReal(), reader.ReadReal(), reader.ReadReal());
+        var terrain = ImmutableArray.CreateBuilder<ImmutableArray<MapLight>>(4);
+        var objects = ImmutableArray.CreateBuilder<ImmutableArray<MapLight>>(4);
+        for (var time = 0; time < 4; time++)
+        {
+            var terrainLights = new[] { MapLight.Unset, MapLight.Unset, MapLight.Unset };
+            var objectLights = new[] { MapLight.Unset, MapLight.Unset, MapLight.Unset };
+            terrainLights[0] = Light();
+            objectLights[0] = Light();
+            if (version >= 2) for (var index = 1; index < 3; index++) objectLights[index] = Light();
+            if (version >= 3) for (var index = 1; index < 3; index++) terrainLights[index] = Light();
+            terrain.Add([..terrainLights]);
+            objects.Add([..objectLights]);
+        }
+        uint? shadow = reader.AtEnd ? null : unchecked((uint)reader.ReadInt());
+        return new MapLighting(timeOfDay, terrain.MoveToImmutable(), objects.MoveToImmutable(), shadow);
     }
 
     /// <summary>

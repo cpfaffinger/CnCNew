@@ -47,6 +47,7 @@ internal static class WorldRealDataTests
         foreach (var sample in SampleMaps)
             t.Run($"sample map {sample}", () => SampleMap(content, maps, sample, lookup, options, graph));
         t.Run("every map builds", () => AllMaps(content, maps, lookup, options));
+        t.Run("every map brings its own light and shadow colour", () => MapLights(content, maps, graph));
         return t.Failures;
     }
 
@@ -112,6 +113,37 @@ internal static class WorldRealDataTests
         Assert(composed.Length == minimap.TerrainRgba.Length && composed.Take(4).SequenceEqual(new byte[] { 0, 0, 0, 255 }), "unexplored corner is black");
         Console.WriteLine($"  {path}: {model.CellsX}x{model.CellsY} cells, atlas {model.Atlas.Width}x{model.Atlas.Height}, GPU {model.Stats.TotalGpuBytes.ToString("N0", CultureInfo.InvariantCulture)} bytes, " +
                           $"sampler deviation {worst.ToString("F4", CultureInfo.InvariantCulture)}, picks {hits}");
+    }
+
+    /// <summary>
+    /// <c>WorldHeightMap::ParseLightingDataChunk</c>: every shipped map carries <c>GlobalLighting</c>; its time of day and lights are what the terrain and the objects are lit with
+    /// (<see cref="TerrainLighting.ForMap"/>), and its last word is the colour of the stencil shadows (<see cref="Shadows.ShadowSun.StencilColor"/>). The owner's playtest of
+    /// 4 November 2026 found a helicopter's shadow too hard on the ground: the port drew every map's shadows in the engine's default grey.
+    /// </summary>
+    private static void MapLights(ContentFileSystem content, string[] maps, CompiledDefinitionGraph graph)
+    {
+        var times = new SortedDictionary<int, int>();
+        var colours = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var without = new List<string>();
+        foreach (var path in maps)
+        {
+            MapData map;
+            using (var stream = content.OpenRead(path)) map = SageMapDecoder.Decode(stream);
+            if (map.Lighting is not { } lighting) { without.Add(path); continue; }
+            times[lighting.TimeOfDay] = times.GetValueOrDefault(lighting.TimeOfDay) + 1;
+            var colour = lighting.ShadowColor is { } value ? value.ToString("X8", CultureInfo.InvariantCulture) : "none";
+            colours[colour] = colours.GetValueOrDefault(colour) + 1;
+            var terrain = TerrainLighting.ForMap(graph, map);
+            var expected = lighting.Terrain[lighting.TimeOfDay - 1][0];
+            Assert(terrain.Lights[0].Ambient == new Vector3((float)expected.AmbientRed, (float)expected.AmbientGreen, (float)expected.AmbientBlue)
+                && terrain.TimeOfDay == (lighting.TimeOfDay switch { 1 => "MORNING", 2 => "AFTERNOON", 3 => "EVENING", _ => "NIGHT" }), $"{path}: the terrain is lit by the map's own first light");
+            var shadow = Shadows.ShadowSun.StencilColor(map);
+            if (lighting.ShadowColor is { } own)
+                Assert(shadow == new Vector3(((own >> 16) & 0xFF) / 255f, ((own >> 8) & 0xFF) / 255f, (own & 0xFF) / 255f), $"{path}: the shadows take the map's colour");
+        }
+        Console.WriteLine($"       maps by time of day: {string.Join(", ", times.Select(pair => $"{pair.Key}={pair.Value}"))}; shadow colours: {string.Join(", ", colours.Select(pair => $"{pair.Key}={pair.Value}"))}");
+        Assert(without.Count == 0, $"every shipped map has GlobalLighting (without: {string.Join(", ", without)})");
+        Assert(Shadows.ShadowSun.StencilColor(null) == new Vector3(160f / 255f), "a map without its own colour keeps the engine's 0x7fa0a0a0");
     }
 
     private static void AllMaps(ContentFileSystem content, string[] maps, TerrainTextureLookup lookup, TerrainRenderOptions options)

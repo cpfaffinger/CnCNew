@@ -268,7 +268,7 @@ internal sealed class TerrainLayer : IWorldLayer
     private TerrainOverlay? CreateOverlay(RenderServices services, LiveGame match, bool linear)
     {
         if (Environment.GetEnvironmentVariable("CNCNEW_CLOUDS") == "0") return null;
-        var options = TerrainClouds.FromDefinitions(match.Data.Graph);
+        var options = TerrainClouds.ForMap(match.Data.Graph, match.Map);
         if (!options.Clouds && !options.LightMap) return null;
         Texture? clouds = null;
         if (options.Clouds)
@@ -352,7 +352,7 @@ internal sealed class TerrainLayer : IWorldLayer
     {
         var model = match.TerrainModel;
         if (model.Water.IsDefaultOrEmpty) return;
-        var options = TerrainRenderOptions.FromDefinitions(match.Data.Graph);
+        var options = TerrainRenderOptions.ForMap(match.Data.Graph, match.Map);
         var additive = options.Water?.AdditiveBlending ?? false;
         var shores = new Dictionary<float, FogMap?>();
         var batches = WaterMeshBuilder.Build(model.Water, fogScale, linear ? PackedColor.SrgbDecodeTable() : PackedColor.IdentityTable());
@@ -414,7 +414,7 @@ internal sealed class TerrainLayer : IWorldLayer
     {
         if (Environment.GetEnvironmentVariable("CNCNEW_ROADS") == "0") return (0, 0, 0);
         var graph = match.Data.Graph;
-        var model = RoadModel.Build(match.Map.Objects, match.Heights, RoadCatalog.FromDefinitions(graph), TerrainRenderOptions.FromDefinitions(graph).Lighting);
+        var model = RoadModel.Build(match.Map.Objects, match.Heights, RoadCatalog.FromDefinitions(graph), TerrainRenderOptions.ForMap(graph, match.Map).Lighting);
         if (model.Meshes.IsDefaultOrEmpty) return (0, 0, 0);
         var batches = RoadMeshBuilder.Build(model, fogScale, lightTable);
         services.TransparentOrder.Stacking.Clear();
@@ -455,7 +455,7 @@ internal sealed class TerrainLayer : IWorldLayer
         var bridges = match.World.Bridges;
         if (bridges.Count == 0) return;
         var library = new W3dAssetLibrary(path => services.Content.Exists(path) ? services.Content.OpenRead(path) : null);
-        var lighting = TerrainRenderOptions.FromDefinitions(match.Data.Graph).Lighting;
+        var lighting = TerrainRenderOptions.ForMap(match.Data.Graph, match.Map).Lighting;
         var materials = new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
         var device = services.GraphicsDevice;
         for (var index = 0; index < bridges.Count; index++)

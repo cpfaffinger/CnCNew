@@ -18,10 +18,13 @@ public sealed record TerrainClouds(bool Clouds, bool LightMap)
     public const float SlideX = -0.02f;
     public const float SlideY = 1.5f * SlideX;
 
-    public static TerrainClouds FromDefinitions(CompiledDefinitionGraph graph)
+    public static TerrainClouds FromDefinitions(CompiledDefinitionGraph graph) => ForMap(graph, null);
+
+    /// <summary>The clouds of a map: none at night, and the night is the map's own time of day when it has one.</summary>
+    public static TerrainClouds ForMap(CompiledDefinitionGraph graph, CnCNew.Data.World.MapData? map)
     {
         var gameData = WorldDefinitionReader.GameData(graph);
-        var lighting = TerrainLighting.FromDefinitions(graph);
+        var lighting = TerrainLighting.ForMap(graph, map);
         return new TerrainClouds(
             WorldDefinitionReader.Boolean(gameData, "UseCloudMap") && !lighting.TimeOfDay.Equals("NIGHT", StringComparison.OrdinalIgnoreCase),
             WorldDefinitionReader.Boolean(gameData, "UseLightMap"));

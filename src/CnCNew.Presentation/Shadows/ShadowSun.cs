@@ -28,6 +28,15 @@ public static class ShadowSun
     /// <summary><c>m_shadowColor</c> of <c>W3DShadowManager</c> (0x7fa0a0a0): the blend multiplies by its colour, 160/255; the alpha is not used.</summary>
     public const float StencilBrightness = 160f / 255f;
 
+    /// <summary>
+    /// The colour the stencil shadows multiply the picture by: the map's own (<c>ParseLightingDataChunk</c> ends in <c>setShadowColor</c>, 0xAARRGGBB, red, green and blue each a
+    /// factor of 255, the alpha unused), or <see cref="StencilBrightness"/> grey for a map that names none.
+    /// </summary>
+    public static Vector3 StencilColor(CnCNew.Data.World.MapData? map)
+        => map?.Lighting?.ShadowColor is { } color
+            ? new Vector3(((color >> 16) & 0xFF) / 255f, ((color >> 8) & 0xFF) / 255f, (color & 0xFF) / 255f)
+            : new Vector3(StencilBrightness);
+
     /// <summary>The direction the light travels: the first light of the objects, or straight down without one.</summary>
     public static Vector3 Direction(TerrainLighting lighting)
     {

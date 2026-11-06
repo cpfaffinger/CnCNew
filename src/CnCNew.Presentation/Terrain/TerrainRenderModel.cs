@@ -79,9 +79,12 @@ public sealed record TerrainRenderOptions(
     int AtlasWidth = TerrainAtlasBuilder.ReferenceTextureWidth)
 {
     /// <summary>Lighting, water and the <c>AdjustCliffTextures</c>/<c>Use3WayTerrainBlends</c> switches of <c>GameData.ini</c>.</summary>
-    public static TerrainRenderOptions FromDefinitions(CompiledDefinitionGraph graph)
+    public static TerrainRenderOptions FromDefinitions(CompiledDefinitionGraph graph) => ForMap(graph, null);
+
+    /// <summary><see cref="FromDefinitions"/> with the map's own lighting (<see cref="TerrainLighting.ForMap"/>).</summary>
+    public static TerrainRenderOptions ForMap(CompiledDefinitionGraph graph, CnCNew.Data.World.MapData? map)
     {
-        var lighting = TerrainLighting.FromDefinitions(graph);
+        var lighting = TerrainLighting.ForMap(graph, map);
         var gameData = WorldDefinitionReader.GameData(graph);
         return new TerrainRenderOptions(
             lighting,

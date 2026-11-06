@@ -80,7 +80,7 @@ public abstract class LiveGame
         _driver = new LocalTickDriver(_tickSeconds);
         _maxTicksPerFrame = world.Time.OriginalFrames(MaxCatchUpFrames);
 
-        var renderOptions = TerrainRenderOptions.FromDefinitions(graph);
+        var renderOptions = TerrainRenderOptions.ForMap(graph, map);
         var lookup = new TerrainTextureLookup(TerrainTextureCatalog.FromDefinitions(graph), path =>
         {
             if (!data.Content.Exists(path)) return null;

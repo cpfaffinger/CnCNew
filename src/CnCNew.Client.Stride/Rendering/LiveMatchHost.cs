@@ -30,7 +30,7 @@ internal sealed class LiveMatchHost : IDisposable
         };
         Scene.Entities.Add(new Entity("Camera") { _camera });
 
-        SceneLighting.Install(Scene, CnCNew.Presentation.Terrain.TerrainLighting.ObjectsFromDefinitions(data.Graph));
+        SceneLighting.Install(Scene, CnCNew.Presentation.Terrain.TerrainLighting.ObjectsForMap(data.Graph, match.Map));
 
         _layers = WorldLayers.CreateAll();
         foreach (var layer in _layers) layer.Attach(Services, match);

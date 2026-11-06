@@ -120,7 +120,7 @@ public sealed record MapBuildListEntry(
 
 public sealed record MapSide(MapProperties Properties, ImmutableArray<MapBuildListEntry> BuildList);
 
-/// <summary>A chunk the decoder recognized but deliberately did not decode (lighting, cameras, sounds); counted, never silent.</summary>
+/// <summary>A chunk the decoder recognized but deliberately did not decode (cameras, sounds); counted, never silent.</summary>
 public sealed record MapSkippedChunk(string Path, int Version, int Bytes);
 
 /// <summary>Value kind of a <see cref="MapScriptParameter"/> (<c>Parameter::ParameterType</c>, <c>Scripts.h</c>). The raw enum order on
@@ -198,7 +198,24 @@ public sealed record MapData(
 {
     public const decimal CellSize = 10m;
     public const decimal HeightScale = 0.625m;
+
+    /// <summary>The map's own light and shadow (<c>GlobalLighting</c>), or null for a map without the chunk: then <c>GameData.ini</c>'s lighting holds.</summary>
+    public MapLighting? Lighting { get; init; }
 }
+
+/// <summary>One light of <c>GlobalData::TerrainLighting</c> as a map stores it: ambient and diffuse colour (0..1 each) and the light's position vector.</summary>
+public sealed record MapLight(decimal AmbientRed, decimal AmbientGreen, decimal AmbientBlue, decimal DiffuseRed, decimal DiffuseGreen, decimal DiffuseBlue, decimal X, decimal Y, decimal Z)
+{
+    /// <summary><c>initLightValues</c>: what a light the file does not name is (black, pointing down).</summary>
+    public static MapLight Unset { get; } = new(0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, -1m);
+}
+
+/// <summary>
+/// <c>WorldHeightMap::ParseLightingDataChunk</c>: the time of day the map is played at (<c>TimeOfDay</c>: 1 morning, 2 afternoon, 3 evening, 4 night), per time of day three lights of the
+/// terrain and three of the objects (index [time of day - 1][light]; the second and third object lights from chunk version 2, the terrain's from version 3, otherwise
+/// <see cref="MapLight.Unset"/>), and the colour of the stencil shadows (<c>W3DShadowManager::setShadowColor</c>, 0xAARRGGBB) when the chunk carries one.
+/// </summary>
+public sealed record MapLighting(int TimeOfDay, ImmutableArray<ImmutableArray<MapLight>> Terrain, ImmutableArray<ImmutableArray<MapLight>> Objects, uint? ShadowColor);
 
 /// <summary>One entry of a script library's <c>ScriptsPlayers</c> chunk: the name of the template player a script list belongs to and, from chunk version 2 on, its side dict.</summary>
 public sealed record MapScriptLibraryPlayer(string Name, MapProperties Properties);

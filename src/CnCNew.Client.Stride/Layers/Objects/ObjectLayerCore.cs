@@ -60,8 +60,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
         _assets = new ModelAssetCache(services);
         _pool = new EntityPool();
         _placeholderModel = PlaceholderBox.Build(services.GraphicsDevice, _assets.Indices, new Color4(1f, 0.15f, 0.85f, 1f));
-        _sun = ShadowSun.Direction(TerrainLighting.ObjectsFromDefinitions(services.Data.Graph));
-        if (!ShadowsOff) _shadows = new ShadowVolumeRenderer(services);
+        _sun = ShadowSun.Direction(TerrainLighting.ObjectsForMap(services.Data.Graph, match.Map));
+        if (!ShadowsOff) _shadows = new ShadowVolumeRenderer(services, ShadowSun.StencilColor(match.Map));
 
         var args = Environment.GetCommandLineArgs();
         _smokeTest = args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase);
