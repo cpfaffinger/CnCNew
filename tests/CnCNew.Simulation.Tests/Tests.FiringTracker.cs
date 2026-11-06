@@ -146,9 +146,10 @@ static partial class Tests
         Check.That(shots[3].After == ContinuousFireStage.Mean && shots[5].After == ContinuousFireStage.Mean, "More than ContinuousFireOne shots in a row: the mean stage.");
         Check.That(shots[6].After == ContinuousFireStage.Fast && shots[^1].After == ContinuousFireStage.Fast, "More than ContinuousFireTwo: the fast stage, and it stays.");
         Check.That(gaps[0] == world.Frames(18) && gaps[1] == world.Frames(18) && gaps[2] == world.Frames(18) && gaps[3] == world.Frames(18), "Without a stage the weapon fires every 18 ticks: " + string.Join(",", gaps));
-        // The shot that reaches a stage was still timed without it (the tracker is told after the shot).
-        Check.That(gaps[4] == world.Frames(9) && gaps[5] == world.Frames(9) && gaps[6] == world.Frames(9), "The mean stage (RATE_OF_FIRE 200%) halves the delay: " + string.Join(",", gaps));
-        Check.That(gaps.Skip(7).All(gap => world.InFrames(gap) is 4 or 5), "The fast stage (400%) quarters it: " + string.Join(",", gaps));
+        // The shot that reaches a stage was still timed without it (the tracker is told after the shot). F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the attack fires on every second
+        // frame at the most, so the halved delay of 9 frames fires 10 apart and the quartered one of 4 or 5 frames 4 or 6 apart.
+        Check.That(gaps[4] == world.Frames(10) && gaps[5] == world.Frames(10) && gaps[6] == world.Frames(10), "The mean stage (RATE_OF_FIRE 200%) halves the delay: " + string.Join(",", gaps));
+        Check.That(gaps.Skip(7).All(gap => world.InFrames(gap) is 4 or 6), "The fast stage (400%) quarters it: " + string.Join(",", gaps));
         Check.That((tank.WeaponBonusConditions & (1u << WeaponBonusTable.ContinuousFireFastCondition)) != 0 && (tank.WeaponBonusConditions & (1u << WeaponBonusTable.ContinuousFireMeanCondition)) == 0,
             "The stages are weapon bonus conditions and exclusive.");
 
@@ -209,6 +210,8 @@ static partial class Tests
             var tank = Slotted(world, template);
             var north = IdOf(world, "TurretTarget", 0);
             var east = IdOf(world, "TurretTarget", 1);
+            // The orders begin with a logic frame of the tank at every rate (F-140: its attack's machine decides per frame).
+            while (!world.Time.BeginsFrameOf(tank, world.Tick)) world.Step();
             var shots = new List<long>();
             var start = world.Tick;
             for (var i = 0; i < world.Frames(frames); i++)
@@ -216,15 +219,17 @@ static partial class Tests
                 each?.Invoke(world, feeder, tank, i);
                 feeder.FireWeapon(1, tank.Id.Value, twoVictims && i >= world.Frames(frames) / 2 ? east : north);
                 var result = world.Step();
-                if (result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) shots.Add(world.InFrames(result.Tick - start));
+                // In the tank's own logic frames from the frame of the first order (at 60 and 120 Hz the first order comes in a later tick of its frame).
+                if (result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) shots.Add(world.InFrames(result.Tick - tank.SpawnTick) - world.InFrames(start - tank.SpawnTick));
             }
             return shots;
         }
 
-        // Per shot: 15 ticks of wind-up before every shot, on top of the 30 ticks between shots.
+        // Per shot: 15 ticks of wind-up before every shot, on top of the 30 ticks between shots. F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the fire state that winds up is entered on the
+        // odd frames after a shot (FIRE_WEAPON goes back to AIM_AT_TARGET), and preFireCurrentWeapon starts the wind-up once the weapon is ready by the next frame: 29 + 15 frames.
         var windup = new List<int>();
         var perShot = Shots("WindupTank", 100, out _, out _, (world, _, tank, i) => windup.Add(world.PreAttackSlotOf(tank)));
-        Check.That(perShot.SequenceEqual([15L, 60L]), "PER_SHOT: the first shot after the wind-up, the next after reload plus wind-up: " + string.Join(",", perShot));
+        Check.That(perShot.SequenceEqual([15L, 59L]), "PER_SHOT: the first shot after the wind-up, the next after reload plus wind-up: " + string.Join(",", perShot));
         Check.That(windup.Skip(1).Take(TestRate.Frames(15)).All(slot => slot == 0) && windup[TestRate.Frames(16)] == -1 && windup[TestRate.Frames(30)] == -1 && windup[TestRate.Frames(46)] == 0, "While it winds up the object reports its slot (PREATTACK_A), not afterwards: " + string.Join("", windup.Take(50).Select(slot => slot < 0 ? "-" : "A")));
 
         // Per attack: only the first shot at a victim waits; another victim waits again.
@@ -235,9 +240,9 @@ static partial class Tests
         Check.That(afterSwitch.Length >= 2 && afterSwitch[0] - Math.Max(100, perAttack.Last(tick => tick < 100) + 30) == 15, "A new victim winds up again: " + string.Join(",", perAttack));
         Check.That(afterSwitch[1] - afterSwitch[0] == 30, "...once: " + string.Join(",", perAttack));
 
-        // Per clip: the first shot of each clip of three waits.
+        // Per clip: the first shot of each clip of three waits. F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): after the reload the fire state that winds up is entered on the odd frame 59.
         var perClip = Shots("ClipWindupTank", 150, out _, out _);
-        Check.That(perClip.Take(6).SequenceEqual([15L, 21L, 27L, 102L, 108L, 114L]), "PER_CLIP: wind-up, three shots 6 ticks apart, 60 ticks of reload, wind-up again: " + string.Join(",", perClip));
+        Check.That(perClip.Take(6).SequenceEqual([15L, 21L, 27L, 101L, 107L, 113L]), "PER_CLIP: wind-up, three shots 6 ticks apart, 60 ticks of reload, wind-up again: " + string.Join(",", perClip));
 
         // Another order drops the wind-up; the next attack starts it afresh. A snapshot taken mid-wind-up continues identically.
         var moved = Shots("WindupTank", 60, out var world2, out var feeder2, (world, feeder, tank, i) =>

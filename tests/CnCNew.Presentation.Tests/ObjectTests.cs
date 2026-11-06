@@ -497,7 +497,8 @@ static partial class ObjectTests
         Check.That(Conditions(new ConditionContext(Night: true, Snow: true)) == ModelConditionSet.Parse("NIGHT SNOW"), "Night and snow come from the caller.");
 
         Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 3) && !world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == rover); i++) { }
         Check.That(Conditions() == ModelConditionSet.Parse("FIRING_A USING_WEAPON_A"), $"The firing tick shows FIRING_A ({Conditions()}).");
         // FIRING_A is shown for one original frame; the step of the shot is a step, the rest are frames of game time.
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();

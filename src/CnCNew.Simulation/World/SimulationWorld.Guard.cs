@@ -647,6 +647,7 @@ public sealed partial class SimulationWorld
             AutoFire(entity, victim, false);
             return true;
         }
+        AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
         if (entity.ContainedBy.IsValid || entity.Template.Locomotor is null) return false;
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {

@@ -344,7 +344,8 @@ static partial class Tests
             if (firstShot < 0 && ShotsOf(result, soldier) > 0) firstShot = result.Tick;
         }
 
-        Check.That(world.InFrames(firstShot) is >= 2 and <= 4, $"The idle soldier looks two frames after it became idle and fires at once (first shot at tick {firstShot}).");
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the attack the look begins aims in the next frame and fires in the one after: two frames after the look.
+        Check.That(world.InFrames(firstShot) is >= 4 and <= 6, $"The idle soldier looks two frames after it became idle and fires two frames later (first shot at tick {firstShot}).");
         Check.That(world.AcquiredVictimOf(soldier) == near.Id && Hurt(near) >= Fixed.FromInt(30) && Hurt(far) == Fixed.Zero, $"It took the closer of two enemies in range and keeps shooting it ({Hurt(near)} damage, {Hurt(far)} on the other).");
         Check.That(Hurt(mutesVictim) == Fixed.Zero && !world.AcquiredVictimOf(Slotted(world, "AcqMute")).IsValid, "A unit whose AI says No (even with ATTACK_BUILDINGS) never acquires.");
         Check.That(Hurt(outOfReach) == Fixed.Zero && !Slotted(world, "AcqSoldier", 1).HasMoveTarget, "An enemy beyond the weapon's reach is neither shot nor walked to by a human player's unit.");

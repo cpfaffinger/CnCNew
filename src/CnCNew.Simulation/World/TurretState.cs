@@ -114,6 +114,12 @@ internal sealed class TurretState
     /// </summary>
     public bool Enabled;
 
+    /// <summary>
+    /// The firing half of the turret's state machine (<c>TURRETAI_AIM</c>, <c>TURRETAI_FIRE</c>, F-140) while it attacks: a weapon the turret carries fires only from its fire state.
+    /// Null while the turret has no attack's victim or place (<c>TURRETAI_HOLD</c> and the states after it).
+    /// </summary>
+    public FireCycle? Cycle;
+
     /// <summary>Whether the turret starts enabled; from the catalog, not state. <see cref="Enabled"/> is written only when it differs from this.</summary>
     private readonly bool _enabledAtStart;
 
@@ -127,7 +133,7 @@ internal sealed class TurretState
     /// <summary>At rest: at the natural angle and pitch, no order, nothing pending. Such a turret needs no stepping.</summary>
     public bool IsAtRest(TurretInfo info)
         => Angle == info.NaturalAngle && Pitch == info.NaturalPitch && !Target.IsValid && !AtPlace && HoldUntil == 0 && !Rotating && SweepUntil == 0 && PositiveSweep
-           && !Persistent && !Pursuing && LoseInterestAt == 0 && !Scanning && NextScan == 0 && SubSteps == 0;
+           && !Persistent && !Pursuing && LoseInterestAt == 0 && !Scanning && NextScan == 0 && SubSteps == 0 && Cycle is null;
 
     /// <summary>At rest and switched as at the start: such a turret writes nothing to the snapshot.</summary>
     public bool IsPristine(TurretInfo info) => IsAtRest(info) && Enabled == _enabledAtStart;
@@ -149,6 +155,7 @@ internal sealed class TurretState
         Scanning = false;
         ScanAngle = Fixed.Zero;
         NextScan = 0;
+        Cycle = null;
     }
 
     public void Describe(IStateWriter writer, int index)
@@ -185,6 +192,7 @@ internal sealed class TurretState
             writer.Fixed("startAngle", StartAngle);
             writer.Fixed("startPitch", StartPitch);
         }
+        Cycle?.Describe(writer);
         writer.EndObject();
     }
 
@@ -215,6 +223,7 @@ internal sealed class TurretState
         GoalPitch = reader.Has("goalPitch") ? reader.Fixed("goalPitch") : Fixed.Zero;
         StartAngle = reader.Has("startAngle") ? reader.Fixed("startAngle") : Fixed.Zero;
         StartPitch = reader.Has("startPitch") ? reader.Fixed("startPitch") : Fixed.Zero;
+        Cycle = reader.Has("fireCycle") ? FireCycle.Load(reader.Object("fireCycle")) : null;
         if (SubSteps < 0) throw new InvalidDataException("Negative turret sub-step counter in snapshot.");
         if (Slot is < 0 or >= WeaponSlot.Count) throw new InvalidDataException("Turret weapon slot out of range.");
         if (HoldUntil < 0 || SweepUntil < 0 || LoseInterestAt < 0 || NextScan < 0 || ScanDraws < 0) throw new InvalidDataException("Negative turret timer in snapshot.");
@@ -227,9 +236,9 @@ internal sealed class TurretState
 /// <summary>Every mutable field of a <see cref="TurretState"/>, compared before and after a step to learn whether the entity's serialized state changed (a struct: stepping must not allocate).</summary>
 internal readonly record struct TurretStamp(
     Fixed Angle, Fixed Pitch, bool Rotating, EntityId Target, long SweepUntil, bool PositiveSweep, long HoldUntil, bool Persistent, bool Pursuing, long LoseInterestAt,
-    bool Scanning, Fixed ScanAngle, long NextScan, int ScanDraws, int Slot, int SubSteps, bool AtPlace, Fixed PlaceX, Fixed PlaceY)
+    bool Scanning, Fixed ScanAngle, long NextScan, int ScanDraws, int Slot, int SubSteps, bool AtPlace, Fixed PlaceX, Fixed PlaceY, FireCycleStamp Cycle)
 {
     public static TurretStamp Of(TurretState state)
         => new(state.Angle, state.Pitch, state.Rotating, state.Target, state.SweepUntil, state.PositiveSweep, state.HoldUntil, state.Persistent, state.Pursuing, state.LoseInterestAt,
-            state.Scanning, state.ScanAngle, state.NextScan, state.ScanDraws, state.Slot, state.SubSteps, state.AtPlace, state.PlaceX, state.PlaceY);
+            state.Scanning, state.ScanAngle, state.NextScan, state.ScanDraws, state.Slot, state.SubSteps, state.AtPlace, state.PlaceX, state.PlaceY, FireCycleStamp.Of(state.Cycle));
 }

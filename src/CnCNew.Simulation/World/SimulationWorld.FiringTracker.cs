@@ -191,6 +191,7 @@ public sealed partial class SimulationWorld
     /// <c>PreAttackDelay</c> that is otherwise ready to fire at <paramref name="victim"/> first winds up for the delay — every shot (<c>PER_SHOT</c>), the first shot at a victim
     /// (<c>PER_ATTACK</c>: no consecutive shot at it yet) or the first shot of a clip (<c>PER_CLIP</c>). False while the weapon winds up: the fire order stays accepted and a later
     /// order of the attack fires. The wind-up is dropped when the unit gets another order (<see cref="EndAttack"/>, the reference's <c>onExit</c>) or aims at another victim.
+    /// Since F-140 only for a fire order to an object without an AI, which has no attack state: an attack's wind-up is its machine's (<see cref="EnterFire"/>).
     /// </summary>
     private bool PreAttackDone(Entity source, WeaponInfo weapon, int slot, Entity victim) => PreAttackDone(source, weapon, slot, victim.Id);
 

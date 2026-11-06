@@ -320,8 +320,9 @@ static partial class Tests
         var phases = new List<JetAIUpdate.JetPhase>();
         for (var tick = 0; tick < world.Frames(400); tick++)
         {
-            if (jet.WeaponClip > 0 && world.Tick >= jet.WeaponReadyTick && feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted) shots++;
-            world.Step();
+            if (jet.WeaponClip > 0 && world.Tick >= jet.WeaponReadyTick) feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value);
+            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): an order's shot comes on the attack machine's frame, not in the order's tick: the shots are counted, not the orders.
+            if (world.Step().Events.Any(value => value.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired && value.Entity == jet.Id)) shots++;
             if (phases.Count == 0 || phases[^1] != ai.Phase) phases.Add(ai.Phase);
             if (jet.Z > Fixed.FromInt(25) && ai.AllowAirLoco) slowest = Fixed.Min(slowest, jet.Speed);
         }

@@ -787,7 +787,8 @@ static partial class Tests
         CsRun(world, 120, () => !CsAi(car).Entity.HasMoveTarget);
         var before = victim.Body!.Health;
         feeder.FireWeapon(1, car.Id.Value, victim.Id.Value);
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        StepThroughShot(world, car);
         Check.That(victim.Body!.Health == before - Fixed.FromInt(50), $"The converted car fires the CARBOMB weapon ({before} -> {victim.Body!.Health}).");
 
         // A car that is already a bomb is not valid for a second terrorist.

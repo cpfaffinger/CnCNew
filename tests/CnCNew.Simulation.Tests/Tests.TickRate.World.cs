@@ -212,16 +212,17 @@ static partial class Tests
             var far = IdOf(world, "TurretTarget", 0);
             var near = Slotted(world, "TurretTarget", 1);
             feeder.FireWeapon(1, tank.Id.Value, far);
-            var result = world.Step();
-            var launched = result.Events.Where(value => value.Kind == SimEventKind.ProjectileLaunched && value.Other == tank.Id).ToArray();
-            Check.That(launched.Length == 1 && launched[0].Value - result.Tick == 50 * factor, $"{rate}: 100 units at 2 per logic frame land {50 * factor} ticks later (measured {(launched.Length == 1 ? launched[0].Value - result.Tick : -1)}).");
+            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+            var (shotTick, shotEvents) = StepToShot(world, tank);
+            var launched = shotEvents.Where(value => value.Kind == SimEventKind.ProjectileLaunched && value.Other == tank.Id).ToArray();
+            Check.That(launched.Length == 1 && launched[0].Value - shotTick == 50 * factor, $"{rate}: 100 units at 2 per logic frame land {50 * factor} ticks later (measured {(launched.Length == 1 ? launched[0].Value - shotTick : -1)}).");
 
             for (var i = 0; i < 31 * factor; i++) world.Step();
             var before = near.Body!.Health;
             feeder.FireWeapon(1, tank.Id.Value, near.Id.Value);
-            result = world.Step();
-            Check.That(result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id) && near.Body.Health < before
-                       && !result.Events.Any(value => value.Kind == SimEventKind.ProjectileLaunched && value.Other == tank.Id),
+            (_, shotEvents) = StepToShot(world, tank);
+            Check.That(shotEvents.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id) && near.Body.Health < before
+                       && !shotEvents.Any(value => value.Kind == SimEventKind.ProjectileLaunched && value.Other == tank.Id),
                 $"{rate}: a victim closer than one logic frame of flight is hit in the tick of the shot.");
         }
     }
@@ -307,8 +308,8 @@ static partial class Tests
             }
 
             // The unit appears in tick 0; its first logic frame begins one frame later, notes the idle state and schedules the look two logic frames after that: three frames
-            // after the appearance at every rate (tick 3 at 30 Hz).
-            Check.That(firstShot == 3 * factor, $"{rate}: the idle soldier looks two logic frames after it became idle and fires at once (first shot at tick {firstShot}, expected {3 * factor}).");
+            // after the appearance at every rate (tick 3 at 30 Hz). F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the attack the look begins aims in the next frame and fires in the one after.
+            Check.That(firstShot == 5 * factor, $"{rate}: the idle soldier looks two logic frames after it became idle and fires two frames later (first shot at tick {firstShot}, expected {5 * factor}).");
         }
     }
 }

@@ -108,29 +108,28 @@ static partial class Tests
     }
 
     /// <summary>
-    /// A wind-up nobody followed up on is forgotten a second after its end - until and including the last tick of that logic frame at every rate: an order in frame 45 after a
-    /// 15-frame wind-up began still fires the wound-up weapon at once, an order in frame 46 winds it up again.
+    /// F-140: the wind-up of an order's attack belongs to its machine (<c>AIAttackFireWeaponState::onEnter</c> starts it, <c>update</c> waits and fires when it is over), so one order
+    /// winds up and fires when the wind-up ends - 15 frames after the order's frame at every rate, whether another order comes or not. (Before, the port fired only on an order that
+    /// came after the end, and forgot a wind-up a second after it with nobody ordering; that approximation is left for objects without an AI, which have no attack state.)
     /// </summary>
-    public static void RateInvarianceStaleWindUpIsForgottenAfterTheSameFrame()
+    public static void RateInvarianceWoundUpShotFallsInTheSameFrame()
     {
         foreach (var (rate, factor) in WorldRates)
-            foreach (var (afterTicks, fires) in new[] { (45 * factor, true), (45 * factor + factor - 1, true), (46 * factor, false) })
-            {
-                var (world, feeder, _) = RatedWorld(rate, RatedWorldFiles());
-                feeder.Spawn(1, "WindupTank", owner: 1, x: 0, y: 0);
-                feeder.Spawn(2, "TurretTarget", owner: 2, x: 100, y: 0);
-                for (var i = 0; i < factor; i++) world.Step();
-                var tank = Slotted(world, "WindupTank");
-                var victim = IdOf(world, "TurretTarget");
-                feeder.FireWeapon(1, tank.Id.Value, victim);
-                var first = world.Step();
-                Check.That(!first.Events.Any(value => value.Kind == SimEventKind.WeaponFired) && world.PreAttackSlotOf(tank) == 0, $"{rate}: the first order starts the wind-up.");
-                for (var i = 1; i < afterTicks; i++) world.Step();
-                feeder.FireWeapon(1, tank.Id.Value, victim);
-                var second = world.Step();
-                var fired = second.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id);
-                Check.That(fired == fires, $"{rate}: an order {afterTicks} ticks after the wind-up began {(fires ? "fires the wound-up weapon" : "winds up again")} (fired: {fired}).");
-            }
+        {
+            var (world, feeder, _) = RatedWorld(rate, RatedWorldFiles());
+            feeder.Spawn(1, "WindupTank", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "TurretTarget", owner: 2, x: 100, y: 0);
+            for (var i = 0; i < factor; i++) world.Step();
+            var tank = Slotted(world, "WindupTank");
+            var victim = IdOf(world, "TurretTarget");
+            var orderFrame = world.InFrames(world.Tick - tank.SpawnTick);
+            feeder.FireWeapon(1, tank.Id.Value, victim);
+            var first = world.Step();
+            Check.That(!first.Events.Any(value => value.Kind == SimEventKind.WeaponFired) && world.PreAttackSlotOf(tank) == 0, $"{rate}: the first order starts the wind-up.");
+            var (shot, _) = StepToShot(world, tank, 30);
+            var frame = shot < 0 ? -1 : world.InFrames(shot - tank.SpawnTick) - orderFrame;
+            Check.That(frame == 15, $"{rate}: the wound-up weapon fires 15 frames after the order's frame without another order (frame {frame}).");
+        }
     }
 
     private static IReadOnlyDictionary<string, string> RateInvarianceFiles() => new Dictionary<string, string>(RatedWorldFiles())
@@ -174,7 +173,7 @@ static partial class Tests
             var tank = Slotted(world, "NoReloadTank");
             var victim = IdOf(world, "TurretTarget");
             var shots = new List<long>();
-            for (var i = 0; i < 60 * factor; i++)
+            for (var i = 0; i < 70 * factor; i++)
             {
                 feeder.FireWeapon(1, tank.Id.Value, victim);
                 var result = world.Step();
@@ -182,8 +181,9 @@ static partial class Tests
             }
 
             var gaps = shots.Zip(shots.Skip(1), (a, b) => b - a).ToArray();
-            Check.That(gaps.Length >= 10 && gaps.Select((gap, index) => gap == (index % 2 == 0 ? 9 : 1) * factor).All(same => same),
-                $"{rate}: the gaps between shots are 9 and 1 logic frames in turn: {string.Join(",", gaps)} ticks.");
+            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the attack fires on every second frame at the most: the delay of 9 frames fires 10 apart, the reload of none (one frame) 2.
+            Check.That(gaps.Length >= 10 && gaps.Select((gap, index) => gap == (index % 2 == 0 ? 10 : 2) * factor).All(same => same),
+                $"{rate}: the gaps between shots are 10 and 2 logic frames in turn: {string.Join(",", gaps)} ticks.");
         }
     }
 
@@ -354,7 +354,8 @@ static partial class Tests
                 Check.That(firstShot > 0 && (firstShot - soldier.SpawnTick) % factor == 0, $"seed {seed}, {rate}: the second look falls on the first tick of a logic frame of the unit (first shot at tick {firstShot}, appeared in tick {soldier.SpawnTick}).");
                 var frame = firstShot / factor;
                 if (reference < 0) reference = frame;
-                Check.That(frame == reference && frame is >= 7 and <= 15, $"seed {seed}, {rate}: the shift is the one of 30 Hz (first shot in frame {frame}, 30 Hz frame {reference}).");
+                // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the attack the look begins fires two frames after the look.
+                Check.That(frame == reference && frame is >= 9 and <= 17, $"seed {seed}, {rate}: the shift is the one of 30 Hz (first shot in frame {frame}, 30 Hz frame {reference}).");
             }
 
             frames.Add(reference);
@@ -568,16 +569,18 @@ static partial class Tests
             var tank = Slotted(world, "PlainTank");
             var victim = Slotted(world, "TurretTarget");
             feeder.FireWeapon(1, tank.Id.Value, victim.Id.Value);
-            var first = world.Step();
-            Check.That(ShotsOf(first, tank) == 1 && world.AcquiredVictimOf(tank) == victim.Id, $"{rate}: the order fires and names the victim of the unit's attack.");
+            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next: the weapon is ready again 1 + 9 frames after the order.
+            var orderTick = world.Tick;
+            var first = StepThroughShot(world, tank);
+            Check.That(first.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id) == 1 && world.AcquiredVictimOf(tank) == victim.Id, $"{rate}: the order fires and names the victim of the unit's attack.");
             long over = -1;
-            for (var step = 1; step < 100 * factor && over < 0; step++)
+            for (var step = (int)(world.Tick - orderTick); step < 100 * factor && over < 0; step++)
             {
                 world.Step();
                 if (!world.AcquiredVictimOf(tank).IsValid) over = step;
             }
 
-            Check.That(over == 55 * factor, $"{rate}: without further orders the attack is over 55 logic frames after the order ({over} ticks, expected {55 * factor}).");
+            Check.That(over == 56 * factor, $"{rate}: without further orders the attack is over 56 logic frames after the order ({over} ticks, expected {56 * factor}).");
         }
     }
 }

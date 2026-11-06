@@ -238,7 +238,8 @@ static partial class Tests
         CsAi(soldier).OrderMove(world, Fixed.FromInt(45), Fixed.FromInt(100), false);
         CsRun(world, 40);
         Check.That(feeder.FireWeapon(1, soldier.Id.Value, dummy.Id.Value).Accepted, "The soldier fires.");
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        StepThroughShot(world, soldier);
         Check.That(before - dummy.Body!.Health == Fixed.FromInt(30), $"Bombardment's DAMAGE 150% turned the 20 into 30 ({before - dummy.Body!.Health}).");
         Check.That((soldier.WeaponBonusConditions & bombardBit) != 0 && (soldier.WeaponBonusConditions & holdBit) == 0, "Applying the bombardment bonus cleared the hold-the-line switch.");
 

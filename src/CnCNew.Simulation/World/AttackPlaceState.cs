@@ -24,6 +24,9 @@ internal sealed class AttackPlaceState
     /// <summary>The unit walks toward the place (<c>AIAttackApproachTargetState</c>).</summary>
     public bool Chasing;
 
+    /// <summary>The firing half of the attack machine for a weapon the body aims (F-140); null while it has not reached its aim state (the place out of range).</summary>
+    public FireCycle? Cycle;
+
     public void Describe(IStateWriter writer)
     {
         writer.BeginObject("attackPlace");
@@ -33,6 +36,7 @@ internal sealed class AttackPlaceState
         writer.Int("shotsLeft", ShotsLeft);
         writer.Int("lockedSlot", LockedSlot);
         if (Chasing) writer.Bool("chasing", true);
+        Cycle?.Describe(writer);
         writer.EndObject();
     }
 
@@ -46,6 +50,7 @@ internal sealed class AttackPlaceState
             ShotsLeft = checked((int)reader.Int("shotsLeft")),
             LockedSlot = checked((int)reader.Int("lockedSlot")),
             Chasing = reader.Has("chasing") && reader.Bool("chasing"),
+            Cycle = reader.Has("fireCycle") ? FireCycle.Load(reader.Object("fireCycle")) : null,
         };
         if (state.ShotsLeft < -1 || state.LockedSlot < -1 || state.LockedSlot >= WeaponSlot.Count) throw new InvalidDataException("Attack on a place out of range in snapshot.");
         return state;
@@ -53,7 +58,7 @@ internal sealed class AttackPlaceState
 }
 
 /// <summary>Every mutable field of an <see cref="AttackPlaceState"/> (or none), compared before and after a step.</summary>
-internal readonly record struct AttackPlaceStamp(bool Present, int ShotsLeft, bool Chasing)
+internal readonly record struct AttackPlaceStamp(bool Present, int ShotsLeft, bool Chasing, FireCycleStamp Cycle)
 {
-    public static AttackPlaceStamp Of(AttackPlaceState? state) => state is null ? default : new(true, state.ShotsLeft, state.Chasing);
+    public static AttackPlaceStamp Of(AttackPlaceState? state) => state is null ? default : new(true, state.ShotsLeft, state.Chasing, FireCycleStamp.Of(state.Cycle));
 }

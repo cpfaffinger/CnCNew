@@ -231,7 +231,8 @@ static partial class Tests
             Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Hero"), Scr.Ability("Cmd_AlphaSellNotPower"))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Shooter"), Placed("BetaSoldier", 130m, 100m, "teamB", "Victim"), Placed("AlphaHero", 100m, 300m, "teamA", "Hero")]);
         var victim = NamedIn(session, "Victim")!;
-        Run(session, session.Frames(3));
+        // F-140: the soldier's own attack fires two frames after its look (AIAttackAimAtTargetState, then AIAttackFireWeaponState).
+        Run(session, session.Frames(5));
         Check.That(victim.Body!.Health < victim.Body.MaxHealth, "A FIRE_WEAPON button used on a named target fires the carrier's weapon at it.");
         Check.That(session.Engine.Diagnostics.ContainsKey("command button 'Cmd_AlphaSellNotPower' has command SELL, not executed"), "A button of another command kind is diagnosed under its own message.");
         Check.That(session.Engine.Diagnostics.Keys.All(key => !key.Contains("is not a special-power", StringComparison.Ordinal)), "The old catch-all message is gone.");

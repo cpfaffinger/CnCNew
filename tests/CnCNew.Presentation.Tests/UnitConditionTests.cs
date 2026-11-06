@@ -418,9 +418,14 @@ internal static partial class UnitConditionTests
             return new EntityId(World.Entities.Where(entity => entity.Template.Name == template).Max(entity => entity.Id.Value));
         }
 
+        /// <summary>The objects that fired, one entry per shot.</summary>
+        public List<(EntityId Entity, long Tick)> Fired { get; } = [];
+
         public void Step()
         {
             var result = World.Step();
+            foreach (var simEvent in result.Events)
+                if (simEvent.Kind == SimEventKind.WeaponFired) Fired.Add((simEvent.Entity, simEvent.Tick));
             Projector.Observe(result.Events, World);
             Projector.Advance(World);
         }
@@ -460,7 +465,6 @@ internal static partial class UnitConditionTests
 
         var stages = new List<string>();
         var plainStages = new List<string>();
-        var shots = 0;
         for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 150); tick++)
         {
             var entity = rig.Get(gun);
@@ -468,13 +472,16 @@ internal static partial class UnitConditionTests
             {
                 rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, gun, target));
                 rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, plain, target));
-                shots++;
             }
             rig.Step();
             AddIfNew(stages, Stage(rig.Bits(gun)));
             AddIfNew(plainStages, Stage(rig.Bits(plain)));
         }
-        Assert(shots == 8, $"eight shots were fired ({shots})");
+        // F-140 (AIAttackFireWeaponState goes back to AIAttackAimAtTargetState after every shot): the 100 ms gun (3 frames) fires every 4 frames while the orders of the
+        // first 24 frames come - six or seven shots, as the window ends.
+        var shotTicks = rig.Fired.Where(shot => shot.Entity == gun).Select(shot => shot.Tick).ToArray();
+        var shots = shotTicks.Length;
+        Assert(shots is 6 or 7 && shotTicks.Zip(shotTicks.Skip(1), (a, b) => b - a).All(gap => gap == CnCNew.Tests.TestTime.Frames(rig.World, 4)), $"the gun fired every 4 frames while ordered ({string.Join(",", shotTicks)})");
         Assert(stages.SequenceEqual(["none", "MEAN", "FAST", "SLOW", "none"]), $"the stages go up with the shots and drop after the coast time ({string.Join(" > ", stages)})");
         Assert(plainStages.SequenceEqual(["none"]), "a weapon without continuous-fire keys never shows a stage");
         Assert(!rig.Bits(gun).Contains(UnitFlags.ContinuousFireSlow), "no stage is left at the end");

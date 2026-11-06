@@ -1,6 +1,7 @@
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 
 namespace CnCNew.Simulation.World;
 
@@ -63,6 +64,25 @@ internal sealed class AcquisitionState
     public Fixed ContinueY;
     public int ContinueOwner;
 
+    /// <summary>
+    /// The firing half of the attack machine on <see cref="Victim"/> for a weapon the body aims (F-140; a weapon on a turret has its turret's, <see cref="TurretState.Cycle"/>); null while the
+    /// machine has not reached its aim state (no attack, or the victim out of range).
+    /// </summary>
+    public FireCycle? Cycle;
+
+    /// <summary>
+    /// The ordered attack was named by a fire order (not only by a pursuit): its attack machine steps in the frames of the unit whether an order arrives in that frame or not (F-140).
+    /// <see cref="OrderOrigin"/> is the source of the latest fire order, whose weapon choice it uses.
+    /// </summary>
+    public bool FireOrdered;
+    public FireOrigin OrderOrigin;
+
+    /// <summary>
+    /// A fire order arrived since the attack's last shot: the machine may fire it. Every fire order of the command giver stands for one shot, which the machine fires in its own
+    /// frame (F-140) - the order stream gives an order while the weapon is ready, and the machine fires on its cycle.
+    /// </summary>
+    public bool ShotPending;
+
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
     /// <summary><c>Weapon::m_leechWeaponRangeActive</c>: a leech-range weapon has fired or begun its wind-up in this attack.</summary>
@@ -78,6 +98,10 @@ internal sealed class AcquisitionState
         OrderedTick = 0;
         Chasing = false;
         ChaseTick = 0;
+        Cycle = null;
+        FireOrdered = false;
+        OrderOrigin = FireOrigin.Player;
+        ShotPending = false;
     }
 
     public void Describe(IStateWriter writer)
@@ -90,6 +114,13 @@ internal sealed class AcquisitionState
             writer.Bool("ordered", true);
             writer.Int("orderedTick", OrderedTick);
         }
+        if (FireOrdered)
+        {
+            writer.Bool("fireOrdered", true);
+            writer.Int("orderOrigin", (long)OrderOrigin);
+            if (ShotPending) writer.Bool("shotPending", true);
+        }
+        Cycle?.Describe(writer);
         if (AttackMove)
         {
             writer.Bool("attackMove", true);
@@ -127,6 +158,14 @@ internal sealed class AcquisitionState
             state.Ordered = reader.Bool("ordered");
             state.OrderedTick = reader.Int("orderedTick");
         }
+        if (reader.Has("fireOrdered"))
+        {
+            state.FireOrdered = reader.Bool("fireOrdered");
+            state.OrderOrigin = (FireOrigin)checked((byte)reader.Int("orderOrigin"));
+            state.ShotPending = reader.Has("shotPending") && reader.Bool("shotPending");
+            if (!Enum.IsDefined(state.OrderOrigin)) throw new InvalidDataException("Origin of a fire order out of range in snapshot.");
+        }
+        if (reader.Has("fireCycle")) state.Cycle = FireCycle.Load(reader.Object("fireCycle"));
         if (reader.Has("attackMove"))
         {
             state.AttackMove = reader.Bool("attackMove");
@@ -158,6 +197,8 @@ internal sealed class AcquisitionState
         if (state.IsDefault) throw new InvalidDataException("An acquisition state without a victim, an attack-move or a pending look is never written.");
         if (state.Forced && (!state.Victim.IsValid || state.Ordered)) throw new InvalidDataException("A slave's forced attack needs a victim and no order.");
         if ((state.Ordered || state.Chasing) && !state.Victim.IsValid) throw new InvalidDataException("An ordered attack or a chase needs a victim.");
+        if ((state.Cycle is not null || state.FireOrdered) && !state.Victim.IsValid) throw new InvalidDataException("An attack machine or a fire order needs a victim.");
+        if (state.FireOrdered && !state.Ordered) throw new InvalidDataException("A fire order is an ordered attack.");
         if (state.OrderedTick < 0 || state.ChaseTick < 0) throw new InvalidDataException("Negative acquisition tick in snapshot.");
         return state;
     }
@@ -165,11 +206,11 @@ internal sealed class AcquisitionState
 
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
 internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral,
-    int ContinueOwner, Fixed ContinueX, Fixed ContinueY)
+    int ContinueOwner, Fixed ContinueX, Fixed ContinueY, FireCycleStamp Cycle, bool FireOrdered, FireOrigin OrderOrigin, bool ShotPending)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
         => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral,
-            state.ContinueOwner, state.ContinueX, state.ContinueY);
+            state.ContinueOwner, state.ContinueX, state.ContinueY, FireCycleStamp.Of(state.Cycle), state.FireOrdered, state.OrderOrigin, state.ShotPending);
 }
 
 /// <summary>

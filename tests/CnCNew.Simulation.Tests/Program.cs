@@ -127,7 +127,7 @@ run.Test("Rate invariance, turrets: a turret decides its step per logic frame an
 run.Test("Rate invariance, turrets: a hold lasts the recentre time and one logic frame", Tests.RateInvarianceTurretHoldsOneFrameMoreThanTheRecentreTime);
 run.Test("Rate invariance, turrets: the idle scan is at the 30 Hz angle at the end of every logic frame", Tests.RateInvarianceTurretIdleScanIsTheSameAtEveryFrame);
 run.Test("Rate invariance, firing: a silent weapon spins down at the same game time", Tests.RateInvarianceFiringTrackerDeadlinesTakeAFrame);
-run.Test("Rate invariance, firing: a stale wind-up is forgotten after the same logic frame", Tests.RateInvarianceStaleWindUpIsForgottenAfterTheSameFrame);
+run.Test("Rate invariance, firing: a stale wind-up is forgotten after the same logic frame", Tests.RateInvarianceWoundUpShotFallsInTheSameFrame);
 run.Test("Rate invariance, firing: a clip without a reload time fires again in the next logic frame", Tests.RateInvarianceClipWithoutReloadTimeFiresOncePerFrame);
 run.Test("Rate invariance, abilities: a capture flashes the building in the same frames of the preparation", Tests.RateInvarianceCaptureFlashesInTheSameFrames);
 run.Test("Rate invariance, abilities: facing the target ends in the same logic frame", Tests.RateInvarianceAbilityFacingEndsInTheSameFrame);

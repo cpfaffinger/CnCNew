@@ -549,7 +549,8 @@ static partial class Tests
         feeder.Spawn(2, "Dummy", x: 0, y: 300);
         world.Step();
         var (lazy, narrow, dummy) = (Get(world, "LazyAimer"), Get(world, "NarrowAimer"), Get(world, "Dummy"));
-        Check.That(FramesToFirstShot(world, feeder, lazy, dummy) == 0, "A weapon that does not care fires at once.");
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        Check.That(FramesToFirstShot(world, feeder, lazy, dummy) is 0 or 1, "A weapon that does not care fires at once, in the order's next frame.");
         Check.That(lazy.Angle == Fixed.Zero, "And the unit has not turned.");
         var frames = FramesToFirstShot(world, feeder, narrow, dummy);
         Check.That(frames == 10, $"60 degrees of the quarter turn are 10 frames, got {frames}.");

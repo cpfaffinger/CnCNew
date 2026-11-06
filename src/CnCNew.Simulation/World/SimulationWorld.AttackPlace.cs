@@ -109,7 +109,8 @@ public sealed partial class SimulationWorld
         if (ContinueRangeOf(unit) > Fixed.Zero) shots = 1;
         ai.OrderIdle(this, fromPlayer);
         if (unit.HasStatus(Modules.ObjectStatusBits.UnderConstruction) || IsOutOfAmmo(unit) || PlaceSlot(unit) is not { } slot) return false;
-        var state = new AttackPlaceState { X = x, Y = y, Z = GroundHeightAt(x, y), ShotsLeft = shots };
+        // AIAttackState::onEnter builds the machine in its aim state; an order's update runs in its own frame (F-140).
+        var state = new AttackPlaceState { X = x, Y = y, Z = GroundHeightAt(x, y), ShotsLeft = shots, Cycle = NewBodyCycle(unit, EntityId.Invalid, fromPlayer) };
         if (unit.WeaponSlots is { Lock: not WeaponLockKind.None }) state.LockedSlot = slot;
         unit.AttackPlace = state;
         _acquirers.Add(unit.Id.Value);
@@ -181,6 +182,7 @@ public sealed partial class SimulationWorld
                 state.Chasing = true;
             }
             AimTurretsAtPlace(entity, slot, state.X, state.Y, state.Z);
+            AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
             return;
         }
         if (state.Chasing)
@@ -188,18 +190,15 @@ public sealed partial class SimulationWorld
             ai.StopInternalMoveAtFrameEnd(this);
             state.Chasing = false;
         }
-        if (!TurretsLetAttack(entity) || tick < EffectiveReadyTick(entity, slot, ActiveWeaponSet(entity)!)) return;
-        if (!AimTurretsAtPlace(entity, slot, state.X, state.Y, state.Z))
-        {
-            NoteTurretWait();
-            return;
-        }
-        if (!PreAttackDone(entity, weapon, slot, EntityId.Invalid)) return;
+        if (!TurretsLetAttack(entity)) return;
+        // The attack's machine (F-140): it aims and fires in the unit's frames, also while the weapon reloads.
+        if (!AttackCycleFires(entity, ref state.Cycle, slot, null, state.X, state.Y, state.Z, ordered: false)) return;
         var fired = ConsumeShot(entity, slot, EntityId.Invalid);
         var damage = FireWeaponAt(entity, fired, null, state.X, state.Y, state.Z);
         NoteTurretShot(entity, slot);
         Emit(SimEventKind.WeaponFired, entity.Id, EntityId.Invalid, fired.Name, damage.Raw, entity.Owner);
         if (state.ShotsLeft > 0) state.ShotsLeft--;
+        AfterCycleShot(entity, ref state.Cycle, slot);
     }
 
     /// <summary><c>Weapon::isWithinAttackRange(source, pos)</c>: the place within the weapon's range of the shooter (its fire point in a garrison), not nearer than the minimum range.</summary>

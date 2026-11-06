@@ -50,7 +50,9 @@ static partial class Tests
                 }
             }
 
-            // Independent model: ClipSize 2, delay 15, reload 60; the first shot is the observed first tick.
+            // Independent model: ClipSize 2, delay 15, reload 60; the first shot is the observed first tick. F-140 (AttackStateMachine: FIRE_WEAPON goes back to AIM_AT_TARGET,
+            // which succeeds into FIRE_WEAPON a frame later): the attack fires on every second frame at the most, so a wait of D frames is the first even number from max(D, 2) on.
+            static long OnCycle(long frames) => Math.Max(2, frames + (frames & 1));
             var expectedTicks = new List<long>();
             long ready = shotTicks[0];
             var clip = 2;
@@ -58,8 +60,8 @@ static partial class Tests
             {
                 expectedTicks.Add(ready);
                 clip--;
-                if (clip == 0) { ready += world.Frames(60); clip = 2; }
-                else ready += world.Frames(15);
+                if (clip == 0) { ready += world.Frames(OnCycle(60)); clip = 2; }
+                else ready += world.Frames(OnCycle(15));
             }
             var label = armored ? "half armor" : "no armor";
             Check.That(shotTicks.SequenceEqual(expectedTicks), $"{label}: shot ticks {string.Join(",", shotTicks)} must equal the model {string.Join(",", expectedTicks)}.");

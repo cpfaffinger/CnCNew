@@ -436,27 +436,27 @@ static partial class Tests
         var (world, feeder, _) = SlotWorld(("Trio", 1, 0, 0), ("Dummy", 2, 50, 0));
         var trio = Slotted(world, "Trio");
         var dummy = IdOf(world, "Dummy");
-        var start = world.Tick;
-        // Explicit slots: the gun twice (empties its clip of 2), the machine gun in between.
+        // Explicit slots: the gun twice (empties its clip of 2), the machine gun in between. F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): every order's shot comes on the attack
+        // machine's frame (an order in the frame of the shot before waits a frame more), so each one is stepped to its shot and the timers are counted from the shots.
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "Gun, first round.");
-        world.Step();
+        Check.That(StepToShot(world, trio).Tick >= 0 && trio.ClipOf(0) == 1, "The gun fired its first round.");
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Secondary).Accepted, "Machine gun, while the gun waits.");
-        world.Step();
-        while (world.Tick < start + world.Frames(15)) world.Step();
+        var machineGunShot = StepToShot(world, trio).Tick;
+        while (world.Tick < trio.ReadyTickOf(0)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "Gun, second round.");
-        world.Step();
-        Check.That(trio.ClipOf(0) == 0 && trio.ReadyTickOf(0) == start + world.Frames(15 + 60), $"The emptied gun reloads for ClipReloadTime (60 ticks): ready at {trio.ReadyTickOf(0)}.");
-        Check.That(trio.ClipOf(1) == int.MaxValue && trio.ReadyTickOf(1) == start + 1 + world.Frames(3) && trio.ClipOf(2) == 4 && trio.ReadyTickOf(2) == 0, "The other slots keep their own clip and timer.");
+        var gunShot = StepToShot(world, trio).Tick;
+        Check.That(gunShot >= 0 && trio.ClipOf(0) == 0 && trio.ReadyTickOf(0) == gunShot + world.Frames(60), $"The emptied gun reloads for ClipReloadTime (60 ticks): ready at {trio.ReadyTickOf(0)}.");
+        Check.That(machineGunShot >= 0 && trio.ClipOf(1) == int.MaxValue && trio.ReadyTickOf(1) == machineGunShot + world.Frames(3) && trio.ClipOf(2) == 4 && trio.ReadyTickOf(2) == 0, "The other slots keep their own clip and timer.");
         // The machine gun keeps firing during the gun's reload; the rocket pods have their own clip of 4.
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Secondary).Accepted && !feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted,
             "The machine gun is available while the gun reloads.");
-        world.Step();
+        StepToShot(world, trio);
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Tertiary).Accepted, "The rocket pods fire independently.");
-        world.Step();
-        Check.That(trio.ClipOf(2) == 3 && trio.ReadyTickOf(2) == world.Tick - 1 + world.Frames(6), "Rocket pods: one of 4 used, 200 ms (6 ticks) delay.");
-        while (world.Tick < start + world.Frames(15 + 60)) world.Step();
+        var podShot = StepToShot(world, trio).Tick;
+        Check.That(trio.ClipOf(2) == 3 && trio.ReadyTickOf(2) == podShot + world.Frames(6), "Rocket pods: one of 4 used, 200 ms (6 ticks) delay.");
+        while (world.Tick < trio.ReadyTickOf(0)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "After 60 ticks the gun's clip is full again and it fires.");
-        world.Step();
+        StepToShot(world, trio);
         Check.That(trio.ClipOf(0) == 1, "A refilled clip of 2 minus the shot.");
     }
 
@@ -490,7 +490,8 @@ static partial class Tests
         // The rocket pods (range 150) are the only weapon reaching the target at 120, and only an explicit slot may fire them.
         Check.That(!feeder.FireWeapon(1, trio.Id.Value, dummy).Accepted, "Without a slot nothing may be chosen at 120: the gun and machine gun are too short, the pods are not auto-chosen.");
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Tertiary).Accepted, "A command button naming the tertiary slot fires the pods.");
-        Check.That(WeaponsFired(world.Step(), trio.Id.Value).SequenceEqual(["RocketPods"]), "The pods fired.");
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        Check.That(WeaponsFiredIn(StepThroughShot(world, trio), trio.Id.Value).SequenceEqual(["RocketPods"]), "The pods fired.");
         Check.That(trio.WeaponLock == WeaponLockKind.Temporary && trio.CurrentWeaponSlot == 2, "The button pinned the slot (setWeaponLock LOCKED_TEMPORARILY).");
 
         // A move order releases the temporary lock.
@@ -509,11 +510,11 @@ static partial class Tests
         var scripted = Slotted(world, "ScriptOnly");
         var near = IdOf(world, "Hulk");
         Check.That(feeder.FireWeaponSlot(1, scripted.Id.Value, near, WeaponSlot.Secondary).Accepted, "The big gun fires on an explicit order.");
-        world.Step();
+        StepThroughShot(world, scripted);
         Check.That(scripted.WeaponLock == WeaponLockKind.Temporary && scripted.ClipOf(1) == 1, "Locked after the first round.");
-        for (var i = 0; i < world.Frames(15); i++) world.Step();
+        while (world.Tick < scripted.ReadyTickOf(1)) world.Step();
         Check.That(feeder.FireWeapon(1, scripted.Id.Value, near).Accepted, "An ordinary order while locked uses the locked slot.");
-        Check.That(WeaponsFired(world.Step(), scripted.Id.Value).SequenceEqual(["BigGun"]), "...the big gun, although automatic choice would never pick it for a player.");
+        Check.That(WeaponsFiredIn(StepThroughShot(world, scripted), scripted.Id.Value).SequenceEqual(["BigGun"]), "...the big gun, although automatic choice would never pick it for a player.");
         Check.That(scripted.ClipOf(1) == 0 && scripted.WeaponLock == WeaponLockKind.None, "The emptied clip released the temporary lock.");
 
         // SetWeaponLockCommand.

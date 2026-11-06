@@ -139,6 +139,9 @@ internal static class JetOrderTests
         public StandingOrders Orders { get; } = new();
         public List<SimCommand> Issued => _sink.Issued;
 
+        /// <summary>The ticks of every shot of the player's objects.</summary>
+        public List<long> Fired { get; } = [];
+
         public Entity Spawn(string template, PlayerId owner, int x, int y)
         {
             var command = new SpawnCommand(PlayerId.System, ++_system, World.Tick, template, owner, Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero);
@@ -150,7 +153,8 @@ internal static class JetOrderTests
         public void Tick()
         {
             Orders.Update(World, Me, make => _sink.Issue(make));
-            World.Step();
+            foreach (var simEvent in World.Step().Events)
+                if (simEvent.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired && simEvent.Player == Me) Fired.Add(simEvent.Tick);
         }
     }
 
@@ -223,18 +227,20 @@ internal static class JetOrderTests
             TestHarness.Assert(fire.GroupBy(command => rig.World.Time.ToOriginalFrames(command.Tick)).All(group => group.Count() == 1), $"at {rate} at most one fire order goes out per original frame");
             firstFire.Add((rate, (double)(fire[0].Tick - start) / rig.World.Time.TicksPerSecond));
             perSecond.Add((rate, (double)issued.Length / seconds));
-            // The first pass: the gun's DelayBetweenShots of 300 ms sets the rhythm of the fire orders (the order goes out in the frame the weapon is ready again).
-            var pass = fire.TakeWhile((command, index) => index == 0 || command.Tick - fire[index - 1].Tick < rig.World.Time.TicksPerSecond).ToArray();
-            TestHarness.Assert(pass.Length >= 3, $"at {rate} the first pass has several fire orders ({pass.Length})");
-            rhythm.Add((rate, (double)(pass[^1].Tick - pass[0].Tick) / (pass.Length - 1) / rig.World.Time.TicksPerSecond));
+            // The first pass: the gun's DelayBetweenShots of 300 ms (9 frames) sets the rhythm of the shots; F-140 (AIAttackFireWeaponState goes back to AIAttackAimAtTargetState
+            // after a shot): the attack fires it 10 frames apart. The orders go out while the weapon is ready, so a shot the machine holds for a frame is ordered twice.
+            var shots = rig.Fired.Where(tick => tick >= start).ToArray();
+            var pass = shots.TakeWhile((tick, index) => index == 0 || tick - shots[index - 1] < rig.World.Time.TicksPerSecond).ToArray();
+            TestHarness.Assert(pass.Length >= 3, $"at {rate} the first pass has several shots ({pass.Length})");
+            rhythm.Add((rate, (double)(pass[^1] - pass[0]) / (pass.Length - 1) / rig.World.Time.TicksPerSecond));
             passOrders.Add(pass.Length);
         }
 
         string Text(IEnumerable<(SimulationRate Rate, double Value)> values, string format) => string.Join(", ", values.Select(value => $"{value.Rate}: {value.Value.ToString(format, System.Globalization.CultureInfo.InvariantCulture)}"));
-        Console.WriteLine($"       standing attack order: fire orders of the first pass every {Text(rhythm, "F4")} s ({string.Join(", ", passOrders)} orders); first fire order after {Text(firstFire, "F4")} s; commands per second {Text(perSecond, "F2")}");
+        Console.WriteLine($"       standing attack order: shots of the first pass every {Text(rhythm, "F4")} s ({string.Join(", ", passOrders)} shots); first fire order after {Text(firstFire, "F4")} s; commands per second {Text(perSecond, "F2")}");
         const double oneFrame = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
         foreach (var (rate, seconds) in rhythm)
-            TestHarness.Assert(Math.Abs(seconds - rhythm[0].Seconds) <= oneFrame + 1e-9 && Math.Abs(seconds - 0.3) <= oneFrame + 1e-9, $"the fire orders of a pass are {seconds:F4} s apart at {rate} and {rhythm[0].Seconds:F4} s at {rhythm[0].Rate} (DelayBetweenShots 300 ms): more than one original frame apart");
+            TestHarness.Assert(Math.Abs(seconds - rhythm[0].Seconds) <= oneFrame + 1e-9 && Math.Abs(seconds - 10 * oneFrame) <= oneFrame + 1e-9, $"the shots of a pass are {seconds:F4} s apart at {rate} and {rhythm[0].Seconds:F4} s at {rhythm[0].Rate} (DelayBetweenShots 300 ms on the attack's cycle): more than one original frame apart");
         foreach (var (rate, count) in perSecond)
             TestHarness.Assert(count <= CnCNew.Data.OriginalFrame.PerSecond, $"at {rate} no more commands go out than original frames pass ({count:F2} per second)");
     }

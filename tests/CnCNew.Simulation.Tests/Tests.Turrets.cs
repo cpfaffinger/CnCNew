@@ -313,7 +313,8 @@ static partial class Tests
 
         // A tank whose body already faces the victim does not wait at all: the turret angle is relative to the heading.
         var (turned, turnedFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 1.5708m), ("TurretTarget", 2, 0, 100, 0m));
-        Check.That(TicksUntilShot(turned, turnedFeeder, IdOf(turned, "TurretTank"), IdOf(turned, "TurretTarget")) == 0, "Body heading counts: a tank already facing the victim fires on the first order.");
+        // F-140 (TurretAIAimTurretState succeeds in the order's frame, TURRETAI_FIRE fires in the next).
+        Check.That(InTheOrdersNextFrame(TicksUntilShot(turned, turnedFeeder, IdOf(turned, "TurretTank"), IdOf(turned, "TurretTarget"))), "Body heading counts: a tank already facing the victim fires on the first order, in the next frame.");
         Check.That(Near(Slotted(turned, "TurretTank").TurretOf(0)!.Value.Angle, Fixed.Zero), "...and its turret stays centred.");
     }
 
@@ -323,7 +324,8 @@ static partial class Tests
         foreach (var name in new[] { "PlainTank", "FakeTurretTank" })
         {
             var (world, feeder, _) = TurretWorld((name, 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
-            Check.That(TicksUntilShot(world, feeder, IdOf(world, name), IdOf(world, "TurretTarget")) == 0, $"{name} fires on its first order.");
+            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+            Check.That(InTheOrdersNextFrame(TicksUntilShot(world, feeder, IdOf(world, name), IdOf(world, "TurretTarget"))), $"{name} fires on its first order, in the next frame.");
             Check.That(world.TurretWaits == 0 && Near(Slotted(world, name).TurretOf(0)?.Angle ?? Fixed.Zero, Fixed.Zero), $"{name}: no turret movement, nothing waited.");
         }
 
@@ -334,7 +336,7 @@ static partial class Tests
 
         var (split, splitFeeder, _) = TurretWorld(("SplitTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var splitTank = Slotted(split, "SplitTank");
-        Check.That(TicksUntilShot(split, splitFeeder, splitTank.Id.Value, IdOf(split, "TurretTarget"), slot: WeaponSlot.Secondary) == 0, "A weapon in a slot no turret controls fires at once.");
+        Check.That(InTheOrdersNextFrame(TicksUntilShot(split, splitFeeder, splitTank.Id.Value, IdOf(split, "TurretTarget"), slot: WeaponSlot.Secondary)), "A weapon in a slot no turret controls fires at once, in the order's next frame (F-140).");
         Check.That(Near(splitTank.TurretOf(0)!.Value.Angle, Fixed.Zero), "...and the turret of the other slot is not asked to aim.");
         Check.That(TicksUntilShot(split, splitFeeder, splitTank.Id.Value, IdOf(split, "TurretTarget"), slot: WeaponSlot.Primary) > split.Frames(10), "The turret-controlled primary gun of the same tank waits for its turret.");
 
@@ -398,7 +400,8 @@ static partial class Tests
 
         // A weapon that sweeps (TurretFireAngleSweep) may fire anywhere inside the sweep angle; the same turret without a sweep has to turn the last degrees first.
         var (sweepWorld, sweepFeeder, _) = TurretWorld(("SweepTank", 1, 0, 0, 0m), ("TurretTarget", 2, 94, 34, 0m));
-        Check.That(TicksUntilShot(sweepWorld, sweepFeeder, IdOf(sweepWorld, "SweepTank"), IdOf(sweepWorld, "TurretTarget")) == 0, "A victim 20 degrees off, inside the 25 degree sweep, is fired at without turning first.");
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the turret's aim state succeeds in the order's frame, its fire state fires in the next.
+        Check.That(InTheOrdersNextFrame(TicksUntilShot(sweepWorld, sweepFeeder, IdOf(sweepWorld, "SweepTank"), IdOf(sweepWorld, "TurretTarget"))), "A victim 20 degrees off, inside the 25 degree sweep, is fired at without turning first.");
         var (plainWorld, plainFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 94, 34, 0m));
         Check.That(plainWorld.InFrames(TicksUntilShot(plainWorld, plainFeeder, IdOf(plainWorld, "TurretTank"), IdOf(plainWorld, "TurretTarget"))) is >= 3 and <= 4, "Without the sweep the turret turns 20 degrees first.");
 

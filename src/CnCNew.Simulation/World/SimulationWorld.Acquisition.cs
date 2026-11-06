@@ -162,6 +162,8 @@ public sealed partial class SimulationWorld
             if (other.Acquisition is { } state && state.Victim == from)
             {
                 state.Victim = to;
+                // AIUpdateInterface::transferAttack hands the attack on: the machine goes on with the new victim.
+                if (state.Cycle is { } cycle) cycle.Victim = to;
                 changed = true;
             }
             // "Transfer the turrets too this frame."
@@ -256,12 +258,14 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private void NoteOrderedAttack(Entity unit, Entity victim)
+    private void NoteOrderedAttack(Entity unit, Entity victim, FireOrigin? fire = null)
     {
         if (AiOf(unit) is not { } ai) return;
         EndGuard(unit);
         var state = unit.Acquisition ??= new AcquisitionState();
         if (state.Chasing) ai.StopInternalMove();
+        if (state.Victim != victim.Id) (state.FireOrdered, state.ShotPending) = (false, false);
+        if (fire is { } origin) (state.FireOrdered, state.OrderOrigin, state.ShotPending) = (true, origin, true);
         state.Victim = victim.Id;
         state.Ordered = true;
         state.OrderedTick = _tick;
@@ -343,9 +347,15 @@ public sealed partial class SimulationWorld
             var attackable = victim is not null && IsAttackable(entity, victim);
             if (state.Ordered)
             {
-                // The command giver fires; the world only notices when its attack is over.
+                // The command giver names the attack; its machine fires in the unit's frames (F-140), and the world notices when the attack is over.
                 // "No order for longer than the grace" is noticed in the step after the grace: a logic frame of the original at every rate, not a tick.
-                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks) return;
+                // A fire order may name a victim that is no enemy (the force-fire of a player): its attack goes on as long as any other attack would.
+                var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false));
+                if (ordered && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks)
+                {
+                    if (state.FireOrdered) StepOrderedFire(entity, state, victim!);
+                    return;
+                }
                 state.ClearVictim();
             }
             else if (state.Forced)
@@ -500,8 +510,8 @@ public sealed partial class SimulationWorld
     /// The victim is still one the unit may attack: alive, an enemy and not hidden (<c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c>). "Fog no longer prevents attacking at all. it prevents
     /// targeting in findClosestEnemy" (<c>WeaponSet.cpp</c>): only a human player's unit looks through the fog filter, in <see cref="ConsiderMoodTarget"/>.
     /// </summary>
-    private bool IsAttackable(Entity entity, Entity victim)
-        => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && AreEnemies(entity, victim)
+    private bool IsAttackable(Entity entity, Entity victim, bool enemiesOnly = true)
+        => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && (!enemiesOnly || AreEnemies(entity, victim))
            && !IsHiddenFrom(entity.Owner, victim) && !IsNoTarget(victim);
 
     /// <summary><c>WeaponSet::getAbleToAttackSpecificObject</c>: "an OBJECT_STATUS_MASKED object is not really a valid target", and "the KINDOF version, for things that aren't really game objects".</summary>
@@ -547,6 +557,8 @@ public sealed partial class SimulationWorld
             return true;
         }
 
+        // outOfWeaponRangeObject and wantToSquishTarget take the body's machine to its chase (F-140); out of range a turret's fire state goes back to its aim.
+        AttackCycleOutOfRange(entity, ref state.Cycle, turrets: !inRange);
         if (squish) AutoFire(entity, victim, turretOnly);
         if (turretOnly || !MayChase(entity, aircraft)) return squish;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
@@ -649,6 +661,8 @@ public sealed partial class SimulationWorld
         }
         if (best is null) return null;
         state.Victim = best.Id;
+        // AIAttackFireWeaponState::update sets the machine's goal object: the machine goes on.
+        if (state.Cycle is { } cycle) cycle.Victim = best.Id;
         state.Neutral = state.Neutral || RelationshipOf(entity.Owner, best.Owner) == Relationship.Neutral;
         AimTurretsForAttack(entity, best, TurretAimOrder.Attack);
         return best;
@@ -894,19 +908,11 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void AutoFire(Entity source, Entity victim, bool turretOnly)
     {
-        if (!TurretsLetAttack(source)) return;
+        if (!TurretsLetAttack(source) || source.Acquisition is not { } attack) return;
         var choice = ChooseWeapon(source, victim, FireOrigin.Ai);
-        if (choice.Rejection != 0 || (turretOnly && !IsOnAimingTurret(source, choice.Slot)) || !GateAllowsFire(source, victim)) return;
-        if (!AimTurretsAt(source, choice.Slot, victim, TurretAimOrder.Attack))
-        {
-            NoteTurretWait();
-            return;
-        }
-
-        if (!PreAttackDone(source, _templates.Weapons[ActiveWeaponSet(source)!.Weapons[choice.Slot]], choice.Slot, victim)) return;
-        var weapon = ConsumeShot(source, choice.Slot, victim.Id);
-        var damage = FireWeaponAt(source, weapon, victim, victim.X, victim.Y, victim.Z);
-        NoteTurretShot(source, choice.Slot);
-        Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, source.Owner);
+        // A weapon that reloads still runs its machine (F-140): the aim state aims, the fire state fails back to it.
+        if (choice.Slot < 0 || choice.Rejection is not (0 or CommandRejection.WeaponNotReady) || (turretOnly && !IsOnAimingTurret(source, choice.Slot)) || !GateAllowsFire(source, victim)) return;
+        if (!AttackCycleFires(source, ref attack.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: false)) return;
+        FireCycleShot(source, ref attack.Cycle, choice.Slot, victim, source.Owner);
     }
 }

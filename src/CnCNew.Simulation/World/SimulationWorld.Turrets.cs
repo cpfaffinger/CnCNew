@@ -334,6 +334,8 @@ public sealed partial class SimulationWorld
         state.Pursuing = false;
         state.LoseInterestAt = 0;
         state.HoldUntil = Math.Max(TurretDeadlineSet, tick + info.RecenterTicks);
+        // setTurretTargetObject(NULL): TURRETAI_HOLD, the attack's machine is over (F-140).
+        state.Cycle = null;
     }
 
     /// <summary>The object has a turret that takes part in aiming (<see cref="TurretInfo.Gates"/>): an attack order is visible in its turrets.</summary>
@@ -385,6 +387,7 @@ public sealed partial class SimulationWorld
         state.Scanning = false;
         state.ScanAngle = Fixed.Zero;
         state.NextScan = 0;
+        state.Cycle = null;
         _activeTurrets.Add(entity.Id.Value);
         MarkDirty(entity);
     }

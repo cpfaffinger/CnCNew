@@ -127,14 +127,15 @@ static partial class Tests
 
         var before = RandomFingerprint(world);
         feeder.FireWeapon(1, f1, allyVictim);
-        var result = world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): an order aims in its frame and fires in the next.
+        var events = StepThroughShot(world, f1);
         Check.That(world.FindEntity(new EntityId(allyVictim)) is null, "The own-side victim died.");
-        Check.That(Requests(result.Events).Count == 0, "Killing an ally never produces a crate.");
+        Check.That(Requests(events).Count == 0, "Killing an ally never produces a crate.");
         Check.That(RandomFingerprint(world) == before, "The ally exit consumes no random numbers.");
 
         feeder.FireWeapon(1, f2, enemyVictim);
-        result = world.Step();
-        var requested = Requests(result.Events);
+        events = StepThroughShot(world, f2);
+        var requested = Requests(events);
         Check.That(requested.Count == 1 && requested[0].Text == "FixtureCrate" && requested[0].Value == PlayerId.System.Value, "An enemy kill requests exactly the neutral crate.");
         world.Step();
         Check.That(world.Entities.Any(value => value.Template.Name == "FixtureCrate" && value.Owner == PlayerId.System && value.X == Fixed.FromInt(20)),
@@ -142,13 +143,13 @@ static partial class Tests
 
         before = RandomFingerprint(world);
         feeder.FireWeapon(1, f3, neverVictim);
-        result = world.Step();
-        Check.That(world.FindEntity(new EntityId(neverVictim)) is null && Requests(result.Events).Count == 0, "CreationChance 0 requests nothing.");
+        events = StepThroughShot(world, f3);
+        Check.That(world.FindEntity(new EntityId(neverVictim)) is null && Requests(events).Count == 0, "CreationChance 0 requests nothing.");
         Check.That(RandomFingerprint(world) != before, "The failed creation-chance draw still consumes the reference's draw.");
 
         feeder.FireWeapon(1, f4, scienceVictim);
-        result = world.Step();
-        requested = Requests(result.Events);
+        events = StepThroughShot(world, f4);
+        requested = Requests(events);
         Check.That(requested.Count == 1 && requested[0].Text == "PendingCrate" && requested[0].Value == 2,
             "Killer science and kind-of pass: the crate is requested and owned by the victim's player; the elite-only entry is skipped.");
         world.Step();

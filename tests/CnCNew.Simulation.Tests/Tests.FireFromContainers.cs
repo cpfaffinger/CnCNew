@@ -681,7 +681,8 @@ static partial class Tests
         var (shots, first) = FcRun(near.World, near.Rider, 60);
         Check.That(shots > 0, "A garrisoned rifleman fires at an enemy in range.");
         var firstFrame = near.World.InFrames(first - near.Rider.SpawnTick);
-        Check.That(firstFrame is >= 1 and <= 4, $"It looks two frames after it became idle and fires at once (first shot {firstFrame} frames after its creation).");
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the attack the look begins aims in the next frame and fires in the one after: two frames after the look.
+        Check.That(firstFrame is >= 3 and <= 6, $"It looks two frames after it became idle and fires two frames later (first shot {firstFrame} frames after its creation).");
         Check.That(near.Rider.ContainedBy == near.Container.Id && (near.World.DisabledFlagsOf(near.Rider) & DisabledMask.Held) != 0, "It fires from inside, held by the building.");
         Check.That(Hurt(near.Victim) > Fixed.FromInt(12 * shots) && Hurt(near.Victim) < Fixed.FromInt(13 * shots),
             $"Its shots carry the garrisoned damage, 125 % of 10 ({Hurt(near.Victim)} from {shots} shots).");
@@ -787,7 +788,8 @@ static partial class Tests
             foreach (var rider in riders.Skip(3)) Check.That(world.TryEnterContainer(rider, immune), $"{rate}: setup - a rifleman enters the immune bunker.");
             Check.That(!feeder.FireWeapon(1, clearer.Id.Value, immune.Id.Value).Accepted, $"{rate}: the immune bunker cannot be fired at with the clearer.");
             Check.That(feeder.FireWeapon(1, clearer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the garrisoned bunker can.");
-            world.Step();
+            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+            StepThroughShot(world, clearer);
             Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the first two riders die, the third lives.");
             Check.That(bunker.Body!.Health == Fixed.FromInt(5000) && riders.Skip(3).All(rider => !rider.EffectivelyDead), $"{rate}: the bunker is whole, the immune bunker's riders live.");
         }

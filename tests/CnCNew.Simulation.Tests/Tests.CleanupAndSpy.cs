@@ -407,7 +407,8 @@ static partial class Tests
         Check.That(module.IsFreeToAssist(world), "An idle turret is free to assist.");
 
         Check.That(feeder.FireWeapon(1, first.Id.Value, victim.Id.Value).Accepted, "The first turret opens fire.");
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        StepThroughShot(world, first);
         Check.That(module.ShotsLeft == 3, "The neighbour within RequestAssistRange was asked for AssistingClipSize shots.");
         Check.That(distant.Modules.OfType<AssistedTargetingUpdate>().Single().ShotsLeft == 0, "A turret beyond the range was not asked.");
         Check.That(enemyTurret.Modules.OfType<AssistedTargetingUpdate>().Single().ShotsLeft == 0, "An enemy turret is never asked.");

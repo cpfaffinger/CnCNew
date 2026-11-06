@@ -476,7 +476,8 @@ static partial class Tests
         Check.That(attacker.WeaponClip == 2, "The clip starts full for the default weapon set (ClipSize=2).");
 
         feeder.FireWeapon(1, 1, 2);
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        StepThroughShot(world, attacker);
         Check.That(target.Body!.Health == Fixed.FromInt(80) && attacker.WeaponClip == 1,
             "20 damage at the default armor's 100% coefficient; the clip decrements by one shot.");
 
@@ -486,7 +487,7 @@ static partial class Tests
 
         for (var i = 0; i < world.Frames(16); i++) world.Step();
         feeder.FireWeapon(1, 1, 2);
-        world.Step();
+        StepThroughShot(world, attacker);
         Check.That(attacker.WeaponClip == 0 && target.Body.Health == Fixed.FromInt(60), "The clip empties on the second shot once the delay has elapsed.");
 
         feeder.FireWeapon(1, 1, 2);
@@ -495,7 +496,7 @@ static partial class Tests
 
         for (var i = 0; i < world.Frames(62); i++) world.Step();
         feeder.FireWeapon(1, 1, 2);
-        world.Step();
+        StepThroughShot(world, attacker);
         Check.That(attacker.WeaponClip == 1 && target.Body.Health == Fixed.FromInt(40), "The clip refills after ClipReloadTime (2000ms = 60 ticks) and firing resumes.");
 
         feeder.Spawn(2, "Fighter", x: 1000, y: 0);
@@ -532,7 +533,8 @@ static partial class Tests
         world.Step();
         Check.That(target.HasPlayerUpgradeArmor, "ArmorUpgrade switches the target to its PLAYER_UPGRADE armor set.");
         feeder.FireWeapon(1, 1, 2);
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        StepThroughShot(world, attacker);
         Check.That(target.Body!.Health == Fixed.FromInt(90), "20 damage at the upgraded armor's 50% coefficient deals 10.");
 
         // WeaponSetUpgrade: player 1 upgrades entity 1's weapon set (TestGun -> BigGun, unlimited clip).
@@ -543,7 +545,7 @@ static partial class Tests
         Check.That(attacker.HasPlayerUpgradeWeapon && attacker.WeaponClip == int.MaxValue, "WeaponSetUpgrade switches weapons and refills the (unlimited) clip.");
         for (var i = 0; i < world.Frames(10); i++) world.Step();
         feeder.FireWeapon(1, 1, 2);
-        world.Step();
+        StepThroughShot(world, attacker);
         Check.That(target.Body.Health == Fixed.FromInt(70), "The upgraded BigGun deals 40 damage at 50% armor (20), leaving 70.");
 
         // MaxHealthUpgrade (SAME_CURRENTHEALTH): the cap rises, current health is unchanged.

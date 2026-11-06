@@ -180,7 +180,8 @@ static partial class Tests
 
         var health = dummy.Body!.Health;
         Check.That(feeder.FireWeapon(1, car.Id.Value, dummy.Id.Value).Accepted, "The bomb car attacks.");
-        var fired = WeaponsFired(world.Step(), car.Id.Value);
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        var fired = WeaponsFiredIn(StepThroughShot(world, car), car.Id.Value);
         Check.That(fired.SequenceEqual(["BigGun"]) && dummy.Body!.Health == health - Fixed.FromInt(100), "It fires the CARBOMB weapon, not its old guns: " + string.Join(",", fired));
 
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
@@ -213,7 +214,8 @@ static partial class Tests
         Check.That(SimulationWorld.ActiveWeaponSet(tank)!.Index == 1 && tank.ClipOf(0) == 2 && tank.ClipOf(1) == int.MaxValue, "Its slots were rebuilt for the new set with full clips.");
         var health = dummy.Body!.Health;
         Check.That(feeder.FireWeapon(1, tank.Id.Value, dummy.Id.Value).Accepted, "The salvager attacks.");
-        var fired = WeaponsFired(world.Step(), tank.Id.Value);
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        var fired = WeaponsFiredIn(StepThroughShot(world, tank), tank.Id.Value);
         Check.That(fired.SequenceEqual(["BigGun"]) && dummy.Body!.Health == health - Fixed.FromInt(100) && tank.ClipOf(0) == 1, "The upgraded weapon fires and spends a round of its own clip: " + string.Join(",", fired));
 
         Pickup(30);
@@ -299,7 +301,8 @@ static partial class Tests
         var victim = CsSpawn(world, feeder, "NetVictim", 2, 50, 80);
         Check.That(neighbour.ClipOf(1) == 2 && neighbour.ClipOf(0) == int.MaxValue, "The neighbour's secondary slot holds the assist weapon's clip of two.");
         Check.That(feeder.FireWeapon(1, first.Id.Value, victim.Id.Value).Accepted, "The first turret opens fire.");
-        world.Step();
+        // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
+        StepThroughShot(world, first);
         Check.That(neighbour.WeaponLock == WeaponLockKind.Temporary && neighbour.CurrentWeaponSlot == WeaponSlot.Secondary, "The request pinned the assisting slot temporarily.");
         var shots = new List<long>();
         for (var tick = 0; tick < world.Frames(60); tick++)
@@ -376,7 +379,8 @@ static partial class Tests
         {
             for (var tick = 0; tick < world.Frames(10); tick++)
             {
-                if (feeder.FireWeaponSlot(1, jet.Id.Value, dummy.Id.Value, slot).Accepted) { world.Step(); return; }
+                // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order's shot comes on the attack machine's frame, one or two frames later.
+                if (feeder.FireWeaponSlot(1, jet.Id.Value, dummy.Id.Value, slot).Accepted) { Check.That(StepToShot(world, jet).Tick >= 0, $"Slot {slot} fired."); return; }
                 world.Step();
             }
             throw new InvalidOperationException($"Slot {slot} never became ready.");
