@@ -1916,10 +1916,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _enterTarget = EntityId.Invalid;
         // The approach may end short (a partial path): only an object that actually reached the container gets in.
         var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
-        // Measured from where the last step of the move ends (above 30 Hz the object is still covering it).
+        // Measured from where the last step of the move ends (above 30 Hz the object is still covering it), to where the container's frame ends (a container that moves is
+        // still covering its step as well; rule 4 of the frame convention, docs/SIMULATION-CORE.md §43).
         var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
-        var dx = container.X - ownX;
-        var dy = container.Y - ownY;
+        var (containerX, containerY, _) = container.FrameEnd(world.Tick);
+        var dx = containerX - ownX;
+        var dy = containerY - ownY;
         if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return;
         world.EnterOnArrival(Entity, container);
     }
