@@ -2629,6 +2629,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>Above 30 Hz: a share of the frame the object has begun is still to come (always false at 30 Hz).</summary>
     internal bool CoversFrame => _frameTicksLeft > 0;
 
+    /// <summary>
+    /// The object covers a frame's turn that began in an earlier tick: the 30 Hz object took that turn in a step of its own and looks at its victim with its next frame. A turn
+    /// begun in this tick - by an order in the command phase - is the 30 Hz step itself. Always false at 30 Hz.
+    /// </summary>
+    internal bool IsCoveringEarlierTurn(long tick) => _frameTicksLeft > 0 && Entity.HasAheadAngle && !(_frameTicksLeft == _stride - 1 && _frameDue == tick + TickOrder.Next);
+
     // The tick of the last turn on the spot; derived within a tick, not state: a unit turns one step per logic frame of the original, however many orders ask for it.
     private long _spotTurnTick = -1;
 

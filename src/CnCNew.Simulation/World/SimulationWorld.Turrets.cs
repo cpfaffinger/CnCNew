@@ -187,7 +187,9 @@ public sealed partial class SimulationWorld
         if (weaponIndex < 0) return true;
         var weapon = _templates.Weapons[weaponIndex];
         if (IsContactWeapon(weapon) || IsOnTurningTurret(source, slot)) return true;
-        // A turn on the spot that is being covered is judged where it ends (FrameEndAngle): the 30 Hz unit took it whole and fires in the same frame (F-138).
+        // A turn on the spot begun in this tick - an attack order's, in the command phase - is judged where it ends (FrameEndAngle): the 30 Hz unit took it whole and fires
+        // in the same frame (F-138). One begun in an earlier tick of the frame was the 30 Hz unit's own step, after which it looks again with its next frame.
+        if (ai.IsCoveringEarlierTurn(_tick)) return false;
         var (ownX, ownY, _) = source.FrameEnd(_tick);
         if (x == ownX && y == ownY) return true;
         var bearing = FixedTrig.Atan2(y - ownY, x - ownX);
