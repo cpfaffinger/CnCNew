@@ -393,6 +393,9 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
             return;
         }
         (_pendingX, _pendingY, _pendingFromPlayer, _hasPendingMove) = (x, y, fromPlayer, true);
+        // DeployStyleAIUpdate::aiDoCommand hands the order to AIUpdateInterface: the move replaces the attack at once, only the walk waits for the packing (F-140: the attack's
+        // machine would otherwise go on firing - and asking to deploy - while the unit packs).
+        world.EndAttack(Entity);
         switch (_state)
         {
             // Turrets that must centre before packing are aligned first (only a unit whose current weapon sits on a turret).
