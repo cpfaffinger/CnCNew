@@ -303,7 +303,11 @@ public sealed partial class ScriptEngine
             case "TEAM_STOP_AND_DISBAND":
                 if (Has(type, p, 1))
                     foreach (var team in TeamNamed(Str(p, 0)))
-                        foreach (var member in LiveMembers(team).ToArray()) Stop(member);
+                        foreach (var member in LiveMembers(team).ToArray())
+                        {
+                            Stop(member);
+                            MakeRecruitable(member);
+                        }
                 break;
             // doTeamGuard: each member guards its own position (F-58).
             case "TEAM_GUARD":
@@ -380,6 +384,21 @@ public sealed partial class ScriptEngine
         _executedActions++;
     }
 
+    /// <summary>The parameters of an action as the text of its <see cref="ScriptOutput"/> (see <see cref="Forward"/>).</summary>
+    private static string[] OutputArguments(MapScriptAction action)
+    {
+        var arguments = new string[action.Parameters.Length];
+        for (var index = 0; index < arguments.Length; index++)
+        {
+            var parameter = action.Parameters[index];
+            arguments[index] = parameter.Type == MapScriptParameterType.Coord3D ? InvariantText.Format($"{parameter.CoordX},{parameter.CoordY},{parameter.CoordZ}")
+                : parameter.Text.Length > 0 ? parameter.Text
+                : parameter.Type is MapScriptParameterType.Real or MapScriptParameterType.Angle or MapScriptParameterType.Percent ? parameter.Real.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : parameter.Integer.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        return arguments;
+    }
+
     private long SecondsToFrames(Fixed seconds)
     {
         // REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value * 1000)): seconds times the logic rate of the original, rounded up to whole
@@ -421,15 +440,7 @@ public sealed partial class ScriptEngine
     private void Forward(MapScriptAction action)
     {
         _forwardedActions++;
-        var arguments = new string[action.Parameters.Length];
-        for (var index = 0; index < arguments.Length; index++)
-        {
-            var parameter = action.Parameters[index];
-            arguments[index] = parameter.Type == MapScriptParameterType.Coord3D ? InvariantText.Format($"{parameter.CoordX},{parameter.CoordY},{parameter.CoordZ}")
-                : parameter.Text.Length > 0 ? parameter.Text
-                : parameter.Type is MapScriptParameterType.Real or MapScriptParameterType.Angle or MapScriptParameterType.Percent ? parameter.Real.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                : parameter.Integer.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
+        var arguments = OutputArguments(action);
         _outputs.Add(new ScriptOutput(_tick, action.TypeName, [..arguments]));
         // ScriptActions::doFreezeTime/doUnfreezeTime set ScriptEngine::m_freezeByScript: still an output for the host's counters, but the world stands still too (MissionSession.Step).
         if (action.TypeName == "FREEZE_TIME") TimeFrozen = true;

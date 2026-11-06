@@ -11,7 +11,8 @@ using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// The script statuses "disabled" and "unpowered" (<c>Object::setScriptStatus</c>, <c>BuildAssistant::canMakeUnit</c>). The port kept the unpowered status and read it nowhere.
+/// The script statuses "disabled" and "unpowered" (<c>Object::setScriptStatus</c>, <c>BuildAssistant::canMakeUnit</c>) and the panel-flag actions that set them
+/// (<c>ScriptActions::changeObjectPanelFlagForSingleObject</c>). The port kept the unpowered status and read it nowhere, and handed the panel flags to the presentation.
 /// </summary>
 static partial class Tests
 {
@@ -75,5 +76,68 @@ static partial class Tests
         factoryWorld.SetScriptDisable(factory, Entity.ScriptUnpowered, false);
         for (var tick = 0; tick < factoryWorld.Frames(90); tick++) factoryWorld.Step();
         Check.That(CountOf(factoryWorld, "QuickUnit") == 1, "Powered again, it makes its unit.");
+    }
+
+    /// <summary>
+    /// <c>UNIT_AFFECT_OBJECT_PANEL_FLAGS</c> and <c>TEAM_AFFECT_OBJECT_PANEL_FLAGS</c>: "Enabled" and "Powered" off disable the object as a script disable and a script underpower, on
+    /// again release it; "Indestructible", "Unsellable" and "Player Targetable" set what they name; "Selectable" goes to the presentation; a flag the original does not name is counted.
+    /// </summary>
+    public static void ScriptPanelFlags()
+    {
+        MapScriptAction Flag(string action, MapScriptParameter target, string flag, bool value) => Scr.Do(action, target, Scr.Named(MapScriptParameterType.ObjectPanelFlag, flag), Scr.Bool(value));
+        const string Unit = "UNIT_AFFECT_OBJECT_PANEL_FLAGS", Team = "TEAM_AFFECT_OBJECT_PANEL_FLAGS";
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Off", [Scr.And(Scr.If("CONDITION_TRUE"))], [
+                Flag(Unit, Scr.Unit("Bunker"), "Powered", false), Flag(Unit, Scr.Unit("Bunker"), "Enabled", false), Flag(Unit, Scr.Unit("Bunker"), "Indestructible", true),
+                Flag(Unit, Scr.Unit("Bunker"), "Unsellable", true), Flag(Unit, Scr.Unit("Bunker"), "Player Targetable", true), Flag(Unit, Scr.Unit("Bunker"), "Selectable", false),
+                Flag(Team, Scr.Team("Squad"), "Powered", false), Flag(Unit, Scr.Unit("Bunker"), "powered", true), Flag(Unit, Scr.Unit("Nobody"), "Enabled", false)], oneShot: true),
+            Scr.Script("On", [Scr.And(Scr.If("FLAG", Scr.Flag("on"), Scr.Bool(true)))], [
+                Flag(Unit, Scr.Unit("Bunker"), "Powered", true), Flag(Unit, Scr.Unit("Bunker"), "Enabled", true), Flag(Unit, Scr.Unit("Bunker"), "Indestructible", false),
+                Flag(Team, Scr.Team("Squad"), "Powered", true)], oneShot: true),
+        ], objects: [Placed("AlphaBunker", 100m, 60m, "teamA", "Bunker"), Placed("AlphaSoldier", 100m, 140m, "Squad", "Trooper1"), Placed("AlphaSoldier", 120m, 140m, "Squad", "Trooper2")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(10));
+        var bunker = NamedIn(session, "Bunker")!;
+        var troopers = new[] { NamedIn(session, "Trooper1")!, NamedIn(session, "Trooper2")! };
+        Check.That(ScriptCoverage.ActionSupport(Unit) == ScriptSupport.Executed && ScriptCoverage.ActionSupport(Team) == ScriptSupport.Executed, "Both actions are executed by the VM.");
+        Check.That(session.World.DisabledFlagsOf(bunker) == (DisabledMask.ScriptDisabled | DisabledMask.ScriptUnderpowered),
+            $"Enabled and Powered off disable the object twice over ({session.World.DisabledFlagsOf(bunker)}).");
+        Check.That(bunker.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: true }, "Indestructible is the body's.");
+        Check.That((bunker.ScriptDisableMask & (Entity.ScriptUnsellable | Entity.ScriptTargetable)) == (Entity.ScriptUnsellable | Entity.ScriptTargetable), "Unsellable and Player Targetable are script statuses.");
+        Check.That(troopers.All(trooper => session.World.DisabledFlagsOf(trooper) == DisabledMask.ScriptUnderpowered), "The team's flag reaches every member.");
+        var outputs = session.Engine.DrainOutputs().Where(output => output.Action == Unit).ToArray();
+        Check.That(outputs.Length == 1 && outputs[0].Arguments is ["Bunker", "Selectable", "0"], $"Only Selectable goes to the presentation ({string.Join(" | ", outputs.Select(output => string.Join(",", output.Arguments)))}).");
+        Check.That(session.Engine.Diagnostics.ContainsKey($"{Unit}: unknown flag 'powered'"), $"A flag the original does not name (it compares exactly) changes nothing and is counted ({string.Join("; ", session.Engine.Diagnostics.Keys)}).");
+        Check.That(session.Engine.MissingActionHits.Count == 0, "Nothing is missing.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
+
+        session.Engine.SignalUiInteraction("on");
+        Run(session, session.Frames(10));
+        Check.That(session.World.DisabledFlagsOf(bunker) == DisabledMask.None && bunker.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: false },
+            "On again, the object is enabled, powered and destructible.");
+        Check.That(troopers.All(trooper => session.World.DisabledFlagsOf(trooper) == DisabledMask.None), "And the team is powered.");
+    }
+
+    /// <summary><c>Team::tryToRecruit</c> leaves out a unit whose AI is not recruitable: the panel flag "AI Recruitable" off keeps the nearest soldier out of the new team.</summary>
+    public static void ScriptPanelFlagRecruitable()
+    {
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Recruit", [Scr.And(Scr.If("CONDITION_TRUE"))], [
+                Scr.Do("UNIT_AFFECT_OBJECT_PANEL_FLAGS", Scr.Unit("Free3"), Scr.Named(MapScriptParameterType.ObjectPanelFlag, "AI Recruitable"), Scr.Bool(false)),
+                Scr.Do("RECRUIT_TEAM", Scr.Team("Strike"), Scr.Real(0m))], oneShot: true),
+        ], objects: [Placed("BetaSoldier", 100m, 200m, "teamPlayerB", "Free1"), Placed("BetaSoldier", 120m, 200m, "teamPlayerB", "Free2"), Placed("BetaSoldier", 140m, 200m, "teamPlayerB", "Free3")]);
+        MapProperties Strike(string name, string owner, string unit) => new([Scr.Text("teamName", name), Scr.Text("teamOwner", owner), Scr.Flag("teamIsSingleton", true), Scr.Text("teamHome", "Far"),
+            new MapProperty("teamProductionPriority", MapPropertyType.Int, 5, 0m, string.Empty),
+            Scr.Text("teamUnitType1", unit), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
+        map = map with { Teams = [..map.Teams, Strike("Strike", PlayerB, "BetaSoldier"), new([Scr.Text("teamName", "teamPlayerB"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true)])] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(10));
+        var strike = session.Engine.TeamInstances.First(team => team.Prototype == "Strike");
+        var members = strike.Members.Select(id => session.World.FindEntity(new EntityId(id))!).ToArray();
+        Check.That(members.Length == 2 && !members.Contains(NamedIn(session, "Free3")) && members.Contains(NamedIn(session, "Free1")) && members.Contains(NamedIn(session, "Free2")),
+            $"The unrecruitable soldier stays out; the two others join ({members.Length} members; {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission keeps who is unrecruitable.");
     }
 }

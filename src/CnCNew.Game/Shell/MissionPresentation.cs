@@ -1303,7 +1303,8 @@ public sealed class MissionPresentationDirector
                 if (Hud is not { } hud) { Problem(action, "no HUD connected"); return; }
                 var flag = Argument(output, 1);
                 if (!Number(output, 2, out var on)) { Problem(action, "flag value missing"); return; }
-                if (!flag.Equals("Selectable", StringComparison.OrdinalIgnoreCase)) { Problem(action, $"flag '{flag}' has no consumer (it needs simulation state)"); return; }
+                // The script engine executes every other flag itself and hands out only the player's selection.
+                if (!flag.Equals("Selectable", StringComparison.Ordinal)) { Problem(action, $"flag '{flag}' is the simulation's, not the presentation's"); return; }
                 var targets = Targets(action.StartsWith("UNIT", StringComparison.Ordinal), Argument(output, 0));
                 if (targets.Count == 0) { Problem(action, "unknown named object or empty team"); return; }
                 var acted = false;

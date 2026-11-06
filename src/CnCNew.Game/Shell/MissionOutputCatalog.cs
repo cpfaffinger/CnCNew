@@ -102,7 +102,7 @@ public static class MissionOutputCatalog
         Shown("the button leaves (or takes a slot of) the command set of the object type, for every object that uses the set (GameLogic::setControlBarOverride)",
             "COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE", "COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT");
         Shown("the healing icons over repaired objects are left out while off (GameLogic::setDrawIconUI; the player's own selection marks stay)", "OPTIONS_SET_DRAWICON_UI_MODE");
-        Shown("only the Selectable flag has a consumer (the player can no longer select the object); the other flags are listed under problems", "UNIT_AFFECT_OBJECT_PANEL_FLAGS", "TEAM_AFFECT_OBJECT_PANEL_FLAGS");
+        Shown("the script engine executes the flags the simulation holds and hands out only Selectable: the player can no longer select the object", "UNIT_AFFECT_OBJECT_PANEL_FLAGS", "TEAM_AFFECT_OBJECT_PANEL_FLAGS");
         Shown("the drawable flashes its house colour every half second for the given seconds (Drawable::colorFlash)", "NAMED_FLASH", "TEAM_FLASH");
         Shown("the whole superweapon timer list (top right, \"Name: m:ss\" per public-timer power) is hidden or shown again (InGameUI::setSuperweaponDisplayEnabledByScript)", "DISABLE_SPECIAL_POWER_DISPLAY", "ENABLE_SPECIAL_POWER_DISPLAY");
         Shown("the timer of that object's superweapon is hidden or shown again in the list (InGameUI::hideObjectSuperweaponDisplayByScript)", "NAMED_HIDE_SPECIAL_POWER_DISPLAY", "NAMED_SHOW_SPECIAL_POWER_DISPLAY");

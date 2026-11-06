@@ -222,8 +222,10 @@ internal static class MissionEffectsTests
         TestHarness.Assert(counts["COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"] is { Displayed: 1 } && counts["COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT"] is { Displayed: 1 } && counts["OPTIONS_SET_DRAWICON_UI_MODE"] is { Displayed: 1 }, "the control bar and the icon switch are displayed once the HUD acted");
         TestHarness.Assert(counts["PLAYER_SCIENCE_AVAILABILITY"] is { Emitted: 2, Forwarded: 1, Displayed: 1 }, $"the science of the local player reaches the window of the general ({counts["PLAYER_SCIENCE_AVAILABILITY"]})");
         TestHarness.Assert(host.Problems.ContainsKey("PLAYER_SCIENCE_AVAILABILITY: unknown player 'Nobody'"), "a side that does not exist is reported");
-        TestHarness.Assert(counts["UNIT_AFFECT_OBJECT_PANEL_FLAGS"] is { Emitted: 2, Forwarded: 1, Displayed: 1 } && host.Problems.Keys.Any(key => key.Contains("flag 'Indestructible' has no consumer", StringComparison.Ordinal)),
-            "only the Selectable flag has a consumer; the Indestructible one is listed as a problem");
+        TestHarness.Assert(counts["UNIT_AFFECT_OBJECT_PANEL_FLAGS"] is { Emitted: 1, Forwarded: 1, Displayed: 1 } && !host.Problems.Keys.Any(key => key.StartsWith("UNIT_AFFECT_OBJECT_PANEL_FLAGS", StringComparison.Ordinal)),
+            $"only the Selectable flag reaches the presentation ({counts["UNIT_AFFECT_OBJECT_PANEL_FLAGS"]})");
+        TestHarness.Assert(again.World.Entities.Single(entity => entity.Template.Name == "Barrel").Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: true },
+            "the Indestructible flag is the simulation's: the barrel's body takes no damage");
         TestHarness.Assert(!host.ScoringEnabled && host.ScoreScreenExcluded.Contains("Hero") && !host.SpecialPowerDisplayEnabled, "the scoring and display switches are kept for the screens that read them");
         TestHarness.Assert(counts["DISABLE_SCORING"] is { Displayed: 1 } && counts["PLAYER_EXCLUDE_FROM_SCORE_SCREEN"] is { Displayed: 1 }, "and they reach the score");
     }

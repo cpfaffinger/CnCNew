@@ -133,7 +133,8 @@ public sealed partial class ScriptEngine
     /// <summary>
     /// <c>Player::recruitSpecificTeam</c> -> <c>AIPlayer::recruitSpecificAITeam</c> / <c>Team::tryToRecruit</c>: for each unit type of the team (up to <c>MaxCount</c>) the nearest unit of the
     /// owner that sits in an active, recruitable team of lower production priority (or in no team at all, the reference's default team) joins the new team and walks to the team's home
-    /// waypoint. A radius under 1 means unlimited. A human player has no <c>AIPlayer</c>: nothing happens. "Build variation" equivalence is not modelled, held units are not excluded
+    /// waypoint. A radius under 1 means unlimited. A human player has no <c>AIPlayer</c>: nothing happens. A unit a script made unrecruitable (the panel flag "AI Recruitable") is left
+    /// out. "Build variation" equivalence is not modelled, held units are not excluded
     /// (<c>docs/SCRIPT-ENGINE.md</c> §8).
     /// </summary>
     private void RecruitTeam(string teamName, Fixed radius)
@@ -190,6 +191,8 @@ public sealed partial class ScriptEngine
                 if (current.RecruitableSet) recruitable = current.Recruitable;
                 if (!recruitable) continue;
             }
+            // Team::tryToRecruit: "can't recruit this unit".
+            if (!IsRecruitable(candidate)) continue;
             var distance = DistanceSquared(candidate, home.X, home.Y);
             // A unit of the default team is taken even outside the radius while nothing was found yet, then nearer ones win (Team::tryToRecruit).
             var inDefaultTeam = current is null || (_program.FindTeam(current.Prototype) is { } ownTeam && ownTeam.Name == "team" + ownTeam.Owner);

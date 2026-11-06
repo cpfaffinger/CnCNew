@@ -26,6 +26,13 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<string, int> _buildableOverrides = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, uint> _captureOrders = [];
 
+    /// <summary><c>AIUpdateInterface::m_isRecruitable</c> false (the panel flag "AI Recruitable" off): the objects no team recruits (<c>Team::tryToRecruit</c>). Written only when set.</summary>
+    private readonly SortedSet<uint> _unrecruitable = [];
+
+    /// <summary><c>TheObjectFlagsNames</c> (<c>Scripts.cpp</c>), compared as <c>AsciiString</c> compares: exactly.</summary>
+    private const string PanelEnabled = "Enabled", PanelPowered = "Powered", PanelIndestructible = "Indestructible", PanelUnsellable = "Unsellable", PanelSelectable = "Selectable",
+        PanelRecruitable = "AI Recruitable", PanelTargetable = "Player Targetable";
+
     private bool TryExecutePhase13Action(MapScriptAction action)
     {
         var p = action.Parameters;
@@ -158,6 +165,13 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } factoryOwner)
                     foreach (var entity in _world.Entities.Where(entity => entity.Owner == factoryOwner.Id && !entity.DestroyRequested && entity.Template.Name.Equals(Str(p, 1), StringComparison.Ordinal)).OrderBy(entity => entity.Id.Value).ToArray())
                         _world.SetScriptDisable(entity, Entity.ScriptDisabled, type == "PLAYER_DISABLE_FACTORIES");
+                return true;
+            // doAffectObjectPanelFlagsUnit / doAffectObjectPanelFlagsTeam -> changeObjectPanelFlagForSingleObject: one flag of the named object or of every member of the team.
+            case "UNIT_AFFECT_OBJECT_PANEL_FLAGS":
+                if (Has(type, p, 3) && NamedEntity(Str(p, 0)) is { } flagged) ChangePanelFlags(action, [flagged], Str(p, 1), Int(p, 2) != 0);
+                return true;
+            case "TEAM_AFFECT_OBJECT_PANEL_FLAGS":
+                if (Has(type, p, 3) && FindTeam(Str(p, 0)) is { } flaggedTeam) ChangePanelFlags(action, LiveMembers(flaggedTeam).ToArray(), Str(p, 1), Int(p, 2) != 0);
                 return true;
             // doNamedSetTrainHeld: RailroadBehavior::setHeld.
             case "SET_TRAIN_HELD":
@@ -492,6 +506,57 @@ public sealed partial class ScriptEngine
 
     // ------------------------------------------------------------------------------------------------ per tick and state
 
+    /// <summary>
+    /// <c>ScriptActions::changeObjectPanelFlagForSingleObject</c> for each object: "Enabled" and "Powered" set or clear <c>OBJECT_STATUS_SCRIPT_DISABLED</c> and <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>
+    /// (the object is disabled as <c>DISABLED_SCRIPT_DISABLED</c> or <c>DISABLED_SCRIPT_UNDERPOWERED</c> while the flag is off), "Indestructible" is the body's, "Unsellable" and "Player Targetable"
+    /// the script statuses, "AI Recruitable" the AI's recruitability. "Selectable" (<c>Object::setSelectable</c>) is the player's selection, which this port keeps outside the simulation: the
+    /// action goes to the presentation as an output once. A flag the original does not name changes nothing there either; here it is counted.
+    /// </summary>
+    private void ChangePanelFlags(MapScriptAction action, IReadOnlyList<Entity> objects, string flag, bool value)
+    {
+        switch (flag)
+        {
+            case PanelEnabled or PanelPowered or PanelUnsellable or PanelTargetable:
+            {
+                var (bit, on) = flag switch
+                {
+                    PanelEnabled => (Entity.ScriptDisabled, !value),
+                    PanelPowered => (Entity.ScriptUnpowered, !value),
+                    PanelUnsellable => (Entity.ScriptUnsellable, value),
+                    _ => (Entity.ScriptTargetable, value),
+                };
+                foreach (var entity in objects) _world.SetScriptDisable(entity, bit, on);
+                return;
+            }
+            case PanelIndestructible:
+                foreach (var entity in objects) _world.SetIndestructible(entity, value);
+                return;
+            case PanelRecruitable:
+                foreach (var entity in objects)
+                {
+                    if (AiOf(entity) is null) continue;
+                    if (value) _unrecruitable.Remove(entity.Id.Value);
+                    else _unrecruitable.Add(entity.Id.Value);
+                }
+                return;
+            case PanelSelectable:
+                _outputs.Add(new ScriptOutput(_tick, action.TypeName, [..OutputArguments(action)]));
+                return;
+            default:
+                Diagnose($"{action.TypeName}: unknown flag '{flag}'");
+                return;
+        }
+    }
+
+    /// <summary><c>AIUpdateInterface::isRecruitable</c>: a script did not take the object out of recruiting.</summary>
+    private bool IsRecruitable(Entity entity) => !_unrecruitable.Contains(entity.Id.Value);
+
+    /// <summary><c>ScriptActions::doTeamStop</c> with disband: every member with an AI is recruitable again.</summary>
+    private void MakeRecruitable(Entity entity)
+    {
+        if (AiOf(entity) is not null) _unrecruitable.Remove(entity.Id.Value);
+    }
+
     private void UpdatePhase13(long tick)
     {
         UpdateCaptureOrders(tick);
@@ -520,6 +585,12 @@ public sealed partial class ScriptEngine
             foreach (var (member, target) in _captureOrders) { writer.BeginObject(null); writer.UInt("member", member); writer.UInt("target", target); writer.EndObject(); }
             writer.EndArray();
         }
+        if (_unrecruitable.Count > 0)
+        {
+            writer.BeginArray("unrecruitable");
+            foreach (var id in _unrecruitable) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); }
+            writer.EndArray();
+        }
         if (_pendingTraps.Count > 0)
         {
             writer.BeginArray("pendingTraps");
@@ -540,6 +611,8 @@ public sealed partial class ScriptEngine
         if (_buildableOverrides.Count > 0) InstallBuildableHook();
         _captureOrders.Clear();
         if (reader.Has("captureOrders")) foreach (var item in reader.Array("captureOrders")) _captureOrders[checked((uint)item.UInt("member"))] = checked((uint)item.UInt("target"));
+        _unrecruitable.Clear();
+        if (reader.Has("unrecruitable")) foreach (var item in reader.Array("unrecruitable")) _unrecruitable.Add(checked((uint)item.UInt("id")));
         _pendingTraps.Clear();
         if (reader.Has("pendingTraps")) foreach (var item in reader.Array("pendingTraps")) _pendingTraps.Add((checked((uint)item.UInt("bomb")), checked((uint)item.UInt("victim")), item.Int("x"), item.Int("y")));
     }

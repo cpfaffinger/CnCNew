@@ -106,13 +106,33 @@ public sealed partial class SimulationWorld
     /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, until)</c> as <c>EMPUpdate</c> calls it (the scripts' and tests' way to it).</summary>
     public void DisableByEmpUntil(Entity victim, long until) => Modules.BuiltIn.AirWeaponModules.DisableUntil(this, victim, until);
 
-    /// <summary>Sets or clears one script disable bit of an entity (<see cref="Entity.ScriptHeld"/> = <c>DISABLED_HELD</c>, <see cref="Entity.ScriptDisabled"/> = <c>OBJECT_STATUS_SCRIPT_DISABLED</c>).</summary>
+    /// <summary>
+    /// Sets or clears one script disable bit of an entity (<see cref="Entity.ScriptHeld"/> = <c>DISABLED_HELD</c>, <see cref="Entity.ScriptDisabled"/> = <c>OBJECT_STATUS_SCRIPT_DISABLED</c>,
+    /// <see cref="Entity.ScriptUnpowered"/> = <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>, <see cref="Entity.ScriptUnsellable"/>, <see cref="Entity.ScriptTargetable"/>). The two script statuses that
+    /// disable (<c>Object::setScriptStatus</c>: <c>DISABLED_SCRIPT_DISABLED</c>, <c>DISABLED_SCRIPT_UNDERPOWERED</c>) reach the disable model through <see cref="Entity.DisabledFlags"/>; the edge
+    /// and the pause of the special powers follow at the end of the tick.
+    /// </summary>
     public void SetScriptDisable(Entity entity, byte bit, bool on)
     {
         var mask = on ? (byte)(entity.ScriptDisableMask | bit) : (byte)(entity.ScriptDisableMask & ~bit);
         if (mask == entity.ScriptDisableMask) return;
         entity.ScriptDisableMask = mask;
         MarkDirty(entity);
+    }
+
+    /// <summary><c>ActiveBody::setIndestructible</c> (the panel flag "Indestructible"): the body takes no damage, and a bridge gives the same to its towers. Nothing for a body that is no <c>ActiveBody</c>.</summary>
+    public void SetIndestructible(Entity entity, bool indestructible)
+    {
+        if (entity.Body is not Modules.BuiltIn.ActiveBody body) return;
+        body.Indestructible = indestructible;
+        MarkDirty(entity);
+        if (!entity.Template.IsKindOf("BRIDGE") || Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.BridgeBehavior) is not Modules.BuiltIn.BridgeBehavior bridge) return;
+        for (var type = 0; type < Modules.BuiltIn.BridgeBehavior.MaxTowers; type++)
+            if (FindEntity(bridge.TowerId(type)) is { } tower && tower.Body is Modules.BuiltIn.ActiveBody towerBody)
+            {
+                towerBody.Indestructible = indestructible;
+                MarkDirty(tower);
+            }
     }
 
     /// <summary>
