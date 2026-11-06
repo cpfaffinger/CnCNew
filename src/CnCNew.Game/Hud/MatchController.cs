@@ -367,6 +367,8 @@ public sealed partial class MatchController
         if (action == MetaAction.Diplomacy) { ToggleDiplomacy(); return; }
         if (action == MetaAction.PlaceBeacon) { ArmBeacon(); return; }
         if (action == MetaAction.DeleteBeacon) { RemoveSelectedBeacons(); return; }
+        // MSG_META_VIEW_LAST_RADAR_EVENT: "You don't need radar for the space bar."
+        if (action == MetaAction.ViewLastRadarEvent) { if (Messages.LastRadarEvent is { } last) Match.Camera.CenterOn(last); return; }
         UiRequest?.Invoke(action);
     }
 
@@ -514,6 +516,7 @@ public sealed partial class MatchController
 
         // The world moved under a resting pointer: the context (and with it the cursor) is evaluated again every frame, not only on input events.
         if (!PointerOverWindow) Input.RefreshHint(Match.World, Match.Camera);
+        Input.Selection.TrackIdleWorkers(Match.World);
         CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
         UpdateGenerals();
@@ -830,6 +833,7 @@ public sealed partial class MatchController
     /// window exists in <c>ControlBar.wnd</c> or <c>QuitMenu.wnd</c>.
     /// </summary>
     public UiRect? WindowRect(string decoratedName) => _tree.FindByName(decoratedName)?.Rect;
+    public bool IsWindowEnabled(string decoratedName) => _tree.FindByName(decoratedName)?.IsEnabled ?? false;
 
     // ------------------------------------------------------------------------------------------------------------ draw list
 
@@ -1161,6 +1165,8 @@ public sealed partial class MatchController
         if (_scheme is { } placed && _modernBar is null) PlaceSchemeWindows(placed);
         _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
+        // InGameUI::updateIdleWorker: the button is enabled while the local player has an idle worker, disabled otherwise.
+        _tree.FindByName("ControlBar.wnd:ButtonIdleWorker")?.SetEnabled(Input.Selection.IdleWorkerCount > 0);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
         if (view.Context == CommandBarContext.UnderConstruction && Match.World.FindEntity(view.Producer) is { } site) underConstructionDesc?.SetText(site.Template.Name);
 

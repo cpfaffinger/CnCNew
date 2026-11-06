@@ -40,6 +40,16 @@ public sealed class HudMessageFeed
     private readonly Dictionary<string, string> _upgradeLabels = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _factionLabels = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(long Tick, Vector2 Position)> _underAttack = [];
+
+    /// <summary>
+    /// <c>Radar::getLastEventLoc</c>: where the local player's last radar event happened - a building finished (<c>RADAR_EVENT_CONSTRUCTION</c>), an object's upgrade done
+    /// (<c>RADAR_EVENT_UPGRADE</c>), an attack (<c>RADAR_EVENT_UNDER_ATTACK</c>, as rationed as its message), or an event a script made (<see cref="NoteRadarEvent"/>). The space bar
+    /// looks at it (<c>MSG_META_VIEW_LAST_RADAR_EVENT</c>); null before the first.
+    /// </summary>
+    public Vector2? LastRadarEvent { get; private set; }
+
+    /// <summary>A radar event that does not come from a simulation event here: a script's <c>RADAR_CREATE_EVENT</c>.</summary>
+    public void NoteRadarEvent(Vector2 position) => LastRadarEvent = position;
     private readonly SortedDictionary<string, int> _withoutLine = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _orderedUpgrades = new(StringComparer.OrdinalIgnoreCase);
 
@@ -174,10 +184,14 @@ public sealed class HudMessageFeed
                 // DozerAIUpdate: the template's display name, or INI:MissingDisplayName with the template name.
                 var siteName = _objectLabels.TryGetValue(site.Template.Name, out var siteLabel) ? _text.Get(siteLabel) : _text.Format("INI:MissingDisplayName", site.Template.Name);
                 Message("DOZER:ConstructionComplete", siteName);
+                LastRadarEvent = SimulationQueries.GroundOf(site);
                 return;
             case SimEventKind.UpgradeCompleted:
-                var owner = world.FindEntity(simEvent.Entity)?.Owner ?? simEvent.Player;
+                var upgraded = world.FindEntity(simEvent.Entity);
+                var owner = upgraded?.Owner ?? simEvent.Player;
                 if (owner != human) return;
+                // ProductionUpdate::update: an upgrade finished at its producer is a radar event there.
+                if (upgraded is not null) LastRadarEvent = SimulationQueries.GroundOf(upgraded);
                 if (_orderedUpgrades.GetValueOrDefault(simEvent.Text) is not (> 0 and var ordered)) { Count("upgrade granted, not ordered"); return; }
                 _orderedUpgrades[simEvent.Text] = ordered - 1;
                 if (!_upgradeLabels.TryGetValue(simEvent.Text, out var upgradeLabel)) { Count("upgrade completed without DisplayName"); return; }
@@ -211,6 +225,7 @@ public sealed class HudMessageFeed
         _underAttack.RemoveAll(entry => tick - entry.Tick >= window);
         if (_underAttack.Any(entry => Vector2.DistanceSquared(entry.Position, position) <= UnderAttackDistance * UnderAttackDistance)) return;
         _underAttack.Add((tick, position));
+        LastRadarEvent = position;
         var template = victim.Template;
         if (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE")) Message(template.IsKindOf("HARVESTER") ? "RADAR:HarvesterUnderAttack" : "RADAR:UnitUnderAttack");
         else if (template.IsKindOf("STRUCTURE") && template.IsKindOf("MP_COUNT_FOR_VICTORY")) Message("RADAR:StructureUnderAttack");

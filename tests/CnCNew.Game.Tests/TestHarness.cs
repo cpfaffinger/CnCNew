@@ -5,7 +5,8 @@ internal sealed class TestHarness(string suite)
     public int Failures { get; private set; }
 
     /// <summary>When set, only the tests whose name starts with this text run (a development aid for the long suites).</summary>
-    public string? OnlyPrefix { get; init; }
+    /// <summary>Only the tests whose name begins so run; the default is the environment variable <c>CNCNEW_TEST_PREFIX</c> (none: every test).</summary>
+    public string? OnlyPrefix { get; init; } = Environment.GetEnvironmentVariable("CNCNEW_TEST_PREFIX") is { Length: > 0 } prefix ? prefix : null;
 
     public void Run(string name, Action test)
     {

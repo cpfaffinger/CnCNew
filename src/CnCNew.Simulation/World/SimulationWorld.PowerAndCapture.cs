@@ -77,6 +77,9 @@ public sealed partial class SimulationWorld
         return 0;
     }
 
+    /// <summary><c>Object::hasSpecialPower(SPECIAL_INFANTRY_CAPTURE_BUILDING)</c> or <c>SPECIAL_BLACKLOTUS_CAPTURE_BUILDING</c>: the unit can take a building by its context order.</summary>
+    public bool HasCapturePower(Entity actor) => StagedCaptureOf(actor) is not null;
+
     /// <summary>The staged capture ability (<see cref="SpecialAbilityUpdate"/> of an infantry or Black Lotus capture power) of <paramref name="actor"/>, or null for a unit without one.</summary>
     internal SpecialAbilityUpdate? StagedCaptureOf(Entity actor)
     {

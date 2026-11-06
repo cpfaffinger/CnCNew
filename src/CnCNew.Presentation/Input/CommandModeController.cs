@@ -205,6 +205,9 @@ public sealed class CommandModeController
             if (armed.Any(SimulationQueries.CanMove) || armed.Any(world.PassesAttackToSlaves)) return Hint(ContextAction.AttackObjectAfterMoving, CursorKind.OutRange);
             return Hint(ContextAction.Invalid, CursorKind.GenericInvalid);
         }
+        // CommandTranslator::evaluateContextCommand asks ACTIONTYPE_CAPTURE_BUILDING after entering and attacking: a garrisonable building is entered, an enemy's attacked, and what
+        // is left - a neutral tech building, an enemy's that nothing selected can attack - is captured by the units whose capture power is ready (canCaptureBuilding).
+        if (target is not null && !ForceAttack && Capturers(world, own, target).Any()) return Hint(ContextAction.CaptureBuilding, CursorKind.CaptureBuilding);
         // canSelectedObjectsDoAction(ACTIONTYPE_SET_RALLY_POINT): the kind of object, not its production queue. The patch gives many a unit a queue for its own upgrades, and those are to move.
         if (target is null && ground is not null && own.All(entity => entity.Template.IsKindOf("AUTO_RALLYPOINT")))
             return Hint(ContextAction.SetRallyPoint, CursorKind.SetRallyPoint);
@@ -239,6 +242,10 @@ public sealed class CommandModeController
     }
 
     /// <summary>The units of <paramref name="own"/> that would hijack, convert or sabotage <paramref name="target"/>, or do the one <paramref name="only"/> names.</summary>
+    /// <summary><c>ActionManager::canCaptureBuilding</c> of every selected unit that carries a capture power: the simulation's own pre-check of the capture.</summary>
+    private IEnumerable<Entity> Capturers(SimulationWorld world, ImmutableArray<Entity> own, Entity target)
+        => own.Where(unit => world.HasCapturePower(unit) && world.Check(new CaptureCommand(Player, 0, 0, unit.Id, target.Id)).Accepted);
+
     private IEnumerable<Entity> Infiltrators(SimulationWorld world, ImmutableArray<Entity> own, Entity target, CollideEntry only = CollideEntry.None)
         => own.Where(unit => world.CollideEntryOf(Player, unit, target) is var entry && entry != CollideEntry.None && (only == CollideEntry.None || entry == only));
 
@@ -344,6 +351,8 @@ public sealed class CommandModeController
                 return Infiltrate(world, Infiltrators(world, own, target), target);
             case ContextAction.Enter when target is not null:
                 return ForEach(Entrants(world, own, target).ToList(), unit => Issue((sequence, tick) => new MoveAndEnterCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
+            case ContextAction.CaptureBuilding when target is not null:
+                return ForEach(Capturers(world, own, target).ToList(), unit => Issue((sequence, tick) => new CaptureCommand(Player, sequence, tick, unit.Id, target.Id)), world, target, FeedbackKind.EnterMarker);
             case ContextAction.SetRallyPoint:
                 return SetRally(world, own, ground);
             case ContextAction.Invalid:
@@ -485,9 +494,10 @@ public sealed class CommandModeController
             }
             case GuiCommandKind.ObjectUpgrade:
             {
+                // MSG_QUEUE_UPGRADE goes to the selected group: AIGroup::queueUpgrade gives it to every member that can take it (here: every unit the button is enabled for -
+                // the original would also queue a second drone behind one in production, whose conflict only shows when both are done).
                 if (sources.IsEmpty) return ActivationResult.NoSource;
-                var target = sources[0];
-                return Result(Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, target.Id)));
+                return ForAll(sources, unit => Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, unit.Id)));
             }
             case GuiCommandKind.PurchaseScience:
             {

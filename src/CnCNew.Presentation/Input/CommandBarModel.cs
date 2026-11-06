@@ -53,6 +53,9 @@ public enum ButtonReason
     /// <summary><c>CANMAKE_PARKING_PLACES_FULL</c>: the airfield has no free space for another aircraft.</summary>
     ParkingFull,
     EmptyPlace,
+
+    /// <summary><c>Object::affectedByUpgrade</c> is false: no module of the object would answer the upgrade (it conflicts with one it has).</summary>
+    NotAffected,
 }
 
 /// <param name="Slot">1..14 as in the <c>CommandSet</c>.</param>
@@ -460,6 +463,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (owned) return State(ButtonAvailability.CantAfford, ButtonReason.AlreadyOwned, null, upgrade.BuildCost, upgrade.BuildTicks);
                 var inProduction = button.Kind == GuiCommandKind.PlayerUpgrade ? world.UpgradeInProduction(player, upgrade.Index) : production?.IsUpgradeInQueue(upgrade.Index) == true;
                 if (inProduction) return State(ButtonAvailability.CantAfford, ButtonReason.InProduction, null, upgrade.BuildCost, upgrade.BuildTicks);
+                // Object::affectedByUpgrade: an object upgrade no module of the object would answer - a drone when the vehicle carries another one (ConflictsWith) - is shown the same way.
+                if (button.Kind == GuiCommandKind.ObjectUpgrade && !AffectedByUpgrade(world, entity, upgrade.Index))
+                    return State(ButtonAvailability.CantAfford, ButtonReason.NotAffected, null, upgrade.BuildCost, upgrade.BuildTicks);
                 if (world.MoneyOf(player) < upgrade.BuildCost) return State(ButtonAvailability.Restricted, ButtonReason.InsufficientFunds, null, upgrade.BuildCost, upgrade.BuildTicks);
                 foreach (var name in button.Sciences)
                     if (!world.Sciences.TryGet(name, out var science) || !world.PlayerSciences(player).Has(science.Index))
@@ -578,6 +584,13 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             entries.Add(new QueueEntry(index, name, image, cost, progress));
         }
         return entries.ToImmutable();
+    }
+
+    /// <summary><c>Object::affectedByUpgrade</c>: one of the object's upgrade modules would execute for its completed upgrades, its player's and this one together.</summary>
+    private static bool AffectedByUpgrade(SimulationWorld world, Entity entity, int upgrade)
+    {
+        var mask = world.UpgradeKeyMaskOf(entity).Set(upgrade);
+        return entity.Modules.OfType<IUpgradeModule>().Any(module => module.WouldUpgrade(mask));
     }
 
     private static ImmutableArray<string> UpgradesOf(SimulationWorld world, Entity entity)

@@ -24,6 +24,7 @@ public sealed class SelectionModel
 {
     private readonly SortedSet<uint> _selected = [];
     private readonly SortedSet<uint>[] _groups = [..Enumerable.Range(0, 10).Select(_ => new SortedSet<uint>())];
+    private readonly List<uint> _idleWorkers = [];
     private int _lastGroup = -1;
     private long _lastGroupTime;
     private bool _hasLastGroupTime;
@@ -243,6 +244,55 @@ public sealed class SelectionModel
             next = forward
                 ? candidates.FirstOrDefault(entity => entity.Id.Value > anchor) ?? candidates[0]
                 : candidates.LastOrDefault(entity => entity.Id.Value < anchor) ?? candidates[^1];
+        }
+        _lastGroup = -1;
+        Replace([next.Id]);
+        var center = EntityPicker.CenterOf(next);
+        return new Vector2(center.X, center.Y);
+    }
+
+    /// <summary>The local player's idle workers, in the order they became idle (<c>InGameUI::m_idleWorkers</c>).</summary>
+    public int IdleWorkerCount => _idleWorkers.Count;
+
+    /// <summary>
+    /// <c>DozerPrimaryIdleState::update</c> with <c>InGameUI::addIdleWorker</c>/<c>removeIdleWorker</c>: a <c>DOZER</c> of the local player whose AI is idle and that is not
+    /// effectively dead joins the end of the list, one that is busy, dead or another player's leaves it. Called once a frame; the ones that became idle in the same frame
+    /// join in id order.
+    /// </summary>
+    public int TrackIdleWorkers(SimulationWorld world)
+    {
+        _idleWorkers.RemoveAll(id => world.FindEntity(new EntityId(id)) is not { } worker || !IsIdleWorker(world, worker));
+        foreach (var entity in world.EntitiesOwnedBy(LocalPlayer).AsSpan())
+            if (entity.Template.IsKindOf("DOZER") && IsIdleWorker(world, entity) && !_idleWorkers.Contains(entity.Id.Value)) _idleWorkers.Add(entity.Id.Value);
+        return _idleWorkers.Count;
+    }
+
+    private bool IsIdleWorker(SimulationWorld world, Entity entity)
+        => entity.Owner == LocalPlayer && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Modules.Any(module => module is AIUpdateInterface) && world.IsAiIdle(entity);
+
+    /// <summary>
+    /// <c>InGameUI::selectNextIdleWorker</c>: with nothing or several things selected, the first idle worker; with one selected, the idle worker after it (the first after the
+    /// last). A worker inside something is selected as its outermost container, and a container holding several counts once (<c>getUniqueIdleWorkers</c>). Returns where the
+    /// camera looks (<c>userLookAt</c>), or null when no worker is idle.
+    /// </summary>
+    public Vector2? SelectNextIdleWorker(SimulationWorld world)
+    {
+        TrackIdleWorkers(world);
+        if (_idleWorkers.Count == 0) return null;
+        Entity Outermost(Entity entity)
+        {
+            while (entity.ContainedBy.IsValid && world.FindEntity(entity.ContainedBy) is { } container) entity = container;
+            return entity;
+        }
+        var unique = new List<Entity>();
+        foreach (var id in _idleWorkers)
+            if (world.FindEntity(new EntityId(id)) is { } worker && Outermost(worker) is var top && !unique.Contains(top)) unique.Add(top);
+        if (unique.Count == 0) return null;
+        var next = unique[0];
+        if (_selected.Count == 1)
+        {
+            var at = unique.FindIndex(entity => entity.Id.Value == _selected.Min);
+            if (at >= 0) next = unique[(at + 1) % unique.Count];
         }
         _lastGroup = -1;
         Replace([next.Id]);

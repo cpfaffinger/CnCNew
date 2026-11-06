@@ -143,8 +143,11 @@ public sealed class StandingOrders
             Clear(unit.Id);
             return;
         }
-        // An aircraft cannot stop in the air: it keeps flying at the target and fires whenever the weapon may (inside its range, past its minimum range, aimed), as an attack run.
+        // A fixed-wing aircraft cannot stop in the air: it keeps flying at the target and fires whenever the weapon may (inside its range, past its minimum range, aimed), as an attack run.
+        // A helicopter (a HOVER locomotor) approaches like a ground unit and hovers where it is in range (AIAttackApproachTargetState, then AIAttackFireWeaponState with
+        // Locomotor::maintainCurrentPosition): it does not fly over its victim.
         var flying = unit.Template.IsKindOf("AIRCRAFT");
+        var hovers = flying && unit.Template.Locomotor is { IsHover: true };
         if (flying && IsOutOfAirfieldAmmunition(world, unit))
         {
             // Nothing left to shoot until the airfield reloads it: the attack is over and the jet's own AI flies home (JetAIUpdate.IdleLogic) once it is idle, which a move to its own position makes it.
@@ -155,8 +158,11 @@ public sealed class StandingOrders
         if (SimulationQueries.InRange(world, unit, target))
         {
             // The chase ends where the unit stands; it is still attacking (its turrets stay on the victim while the weapon reloads), so the stop is a pursuit of its own position.
-            if (!flying && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
-                issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
+            if ((!flying || hovers) && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
+            {
+                if (hovers) issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
+                else issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
+            }
             if (SimulationQueries.CanFireAt(world, unit, target))
                 issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id));
             // In reach but not ready to shoot (reloading): the attack has begun all the same, so a turret that has no victim yet takes it now instead of waiting for the next shot.
@@ -165,7 +171,7 @@ public sealed class StandingOrders
                 _standing[unit.Id.Value] = target.Id;
                 issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
             }
-            if (!flying) return;
+            if (!flying || hovers) return;
         }
         if (!SimulationQueries.CanMove(unit)) return;
         if (flying && unit.Template.Locomotor is { IsWings: true } && AttackRunEgress(world, player, unit, target, issue)) return;

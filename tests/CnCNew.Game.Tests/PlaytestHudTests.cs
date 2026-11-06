@@ -26,7 +26,10 @@ internal static class PlaytestHudTests
         harness.Run("A general's power on the bar at the side shows its recharge as a clock over its cameo", () => PowerRecharge(data));
         harness.Run("At a skirmish's start what the map placed stands darkened across the explored map, the enemy's base does not", () => RevealGhosts(data));
         harness.Run("A building the player holds shows who is inside on the bar, lets one out and empties; a neutral one shows its places disabled", () => GarrisonInventory(data));
+        harness.Run("The idle worker button is enabled while a worker stands idle and selects the idle workers one after another", () => IdleWorkerButton(data));
+        harness.Run("A drone in production or carried greys every drone button of a Humvee, alone and in a selection of two, and its order stands in the queue", () => DroneButtons(data));
         harness.Run("Over the own bunker the infantry's pointer is enter, over a building the enemy holds it is attack", () => BuildingCursors(data));
+        harness.Run("A ranger with the capture upgrade shows capture over a neutral tech building and takes it by a click, attacks an enemy's and enters a civilian one", () => CaptureCursor(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
         return harness.Failures;
     }
@@ -93,6 +96,61 @@ internal static class PlaytestHudTests
         TestHarness.Assert(!live.World.FindEntity(guard)!.ContainedBy.IsValid, "a click on the place lets the red guard out");
     }
 
+    private static void IdleWorkerButton(GameData data)
+    {
+        var scenario = new DemoScenario("hud-idle-worker", "hud-idle-worker", "hud-idle-worker", 2400,
+            [
+                new ScenarioUnit("first", "ChinaVehicleDozer", 1, 0, 0, 0f),
+                new ScenarioUnit("second", "ChinaVehicleDozer", 1, 0, 120, 0f),
+                new ScenarioUnit("tank", "ChinaTankBattleMaster", 1, -120, 0, 0f),
+            ],
+            [
+                new ScenarioOrder(1, "first", ScenarioOrderKind.MoveTo, X: 400, Y: 0),
+                new ScenarioOrder(1500, "first", ScenarioOrderKind.MoveTo, X: -400, Y: 0),
+                new ScenarioOrder(1500, "second", ScenarioOrderKind.MoveTo, X: -400, Y: 120),
+            ], 100f, 40f)
+        {
+            HumanFaction = "FactionChina",
+            OpponentFaction = "FactionAmerica",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Frame()
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        const string Button = "ControlBar.wnd:ButtonIdleWorker";
+        var (first, second, tank) = (live.Tags["first"], live.Tags["second"], live.Tags["tank"]);
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond / 2; frame++) Frame();
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.Input.Selection.IdleWorkerCount == 1 && controller.IsWindowEnabled(Button), $"one dozer drives, the other stands: one idle worker, the button enabled ({controller.Input.Selection.IdleWorkerCount})");
+
+        controller.Input.Selection.Replace([tank]);
+        Frame();
+        var rect = controller.WindowRect(Button)!.Value;
+        var at = new Vector2(rect.CenterX, rect.CenterY);
+        void Click(long time)
+        {
+            controller.Process(new MouseMoveEvent(time, at));
+            controller.Process(new MouseButtonEvent(time + 10, MouseButton.Left, true, at));
+            controller.Process(new MouseButtonEvent(time + 60, MouseButton.Left, false, at));
+        }
+        Click(50_000);
+        TestHarness.Assert(controller.Input.Selection.Selected.SequenceEqual([second]), $"a click on the button selects the idle dozer ({string.Join(",", controller.Input.Selection.Selected)})");
+
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 30 && controller.Input.Selection.IdleWorkerCount < 2; frame++) Frame();
+        TestHarness.Assert(controller.Input.Selection.IdleWorkerCount == 2, "the driving dozer is idle once it has arrived");
+        Click(60_000);
+        TestHarness.Assert(controller.Input.Selection.Selected.SequenceEqual([first]), $"the next click selects the worker that became idle after the selected one ({string.Join(",", controller.Input.Selection.Selected)})");
+        Click(70_000);
+        TestHarness.Assert(controller.Input.Selection.Selected.SequenceEqual([second]), "and the one after the last is the first again");
+
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 70 && live.World.Tick < live.World.Time.OriginalFrames(1500) + 4; frame++) Frame();
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.Input.Selection.IdleWorkerCount == 0 && !controller.IsWindowEnabled(Button), "with every worker busy the button is disabled");
+    }
+
     private static void BuildingCursors(GameData data)
     {
         var scenario = new DemoScenario("hud-cursors", "hud-cursors", "hud-cursors", 900,
@@ -130,6 +188,139 @@ internal static class PlaytestHudTests
         TestHarness.Assert(bunker == CursorKind.EnterFriendly, $"over the own bunker: enter ({bunker})");
         var held = Over("house");
         TestHarness.Assert(held is CursorKind.AttackObj or CursorKind.OutRange, $"over the house the enemy holds: attack ({held})");
+    }
+
+    private static void DroneButtons(GameData data)
+    {
+        var scenario = new DemoScenario("hud-drones", "hud-drones", "hud-drones", 4500,
+            [
+                new ScenarioUnit("first", "AmericaVehicleHumvee", 1, 0, 0, 0f),
+                new ScenarioUnit("second", "AmericaVehicleHumvee", 1, 0, 60, 0f),
+            ],
+            [], 0f, 20f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+            StartMoney = 10000,
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Frame()
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond; frame++) Frame();
+        var (first, second) = (live.Tags["first"], live.Tags["second"]);
+        CommandBarButton? Drone(string name) => controller.CommandBar.Slots.FirstOrDefault(button => button?.Button.Name == name);
+        string States() => string.Join(", ", new[] { "Battle", "Scout", "Hellfire" }.Select(kind => $"{kind} {Drone($"Command_ConstructAmericaVehicle{kind}Drone")?.Availability}"));
+        controller.Input.Selection.Replace([first, second]);
+        Frame();
+        TestHarness.Assert(controller.CommandBar.Context == CommandBarContext.MultiSelect && Drone("Command_ConstructAmericaVehicleScoutDrone") is { IsEnabled: true }, $"two Humvees offer the drones ({States()})");
+
+        // The scout drone for the first Humvee alone.
+        controller.Input.Selection.Replace([first]);
+        Frame();
+        controller.BuildDrawList(1280, 720);
+        var single = States();
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{Drone("Command_ConstructAmericaVehicleScoutDrone")!.Slot:00}")!.Value;
+        var at = new Vector2(rect.CenterX, rect.CenterY);
+        controller.Process(new MouseMoveEvent(9_000, at));
+        controller.Process(new MouseButtonEvent(9_010, MouseButton.Left, true, at));
+        controller.Process(new MouseButtonEvent(9_060, MouseButton.Left, false, at));
+        for (var frame = 0; frame < 4; frame++) Frame();
+        var said = string.Join(",", controller.Input.Commands.DrainFeedback().Select(item => item.Kind + ":" + item.Rejection + ":" + item.Detail));
+        var humvee = live.World.FindEntity(first)!;
+        var upgrades = string.Join(",", live.World.Upgrades.Upgrades.Where(upgrade => humvee.CompletedUpgrades.Has(upgrade.Index)).Select(upgrade => upgrade.Name));
+        TestHarness.Assert(controller.CommandBar.Queue.Length == 1, $"the drone's order stands in the Humvee's queue ({controller.CommandBar.Queue.Length}; feedback {said}; completed {upgrades}; drones {live.World.Entities.Count(entity => entity.Template.Name.Contains("Drone"))}; bar {single} at {at}; money {live.World.MoneyOf(live.Human)})");
+        TestHarness.Assert(new[] { "Battle", "Scout", "Hellfire" }.All(kind => Drone($"Command_ConstructAmericaVehicle{kind}Drone") is { IsEnabled: false }), $"with a drone in production every drone button is grey ({States()})");
+
+        // Both Humvees selected: the second can still take a drone, so the buttons stay; once the second has one too, none does.
+        controller.Input.Selection.Replace([first, second]);
+        Frame();
+        TestHarness.Assert(Drone("Command_ConstructAmericaVehicleBattleDrone") is { IsEnabled: true }, $"the second Humvee can still take a drone ({States()})");
+        controller.Input.Selection.Replace([second]);
+        Frame();
+        rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{Drone("Command_ConstructAmericaVehicleBattleDrone")!.Slot:00}")!.Value;
+        at = new Vector2(rect.CenterX, rect.CenterY);
+        controller.Process(new MouseMoveEvent(10_000, at));
+        controller.Process(new MouseButtonEvent(10_010, MouseButton.Left, true, at));
+        controller.Process(new MouseButtonEvent(10_060, MouseButton.Left, false, at));
+        for (var frame = 0; frame < 4; frame++) Frame();
+        controller.Input.Selection.Replace([first, second]);
+        Frame();
+        TestHarness.Assert(new[] { "Battle", "Scout", "Hellfire" }.All(kind => Drone($"Command_ConstructAmericaVehicle{kind}Drone") is null or { IsEnabled: false }),
+            $"with a drone in production at both, no drone button of the selection is enabled ({States()})");
+
+        // Once the drones are there, the other drones conflict (ConflictsWith) and stay grey.
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 60 && controller.CommandBar.Slots.Any(button => button is not null) && live.World.FindEntity(first)!.CompletedUpgrades.Equals(default(CnCNew.Simulation.Templates.UpgradeMask)); frame++) Frame();
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 2; frame++) Frame();
+        controller.Input.Selection.Replace([first]);
+        Frame();
+        TestHarness.Assert(controller.CommandBar.Queue.IsEmpty && new[] { "Battle", "Scout", "Hellfire" }.All(kind => Drone($"Command_ConstructAmericaVehicle{kind}Drone") is { IsEnabled: false }),
+            $"a Humvee with its scout drone offers no other drone ({States()}, queue {controller.CommandBar.Queue.Length})");
+    }
+
+    private static void CaptureCursor(GameData data)
+    {
+        var scenario = new DemoScenario("hud-capture", "hud-capture", "hud-capture", 4500,
+            [
+                new ScenarioUnit("ranger", "AmericaInfantryRanger", 1, 0, 0, 0f),
+                new ScenarioUnit("derrick", "TechOilDerrick", 0, 110, -40, 0f),
+                new ScenarioUnit("barracks", "ChinaBarracks", 2, 110, 90, 0f),
+                new ScenarioUnit("house", "GermanTownHouse1", 0, -110, 0, 0f),
+            ],
+            [], 0f, 20f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+            Upgrades = ["Upgrade_InfantryCaptureBuilding"],
+            PowersReady = true,
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Frame()
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        // canCaptureBuilding: "Special not ready" - the ability recharges once the upgrade has unpaused it, and only then is a click a capture.
+        bool Ready() => live.World.Check(new CnCNew.Simulation.Commands.CaptureCommand(live.Human, 0, 0, live.Tags["ranger"], live.Tags["derrick"])).Accepted;
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 90 && !Ready(); frame++) Frame();
+        TestHarness.Assert(Ready(), "the ranger's capture is ready");
+        controller.Input.Selection.Replace([live.Tags["ranger"]]);
+        Vector2 ScreenOf(string tag)
+        {
+            var entity = live.World.FindEntity(live.Tags[tag])!;
+            var point = new System.Numerics.Vector3(CnCNew.Presentation.FixedConvert.ToSingle(entity.X), CnCNew.Presentation.FixedConvert.ToSingle(entity.Y), CnCNew.Presentation.FixedConvert.ToSingle(entity.Z) + 5f);
+            TestHarness.Assert(live.Camera.TryWorldToScreen(point, out var screen), $"the {tag} is on the screen");
+            return screen;
+        }
+        CursorKind Over(string tag)
+        {
+            controller.Process(new MouseMoveEvent(5_000, ScreenOf(tag)));
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            return controller.Cursor.Kind;
+        }
+        var derrick = Over("derrick");
+        var check = live.World.Check(new CnCNew.Simulation.Commands.CaptureCommand(live.Human, 0, 0, live.Tags["ranger"], live.Tags["derrick"]));
+        TestHarness.Assert(derrick == CursorKind.CaptureBuilding, $"over the neutral oil derrick: capture ({derrick}; the capture's pre-check: {check.Reason}, power {live.World.HasCapturePower(live.World.FindEntity(live.Tags["ranger"])!)})");
+        var barracks = Over("barracks");
+        TestHarness.Assert(barracks is CursorKind.AttackObj or CursorKind.OutRange, $"over the enemy's barracks: attack ({barracks})");
+        var house = Over("house");
+        TestHarness.Assert(house == CursorKind.EnterFriendly, $"over the civilian house: enter ({house})");
+
+        var at = ScreenOf("derrick");
+        controller.Process(new MouseMoveEvent(6_000, at));
+        controller.Process(new MouseButtonEvent(6_010, MouseButton.Right, true, at));
+        controller.Process(new MouseButtonEvent(6_060, MouseButton.Right, false, at));
+        var target = live.Tags["derrick"];
+        var ranger = live.World.FindEntity(live.Tags["ranger"])!;
+        var (fromX, fromY) = (ranger.X, ranger.Y);
+        var feedback = string.Join(",", controller.Input.Commands.DrainFeedback().Select(item => item.Kind + ":" + item.Rejection));
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 60 && live.World.FindEntity(target)!.Owner != live.Human; frame++) Frame();
+        TestHarness.Assert(live.World.FindEntity(target)!.Owner == live.Human,
+            $"a click with the capture cursor makes the ranger walk over and take the derrick (feedback {feedback}; the ranger from ({fromX}, {fromY}) to ({ranger.X}, {ranger.Y}))");
     }
 
     private static void PowerClick(GameData data)

@@ -217,6 +217,9 @@ public sealed class GameInputController
                 if (Selection.SelectNext(world, workers, forward) is { } center) Camera.RequestCenter(center);
                 return;
             }
+            case MetaAction.SelectNextIdleWorker:
+                if (Selection.SelectNextIdleWorker(world) is { } idle) Camera.RequestCenter(idle);
+                return;
             case MetaAction.ViewCommandCenter:
             {
                 var center = world.Entities.Where(entity => entity.Owner == Selection.LocalPlayer && entity.Template.IsKindOf("COMMANDCENTER") && SimulationQueries.IsAlive(entity))

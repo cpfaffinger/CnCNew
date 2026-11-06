@@ -63,6 +63,8 @@ public enum ContextAction
     /// <summary>Hijack, car bomb, sabotage: <c>MSG_ENTER</c> at what the units' collide modules want (<c>ENTER_AGGRESSIVELY</c>).</summary>
     EnterAggressively,
     Enter,
+    /// <summary><c>handleCaptureBuildingCommand</c>: the units with a ready capture power take the building (a neutral tech building; an enemy's is attacked first).</summary>
+    CaptureBuilding,
     SetRallyPoint,
     Invalid,
 }
