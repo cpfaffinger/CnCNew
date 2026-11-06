@@ -65,6 +65,9 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
     public Fixed MaxHealth { get; protected set; }
     public Fixed PreviousHealth { get; protected set; }
 
+    /// <summary>The tick in which the body last fell from full health; 0 while it is at full health.</summary>
+    public long HurtSince { get; private set; }
+
     /// <summary><c>m_currentSubdualDamage</c>.</summary>
     public Fixed SubdualDamage { get; private set; }
 
@@ -99,6 +102,10 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         var health = Health + delta;
         if (health > MaxHealth) health = MaxHealth;
         if (health < Fixed.Zero) health = Fixed.Zero;
+        // The tick the body last fell from full health (0 while it is full): what was hurt first within a frame is told apart from what was hurt before it, however many hits
+        // the frame brings (F-138; the bored dozer's look, F-85).
+        if (health >= MaxHealth) HurtSince = 0;
+        else if (PreviousHealth >= MaxHealth) HurtSince = world.Tick;
         Health = health;
         DamageState = CalcDamageState(world);
         Entity.EffectivelyDead = Health <= Fixed.Zero;
@@ -315,6 +322,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         writer.Fixed("maxHealth", MaxHealth);
         writer.Fixed("previousHealth", PreviousHealth);
         writer.Int("damageState", DamageState);
+        if (HurtSince != 0) writer.Int("hurtSince", HurtSince);
         if (Indestructible) writer.Bool("indestructible", true);
         if (SubdualDamage != Fixed.Zero)
         {
@@ -329,6 +337,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         MaxHealth = reader.Fixed("maxHealth");
         PreviousHealth = reader.Fixed("previousHealth");
         DamageState = checked((int)reader.Int("damageState"));
+        HurtSince = reader.Has("hurtSince") ? reader.Int("hurtSince") : 0;
         Indestructible = reader.Has("indestructible") && reader.Bool("indestructible");
         if (reader.Has("subdualDamage"))
         {

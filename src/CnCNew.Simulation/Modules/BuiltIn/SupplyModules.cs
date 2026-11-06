@@ -181,12 +181,13 @@ internal struct DozerBoredom
     }
 
     /// <summary>
-    /// Above 30 Hz the look stands at the frame's end, for the update of the frame's first tick: what first hurt the structure after that update comes after the look, as it does at 30 Hz (F-85).
+    /// Above 30 Hz the look stands at the frame's end, for the update of the frame's first tick: what first hurt the structure after that update comes after the look, as it does at 30 Hz
+    /// (F-85) - also when more than one hit came in the frame (F-138: the first one is counted, not the last).
     /// </summary>
     private static bool FirstHurtInThisFrame(IWorldServices world, Entity candidate)
     {
         var perFrame = world.Time.TicksPerOriginalFrame;
-        return perFrame != TickOrder.Next && candidate.LastDamageTick > world.Tick - perFrame && candidate.Body is ActiveBody body && body.PreviousHealth >= body.MaxHealth;
+        return perFrame != TickOrder.Next && candidate.Body is ActiveBody { HurtSince: > 0 } body && body.HurtSince > world.Tick - perFrame;
     }
 
     public readonly void Describe(IStateWriter writer)
