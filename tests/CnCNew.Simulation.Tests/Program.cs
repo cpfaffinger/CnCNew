@@ -79,6 +79,8 @@ run.Test("Rate timing: a firestorm's way out and back take the same game time", 
 run.Test("Lost wake: a lifetime and a slow death of one frame end two frames after creation", Tests.LostWakeALifetimeAndASlowDeathOfOneFrameEnd);
 run.Test("Lost wake: a slow death of one frame begun in the tick after creation ends", Tests.LostWakeASlowDeathOfOneFrameBegunOnTheFirstFrameEnds);
 run.Test("Lost wake: a battle bus killed in a tick it looks at its hulk in ends", Tests.LostWakeABattleBusKilledWhileItLooksAtItsHulkEnds);
+run.Test("F-138: an attack order turns a standing unit as much at 60 and 120 Hz as at 30 Hz", Tests.F138AttackOrderTurnsAStandingUnitLikeAt30Hz);
+run.Test("F-138: a death settles an arrival that only has its angle left", Tests.F138DeathSettlesAnArrivalThatOnlyHasItsAngleLeft);
 run.Test("Tick rate, world: the shroud is refreshed every three logic frames, phase 0", Tests.TickRateWorldVisionKeepsItsRhythm);
 run.Test("Tick rate, world: weapon delays under a bonus are rounded in logic frames", Tests.TickRateWorldWeaponDelaysAreRoundedOnTheOriginalGrid);
 run.Test("Tick rate, world: a weapon that spins up keeps its shot times", Tests.TickRateWorldSpinUpKeepsItsShotTimes);
