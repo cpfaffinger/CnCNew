@@ -1851,7 +1851,7 @@
       "results": {
         "atTickBudget": 64,
         "attempted": 64,
-        "combinedSha256": "96F3CCFECA653CE13103684EAF83AD49FF66763881462A9D6484DCAEA858754F",
+        "combinedSha256": "4CB57886A7404C7E86D0B0E3BC3296D5C0F96114ECE38B71629B0E03E5583DE2",
         "failed": 0,
         "maps": {
           "Maps/Alpine Assault/Alpine Assault.map": {
@@ -1932,7 +1932,7 @@
             "status": "ended"
           },
           "Maps/Destruction Station/Destruction Station.map": {
-            "chainHash": "747D4342678AC8FD",
+            "chainHash": "E424A467194AA043",
             "endTick": 6000,
             "finalHash": "FE8D3B30690F8362",
             "outcome": "stalemate",
