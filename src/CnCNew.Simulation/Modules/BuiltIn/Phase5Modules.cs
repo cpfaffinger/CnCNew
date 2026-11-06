@@ -2624,6 +2624,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary><c>AIAttackAimAtTargetState::m_canTurnInPlace</c>: a locomotor without a minimum speed can face its victim standing (the others fly at it).</summary>
     internal bool CanTurnInPlace => ActiveLocomotor is { MinSpeed.Raw: 0 };
 
+    /// <summary>Above 30 Hz: a share of the frame the object has begun is still to come (always false at 30 Hz).</summary>
+    internal bool CoversFrame => _frameTicksLeft > 0;
+
     /// <summary>The object is covering a frame's turn: whether it looks at a victim is decided when that is done. Always false at 30 Hz, where the turn is taken at once.</summary>
     internal bool IsCoveringTurn => _frameTicksLeft > 0 && Entity.HasAheadAngle;
 

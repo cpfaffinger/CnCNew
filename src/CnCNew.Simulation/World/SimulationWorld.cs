@@ -1899,6 +1899,9 @@ public sealed partial class SimulationWorld : IWorldServices
             if (AiOf(entity) is { } mover) mover.SettleFrame(_tick);
             else entity.CompleteFrame(_tick);
         }
+        // An arrival whose frame has neither a step nor a turn left still holds the frame's angle, which its next share would set again over what the death does to the
+        // object (a fling turns it): the 30 Hz object took that frame whole before it died (F-138).
+        else if (_firstFrameTicks != TickOrder.Next && AiOf(entity) is { CoversFrame: true } arriving) arriving.SettleFrame(_tick);
         if (_firstFrameTicks != TickOrder.Next && entity.Turrets is { } turrets) CompleteTurretFrames(entity, turrets);
         // SlowDeathBehavior::onDie, ai->markAsDead(): the dying object stops where the logic frame ends in which it died, so that what its death leaves lies where it died.
         AiOf(entity)?.StopAtDeath(this, settled);
