@@ -148,6 +148,13 @@ public enum SimEventKind : byte
 
     /// <summary><c>CrateCollide::onCollide</c>: the crate plays its <c>ExecuteAnimation</c> (<see cref="SimEvent.Text"/>); the value is <see cref="CrateAnimation"/>.</summary>
     CrateAnimation = 88,
+
+    /// <summary>
+    /// <c>RailroadBehavior::onCollide</c>, the line "Alert all the players of recent disaster": a train car ran into something it does not share space with, and its <c>WhistleSound</c>
+    /// plays unless it still plays. <c>Entity</c> is the car whose module collided, <c>Other</c> what it ran into. Raised for every such collision in every frame it lasts; whether the
+    /// whistle still sounds is the audio layer's to know.
+    /// </summary>
+    TrainWhistle = 93,
 }
 
 /// <summary>

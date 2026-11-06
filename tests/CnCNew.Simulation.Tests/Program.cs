@@ -786,6 +786,7 @@ run.Test("Rate invariance (physics): a toppling object falls frame by frame of t
 run.Test("Rate invariance (physics): a toppling structure accelerates, decays and crushes once per frame of the original", Tests.RateInvarianceStructureTopple);
 run.Test("Rate invariance (physics): a train accelerates, brakes, waits, crushes and shoves once per frame of the original", Tests.RateInvarianceTrain);
 run.Test("F-133: a train placed at the start runs the same at 30, 60 and 120 Hz on a bending track through a tunnel", Tests.F133TrainPlacedAtTheStartIsTheSameAtEveryRate);
+run.Test("Train: it whistles when it runs into something with physics, in the same frames at 30, 60 and 120 Hz", Tests.TrainWhistlesWhenItRunsIntoSomething);
 run.Test("Rate invariance (physics): the avalanche slides once per frame of the original", Tests.RateInvarianceAvalanche);
 run.Test("Rate invariance (physics): a battle bus is thrown and lands frame by frame of the original", Tests.RateInvarianceBattleBusThrow);
 run.Test("Rate invariance (physics): a collapsing structure sinks frame by frame of the original", Tests.RateInvarianceStructureCollapse);

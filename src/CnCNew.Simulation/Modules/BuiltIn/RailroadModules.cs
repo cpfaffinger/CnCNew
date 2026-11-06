@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
@@ -189,6 +190,8 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     public bool HasEverBeenHitched => _hasEverBeenHitched;
     /// <summary>The speed along the track in distance per tick (the unit of <c>Entity.Speed</c>).</summary>
     public Fixed Speed => _ticksPerOriginalFrame == TickOrder.Next ? _pull.Speed : _pull.Speed / Fixed.FromInt(_ticksPerOriginalFrame);
+    /// <summary>The conductor's speed in distance per frame of the original (<c>conductorPullInfo.speed</c>, the unit the clatter's volume is made of), the same at every tick rate.</summary>
+    public Fixed ConductorSpeedPerFrame => _conductorPull.Speed;
     public Fixed TrackLength => _track?.Length ?? Fixed.Zero;
     public bool IsOnLoopingTrack => _track?.IsLooping ?? false;
 
@@ -621,6 +624,10 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
                 }
             }
             if (!other.ModuleArray.OfType<PhysicsBehavior>().Any() || other.ContainedBy == Entity.Id) continue;
+            // "Alert all the players of recent disaster": the whistle comes before the shove and the early return of a train that waits or coasts. A passenger who intends to board a train that
+            // waits at its station slowly enough is let through before it (the shove below does not know that exception; only this event does).
+            if (!(_state == ConductorStates.WaitAtStation && _pull.Speed < world.Time.PerTickAsPerOriginalFrame(data.RunningGarrisonSpeedMax) && IsBoarding(other)))
+                world.Emit(SimEventKind.TrainWhistle, Entity.Id, other.Id, string.Empty, 0);
 
             // Shove out of the footprint: "the plus 1 makes them go just outside of me"; infantry is left where it stands.
             var victimIsInfantry = other.Template.IsKindOf("INFANTRY");
@@ -642,6 +649,14 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
             if (_pull.Speed >= world.Time.PerTickAsPerOriginalFrame(data.KillSpeedMin)) world.Kill(other.Id);
             else world.Damage(other.Id, new DamageInfo(Entity.Id, _pull.Speed * 10, CrushDamage, DeathTypes.Crushed, false));
         }
+    }
+
+    /// <summary><c>ai->getEnterTarget() == obj</c> of <c>onCollide</c>: the other object means to enter this car.</summary>
+    private bool IsBoarding(Entity other)
+    {
+        foreach (var module in other.ModuleArray)
+            if (module is AIUpdateInterface ai && ai.EnterTarget == Entity.Id) return true;
+        return false;
     }
 
     /// <summary>What <c>onCollide</c> does when the other object is a train: a locomotive "just rear ended a stranded train" and kills it; a lead carriage "coasted into some other carriage" and both die.</summary>
