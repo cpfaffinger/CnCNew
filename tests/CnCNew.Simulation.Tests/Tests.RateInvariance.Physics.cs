@@ -659,6 +659,9 @@ static partial class Tests
             Entity[] Of(string name) => world.Entities.Where(entity => entity.Template.Name == name).OrderBy(entity => entity.Id.Value).ToArray();
             var waited = 0;
             var topSpeed = Fixed.Zero;
+            // The train is placed in the world's first tick, so its frames are the world's: the series is read where the world's frames end (F-133; the
+            // series begins with one tick).
+            for (var tick = 1; tick < world.Time.TicksPerOriginalFrame; tick++) world.Step();
             var series = FrameSeries(world, 900, () =>
             {
                 long mixed = 0;
