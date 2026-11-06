@@ -20,6 +20,15 @@ public sealed record SoundCue(long Tick, string EventName, SoundCueKind Kind, Ve
 {
     /// <summary><c>FiringTracker::shotFired</c>, a weapon with <c>FireSoundLoopTime</c>: the sound of the entity goes on for this many ticks after this shot, one voice for a stream of shots.</summary>
     public long LoopTicks { get; init; }
+
+    /// <summary><c>AudioEventRTS::setVolume</c>: the volume this request carries instead of the event's own (<c>getVolume</c> answers it when it was set); null keeps the event's.</summary>
+    public float? VolumeOverride { get; init; }
+
+    /// <summary>
+    /// <c>AudioEventRTS::isCurrentlyPlaying</c> before <c>addAudioEvent</c>: the request is dropped while the voice an earlier request of the same event started for the same
+    /// <see cref="Entity"/> still plays. Only the audio layer knows whether a voice still plays.
+    /// </summary>
+    public bool OnlyIfNotPlaying { get; init; }
 }
 
 /// <summary>
@@ -63,6 +72,14 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
             case SimEventKind.CrushSound:
                 if (FxCatalog.IsAudible(simEvent.Text) && view.GetPose(simEvent.Entity) is { } crushed)
                     Add(output, tick, simEvent.Text, SoundCueKind.Effect, crushed.Position, simEvent.Entity, crushed.Owner, "CrushDie.onDie");
+                break;
+            case SimEventKind.TrainWhistle:
+                // RailroadBehavior::onCollide: "if ( ! m_whistleSound.isCurrentlyPlaying()) m_whistleSound.setPlayingHandle(TheAudio->addAudioEvent(...))".
+                if (view.GetPose(simEvent.Entity) is { } car && catalog.FindObject(car.TemplateName)?.Sound("WhistleSound") is { } whistle)
+                {
+                    Add(output, tick, whistle, SoundCueKind.Effect, car.Position, simEvent.Entity, car.Owner, "Object.WhistleSound (RailroadBehavior::onCollide)");
+                    output[^1] = output[^1] with { OnlyIfNotPlaying = true };
+                }
                 break;
             case SimEventKind.RankGained:
                 if (catalog.MiscAudio.TryGetValue("UnitPromoted", out var promoted) && FxCatalog.IsAudible(promoted) && view.GetPose(simEvent.Entity) is { } raised)

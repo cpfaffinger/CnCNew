@@ -30,6 +30,7 @@ public static partial class FxTests
         run.Test("Fx: camera shake falloff and decay (W3DView::shake)", CameraShakeSemantics);
         run.Test("Fx: decal ring buffer and scorch atlas", DecalBufferSemantics);
         run.Test("Fx: sound cue derivation rules", SoundCueRules);
+        run.Test("Fx: a train that collides plays its whistle unless it still plays", TrainWhistleCue);
         run.Test("Fx: sound cue rate limiter", RateLimiter);
         run.Test("Fx time scale: the under-attack notification and the damage-effect throttle lock out for the same game time at 30, 60 and 120 Hz", TimeScaleLockouts);
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
@@ -327,6 +328,14 @@ public static partial class FxTests
 
         Object TestBase
           KindOf = STRUCTURE MP_COUNT_FOR_VICTORY SELECTABLE
+        End
+
+        Object TestTrain
+          KindOf = VEHICLE
+          Behavior = RailroadBehavior ModuleTag_Rail
+            WhistleSound = TestWhistle
+            ClicketyClackSound = TestClack
+          End
         End
         """;
 
@@ -821,6 +830,19 @@ public static partial class FxTests
         Assert(cues.Single() is { EventName: "BuildingLost", Kind: SoundCueKind.Eva }, "BuildingLost; self-inflicted deaths are silent");
     }
 
+    /// <summary><c>RailroadBehavior::onCollide</c>: the car's own <c>WhistleSound</c>, asked for only while the voice of the last one is not playing (the audio layer knows that).</summary>
+    private static void TrainWhistleCue()
+    {
+        var deriver = new SoundCueDeriver(Catalog(), CnCNew.Tests.TestRate.Time);
+        var cues = new List<SoundCue>();
+        deriver.Derive(new SimEvent(new EventId(1), 5, SimEventKind.TrainWhistle, TestView.Train, TestView.Tank, PlayerId.System, string.Empty, 0), new TestView(), cues);
+        Assert(cues.Count == 1 && cues[0] is { EventName: "TestWhistle", Kind: SoundCueKind.Effect, OnlyIfNotPlaying: true, Tick: 5 } && cues[0].Entity == TestView.Train && cues[0].Position == new Vector3(50f, 0f, 0f),
+            "the whistle is the car's WhistleSound at the car, asked for only if not playing: " + string.Join(", ", cues.Select(cue => cue.EventName)));
+        cues.Clear();
+        deriver.Derive(new SimEvent(new EventId(2), 5, SimEventKind.TrainWhistle, TestView.Tank, TestView.Base, PlayerId.System, string.Empty, 0), new TestView(), cues);
+        Assert(cues.Count == 0, "a car without a WhistleSound whistles nothing");
+    }
+
     private static void RateLimiter()
     {
         SoundCue Cue(long tick, string name, float x = 0f, SoundCueKind kind = SoundCueKind.Effect)
@@ -888,12 +910,14 @@ public static partial class FxTests
     {
         public static readonly EntityId Tank = new(1);
         public static readonly EntityId Base = new(2);
+        public static readonly EntityId Train = new(3);
         public Vector3 TankPosition = new(0f, 0f, 0f);
         public bool TankGone;
 
         public FxEntityPose? GetPose(EntityId entity)
             => entity == Tank && !TankGone ? new FxEntityPose(TankPosition, 0f, "TestTank", new PlayerId(1), 0, 12f)
                 : entity == Base ? new FxEntityPose(new Vector3(200f, 0f, 0f), 0f, "TestBase", new PlayerId(2), 0, 30f)
+                : entity == Train ? new FxEntityPose(new Vector3(50f, 0f, 0f), 0f, "TestTrain", PlayerId.System, 0, 20f)
                 : null;
 
         public Vector3? GetBonePosition(EntityId entity, string boneName)

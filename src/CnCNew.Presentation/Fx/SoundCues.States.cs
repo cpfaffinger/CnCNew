@@ -14,7 +14,7 @@ public sealed partial class SoundCueDeriver
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
 
-    private readonly record struct Seen(bool Moving, int Damage, bool Stealthed, bool Detected, bool Opened, byte Pack, int Triggers, int TrackPoint = -1, long Whistle = -1);
+    private readonly record struct Seen(bool Moving, int Damage, bool Stealthed, bool Detected, bool Opened, byte Pack, int Triggers, int TrackPoint = -1, long Whistle = -1, float Clatter = 0f);
 
     private readonly Dictionary<uint, Seen> _seen = [];
 
@@ -34,15 +34,21 @@ public sealed partial class SoundCueDeriver
                     now = now with
                     {
                         TrackPoint = train.InTunnel ? -1 : train.CurrentPoint,
+                        // m_clicketyClackSound.setVolume(conductorPullInfo.speed / 10): the conductor's distance per frame of the original, whatever the tick rate. A volume below zero is no sound.
+                        Clatter = Math.Clamp(FixedConvert.ToSingle(train.ConductorSpeedPerFrame) / 10f, 0f, 1f),
                         Whistle = train.Conductor == RailroadBehavior.ConductorStates.WaitAtStation && train.WaitAtStationTimer == world.Time.ToOriginalFrames(train.Data.WaitAtStationTicks) / 4 ? train.WaitAtStationTimer : -1,
                     };
             }
             var known = _seen.TryGetValue(entity.Id.Value, out var was);
             _seen[entity.Id.Value] = now;
             if (!known || now == was) continue;
-            void Play(string key)
+            void Play(string key, float? volume = null)
             {
-                if (info.Sound(key) is { } name && view.GetPose(entity.Id) is { } pose) Add(output, world.Tick, name, SoundCueKind.Effect, pose.Position, entity.Id, pose.Owner, $"Object.{key}");
+                if (info.Sound(key) is { } name && view.GetPose(entity.Id) is { } pose)
+                {
+                    Add(output, world.Tick, name, SoundCueKind.Effect, pose.Position, entity.Id, pose.Owner, $"Object.{key}");
+                    if (volume is { } set) output[^1] = output[^1] with { VolumeOverride = set };
+                }
             }
             if (now.Moving && !was.Moving) Play(now.Damage > BodyDamageStates.Damaged ? "SoundMoveStartDamaged" : "SoundMoveStart");
             if (now.Damage > was.Damage)
@@ -61,7 +67,7 @@ public sealed partial class SoundCueDeriver
             }
             if (now.Triggers > was.Triggers) Play("TriggerSound");
             // RailroadBehavior::updatePositionTrackDistance: a locomotive "just rode over a join IN the tracks"; a quarter of the station's wait before it leaves it whistles.
-            if (now.TrackPoint >= 0 && now.TrackPoint != was.TrackPoint) Play("ClicketyClackSound");
+            if (now.TrackPoint >= 0 && now.TrackPoint != was.TrackPoint) Play("ClicketyClackSound", now.Clatter);
             if (now.Whistle >= 0 && was.Whistle < 0) Play("WhistleSound");
         }
         if (_seen.Count > 2 * world.Entities.Count + 64)

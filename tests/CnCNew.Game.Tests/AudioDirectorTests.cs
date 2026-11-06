@@ -73,6 +73,7 @@ internal static class AudioDirectorTests
         harness.Run("Music playlist: side filter, silent/unresolved skipped, no immediate repeat", MusicPlaylistBehaviour);
         harness.Run("Director: bus mapping and shouldPlayLocally", DirectorCueDispatch);
         harness.Run("Director: a looping fire sound is one voice for a stream of shots", DirectorFireLoop);
+        harness.Run("Director: a request that plays only if not playing waits for the voice of the last one; a request carries its own volume", DirectorOnlyIfNotPlayingAndVolume);
         harness.Run("Director: rate limiting, unit voice interruption, missing voice keys", DirectorLimitsAndUnitVoices);
         harness.Run("Wiring: CaptureFlash becomes the MiscAudio DefectorTimerTickSound at the building", CaptureFlashTicksAtTheBuilding);
         harness.Run("Wiring: selection, orders, clicks and refusals reach the director", SelectionOrdersAndClicks);
@@ -453,6 +454,51 @@ internal static class AudioDirectorTests
         director.Tick(view, 0.01);
         Shot(81);
         TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("GunLoop") == 2, "after the time of the last shot it has stopped and a new shot starts it");
+    }
+
+    /// <summary>
+    /// <c>RailroadBehavior::onCollide</c> asks <c>m_whistleSound.isCurrentlyPlaying()</c> before it adds the event: a second whistle request of the same object is dropped while the first voice
+    /// plays and starts a voice again after it ended. <c>AudioEventRTS::setVolume</c> (the clatter's <c>speed / 10</c>) replaces the event's volume.
+    /// </summary>
+    private static void DirectorOnlyIfNotPlayingAndVolume()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        using var director = NewDirector(catalog, fx);
+        using var render = new OfflineAudioRenderer(director.Mixer);
+        var view = new FakeView();
+        var train = new EntityId(9);
+        ImmutableArray<Presentation.Fx.SoundCue> Whistle(long tick, EntityId entity)
+            => [new Presentation.Fx.SoundCue(tick, "WorldEveryone", Presentation.Fx.SoundCueKind.Effect, new Vector3(10, 10, 0), entity, view.Human, 1f, 2, "test") { OnlyIfNotPlaying = true }];
+        director.Submit(Whistle(1, train), view);
+        director.Tick(view, 0.01);
+        render.Pump(0.01);
+        director.Submit(Whistle(2, train), view);
+        TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("WorldEveryone") == 1 && director.Stats.Outcomes.GetValueOrDefault(AudioOutcomes.AlreadyPlaying) == 1,
+            "a whistle asked for while the last one plays is dropped and counted");
+        director.Submit(Whistle(2, new EntityId(10)), view);
+        TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("WorldEveryone") == 2, "another train whistles on its own");
+        for (var step = 0; step < 20; step++)
+        {
+            director.Tick(view, 0.05);
+            render.Pump(0.05);
+        }
+        director.Submit(Whistle(90, train), view);
+        TestHarness.Assert(director.Stats.StartedEvents.GetValueOrDefault("WorldEveryone") == 3, "after the voice ended the whistle starts again");
+
+        float PeakWith(float? volume)
+        {
+            using var other = NewDirector(catalog, fx);
+            using var pump = new OfflineAudioRenderer(other.Mixer);
+            other.Submit([new Presentation.Fx.SoundCue(1, "WorldEveryone", Presentation.Fx.SoundCueKind.Effect, new Vector3(10, 10, 0), train, view.Human, 1f, 2, "test") { VolumeOverride = volume }], view);
+            for (var step = 0; step < 4; step++)
+            {
+                other.Tick(view, 0.02);
+                pump.Pump(0.02);
+            }
+            return pump.Peak;
+        }
+        var (full, quiet) = (PeakWith(null), PeakWith(0.2f));
+        TestHarness.Assert(full > 0.01f && quiet > 0f && quiet < full * 0.5f, $"a request's volume replaces the event's: peak {quiet:F4} at 0.2 against {full:F4}");
     }
 
     private static void DirectorCueDispatch()
@@ -922,14 +968,17 @@ internal static class AudioDirectorTests
         live.ShowWorldAs(null);
         var view = new LiveAudioView(live);
         var (clacks, running) = (0, 0);
+        var volumes = new List<float?>();
         for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 120; frame++)
         {
             live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
-            clacks += live.DrainSoundCues().Count(cue => cue.Origin == "Object.ClicketyClackSound");
+            foreach (var cue in live.DrainSoundCues().Where(cue => cue.Origin == "Object.ClicketyClackSound")) { clacks++; volumes.Add(cue.VolumeOverride); }
             if (frame % CnCNew.Tests.TestTime.FramesPerSecond == 0 && live.Frame.Drawables.Any(drawable => view.StateLoops(drawable).Any(loop => loop.Slot == 5))) running++;
         }
         Console.WriteLine($"       train: {clacks} joins heard, running in {running} of 120 seconds");
         TestHarness.Assert(clacks > 0 && running > 0, $"the train clatters ({clacks}) and runs with its loop ({running})");
+        // RailroadBehavior::updatePositionTrackDistance: m_clicketyClackSound.setVolume(conductorPullInfo.speed / 10) - every clack carries a volume in 0..1, and a train at speed is not silent.
+        TestHarness.Assert(volumes.All(volume => volume is >= 0f and <= 1f) && volumes.Any(volume => volume > 0f), $"the clatter's volume is the conductor's speed over ten ({string.Join(",", volumes.Take(6).Select(volume => volume?.ToString("F2")))})");
     }
 
     /// <summary><c>ParticleUplinkCannonUpdate::setLogicalStatus</c>: a ready cannon holds its unpacking loop; fired, the firing loop and the annihilation at the beam.</summary>

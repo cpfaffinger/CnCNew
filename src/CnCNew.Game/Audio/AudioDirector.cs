@@ -124,6 +124,8 @@ public static class AudioOutcomes
     public const string NotLocal = "dropped:not-local";
     public const string NoOwner = "dropped:no-owner";
     public const string Shrouded = "dropped:shrouded";
+    /// <summary><c>AudioEventRTS::isCurrentlyPlaying</c>: the voice an earlier request of the event started for the object still plays.</summary>
+    public const string AlreadyPlaying = "dropped:already-playing";
     public const string CulledDistance = "dropped:distance";
     public const string CulledQuiet = "dropped:quiet";
     public const string NoSounds = "dropped:no-sounds";
@@ -418,6 +420,7 @@ public sealed partial class AudioDirector : IDisposable
                 _ended[(int)voice.Source]++;
             }
             _tracked.Clear();
+            _singleVoices.Clear();
             foreach (var entry in _ambient.Values)
             {
                 _mixer.Stop(entry.Handle, _options.PauseFadeSeconds);
@@ -516,8 +519,23 @@ public sealed partial class AudioDirector : IDisposable
             return;
         }
 
-        Play(AudioSource.Simulation, info, position, cue.Kind == SoundCueKind.Voice ? AudioBus.Voice : null, null);
+        if (cue.OnlyIfNotPlaying && cue.Entity.IsValid)
+        {
+            var key = (cue.Entity, info.Name);
+            if (_singleVoices.TryGetValue(key, out var playing) && _tracked.Exists(voice => voice.Handle == playing && IsLive(voice.Handle, voice.IssuedFrames)))
+            {
+                Drop(AudioSource.Simulation, AudioOutcomes.AlreadyPlaying);
+                return;
+            }
+            _singleVoices[key] = Play(AudioSource.Simulation, info, position, cue.Kind == SoundCueKind.Voice ? AudioBus.Voice : null, null, true, out _, cue.VolumeOverride);
+            return;
+        }
+
+        Play(AudioSource.Simulation, info, position, cue.Kind == SoundCueKind.Voice ? AudioBus.Voice : null, null, true, out _, cue.VolumeOverride);
     }
+
+    // The voices of requests that play only when their last voice has ended (AudioEventRTS::m_playingHandle), per object and event.
+    private readonly Dictionary<(EntityId Entity, string Event), VoiceHandle> _singleVoices = [];
 
     // The looping fire sounds: per object its voice and the tick it stops at (m_frameToStopLoopingSound).
     private readonly Dictionary<EntityId, (VoiceHandle Handle, long StopTick)> _fireLoops = [];
@@ -537,9 +555,9 @@ public sealed partial class AudioDirector : IDisposable
     private VoiceHandle Play(AudioSource source, AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, bool track = true)
         => Play(source, info, position, bus, streaming, track, out _);
 
-    private VoiceHandle Play(AudioSource source, AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, bool track, out float shift)
+    private VoiceHandle Play(AudioSource source, AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, bool track, out float shift, float? cueVolume = null)
     {
-        var (handle, outcome, started) = Start(info, position, bus, streaming);
+        var (handle, outcome, started) = Start(info, position, bus, streaming, cueVolume);
         shift = started;
         if (!handle.IsValid)
         {
@@ -590,10 +608,11 @@ public sealed partial class AudioDirector : IDisposable
     }
 
     /// <summary>Picks the variation, decodes the sounds and hands the request to the mixer; the outcome name says why nothing started.</summary>
-    private (VoiceHandle Handle, string Outcome, float Shift) Start(AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming)
+    private (VoiceHandle Handle, string Outcome, float Shift) Start(AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, float? cueVolume = null)
     {
         // A script's volume override for this event (AudioManager::addAudioEvent: the event takes the overridden volume; below the minimum it is culled as muted).
-        float? volumeOverride = _eventVolumes.TryGetValue(info.Name, out var scripted) ? scripted : null;
+        // A request's own volume (AudioEventRTS::setVolume) stands where no script overrode the event.
+        float? volumeOverride = _eventVolumes.TryGetValue(info.Name, out var scripted) ? scripted : cueVolume;
         if (volumeOverride is { } wanted && (wanted <= 0f || wanted < _catalog.Settings.MinSampleVolume))
         {
             _scriptMuted++;
