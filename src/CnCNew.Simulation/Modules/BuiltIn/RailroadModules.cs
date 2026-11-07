@@ -157,17 +157,12 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     private bool _held;
     private ConductorStates _state = data.IsLocomotive ? ConductorStates.Accelerate : ConductorStates.Coast;
     // The train runs the original's recursion once per logic frame of the original, in its units: every speed of the state (PullInfo.Speed) is a distance per
-    // FRAME at every rate, the conductor acts and the friction applies with the first tick of the lead carriage's own frame, the track distance covers the
-    // frame's step tick by tick, and the collision response (damage, shove) comes with the frame's last tick. A pulled carriage is told by its puller whether
-    // the lead is inside a frame. Both fields are at rest (unwritten) at 30 Hz.
+    // FRAME at every rate. The step of the frame is the 30 Hz step and falls in the first tick of the lead carriage's own frame: the conductor acts, the friction applies, the
+    // track distance grows by the whole step, the carriages follow and the collision response (damage, shove) comes, all in that tick, and nothing of the train moves in the
+    // frame's other ticks. What the train kills is dead for whatever decides after it in that tick, as at 30 Hz (F-145). A pulled carriage is told by its puller that its
+    // collision response is due. Both fields are at rest (unwritten) at 30 Hz.
     private FramePhase _framePhase;
-    private bool _pulledInsideFrame;
-    // The carriage's rear turning point where the frame began: the original turns a carriage once per frame about where it stood; a tick inside the frame turns it
-    // about the same point, or the frame's ticks compound the turn (F-133). Held only inside a frame, so at rest at 30 Hz.
-    private bool _pivotHeld;
-    private Fixed _pivotX;
-    private Fixed _pivotY;
-    private Fixed _pivotZ; // the height where the frame began: a carriage that ends the frame in a tunnel or on a bridge keeps it, as the 30 Hz carriage does
+    private bool _collidePending;
     private int _ticksPerOriginalFrame = (int)TickOrder.Next; // of the world, for Speed; not state
 
     public override string ModuleName => "RailroadBehavior";
@@ -242,33 +237,40 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         }
 
         if (_wantsToBeLead > UnpulledLongEnough(time)) _isLead = true;
-        var frameEnds = !_pulledInsideFrame;
+        var frameEnds = false;
         if (_isLead)
         {
             if (!data.IsLocomotive) subTick = _framePhase.Next(time);
-            if (subTick == TickOrder.Next && _state == ConductorStates.Coast) _conductorPull.Speed *= data.Friction;
-            _conductorPull.TrackDistance += time.FrameSlice(_conductorPull.Speed, subTick);
-            if (_track.IsLooping)
+            if (subTick == TickOrder.Next)
             {
-                while (_conductorPull.TrackDistance > _track.Length) _conductorPull.TrackDistance -= _track.Length;
-                while (_conductorPull.TrackDistance < Fixed.Zero) _conductorPull.TrackDistance += _track.Length;
-            }
-            (_conductorPull.HitchX, _conductorPull.HitchY, _conductorPull.HitchZ) = FindPosition(world, _conductorPull.TrackDistance, setState: false);
-            frameEnds = _framePhase.AtBoundary;
-            UpdatePosition(world, _conductorPull, _pull, !frameEnds);
-            _pulledInsideFrame = false;
-            var trailer = RailroadOf(world, _trailer);
-            if (trailer is not null) trailer.GetPulled(world, _pull, !frameEnds);
-            else
-            {
-                _trailer = EntityId.Invalid;
-                // A train leaves the end of the line one carriage per frame of the original, the last one first.
-                if (_endOfLine && frameEnds) world.RequestDestroy(Entity.Id);
+                if (_state == ConductorStates.Coast) _conductorPull.Speed *= data.Friction;
+                _conductorPull.TrackDistance += _conductorPull.Speed;
+                if (_track.IsLooping)
+                {
+                    while (_conductorPull.TrackDistance > _track.Length) _conductorPull.TrackDistance -= _track.Length;
+                    while (_conductorPull.TrackDistance < Fixed.Zero) _conductorPull.TrackDistance += _track.Length;
+                }
+                (_conductorPull.HitchX, _conductorPull.HitchY, _conductorPull.HitchZ) = FindPosition(world, _conductorPull.TrackDistance, setState: false);
+                frameEnds = true;
+                UpdatePosition(world, _conductorPull, _pull);
+                var trailer = RailroadOf(world, _trailer);
+                if (trailer is not null) trailer.GetPulled(world, _pull);
+                else
+                {
+                    _trailer = EntityId.Invalid;
+                    // A train leaves the end of the line one carriage per frame of the original, the last one first.
+                    if (_endOfLine) world.RequestDestroy(Entity.Id);
+                }
             }
         }
         else if (_wantsToBeLead <= UnpulledLongEnough(time)) _wantsToBeLead++;
 
         // onCollide once per frame of the original, with the train where the frame leaves it: the damage and the shove are amounts per frame.
+        if (_collidePending)
+        {
+            _collidePending = false;
+            frameEnds = true;
+        }
         if (frameEnds) Collide(world);
         return SimulationTiming.SleepNone;
     }
@@ -319,20 +321,20 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     }
 
     /// <summary><c>RailroadBehavior::getPulled</c>: this carriage obeys its puller, positions itself and passes its own pull on.</summary>
-    private void GetPulled(IWorldServices world, PullInfo puller, bool insideFrame)
+    private void GetPulled(IWorldServices world, PullInfo puller)
     {
         EnsureHitched(world);
         _wantsToBeLead = 0;
-        _pulledInsideFrame = insideFrame;
         if (_track is null) return;
+        _collidePending = true;
         _conductorPull.CopyFrom(puller);
-        UpdatePosition(world, puller, _pull, insideFrame);
+        UpdatePosition(world, puller, _pull);
         var trailer = RailroadOf(world, _trailer);
-        if (trailer is not null) trailer.GetPulled(world, _pull, insideFrame);
+        if (trailer is not null) trailer.GetPulled(world, _pull);
         else
         {
             _trailer = EntityId.Invalid;
-            if (_endOfLine && !insideFrame) world.RequestDestroy(Entity.Id);
+            if (_endOfLine) world.RequestDestroy(Entity.Id);
         }
     }
 
@@ -459,7 +461,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     /// The reference builds a transform that rotates the carriage about its rear hitch and moves the hitch to the track point; the product reduces to: heading towards the puller's hitch from
     /// the old hitch, centre one major radius ahead of the new hitch on that heading, ground height of the old hitch (kept inside a tunnel).
     /// </summary>
-    private void UpdatePosition(IWorldServices world, PullInfo puller, PullInfo mine, bool insideFrame)
+    private void UpdatePosition(IWorldServices world, PullInfo puller, PullInfo mine)
     {
         var radius = Entity.Template.GeometryMajorRadius;
         mine.TrackDistance = puller.TrackDistance - radius * 2;
@@ -468,21 +470,15 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         (mine.HitchX, mine.HitchY, mine.HitchZ) = FindPosition(world, mine.TrackDistance, setState: false);
         var car = FindPosition(world, mine.TrackDistance, setState: true);
 
-        if (!_pivotHeld)
-        {
-            _pivotX = Entity.X - FixedTrig.Cos(Entity.Angle) * radius;
-            _pivotY = Entity.Y - FixedTrig.Sin(Entity.Angle) * radius;
-            _pivotZ = Entity.Z;
-        }
-        var turnX = _pivotX;
-        var turnY = _pivotY;
-        _pivotHeld = insideFrame;
+        var turnX = Entity.X - FixedTrig.Cos(Entity.Angle) * radius;
+        var turnY = Entity.Y - FixedTrig.Sin(Entity.Angle) * radius;
+        var startZ = Entity.Z;
         var desired = FixedTrig.Atan2(puller.HitchY - turnY, puller.HitchX - turnX);
         var ground = world.GroundHeightAt(turnX, turnY);
         Entity.Angle = FixedTrig.Normalize(desired);
         Entity.X = car.X + FixedTrig.Cos(Entity.Angle) * radius;
         Entity.Y = car.Y + FixedTrig.Sin(Entity.Angle) * radius;
-        Entity.Z = !_inTunnel ? ground : insideFrame ? Entity.Z : _pivotZ;
+        Entity.Z = !_inTunnel ? ground : startZ;
         world.MarkDirty(Entity);
     }
 
@@ -694,13 +690,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         _pull.Describe(writer, "pull");
         _conductorPull.Describe(writer, "conductorPull");
         _framePhase.Describe(writer, "framePhase");
-        if (_pulledInsideFrame) writer.Bool("pulledInsideFrame", true);
-        if (_pivotHeld)
-        {
-            writer.Fixed("pivotX", _pivotX);
-            writer.Fixed("pivotY", _pivotY);
-            writer.Fixed("pivotZ", _pivotZ);
-        }
+        if (_collidePending) writer.Bool("collidePending", true);
         if (_carriages.Count == 0) return;
         writer.BeginArray("carriages");
         foreach (var id in _carriages)
@@ -735,11 +725,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         _pull.Load(reader.Object("pull"));
         _conductorPull.Load(reader.Object("conductorPull"));
         _framePhase.Load(reader, "framePhase");
-        _pulledInsideFrame = reader.Has("pulledInsideFrame") && reader.Bool("pulledInsideFrame");
-        _pivotHeld = reader.Has("pivotX");
-        _pivotX = _pivotHeld ? reader.Fixed("pivotX") : Fixed.Zero;
-        _pivotY = _pivotHeld ? reader.Fixed("pivotY") : Fixed.Zero;
-        _pivotZ = _pivotHeld ? reader.Fixed("pivotZ") : Fixed.Zero;
+        _collidePending = reader.Has("collidePending") && reader.Bool("collidePending");
         _carriages = reader.Has("carriages") ? [..reader.Array("carriages").Select(item => new EntityId(checked((uint)item.UInt("id"))))] : [];
         // m_trackDataLoaded and m_track are not saved: the locomotive reloads the track and hands it down the saved chain.
         _track = null;
