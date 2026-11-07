@@ -57,6 +57,9 @@ public sealed class AttachedEffectCatalog
     /// <summary>The objects with a <c>W3DLaserDraw</c>, by name: what the special object of an ability draws between the unit and its target.</summary>
     public ImmutableDictionary<string, LaserSpec> Lasers { get; private init; } = ImmutableDictionary<string, LaserSpec>.Empty;
 
+    /// <summary>The lives of the laser objects in frames of the original, by name (their <c>DeletionUpdate</c>): how long a feedback beam of <c>AssistedTargetingUpdate</c> is drawn.</summary>
+    public ImmutableDictionary<string, long> LaserFrames { get; private init; } = ImmutableDictionary<string, long>.Empty;
+
     /// <summary>Per weapon the beam a shot draws (<c>LaserName</c>, <c>LaserBoneName</c>; <c>Weapon::createLaser</c>).</summary>
     public ImmutableDictionary<string, WeaponLaser> WeaponLasers { get; private init; } = ImmutableDictionary<string, WeaponLaser>.Empty;
 
@@ -152,7 +155,7 @@ public sealed class AttachedEffectCatalog
         var owners = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (owner, made, bone) in abilities)
             if (lasers.ContainsKey(made)) owners[owner] = bone;
-        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
+        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
     }
 
     private static string? Named(string token) => token.Length == 0 || token.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : token;
@@ -382,6 +385,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     public void Observe(IReadOnlyList<SimEvent> events, SimulationWorld world)
     {
         NoteBeams(events, world);
+        NoteFeedbackBeams(events, world);
         ArgumentNullException.ThrowIfNull(events);
         foreach (var simEvent in events)
         {
@@ -518,6 +522,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         foreach (var key in ended) _streams.Remove(key);
         if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame);
         if (_beams.Count > 0) AddBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
+        if (_feedbackBeams.Count > 0) AddFeedbackBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         _streamFrame = frame.ToImmutable();
         UpdateRopes(world);
     }
@@ -578,6 +583,37 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             frame.Add(new StreamInstance(points, beam.Laser.Laser.Texture, beam.Laser.Laser.Width, 1f));
         }
         if (_beams.Count == 0) _beamEnds.Clear();
+    }
+
+    private readonly record struct FeedbackBeam(EntityId Source, Vector3 End, LaserSpec Laser, long Born, long Frames);
+
+    private readonly List<FeedbackBeam> _feedbackBeams = [];
+
+    /// <summary>
+    /// <c>AssistedTargetingUpdate::makeFeedbackLaser</c> (F-158): the data stream beam of a battery that joins another's attack. The laser object lives as long as its <c>DeletionUpdate</c> says;
+    /// <c>LaserUpdate::initLaser</c> was given the battery as the parent, so the beam starts at the battery wherever it stands, and a fixed end (the place the event carries).
+    /// </summary>
+    private void NoteFeedbackBeams(IReadOnlyList<SimEvent> events, SimulationWorld world)
+    {
+        foreach (var simEvent in events)
+            if (simEvent.Kind == SimEventKind.AssistFeedbackLaser && catalog.Lasers.TryGetValue(simEvent.Text, out var laser))
+                _feedbackBeams.Add(new FeedbackBeam(simEvent.Entity, new Vector3(FixedConvert.ToSingle(simEvent.X), FixedConvert.ToSingle(simEvent.Y), FixedConvert.ToSingle(simEvent.Z)), laser,
+                    world.Tick / world.Time.TicksPerOriginalFrame, Math.Max(catalog.LaserFrames.GetValueOrDefault(simEvent.Text), 1)));
+    }
+
+    /// <summary>
+    /// The feedback beams of this tick. A beam whose two ends are the same place has no length: the original's first beam (the one "from the requester") is that, and
+    /// <c>W3DLaserDraw</c> divides the distance from the middle by its half length, so it draws nothing - neither does this.
+    /// </summary>
+    private void AddFeedbackBeams(SimulationWorld world, IFxWorldView view, ImmutableArray<StreamInstance>.Builder frame, long originalFrame)
+    {
+        _feedbackBeams.RemoveAll(beam => originalFrame >= beam.Born + beam.Frames);
+        foreach (var beam in _feedbackBeams)
+        {
+            if (view.GetPose(beam.Source) is not { } pose || Vector3.DistanceSquared(pose.Position, beam.End) < 1e-6f) continue;
+            var points = beam.Laser.Points(pose.Position, beam.End, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f);
+            frame.Add(new StreamInstance(points, beam.Laser.Texture, beam.Laser.Width, 1f));
+        }
     }
 
     /// <summary>The beams of the abilities at work (<c>SpecialAbilityUpdate::initLaser</c>, <c>LaserUpdate</c>): from the unit's bone, or the unit, to the centre of its target; a band like a stream. The Black Lotus's data stream is one of them.</summary>

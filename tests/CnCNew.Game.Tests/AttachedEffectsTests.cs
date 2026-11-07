@@ -29,6 +29,7 @@ internal static class AttachedEffectsTests
         harness.Run("Real data: the catalog of the shipped objects", () => ShippedCatalog(data));
         harness.Run("The Dragon tank's flame: its projectiles carry the trail of BoneFXUpdate, and what it hits burns", () => DragonFlame(data));
         harness.Run("The Black Lotus's data stream: an arc from the unit to its target while the hack runs", () => DataStream(data));
+        harness.Run("F-158: a Patriot battery that joins another's attack draws its data stream to the victim for the laser object's life", () => PatriotDataStream(data));
         harness.Run("A damaged building smokes and burns: TransitionDamageFX and the body's bones", () => DamagedBuilding(data));
         harness.Run("A building set on fire by the flame burns: the body's aflame category and the fire one size up", () => BurningBuilding(data));
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
@@ -113,6 +114,45 @@ internal static class AttachedEffectsTests
         TestHarness.Assert(points.Length == 11 && Math.Abs(points[0].X) < 1e-3f && Math.Abs(points[^1].X - 100f) < 1e-3f, "ten segments between the two ends");
         TestHarness.Assert(Math.Abs(points[5].Z - 40f) < 1e-3f && Math.Abs(points[0].Z - 10f) < 1e-3f, "the arc is highest in the middle and nothing at the ends");
         TestHarness.Assert(spec.Points(new Vector3(0, 0, 0), new Vector3(100, 0, 0), (_, _) => 50f).All(point => point.Z >= 52f), "it skims the ground and does not go through it");
+    }
+
+    /// <summary>
+    /// <c>AssistedTargetingUpdate::makeFeedbackLaser</c> and <c>W3DLaserDraw</c>: the owner saw no animation when Patriot batteries pass a target on. The first battery fires; the second, out
+    /// of reach of the victim, joins and draws <c>PatriotBinaryDataStream</c> from itself to the place the victim stood, for the 600 ms of the laser object's <c>DeletionUpdate</c> (18 frames).
+    /// </summary>
+    private static void PatriotDataStream(GameData data)
+    {
+        var catalog = data.AttachedEffects;
+        TestHarness.Assert(catalog.Lasers.TryGetValue("PatriotBinaryDataStream", out var spec) && spec is { Segments: 5, ArcHeight: 30f, Width: 5f } && spec.Texture.Length > 0, "the stream's draw module is read");
+        TestHarness.Assert(catalog.LaserFrames.GetValueOrDefault("PatriotBinaryDataStream") == 18, $"it lives 18 frames ({catalog.LaserFrames.GetValueOrDefault("PatriotBinaryDataStream")})");
+        var scene = LiveScenario.Create(data, new DemoScenario("attached-patriots", "patriots", "patriots", 300,
+            [new ScenarioUnit("a", "AmericaPatriotBattery", 2, 0f, 0f), new ScenarioUnit("b", "AmericaPatriotBattery", 2, 0f, 190f), new ScenarioUnit("p1", "AmericaPowerPlant", 2, 300f, -100f),
+             new ScenarioUnit("p2", "AmericaPowerPlant", 2, 300f, -200f), new ScenarioUnit("dozer", "ChinaVehicleDozer", 1, -180f, 0f)],
+            [new ScenarioOrder(30, "a", ScenarioOrderKind.Attack, "dozer")], 0f, 0f) { HumanFaction = "FactionChina", OpponentFaction = "FactionAmerica" }, Viewport);
+        var framesWithBeam = 0;
+        var reached = false;
+        var firstFrame = -1L;
+        var lastFrame = -1L;
+        Vector3? victimAt = null;
+        Run(scene, () =>
+        {
+            if (scene.Tags.TryGetValue("dozer", out var dozerId) && scene.World.FindEntity(dozerId) is { } dozer && scene.Attached.Stats.Tracked > 0) victimAt ??= new Vector3((float)dozer.X.ToDecimal(), (float)dozer.Y.ToDecimal(), 0f);
+            var beam = scene.Attached.ProjectileStreams.FirstOrDefault(stream => stream.Texture.StartsWith("EXBinaryStream32", StringComparison.OrdinalIgnoreCase) && stream.Points.Length >= 2);
+            if (beam is null) return;
+            framesWithBeam++;
+            var frame = scene.World.Tick / scene.World.Time.TicksPerOriginalFrame;
+            if (firstFrame < 0) firstFrame = frame;
+            lastFrame = frame;
+            var b = scene.World.FindEntity(scene.Tags["b"])!;
+            var start = beam.Points[0];
+            var end = beam.Points[^1];
+            if (Math.Abs(start.X - (float)b.X.ToDecimal()) < 2f && Math.Abs(start.Y - (float)b.Y.ToDecimal()) < 2f && victimAt is { } victim && Math.Abs(end.X - victim.X) < 40f && Math.Abs(end.Y - victim.Y) < 40f) reached = true;
+        });
+        Console.WriteLine($"       patriots: frames with the stream {framesWithBeam} ({firstFrame}..{lastFrame}); {scene.Attached.Stats}");
+        TestHarness.Assert(framesWithBeam > 0, "the data stream is drawn");
+        TestHarness.Assert(reached, "it runs from the assisting battery to the place of the victim");
+        TestHarness.Assert(framesWithBeam <= 18 * 2, $"and only for the life of the laser object ({framesWithBeam} frames)");
+        TestHarness.Assert(scene.Fx.Capture().ProjectileStreams.Length == scene.Attached.ProjectileStreams.Length, "the frame the renderer gets carries it");
     }
 
     private static void DragonFlame(GameData data)
