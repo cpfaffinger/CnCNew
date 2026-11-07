@@ -2770,14 +2770,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var (x, y, z, angle) = (Entity.X, Entity.Y, Entity.Z, Entity.Angle);
         var (aheadX, aheadY, aheadZ) = (Entity.AheadX, Entity.AheadY, Entity.AheadZ);
         var pending = _frameTicksLeft;
-        var (dead, leaving) = (Entity.EffectivelyDead, Entity.DestroyRequested);
+        var (dead, leaving, container) = (Entity.EffectivelyDead, Entity.DestroyRequested, Entity.ContainedBy);
         Entity.X = x + aheadX;
         Entity.Y = y + aheadY;
         Entity.Z = z + aheadZ;
         Entity.Angle = _frameAngle;
         Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
         world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
-        if (_frameTicksLeft != pending || Entity.EffectivelyDead != dead || Entity.DestroyRequested != leaving || Entity.ContainedBy.IsValid || Entity.X != x + aheadX || Entity.Y != y + aheadY)
+        if (_frameTicksLeft != pending || Entity.EffectivelyDead != dead || Entity.DestroyRequested != leaving || Entity.ContainedBy != container || Entity.X != x + aheadX || Entity.Y != y + aheadY)
         {
             _frameTicksLeft = 0;
             return;
