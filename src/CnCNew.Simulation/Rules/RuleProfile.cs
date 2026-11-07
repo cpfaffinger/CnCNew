@@ -85,6 +85,9 @@ public enum GameFix
 
     /// <summary>A Chinook told to unload at a place lets its riders out through the door one after the other, not all in one frame (<c>ChinookAIUpdate::aiDoCommand</c>).</summary>
     ChinookUnloadsOneByOne = 25,
+
+    /// <summary>A weapon that is preferred against a victim (the Comanche's missiles against vehicles and structures) holds the choice only while its clip has rounds: with the clip empty and reloading, a ready weapon that can hit the victim - the cannon - fires meanwhile. The original keeps the preferred weapon while it merely reloads (<c>WeaponSet::chooseBestWeaponForTarget</c>) and the helicopter waits for it; the owner's decision, not the community source's.</summary>
+    PreferredWeaponYieldsWhileClipEmpty = 26,
 }
 
 /// <summary>
@@ -217,6 +220,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.ChinookUnloadsOneByOne, "chinook-unloads-one-by-one",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp, ChinookAIUpdate::aiDoCommand",
             "a Chinook ordered to unload at a place lands and lets its riders out through the door one after the other, as a bare evacuation does, instead of dropping all of them in one frame; a reinforcement Chinook that leaves the map afterwards still drops them at once"),
+        new(GameFix.PreferredWeaponYieldsWhileClipEmpty, "preferred-weapon-yields-while-clip-empty",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/WeaponSet.cpp, WeaponSet::chooseBestWeaponForTarget (the project owner's decision, not a community fix)",
+            "a Comanche whose anti-tank missiles are all fired uses its cannon on vehicles and buildings while the clip reloads, instead of hovering until the missiles are back"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

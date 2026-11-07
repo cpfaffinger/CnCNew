@@ -300,7 +300,8 @@ public sealed partial class SimulationWorld
             if (IsPreferredAgainst(set, candidate, victim))
             {
                 damage = Fixed.MaxValue;
-                ready = true;
+                // A preferred weapon counts as ready while it merely reloads; the rule fix ends that when its clip is empty (a reload between shots of a clip still holds the choice).
+                if (source.ClipOf(candidate) > 0 || !_templates.Rules.Has(Rules.GameFix.PreferredWeaponYieldsWhileClipEmpty)) ready = true;
             }
             if (!ready)
             {
