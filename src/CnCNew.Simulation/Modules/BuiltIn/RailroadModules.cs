@@ -624,10 +624,10 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
                 }
             }
             if (!other.ModuleArray.OfType<PhysicsBehavior>().Any() || other.ContainedBy == Entity.Id) continue;
-            // "Alert all the players of recent disaster": the whistle comes before the shove and the early return of a train that waits or coasts. A passenger who intends to board a train that
-            // waits at its station slowly enough is let through before it (the shove below does not know that exception; only this event does).
-            if (!(_state == ConductorStates.WaitAtStation && _pull.Speed < world.Time.PerTickAsPerOriginalFrame(data.RunningGarrisonSpeedMax) && IsBoarding(other)))
-                world.Emit(SimEventKind.TrainWhistle, Entity.Id, other.Id, string.Empty, 0);
+            // "they can grab on safely": a passenger who intends to board a train that waits at its station slowly enough is let through before the whistle and the shove.
+            if (_state == ConductorStates.WaitAtStation && _pull.Speed < world.Time.PerTickAsPerOriginalFrame(data.RunningGarrisonSpeedMax) && IsBoarding(other)) continue;
+            // "Alert all the players of recent disaster": the whistle comes before the shove and the early return of a train that waits or coasts.
+            world.Emit(SimEventKind.TrainWhistle, Entity.Id, other.Id, string.Empty, 0);
 
             // Shove out of the footprint: "the plus 1 makes them go just outside of me"; infantry is left where it stands.
             var victimIsInfantry = other.Template.IsKindOf("INFANTRY");
