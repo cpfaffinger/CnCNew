@@ -112,9 +112,9 @@ run.Test("Acceptance (UNIT-19): a jet flares its landing", Tests.AJetFlaresItsLa
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
 run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlliesMakeWayForAHarvester);
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);
-run.Test("Phase 63 (F-14x): a bored dozer sees a hurt that came before its update", Tests.BoredDozerSeesAHurtBeforeItsUpdate);
-run.Test("Phase 63 (F-14x): a bored dozer looks before a heal of the same tick", Tests.BoredDozerLooksBeforeAHealOfTheSameTick);
-run.Test("Phase 63 (F-14y): a sinking body that walks ends each frame below the ground", Tests.ASinkingBodyThatWalksEndsEachFrameBelowTheGround);
+run.Test("Phase 62 (F-147): a bored dozer sees a hurt that came before its update", Tests.BoredDozerSeesAHurtBeforeItsUpdate);
+run.Test("Phase 62 (F-147): a bored dozer looks before a heal of the same tick", Tests.BoredDozerLooksBeforeAHealOfTheSameTick);
+run.Test("Phase 62 (F-148): a sinking body that walks ends each frame below the ground", Tests.ASinkingBodyThatWalksEndsEachFrameBelowTheGround);
 run.Test("Phase 50 (F-86): a walker sees its goal gone in the next frame", Tests.WalkerSeesItsGoalGoneInTheNextFrame);
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
 run.Test("Phase 49 (F-80): a unit on its exit path looks for victims in the frames it does at 30 Hz", Tests.ExitPathAcquisitionIsTheSameAtEveryRate);
