@@ -1297,7 +1297,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 // Body::setInitialHealth takes any percentage; 100 is what every object starts with.
                 var setup = new SpawnSetup(placed.HealthPercent != 100, placed.HealthPercent, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
                     MapFlags: placed.Flags, Attitude: placed.Attitude);
-                _spawnQueue.Add(new PendingSpawn(Ids.AllocateEntity(), template.Index, placed.Owner, placed.X, placed.Y, placed.Z, placed.Angle, setup));
+                var placedId = Ids.AllocateEntity();
+                _spawnQueue.Add(new PendingSpawn(placedId, template.Index, placed.Owner, placed.X, placed.Y, placed.Z, placed.Angle, setup));
+                RecordNeutralBuilding(placedId, template, placed);
                 break;
             }
             case DestroyCommand destroy:
@@ -2407,6 +2409,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessDestroys();
         ProcessDelayedDamage(tick);
         StepBlockedMovers(tick);
+        if (NeutralRespawnSeconds > 0) StepNeutralRespawn(tick);
         ProcessSpawns();
         DeliverEvents();
         if (_vision is not null && tick % VisionInterval == _visionPhase) RefreshVision();
@@ -2465,6 +2468,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseStarted(TickPhase.DelayedDamage);
         ProcessDelayedDamage(tick);
         StepBlockedMovers(tick);
+        if (NeutralRespawnSeconds > 0) StepNeutralRespawn(tick);
         observer.PhaseEnded(TickPhase.DelayedDamage);
         observer.PhaseStarted(TickPhase.Spawns);
         ProcessSpawns();
@@ -2636,6 +2640,7 @@ public sealed partial class SimulationWorld : IWorldServices
         }
         if (_holesRebuild) writer.Bool("holesRebuild", true);
         DescribeSoloBonus(writer);
+        DescribeMatchOptions(writer);
         Ids.Describe(writer);
         Streams.DescribeLogic(writer);
         writer.Int("entities", _entities.Count);

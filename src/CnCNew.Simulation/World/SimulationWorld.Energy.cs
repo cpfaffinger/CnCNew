@@ -50,6 +50,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     public long BuildTicksUnderPower(PlayerId player, long baseTicks)
     {
+        baseTicks = ScaleBuildTicks(baseTicks);
         var rules = _templates.LowEnergy;
         if (rules == LowEnergyRules.Absent) return baseTicks;
         var production = ProducedEnergyOf(player);

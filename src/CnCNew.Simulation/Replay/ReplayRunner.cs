@@ -67,7 +67,19 @@ public static class ReplayRunner
         var rate = RateOf(header);
         if (rate != templates.Rate)
             throw new ReplayRejectedException($"The replay was recorded at {rate}; the catalog was built for {templates.Rate}.");
-        return new(new WorldConfiguration(header.WorldId, rate, header.Seed, header.Players, header.FixtureId, header.DefinitionFingerprint.ToUpperInvariant(), header.TerrainFingerprint), templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(header.WorldId, rate, header.Seed, header.Players, header.FixtureId, header.DefinitionFingerprint.ToUpperInvariant(), header.TerrainFingerprint), templates, terrain);
+        // The debug options of a skirmish's description are rules of its world (quick building, returning neutral buildings): a replay of the bare world follows them like the match did.
+        Skirmish.MatchDescription? description;
+        try
+        {
+            description = Skirmish.SkirmishReplay.DescriptionOf(header);
+        }
+        catch (FormatException exception)
+        {
+            throw new ReplayRejectedException($"The replay's match description cannot be read: {exception.Message}");
+        }
+        if (description is { Debug.IsDefault: false } options) world.ConfigureMatchOptions(options.Debug.BuildTimePercent, options.Debug.NeutralRespawnSeconds);
+        return world;
     }
 
     /// <summary>Runs the replay from a fresh world.</summary>

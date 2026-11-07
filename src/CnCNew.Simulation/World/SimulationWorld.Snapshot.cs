@@ -43,6 +43,7 @@ public sealed partial class SimulationWorld
         if (state.Has("contacts")) foreach (var item in state.Array("contacts")) _contacts.Add(checked((uint)item.UInt("id")));
         _holesRebuild = state.Has("holesRebuild") && state.Bool("holesRebuild");
         LoadSoloBonus(state);
+        LoadMatchOptions(state);
         LoadWater(state);
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");
         Ids.Load(state);

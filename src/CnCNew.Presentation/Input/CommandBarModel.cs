@@ -499,7 +499,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             {
                 if (!world.Templates.TryGet(button.Object, out var template)) return State(ButtonAvailability.Restricted, ButtonReason.UnknownReference);
                 var cost = template.BuildCost;
-                var ticks = template.BuildTicks;
+                // The debug option "quick build" shortens what the tooltip names as well.
+                var ticks = world.ScaleBuildTicks(template.BuildTicks);
                 if (template.Buildable.Equals("No", StringComparison.OrdinalIgnoreCase)
                     || template.Buildable.Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !world.IsComputerPlayer(player))
                     return State(ButtonAvailability.Hidden, ButtonReason.NotBuildable, null, cost, ticks);
@@ -525,22 +526,23 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             case GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade:
             {
                 if (!world.Upgrades.TryGet(button.Upgrade, out var upgrade)) return State(ButtonAvailability.Restricted, ButtonReason.UnknownReference);
+                var upgradeTicks = world.ScaleBuildTicks(upgrade.BuildTicks);
                 // ControlBar::getCommandAvailability (ControlBarCommand.cpp), in its order: a full queue restricts; an upgrade owned or in production (anywhere for a player
                 // upgrade, in this queue for an object upgrade) is shown like one that cannot be afforded; then the money and the sciences.
-                if (production is { HasRoom: false }) return State(ButtonAvailability.Restricted, ButtonReason.QueueFull, null, upgrade.BuildCost, upgrade.BuildTicks);
-                if (button.Kind == GuiCommandKind.ObjectUpgrade && production is null) return State(ButtonAvailability.Restricted, ButtonReason.NoProducer, null, upgrade.BuildCost, upgrade.BuildTicks);
+                if (production is { HasRoom: false }) return State(ButtonAvailability.Restricted, ButtonReason.QueueFull, null, upgrade.BuildCost, upgradeTicks);
+                if (button.Kind == GuiCommandKind.ObjectUpgrade && production is null) return State(ButtonAvailability.Restricted, ButtonReason.NoProducer, null, upgrade.BuildCost, upgradeTicks);
                 var owned = button.Kind == GuiCommandKind.PlayerUpgrade ? world.PlayerUpgrades(player).Has(upgrade.Index) : entity.CompletedUpgrades.Has(upgrade.Index);
-                if (owned) return State(ButtonAvailability.CantAfford, ButtonReason.AlreadyOwned, null, upgrade.BuildCost, upgrade.BuildTicks);
+                if (owned) return State(ButtonAvailability.CantAfford, ButtonReason.AlreadyOwned, null, upgrade.BuildCost, upgradeTicks);
                 var inProduction = button.Kind == GuiCommandKind.PlayerUpgrade ? world.UpgradeInProduction(player, upgrade.Index) : production?.IsUpgradeInQueue(upgrade.Index) == true;
-                if (inProduction) return State(ButtonAvailability.CantAfford, ButtonReason.InProduction, null, upgrade.BuildCost, upgrade.BuildTicks);
+                if (inProduction) return State(ButtonAvailability.CantAfford, ButtonReason.InProduction, null, upgrade.BuildCost, upgradeTicks);
                 // Object::affectedByUpgrade: an object upgrade no module of the object would answer - a drone when the vehicle carries another one (ConflictsWith) - is shown the same way.
                 if (button.Kind == GuiCommandKind.ObjectUpgrade && !AffectedByUpgrade(world, entity, upgrade.Index))
-                    return State(ButtonAvailability.CantAfford, ButtonReason.NotAffected, null, upgrade.BuildCost, upgrade.BuildTicks);
-                if (world.MoneyOf(player) < upgrade.BuildCost) return State(ButtonAvailability.Restricted, ButtonReason.InsufficientFunds, null, upgrade.BuildCost, upgrade.BuildTicks);
+                    return State(ButtonAvailability.CantAfford, ButtonReason.NotAffected, null, upgrade.BuildCost, upgradeTicks);
+                if (world.MoneyOf(player) < upgrade.BuildCost) return State(ButtonAvailability.Restricted, ButtonReason.InsufficientFunds, null, upgrade.BuildCost, upgradeTicks);
                 foreach (var name in button.Sciences)
                     if (!world.Sciences.TryGet(name, out var science) || !world.PlayerSciences(player).Has(science.Index))
-                        return State(ButtonAvailability.Restricted, ButtonReason.MissingScience, null, upgrade.BuildCost, upgrade.BuildTicks);
-                return State(ButtonAvailability.Available, ButtonReason.None, null, upgrade.BuildCost, upgrade.BuildTicks);
+                        return State(ButtonAvailability.Restricted, ButtonReason.MissingScience, null, upgrade.BuildCost, upgradeTicks);
+                return State(ButtonAvailability.Available, ButtonReason.None, null, upgrade.BuildCost, upgradeTicks);
             }
             case GuiCommandKind.PurchaseScience:
             {

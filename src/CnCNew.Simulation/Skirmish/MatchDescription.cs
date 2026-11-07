@@ -63,8 +63,8 @@ public sealed record MatchDescription(
     int TickRate, string MapPath, string TerrainFingerprint, string DefinitionFingerprint, uint Seed, uint AiSeed, long MaxTicks, int StartMoney, long GraceFrames,
     long SciencePointIntervalFrames, ImmutableArray<MatchSlotDescription> Slots)
 {
-    /// <summary>3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
-    public const int EncodingVersion = 3;
+    /// <summary>4: the debug options (<see cref="Debug"/>). 3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
+    public const int EncodingVersion = 4;
     private static ReadOnlySpan<byte> Magic => "CNCMATCH"u8;
 
     /// <summary>The version of the simulation the description was made for: the command table and the world state. A machine with another one must refuse the match.</summary>
@@ -79,6 +79,12 @@ public sealed record MatchDescription(
     /// </summary>
     public string SimulationId { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The debug options of the match (<see cref="MatchDebugOptions"/>): quick building, respawning neutral buildings and general points at the start. <see cref="MatchDebugOptions.None"/>
+    /// is the original's game.
+    /// </summary>
+    public MatchDebugOptions Debug { get; init; } = MatchDebugOptions.None;
+
     public SimulationRate Rate => SimulationRate.FromTicksPerSecond(TickRate);
 
     /// <summary>The slots are compared by content: two descriptions with equal slots are equal.</summary>
@@ -92,7 +98,7 @@ public sealed record MatchDescription(
 
     /// <summary>
     /// The canonical bytes, little endian: <c>"CNCMATCH"</c>, u32 encoding version, u32 command table version, u32 world state version, string simulation identifier, u32 tick rate, string map path, string terrain
-    /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, u16 slot count
+    /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, i32 build time percent, i32 neutral respawn seconds, i32 starting general points, u16 slot count
     /// (u8 kind, string faction, i32 team, i32 colour, i32 start position, i32 AI strength, i32 AI composition, i32 AI tactics). Strings are u16-length-prefixed UTF-8.
     /// </summary>
     public byte[] Encode()
@@ -115,6 +121,9 @@ public sealed record MatchDescription(
             writer.Write(StartMoney);
             writer.Write(GraceFrames);
             writer.Write(SciencePointIntervalFrames);
+            writer.Write(Debug.BuildTimePercent);
+            writer.Write(Debug.NeutralRespawnSeconds);
+            writer.Write(Debug.StartingGeneralPoints);
             writer.Write(checked((ushort)Slots.Length));
             foreach (var slot in Slots)
             {
@@ -153,6 +162,7 @@ public sealed record MatchDescription(
             var startMoney = ReadInt32(data, ref position);
             var grace = ReadInt64(data, ref position);
             var science = ReadInt64(data, ref position);
+            var debug = new MatchDebugOptions(ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position));
             var count = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(position, 2));
             position += 2;
             var slots = ImmutableArray.CreateBuilder<MatchSlotDescription>(count);
@@ -167,7 +177,7 @@ public sealed record MatchDescription(
             if (position != data.Length) throw new FormatException("Trailing bytes after the match description.");
             return new MatchDescription(tickRate, mapPath, terrain, definitions, seed, aiSeed, maxTicks, startMoney, grace, science, slots.MoveToImmutable())
             {
-                CommandTableVersion = commandTable, WorldStateVersion = worldState, SimulationId = simulationId,
+                CommandTableVersion = commandTable, WorldStateVersion = worldState, SimulationId = simulationId, Debug = debug,
             };
         }
         catch (Exception exception) when (exception is ArgumentOutOfRangeException or IndexOutOfRangeException or DecoderFallbackException)
@@ -188,6 +198,7 @@ public sealed record MatchDescription(
             throw new ArgumentException($"The match was opened with simulation '{SimulationId}'; this build is '{simulationId}'.");
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(terrain);
+        if (Debug.Problem is { } debugProblem) throw new ArgumentException(debugProblem);
         if (definitionFingerprint is not null && !string.Equals(DefinitionFingerprint, definitionFingerprint, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("The match is described for different definitions (fingerprint mismatch).");
         if (CommandTableVersion != CommandTypes.Version || WorldStateVersion != WorldSnapshot.Version)

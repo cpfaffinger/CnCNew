@@ -76,7 +76,7 @@ public sealed partial class SimulationWorld
     {
         buyer.Money -= info.BuildCost;
         var production = FindProductionModule(producer)!;
-        production.EnqueueUpgrade(Time, info.Index, info.BuildCost, info.BuildTicks);
+        production.EnqueueUpgrade(Time, info.Index, info.BuildCost, ScaleBuildTicks(info.BuildTicks));
         var node = Array.Find(producer.Updates, value => ReferenceEquals(value.Module, production));
         if (node is not null) WakeAt(producer, node.Update, _tick);
         MarkDirty(producer);

@@ -726,6 +726,10 @@ run.Test("Session state: a skirmish saved at any tick continues identically, AI 
 run.Test("Session state: the session hash covers the AI, a save is checked against it", Tests.SkirmishSessionHashCoversTheAi);
 run.Test("Match description: one encoding, every field in the fingerprint", Tests.MatchDescriptionIsCanonicalAndEveryFieldCounts);
 run.Test("Match description: the same bytes build the same match, random choices included", Tests.MatchDescriptionBuildsTheSameMatchEverywhere);
+run.Test("Debug options: they are in the match description, ranges are checked, the older encoding is refused", Tests.MatchDebugOptionsAreInTheDescription);
+run.Test("Debug options: quick build takes a tenth of the time of units, upgrades and structures", Tests.QuickBuildTakesATenthOfTheTime);
+run.Test("Debug options: a destroyed neutral building of the map comes back after N seconds", Tests.DestroyedNeutralBuildingsComeBack);
+run.Test("Debug options: a skirmish with all three plays, saves and replays identically", Tests.MatchDebugOptionsPlayInASkirmish);
 run.Test("Skirmish replay: the playback lets the AI decide again and audits it against the recording", Tests.SkirmishReplayPlaysTheMatchAndAuditsTheAi);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
 run.Test("Projectiles: ballistic arc path points and flight time", Tests.ProjectileBallisticArc);
