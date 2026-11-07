@@ -152,6 +152,8 @@ public sealed class SelectionModel
         else if (counts.GetValueOrDefault(Side.Friends) == 1) selectOther = Side.Friends;
         if (!selectMine && selectOther is null) return false;
         if (selectOther is not null) addToGroup = false;
+        // A Shift-click on one more building of the kind that is selected joins it to the structure group (an addition of this client; the original never extends a building selection).
+        if (preferSelection && isPoint && selectMineBuildings && candidates.Length == 1 && JoinsStructureGroup(world, mine[0])) addToGroup = true;
 
         _lastGroup = -1;
         if (preferSelection && isPoint && candidates.All(entity => _selected.Contains(entity.Id.Value)))
@@ -172,6 +174,36 @@ public sealed class SelectionModel
         return true;
     }
 
+    /// <summary>
+    /// True when <paramref name="building"/> is a finished own structure of the template every selected object has: the selection is a structure group (or one building) of its kind.
+    /// </summary>
+    private bool JoinsStructureGroup(SimulationWorld world, Entity building)
+        => IsGroupableStructure(building) && _selected.Count > 0 && OwnStructureTemplate(world) == building.Template.Name;
+
+    /// <summary>
+    /// A structure that may be part of a group of its kind: selectable, finished and not being sold (the callers check the owner). A site has no command set of its own to share, so
+    /// it is never taken along by a double click or by the matching keys.
+    /// </summary>
+    public static bool IsGroupableStructure(Entity entity)
+        => EntityPicker.IsSelectable(entity) && entity.Template.IsKindOf("STRUCTURE")
+           && !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(ObjectStatusBits.Sold);
+
+    /// <summary>
+    /// The template name when everything selected is a structure of the player's own and they are all of one template (one building counts), otherwise null. Two or more such
+    /// buildings are a structure group: they take the same orders at once (<see cref="CommandBarModel"/>).
+    /// </summary>
+    public string? OwnStructureTemplate(SimulationWorld world)
+    {
+        string? template = null;
+        foreach (var id in _selected)
+        {
+            if (world.FindEntity(new EntityId(id)) is not { } entity || entity.Owner != LocalPlayer || !entity.Template.IsKindOf("STRUCTURE")) return null;
+            if (template is null) template = entity.Template.Name;
+            else if (!template.Equals(entity.Template.Name, StringComparison.Ordinal)) return null;
+        }
+        return template;
+    }
+
     /// <summary>A point click: the picked object as the only candidate.</summary>
     public bool ClickSelect(SimulationWorld world, IViewProjection view, Vector2 screen, bool preferSelection)
     {
@@ -189,7 +221,8 @@ public sealed class SelectionModel
     public bool DoubleClickSelect(SimulationWorld world, IViewProjection view, Vector2 screen, bool acrossMap, bool preferSelection)
     {
         var picked = Picker.Pick(world, LocalPlayer, view, screen);
-        if (picked is null || picked.Owner != LocalPlayer || !EntityPicker.IsMassSelectable(picked)) return false;
+        if (picked is null || picked.Owner != LocalPlayer) return false;
+        if (!EntityPicker.IsMassSelectable(picked)) return picked.Template.IsKindOf("STRUCTURE") && DoubleClickStructure(world, view, picked, acrossMap);
         var keep = preferSelection
             ? _selected.Select(id => world.FindEntity(new EntityId(id))).OfType<Entity>().Where(entity => entity.Owner == LocalPlayer && EntityPicker.IsMassSelectable(entity)).Select(entity => entity.Id.Value).ToList()
             : [];
@@ -207,15 +240,37 @@ public sealed class SelectionModel
     }
 
     /// <summary>
+    /// The double click on one of the player's own buildings (a feature of this client; the original double-clicks only units): the building and every finished building of its
+    /// template on the screen (Alt: the whole map) are selected as a structure group. The first click of the pair must have selected the building; one that an order went to instead
+    /// (a dozer's repair under the left-click scheme) is not reselected.
+    /// </summary>
+    private bool DoubleClickStructure(SimulationWorld world, IViewProjection view, Entity picked, bool acrossMap)
+    {
+        if (!IsGroupableStructure(picked) || !_selected.Contains(picked.Id.Value) || OwnStructureTemplate(world) != picked.Template.Name) return false;
+        _lastGroup = -1;
+        Change(set =>
+        {
+            set.Clear();
+            set.Add(picked.Id.Value);
+        });
+        if (acrossMap) MatchingAcrossMap(world);
+        else MatchingAcrossScreen(world, view);
+        return true;
+    }
+
+    /// <summary>
     /// <c>InGameUI::selectMatchingAcrossRegion</c>: adds every own, uncontained, mass-selectable object whose template equals a selected own object's
     /// template, on screen (<paramref name="view"/>) or across the map (null). Returns the number added, or -1 when nothing of the player's own is selected.
+    /// A selection of buildings finds the finished buildings of its template instead (the structure group of this client; the original's call finds no structure).
     /// </summary>
     public int SelectMatching(SimulationWorld world, IViewProjection? view)
     {
-        var templates = OwnSelected(world).Select(entity => entity.Template.Name).ToHashSet(StringComparer.Ordinal);
+        var own = OwnSelected(world);
+        var templates = own.Select(entity => entity.Template.Name).ToHashSet(StringComparer.Ordinal);
         if (templates.Count == 0) return -1;
+        var structures = own.All(entity => entity.Template.IsKindOf("STRUCTURE"));
         var pool = view is null ? world.Entities.OrderBy(entity => entity.Id.Value).ToImmutableArray() : Picker.OnScreen(world, LocalPlayer, view);
-        return AddUpToLimit(pool.Where(entity => entity.Owner == LocalPlayer && EntityPicker.IsMassSelectable(entity) && templates.Contains(entity.Template.Name)));
+        return AddUpToLimit(pool.Where(entity => entity.Owner == LocalPlayer && (structures ? IsGroupableStructure(entity) : EntityPicker.IsMassSelectable(entity)) && templates.Contains(entity.Template.Name)));
     }
 
     /// <summary><c>InGameUI::selectMatchingAcrossScreen</c>: the matching units on screen; says "nothing selected" when there was nothing to match, "across screen" when units were added, nothing when none were.</summary>
@@ -418,13 +473,28 @@ public sealed class SelectionModel
                 {
                     var firstSelected = set.Count > 0 ? world.FindEntity(new EntityId(set.Min)) : null;
                     var firstMember = members.Count > 0 ? world.FindEntity(new EntityId(members.Min)) : null;
-                    if (firstSelected?.Template.IsKindOf("STRUCTURE") == true || firstMember?.Template.IsKindOf("STRUCTURE") == true) set.Clear();
+                    // A building that is selected or stands first in the group empties the selection, unless it and the members are finished buildings of one kind (a structure group).
+                    if ((firstSelected?.Template.IsKindOf("STRUCTURE") == true || firstMember?.Template.IsKindOf("STRUCTURE") == true) && !SameStructureKind(world, set, members)) set.Clear();
                     set.UnionWith(members);
                 });
                 return null;
             }
         }
         return null;
+    }
+
+    /// <summary>True when everything in both sets is a finished structure of the player's own and they all share one template (both sets non-empty).</summary>
+    private bool SameStructureKind(SimulationWorld world, SortedSet<uint> selected, SortedSet<uint> members)
+    {
+        if (selected.Count == 0 || members.Count == 0) return false;
+        string? template = null;
+        foreach (var id in selected.Concat(members))
+        {
+            if (world.FindEntity(new EntityId(id)) is not { } entity || entity.Owner != LocalPlayer || !IsGroupableStructure(entity)) return false;
+            if (template is null) template = entity.Template.Name;
+            else if (!template.Equals(entity.Template.Name, StringComparison.Ordinal)) return false;
+        }
+        return true;
     }
 
     /// <summary>

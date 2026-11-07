@@ -467,9 +467,12 @@ public sealed class CommandModeController
         {
             case GuiCommandKind.UnitBuild:
             {
-                var producer = sources.FirstOrDefault(entity => SimulationQueries.ProductionOf(entity) is not null);
+                // Several producers (a structure group): the one with the shortest queue takes the order, so the queues fill evenly (ProductionBalancer).
+                var producer = ChooseProducer(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).ToList(), out var length, out var balanced);
                 if (producer is null) return ActivationResult.NoSource;
-                return Result(Issue((sequence, tick) => new QueueProductionCommand(Player, sequence, tick, producer.Id, button.Object)));
+                var result = Issue((sequence, tick) => new QueueProductionCommand(Player, sequence, tick, producer.Id, button.Object));
+                if (result.Accepted && balanced) _balancer.Ordered(world, producer, length);
+                return Result(result);
             }
             case GuiCommandKind.DozerConstruct:
             {
@@ -488,15 +491,33 @@ public sealed class CommandModeController
                     site => Issue((sequence, tick) => new CancelConstructCommand(Player, sequence, tick, site.Id)));
             case GuiCommandKind.PlayerUpgrade:
             {
-                // The building whose button was pressed researches it (MSG_QUEUE_UPGRADE goes to the selected group).
-                var producer = sources.IsEmpty ? (EntityId?)null : sources[0].Id;
-                return Result(Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, producer)));
+                // The building whose button was pressed researches it (MSG_QUEUE_UPGRADE goes to the selected group); of several selected buildings, the one with the shortest queue.
+                var chosen = ChooseProducer(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).ToList(), out var length, out var balanced);
+                EntityId? producer = chosen is not null ? chosen.Id : sources.IsEmpty ? null : sources[0].Id;
+                var result = Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, producer));
+                if (result.Accepted && balanced && chosen is not null) _balancer.Ordered(world, chosen, length);
+                return Result(result);
             }
             case GuiCommandKind.ObjectUpgrade:
             {
                 // MSG_QUEUE_UPGRADE goes to the selected group: AIGroup::queueUpgrade gives it to every member that can take it (here: every unit the button is enabled for -
                 // the original would also queue a second drone behind one in production, whose conflict only shows when both are done).
                 if (sources.IsEmpty) return ActivationResult.NoSource;
+                // Buildings selected together hold the upgrade one each (a reactor, an overcharge): it goes to one that can still take it and is not researching it, the one with the
+                // shortest queue. The units of a selection all get it.
+                if (sources.Length > 1 && sources.All(entity => entity.Template.IsKindOf("STRUCTURE")))
+                {
+                    var able = _balancer.WithoutPendingUpgrade(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null), button.Upgrade, Horizon(world)).ToList();
+                    var chosen = ChooseProducer(world, able, out var length, out _);
+                    if (chosen is null) return ActivationResult.NoSource;
+                    var result = Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, chosen.Id));
+                    if (result.Accepted)
+                    {
+                        _balancer.Ordered(world, chosen, length);
+                        _balancer.UpgradeOrdered(world, chosen, button.Upgrade);
+                    }
+                    return Result(result);
+                }
                 return ForAll(sources, unit => Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, unit.Id)));
             }
             case GuiCommandKind.PurchaseScience:
@@ -612,6 +633,26 @@ public sealed class CommandModeController
                 _feedback.Add(new CommandFeedback(FeedbackKind.Unsupported, Vector3.Zero, EntityId.Invalid, world.Tick, Settings.MarkerFrames, Detail: button.Kind.ToString()));
                 return ActivationResult.Unsupported;
         }
+    }
+
+    private readonly ProductionBalancer _balancer = new();
+
+    /// <summary>How long an order that the world does not show yet counts for the balance: its delay and a few frames of the original.</summary>
+    private long Horizon(SimulationWorld world) => _sink.DelayTicks + world.Time.OriginalFrames(8);
+
+    /// <summary>
+    /// The producer of several that takes the next order: the shortest queue, ties in the order given (<see cref="ProductionBalancer"/>). <paramref name="balanced"/> says there was a choice;
+    /// <paramref name="length"/> is the queue the chosen one had.
+    /// </summary>
+    private Entity? ChooseProducer(SimulationWorld world, IReadOnlyList<Entity> producers, out int length, out bool balanced)
+    {
+        length = 0;
+        balanced = producers.Count > 1;
+        if (producers.Count == 0) return null;
+        if (!balanced) return producers[0];
+        var chosen = _balancer.Pick(world, producers, Horizon(world));
+        if (chosen is not null) length = _balancer.QueueLength(world, chosen, Horizon(world));
+        return chosen;
     }
 
     /// <summary>

@@ -90,6 +90,15 @@ public enum CommandBarContext
     MultiSelect,
 }
 
+public enum SelectionGroupKind
+{
+    /// <summary>Several buildings of one template, selected together: the bar is theirs, an order goes to one of them or to all.</summary>
+    Structures,
+}
+
+/// <summary>What the bar stands for when it is not one object's: <see cref="Count"/> objects of <see cref="Template"/>.</summary>
+public sealed record SelectionGroup(SelectionGroupKind Kind, string Template, int Count);
+
 public sealed record CommandBarView(
     CommandBarContext Context,
     string CommandSet,
@@ -100,6 +109,9 @@ public sealed record CommandBarView(
     bool CanCancelConstruction)
 {
     public CommandBarButton? this[int slot] => slot >= 1 && slot <= Slots.Length ? Slots[slot - 1] : null;
+
+    /// <summary>Set when the bar is that of a structure group; null for one object and for the buttons all of a mixed selection share. <see cref="Producer"/> is the lead building then: the first of the group, whose queue is shown.</summary>
+    public SelectionGroup? Group { get; init; }
 }
 
 public sealed record SpecialPowerView(string Power, EntityId Source, bool Ready, float ReadyFraction);
@@ -275,6 +287,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         var units = selected.Where(entity => !entity.Template.IsKindOf("IGNORED_IN_GUI") && !entity.HasStatus(ObjectStatusBits.Sold)).ToList();
         if (units.Count == 0) return Empty(CommandBarContext.BeingSold);
         if (units.Count == 1) return BuildSingle(world, player, units[0]);
+        // Several buildings of one template are a structure group.
+        if (selection.OwnStructureTemplate(world) is { } structureTemplate)
+            return BuildGroup(world, player, units, new SelectionGroup(SelectionGroupKind.Structures, structureTemplate, units.Count));
         return BuildMulti(world, player, units);
     }
 
@@ -350,6 +365,37 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 slots[slot - 1] = new CommandBarButton(slot, button, full ? ButtonAvailability.Available : ButtonAvailability.Restricted, full ? ButtonReason.None : ButtonReason.EmptyContainer,
                     null, default, 0, null, full ? [entity.Id] : []);
         return new CommandBarView(CommandBarContext.Command, string.Empty, [..slots], [], entity.Id, [], false);
+    }
+
+    /// <summary>
+    /// The bar of several buildings of one template: the whole command set of the lead - the first of them -, not only
+    /// the buttons the original marks for a multiple selection. A button shows when one of the objects it fits shows it, is enabled when one of them can do it, and
+    /// <see cref="CommandBarButton.Sources"/> names the objects that can; the controller chooses among them (the shortest queue takes a production order, every one takes
+    /// the orders that fit all alike). The queue shown is the lead's.
+    /// </summary>
+    private CommandBarView BuildGroup(SimulationWorld world, PlayerId player, List<Entity> members, SelectionGroup group)
+    {
+        var ready = members.Where(member => !member.HasStatus(ObjectStatusBits.UnderConstruction)).ToList();
+        if (ready.Count == 0) return Empty(CommandBarContext.UnderConstruction) with { CanCancelConstruction = true, Producer = members[0].Id, Group = group };
+        if (ready.Count == 1) return BuildSingle(world, player, ready[0]) with { Group = group };
+        var sets = ready.Select(member => ActiveCommandSet(world, member) is { } name && Catalog.TryGetSet(name, out var found) ? found : null).ToList();
+        if (sets[0] is not { } leadSet) return Empty(CommandBarContext.NoCommandSet) with { Group = group };
+        var slots = new CommandBarButton?[GridSlots];
+        var hotkeys = new HashSet<char>();
+        for (var index = 0; index < GridSlots; index++)
+        {
+            if (ButtonOf(leadSet, index) is not { } button) continue;
+            var owners = ready.Where((_, member) => sets[member] is { } set && ReferenceEquals(ButtonOf(set, index), button)).ToList();
+            var states = owners.Select(owner => Evaluate(world, player, owner, button)).ToList();
+            if (states.All(state => state.Availability == ButtonAvailability.Hidden)) continue;
+            var enabled = states.FindIndex(state => state.Availability == ButtonAvailability.Available);
+            if (enabled < 0) enabled = states.FindIndex(state => state.Availability == ButtonAvailability.Active);
+            var chosen = enabled >= 0 ? states[enabled] : states[0];
+            var sources = owners.Where((_, i) => states[i].Availability is ButtonAvailability.Available or ButtonAvailability.Active).Select(owner => owner.Id).ToImmutableArray();
+            slots[index] = Make(index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(owner => owner.Id)] : sources, hotkeys);
+        }
+        var lead = ready[0];
+        return new CommandBarView(CommandBarContext.Command, leadSet.Name, [..slots], QueueOf(world, lead, leadSet), lead.Id, UpgradesOf(world, lead), false) { Group = group };
     }
 
     private CommandBarView BuildMulti(SimulationWorld world, PlayerId player, List<Entity> units)

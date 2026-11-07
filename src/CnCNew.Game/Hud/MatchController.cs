@@ -1045,8 +1045,12 @@ public sealed partial class MatchController
     /// <summary>The <c>SelectPortrait</c> of the single selected object, if the image table has it.</summary>
     private string? SelectedPortrait()
     {
-        if (Input.Selection.Selected.ToArray() is not [var only] || Match.World.FindEntity(only) is not { } entity) return null;
-        return Match.Data.Visuals.TryGet(entity.Template.Name, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _) ? image : null;
+        // The bar of a structure group shows the portrait of its kind, with the count over it (GroupTag).
+        string name;
+        if (CommandBar.Group is { } group) name = group.Template;
+        else if (Input.Selection.Selected.ToArray() is [var only] && Match.World.FindEntity(only) is { } entity) name = entity.Template.Name;
+        else return null;
+        return Match.Data.Visuals.TryGet(name, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _) ? image : null;
     }
 
     private static readonly int SoldStatus = CnCNew.Simulation.Modules.ObjectStatusBits.Index("SOLD");
@@ -1297,8 +1301,24 @@ public sealed partial class MatchController
             var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
         }
+        if (_modernBar is null && !_controlBarRoot.IsHidden && CommandBar.Group is { } group) commands.AddRange(GroupTag(group));
         AddPowerCameos(commands, cooldown);
         AddGeneralsCameos(commands);
         return commands.ToImmutable();
+    }
+
+    /// <summary>
+    /// What the original bar cannot say about several buildings that share it: their name and how many there are, over the portrait window. The modern bar's plate says the same in its own text.
+    /// </summary>
+    private ImmutableArray<UiDrawCommand> GroupTag(SelectionGroup group)
+    {
+        if (_tree.FindByName("ControlBar.wnd:RightHUD") is not { } anchor) return [];
+        var name = _descriptions.DisplayName(group.Template);
+        var text = string.Create(CultureInfo.InvariantCulture, $"{name} x{group.Count}");
+        var font = TextStyle.Font(InGameUiFontRole.Message, _tree.Viewport, _scaleOptions);
+        var rect = anchor.Rect;
+        var width = _textMeasure.MeasureWidth(text, font);
+        var (x, y) = (rect.X + (rect.Width - width) / 2, rect.Y - _textMeasure.LineHeight(font) - 1);
+        return [new UiTextDraw(text, null, font, WndColor.White, new WndColor(0, 0, 0, 255), x, y, UiTextAlignment.Left, new UiRect(rect.X - 8, y - 2, rect.Width + 16, _textMeasure.LineHeight(font) + 4))];
     }
 }

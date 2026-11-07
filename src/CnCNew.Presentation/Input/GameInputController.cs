@@ -209,7 +209,12 @@ public sealed class GameInputController
         {
             case MetaAction.SelectAll: Selection.SelectAll(world, view, aircraftOnly: false); return;
             case MetaAction.SelectAllAircraft: Selection.SelectAll(world, view, aircraftOnly: true); return;
-            case MetaAction.SelectMatchingUnits: Selection.SelectMatchingUnits(world, view); return;
+            case MetaAction.SelectMatchingUnits:
+                // E on buildings finds the finished buildings of their kind (a structure group), but a building whose bar has a button on the same key keeps it (the war factory builds an
+                // ECM tank with E): the key does one thing, as in the original.
+                if (BarKeepsKeyOf(action, world)) return;
+                Selection.SelectMatchingUnits(world, view);
+                return;
             case MetaAction.SelectNextUnit or MetaAction.SelectPrevUnit or MetaAction.SelectNextWorker or MetaAction.SelectPrevWorker:
             {
                 var workers = action is MetaAction.SelectNextWorker or MetaAction.SelectPrevWorker;
@@ -235,6 +240,15 @@ public sealed class GameInputController
                 UiRequest?.Invoke(action);
                 return;
         }
+    }
+
+    /// <summary>True when the selection is own buildings and one of their visible buttons is pressed by the plain key <paramref name="action"/> is bound to.</summary>
+    private bool BarKeepsKeyOf(MetaAction action, SimulationWorld world)
+    {
+        if (CommandBar is null || Selection.OwnStructureTemplate(world) is null || !Hotkeys.TryGetEntry(action, out var entry) || entry.Binding.Modifiers != KeyModifiers.None
+            || KeyNames.CharacterOf(entry.Binding.Key) is not { } character) return false;
+        var lower = char.ToLowerInvariant(character);
+        return CommandBar.Build(world, Selection).Slots.Any(button => button is not null && button.Hotkey == lower && button.Availability != ButtonAvailability.Hidden);
     }
 
     // ------------------------------------------------------------------------------------------------ mouse
