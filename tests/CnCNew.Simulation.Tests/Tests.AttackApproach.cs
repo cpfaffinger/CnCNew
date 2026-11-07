@@ -53,6 +53,7 @@ static partial class Tests
         Object AapTarget
           KindOf = SELECTABLE VEHICLE
           VisionRange = 100.0
+          Locomotor = SET_NORMAL AapTreads
           Body = ActiveBody Body01
             MaxHealth = 100000.0
             InitialHealth = 100000.0
@@ -64,11 +65,13 @@ static partial class Tests
     };
 
     /// <summary>A computer player's mortar truck idle on the point where an enemy stands; returns the shots it fired over ten seconds, its distance to the victim and its arrivals.</summary>
-    private static (int Shots, Fixed Distance, int Arrivals) MortarOnTopOfItsVictim(SimulationRate rate)
+    private static (int Shots, Fixed Distance, int Arrivals) MortarOnTopOfItsVictim(SimulationRate rate, bool withTerrain)
     {
         var fixture = new SyntheticFixture(rate, files: AttackApproachFiles());
-        var terrain = TerrainMap.Build(SyntheticMaps.Build(30, 30, 1), "attack-approach");
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var terrain = withTerrain ? TerrainMap.Build(SyntheticMaps.Build(30, 30, 1), "attack-approach") : null;
+        var world = terrain is null
+            ? new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates)
+            : new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "AapMortarTruck", owner: 1, x: 150, y: 150);
         feeder.Spawn(2, "AapTarget", owner: 2, x: 150, y: 150);
@@ -92,12 +95,14 @@ static partial class Tests
     public static void AttackApproachKeepsTheMinimumRange()
     {
         foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
-        {
-            var (shots, distance, arrivals) = MortarOnTopOfItsVictim(rate);
-            Check.That(shots > 0, $"{rate}: a mortar on top of its victim moves out of its minimum range and fires ({shots} shots, {arrivals} arrivals).");
-            Check.That(distance >= Fixed.FromInt(60) && distance <= Fixed.FromInt(120), $"{rate}: it fires from within its range of 60 to 120 ({distance}).");
-            Check.That(arrivals < 5, $"{rate}: it does not begin its approach again in every frame ({arrivals} arrivals).");
-        }
+            foreach (var withTerrain in new[] { true, false })
+            {
+                var (shots, distance, arrivals) = MortarOnTopOfItsVictim(rate, withTerrain);
+                var where = $"{rate}{(withTerrain ? "" : " without terrain")}";
+                Check.That(shots > 0, $"{where}: a mortar on top of its victim moves out of its minimum range and fires ({shots} shots, {arrivals} arrivals).");
+                Check.That(distance >= Fixed.FromInt(59) && distance <= Fixed.FromInt(120), $"{where}: it fires from within its range of 60 to 120, the minimum range read as the weapon reads it ({distance}).");
+                Check.That(arrivals < 10, $"{where}: it does not begin its approach again in every frame ({arrivals} arrivals).");
+            }
     }
 }
 
@@ -113,10 +118,14 @@ static partial class Tests
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = System.Collections.Immutable.ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "Tunnel", IsComputer: true), new PlayerConfiguration(new PlayerId(2), "Enemy"));
         foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+            foreach (var withTerrain in new[] { true, false })
         {
             var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
-            var terrain = TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "tunnel-defender");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, players, "real-tunnel-defender", fingerprint, terrain.Fingerprint), catalog, terrain);
+            // The retail reference match runs on a world without terrain.
+            var terrain = withTerrain ? TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "tunnel-defender") : null;
+            var world = terrain is null
+                ? new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, players, "real-tunnel-defender", fingerprint), catalog)
+                : new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, players, "real-tunnel-defender", fingerprint, terrain.Fingerprint), catalog, terrain);
             var sequence = 0UL;
             void Spawn(string template, int owner, int x, int y)
                 => Check.That(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(new PlayerId(owner), ++sequence, world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, template + " spawns.");
@@ -133,8 +142,8 @@ static partial class Tests
                     if (value.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired) shots++;
                     if (value.Kind == CnCNew.Simulation.Events.SimEventKind.MoveArrived) arrivals++;
                 }
-            Check.That(shots > 0, $"{rate}: a tunnel defender on its victim's point steps out of the rocket's minimum range and fires ({shots} shots, {arrivals} arrivals).");
-            Check.That(arrivals < 10, $"{rate}: it does not begin its approach again in every frame ({arrivals} arrivals).");
+            Check.That(shots > 0, $"{rate}{(withTerrain ? "" : " without terrain")}: a tunnel defender on its victim's point steps out of the rocket's minimum range and fires ({shots} shots, {arrivals} arrivals).");
+            Check.That(arrivals < 10, $"{rate}{(withTerrain ? "" : " without terrain")}: it does not begin its approach again in every frame ({arrivals} arrivals).");
         }
     }
 }

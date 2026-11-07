@@ -142,14 +142,14 @@ public sealed partial class SimulationWorld
     /// </summary>
     public (Fixed X, Fixed Y)? FindAttackPosition(Entity unit, Entity victim)
     {
-        if (Navigation is not { } grid || Terrain is not { } terrain || unit.Template.IsKindOf("IMMOBILE")) return null;
+        if (unit.Template.IsKindOf("IMMOBILE")) return null;
         if (unit.Template.Locomotor is not { } locomotor || (locomotor.Surfaces & LocomotorSurfaces.Air) != 0) return null;
         var (unitX, unitY, _) = unit.FrameEnd(_tick);
         var (victimX, victimY, _) = victim.FrameEnd(_tick);
         WeaponInfo? chosen = null;
         var tooClose = false;
         // In range but the view is blocked: only a unit of the kind that needs a view is held back by that (F-55).
-        if (AttackUsesLineOfSight && unit.Template.IsKindOf(NeedsLineOfSightKind))
+        if (AttackUsesLineOfSight && Navigation is not null && Terrain is not null && unit.Template.IsKindOf(NeedsLineOfSightKind))
         {
             var choice = ChooseWeapon(unit, victim, FireOrigin.Ai);
             if (choice.Slot >= 0 && ActiveWeaponSet(unit) is { } set && set.HasWeapon(choice.Slot)) chosen = _templates.Weapons[set.Weapons[choice.Slot]];
@@ -176,6 +176,9 @@ public sealed partial class SimulationWorld
         var far = SquaredReach.Of(range - GoalRangeMargin);
         var hasNear = weapon.MinimumAttackRange > Fixed.Zero;
         var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin);
+
+        // A world without terrain has no cells to search; a unit inside its minimum range still steps out of it.
+        if (Navigation is not { } grid || Terrain is not { } terrain) return tooClose ? StepOffTheVictim() : null;
 
         bool Fits(Fixed x, Fixed y)
         {
@@ -267,12 +270,19 @@ public sealed partial class SimulationWorld
         // computeAttackPath, no place to fire from: "if the move is a short distance, just do a find closest path to our current position. This will unstack us if we are on top
         // of another unit". The original reaches this with a goal its strip-back moved out of range; here the search found none, and a unit inside its minimum range steps to the
         // nearest free place beside where it stands (adjustDestination) instead of walking at the victim's point, which it already stands on.
-        if (tooClose)
+        return tooClose ? StepOffTheVictim() : null;
+
+        (Fixed X, Fixed Y)? StepOffTheVictim()
         {
-            var (freeX, freeY) = (unitX, unitY);
-            if (FindPossibleDestination(unit, ref freeX, ref freeY) && (freeX != unitX || freeY != unitY)) return (freeX, freeY);
+            // Out along the line from the victim through the unit (any way when they stand on one point) to just outside the minimum range, then to the nearest free place there.
+            var awayX = unitX - victimX;
+            var awayY = unitY - victimY;
+            var away = Fixed.Sqrt(awayX * awayX + awayY * awayY);
+            var (directionX, directionY) = away > Fixed.Zero ? (awayX / away, awayY / away) : (Fixed.One, Fixed.Zero);
+            var distance = weapon.MinimumAttackRange + GoalRangeMargin * Fixed.FromInt(2);
+            var (freeX, freeY) = (victimX + directionX * distance, victimY + directionY * distance);
+            return FindPossibleDestination(unit, ref freeX, ref freeY) && (freeX != unitX || freeY != unitY) ? (freeX, freeY) : null;
         }
-        return null;
 
         static long Key(long estimate, int cell) => estimate * CellKeySpan + cell;
     }
