@@ -318,7 +318,11 @@ internal sealed class TerrainLayer : IWorldLayer
     private void CreateMinimapTexture(GraphicsDevice device, LiveGame match)
     {
         var minimap = match.Minimap;
-        MinimapTexture = Texture.New2D(device, minimap.Width, minimap.Height, PixelFormat.R8G8B8A8_UNorm, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Dynamic);
+        // The radar's picture holds display values (W3DRadar composes it in a gamma-space texture and the screen shows those values as they are). In the linear pipeline
+        // a plain UNorm texture is read as linear light and comes out brightened by the display curve - the fog's half level then showed at three quarters and the three
+        // states of the shroud hardly differed - so it is read as sRGB, as every other picture the client draws (W3dTextureCache, UiTextures).
+        var format = device.ColorSpace == ColorSpace.Linear ? PixelFormat.R8G8B8A8_UNorm_SRgb : PixelFormat.R8G8B8A8_UNorm;
+        MinimapTexture = Texture.New2D(device, minimap.Width, minimap.Height, format, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Dynamic);
         Track(MinimapTexture, minimap.Width * minimap.Height * 4);
     }
 

@@ -22,6 +22,7 @@ internal static class MinimapTests
         t.Run("height shading", Shading);
         t.Run("terrain layer with water", TerrainLayer);
         t.Run("fog, dots and camera footprint", Compose);
+        t.Run("the shroud's three states: unexplored black, explored but fogged half, in sight bright; and the picture follows the sight", ThreeStatesOfTheShroud);
         t.Run("a working bridge has its colour, over the water too", Bridge);
         return t.Failures;
     }
@@ -118,6 +119,40 @@ internal static class MinimapTests
             if (framed[i] == 255 && framed[i + 1] == 255 && framed[i + 2] == 255) white++;
         Assert(white > 20, $"footprint outline drawn ({white} pixels)");
         Assert(image.TerrainRgba.SequenceEqual(image.Compose(null, [], null)), "composition without overlays is the terrain layer");
+    }
+
+    /// <summary>
+    /// <c>W3DRadar::setShroudLevel</c> lays a black of alpha 255 over a shrouded cell, 127 over a fogged one and 0 over one in sight: the radar shows the player's field of view as
+    /// bright ground, the explored rest at about half and the unexplored black. The cells follow the sight as it moves (the fade is the presentation's own and ends at the levels).
+    /// </summary>
+    private static void ThreeStatesOfTheShroud()
+    {
+        var (image, _) = Build(40, SyntheticTerrain.Map(81, 41, 0, (_, _) => 0));
+        var settings = VisionTests.Settings;
+        Assert(settings is { ShroudLevel: 0, FogLevel: 127, ClearLevel: 255 }, "the levels are the original's ShroudAlpha, FogAlpha and ClearAlpha");
+        var fog = new FogOfWarGrid(80, 40, settings);
+        // West third in sight, middle third explored, east third never seen.
+        fog.SetStates(Enumerable.Range(0, 80 * 40).Select(index => index % 80 < 27 ? FogCellState.Visible : index % 80 < 54 ? FogCellState.Fogged : FogCellState.Unexplored).ToArray());
+        fog.Snap();
+        var ground = SyntheticTerrain.TileColor(0, 0);
+        Rgba32 At(byte[] picture, int x)
+        {
+            Pixel(picture, image.Width, x, 10, out var color);
+            return color;
+        }
+        var rgba = image.Compose(fog, [], null);
+        var (visible, fogged, shrouded) = (At(rgba, 3), At(rgba, 20), At(rgba, 37));
+        Assert(visible == ground, $"in sight the ground is as it is ({visible})");
+        Assert(shrouded == new Rgba32(0, 0, 0, 255), $"unexplored is black ({shrouded})");
+        byte Half(byte channel) => (byte)((channel * 127 + 127) / 255);
+        Assert(fogged == new Rgba32(Half(ground.R), Half(ground.G), Half(ground.B), 255), $"explored but not in sight is the ground at 127/255 ({fogged}, ground {ground})");
+        Assert(visible.R + visible.G + visible.B > fogged.R + fogged.G + fogged.B && fogged.R + fogged.G + fogged.B > 0, "the three states are three brightnesses, bright, half and black");
+
+        // The sight moves east: the picture follows once the levels have arrived.
+        fog.SetStates(Enumerable.Range(0, 80 * 40).Select(index => index % 80 < 27 ? FogCellState.Fogged : index % 80 < 54 ? FogCellState.Visible : FogCellState.Unexplored).ToArray());
+        fog.Advance(10f);
+        var moved = image.Compose(fog, [], null);
+        Assert(At(moved, 3) == fogged && At(moved, 20) == ground && At(moved, 37) == shrouded, "the field of view moved: the cells it left dim to half and the ones it reached brighten");
     }
 
     private static void Pixel(ReadOnlySpan<byte> rgba, int width, int x, int y, out Rgba32 color)
