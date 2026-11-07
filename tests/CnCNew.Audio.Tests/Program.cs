@@ -12,6 +12,7 @@ run.Test("Mixer: microphone placement and zoom volume", Tests.MicrophonePlacemen
 run.Test("Mixer: priority stealing, limits and culling", Tests.VoiceStealingAndLimits);
 run.Test("Mixer: loop seams, fade-in and fade-out", Tests.LoopSeamAndFades);
 run.Test("Mixer: music streaming and crossfade", Tests.MusicCrossfade);
+run.Test("Mixer: a paused music track stands and goes on", Tests.MusicPause);
 run.Test("Mixer: event voices with delay, attack, loops and decay", Tests.EventVoices);
 run.Test("Mixer: two runs of one script are byte-identical", Tests.MixerDeterminism);
 

@@ -167,6 +167,27 @@ static partial class Tests
         Check.That(mixer.ActiveMusicCount == 0, "A non-looping track ends.");
     }
 
+    public static void MusicPause()
+    {
+        using var mixer = new SoftwareMixer(new MixerOptions(SampleRate: 1000));
+        // A ramp that never repeats inside the test: the sample value tells where the track stands.
+        var ramp = new float[1000];
+        for (var frame = 0; frame < ramp.Length; frame++) ramp[frame] = frame / 1000f;
+        mixer.PlayMusic(new PcmBufferStream(PcmBuffer.FromOwnedArray(1000, 1, ramp)), loop: false);
+        var block = new float[2 * 100];
+        mixer.Render(block);
+        Check.Near(block[^2], 0.099, 1e-6, "The track has played 100 frames.");
+        mixer.SetMusicPaused(true);
+        mixer.Render(block);
+        mixer.Render(block);
+        Check.That(block.All(value => value == 0f), "A paused track is silent.");
+        Check.That(mixer.ActiveMusicCount == 1, "A paused track is not ended.");
+        mixer.SetMusicPaused(false);
+        mixer.Render(block);
+        Check.Near(block[0], 0.100, 1e-6, "It goes on from the frame it stood on, not from where the clock would be.");
+        Check.Near(block[^2], 0.199, 1e-6, "… and plays on.");
+    }
+
     public static void EventVoices()
     {
         var info = Event("Loop", ["a", "b"], AudioControlFlags.Loop) with

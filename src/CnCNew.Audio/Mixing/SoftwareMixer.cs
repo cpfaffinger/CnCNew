@@ -28,6 +28,7 @@ public sealed class SoftwareMixer : IDisposable
     private BusVolumes _buses;
     private float _master = 1f;
     private bool _membershipChanged = true;
+    private bool _musicPaused;
     private long _started, _finished, _stopped, _stolen, _replaced, _rejectedDistance, _rejectedMuted, _rejectedLimit, _rejectedNoChannel, _culled, _clipped, _rendered;
 
     private volatile MixerStatistics _statistics = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -96,6 +97,12 @@ public sealed class SoftwareMixer : IDisposable
 
     public void StopMusic(float fadeOutSeconds = 0f) => _commands.Enqueue(new StopMusicCommand(fadeOutSeconds));
 
+    /// <summary>
+    /// Holds the music tracks where they are (<c>AIL_pause_stream</c> of <c>MilesAudioManager::pauseAudio</c>): they neither sound nor advance, and go on from the same place
+    /// when <paramref name="paused"/> is false again. Tracks started while it is on wait with the rest.
+    /// </summary>
+    public void SetMusicPaused(bool paused) => _commands.Enqueue(new PauseMusicCommand(paused));
+
     // ------------------------------------------------------------------------------------------ render (audio thread)
 
     /// <summary>Mixes the next block into <paramref name="interleavedStereo"/> (overwritten) and returns the frame count.</summary>
@@ -110,7 +117,7 @@ public sealed class SoftwareMixer : IDisposable
         if (frames > 0)
         {
             MixAll(_voices, interleavedStereo, frames);
-            MixAll(_music, interleavedStereo, frames);
+            if (!_musicPaused) MixAll(_music, interleavedStereo, frames);
         }
 
         float peakLeft = 0f, peakRight = 0f;
@@ -177,6 +184,7 @@ public sealed class SoftwareMixer : IDisposable
                 foreach (var voice in _voices.Concat(_music).ToArray()) StopVoice(voice, all.FadeOutSeconds);
                 break;
             case MusicCommand music: StartMusic(music); break;
+            case PauseMusicCommand pause: _musicPaused = pause.Paused; break;
             case StopMusicCommand stopMusic:
                 foreach (var voice in _music.ToArray()) StopVoice(voice, stopMusic.FadeOutSeconds);
                 break;
@@ -440,4 +448,5 @@ public sealed class SoftwareMixer : IDisposable
     private sealed record StopAllCommand(float FadeOutSeconds) : Command;
     private sealed record MusicCommand(VoiceHandle Handle, IPcmStream Stream, float CrossfadeSeconds, float Volume, bool Loop) : Command;
     private sealed record StopMusicCommand(float FadeOutSeconds) : Command;
+    private sealed record PauseMusicCommand(bool Paused) : Command;
 }

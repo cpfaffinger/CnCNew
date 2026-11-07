@@ -92,6 +92,7 @@ internal static class AudioDirectorTests
         var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"), rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Director drives a real match: deterministic, audible, bounded, WAV dump", () => RealDataRun(data));
         harness.Run("State sounds on real data: a unit that moves is heard", () => StateSoundsOnRealData(data));
+        harness.Run("The in-game menu pauses the music as well (GameLogic::setGamePaused pauses AudioAffect_All)", () => PauseHoldsTheMusic(data));
         harness.Run("The train of Alpine Assault: it runs with its loop and clatters over the joins of its track", () => TrainSounds(data));
         harness.Run("The particle cannon's loops follow its state: unpacked and ready, then firing with the beam's annihilation", () => CannonLoops(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
@@ -1004,6 +1005,46 @@ internal static class AudioDirectorTests
         }
         Console.WriteLine($"       cannon loops before the shot: {string.Join(",", before)}; after: {string.Join(",", seen)}");
         TestHarness.Assert(before.SetEquals([2]) && seen.IsSupersetOf([3, 4]), $"ready: the unpacking loop only ({string.Join(",", before)}); fired: the firing loop and the annihilation ({string.Join(",", seen)})");
+    }
+
+    /// <summary>
+    /// <c>QuitMenu.cpp</c> pauses a skirmish with <c>setGamePaused(TRUE)</c>, whose music flag defaults to on: <c>MilesAudioManager::pauseAudio</c> then pauses the music stream. The port ducked
+    /// the music to 40 % instead, so it kept playing under the menu.
+    /// </summary>
+    private static void PauseHoldsTheMusic(GameData data)
+    {
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard) { AutoPlay = true };
+        var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        using var director = AudioDirector.Create(data, new AudioDirectorOptions { Seed = 1, MusicGapSeconds = 0 });
+        director.StartMatchMusic(data.Factions[0].Side);
+        const int blockFrames = 44100 / CnCNew.Tests.TestTime.FramesPerSecond;
+        var block = new float[blockFrames * 2];
+
+        float Play(int seconds)
+        {
+            var peak = 0f;
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * seconds; frame++)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                director.Update(live, CnCNew.Tests.TestTime.FrameSeconds);
+                var written = director.Mixer.Render(block);
+                if (frame >= CnCNew.Tests.TestTime.FramesPerSecond * seconds - CnCNew.Tests.TestTime.FramesPerSecond / 2)
+                    for (var index = 0; index < written * 2; index++) peak = Math.Max(peak, Math.Abs(block[index]));
+            }
+            return peak;
+        }
+
+        var playing = Play(6);
+        TestHarness.Assert(director.Stats.MusicStarted == 1 && director.Mixer.ActiveMusicCount == 1, "the match music is playing");
+        TestHarness.Assert(playing > 0.01f, $"and it is heard ({playing:F4})");
+        live.Paused = true;
+        var paused = Play(2);
+        TestHarness.Assert(director.IsPaused && director.Mixer.ActiveMusicCount == 1, "a pause holds the track, it does not end it");
+        TestHarness.Assert(paused == 0f, $"nothing is heard while the game is paused (peak {paused})");
+        live.Paused = false;
+        var resumed = Play(2);
+        TestHarness.Assert(!director.IsPaused && resumed > 0.01f, $"the track goes on when the game does ({resumed:F4})");
     }
 
     private static void RealDataRun(GameData data)

@@ -24,7 +24,6 @@ public enum UnitVoiceKind { Move, Attack, AttackAir, Guard, Enter, Garrison }
 /// <param name="MusicCrossfadeSeconds">Null uses <c>TimeToFadeAudio</c> of <c>AudioSettings.ini</c>.</param>
 /// <param name="MusicGapSeconds">Silence between two in-game tracks.</param>
 /// <param name="PauseFadeSeconds">Fade of the sounds that are cut when the game pauses.</param>
-/// <param name="PausedMusicVolume">Music bus factor while paused.</param>
 /// <param name="MaxAmbientVoices">Drawable ambient loops (<c>SoundAmbient</c>) audible at once, nearest first.</param>
 public sealed record AudioDirectorOptions
 {
@@ -33,7 +32,6 @@ public sealed record AudioDirectorOptions
     public float? MusicCrossfadeSeconds { get; init; }
     public float MusicGapSeconds { get; init; } = 3f;
     public float PauseFadeSeconds { get; init; } = 0.15f;
-    public float PausedMusicVolume { get; init; } = 0.4f;
     public TimeOfDay TimeOfDay { get; init; } = TimeOfDay.Afternoon;
     public int MaxAmbientVoices { get; init; } = 12;
     public float AmbientUpdateSeconds { get; init; } = 0.25f;
@@ -381,7 +379,7 @@ public sealed partial class AudioDirector : IDisposable
         PruneTracked();
         if (view is not null && !_paused) UpdateEva(view);
         if (view is not null) StopFireLoops(view.Clock.Tick);
-        UpdateMusic();
+        if (!_paused) UpdateMusic();
         SyncBuses();
     }
 
@@ -405,13 +403,15 @@ public sealed partial class AudioDirector : IDisposable
     }
 
     /// <summary>
-    /// Pausing cuts every world sound (short fade) and ducks the music; UI sounds, unit voices and Eva played while paused still sound.
-    /// The reference pauses the audio engine per affect group (<c>AudioManager::pauseAudio</c>); a mixer without pause state cuts instead.
+    /// Pausing cuts every world sound (short fade) and holds the music where it is, to go on from there; UI sounds, unit voices and Eva played while paused still sound.
+    /// The reference pauses the audio engine per affect group (<c>AudioManager::pauseAudio</c>, and the in-game menu pauses with <c>AudioAffect_All</c>, music included:
+    /// <c>GameLogic::setGamePaused(TRUE)</c> in <c>QuitMenu.cpp</c>); a mixer without pause state cuts the sounds instead.
     /// </summary>
     public void SetPaused(bool paused)
     {
         if (paused == _paused) return;
         _paused = paused;
+        _mixer.SetMusicPaused(paused);
         if (paused)
         {
             foreach (var voice in _tracked)
@@ -1008,13 +1008,13 @@ public sealed partial class AudioDirector : IDisposable
     /// <summary>
     /// Bus volumes are the final values of <see cref="AudioSettings"/> (the options screen starts at the retail defaults):
     /// sound effects and ambient follow the camera zoom (<c>set3DVolumeAdjustment</c>), UI sounds carry the retail 2D/3D ratio
-    /// (<c>Relative2DVolume</c>), music is ducked while paused. Only changed values reach the mixer.
+    /// (<c>Relative2DVolume</c>), music stands while paused (<see cref="SetPaused"/>). Only changed values reach the mixer.
     /// </summary>
     private void SyncBuses()
     {
         // The mission scripts' own volumes (AudioManager::setVolume without AudioAffect_SystemSetting) multiply the player's: music, speech, 2D sound (UI) and 3D sound (world and ambient).
         var volumes = new BusVolumes(
-            Music: _settings.Music * (_paused ? _options.PausedMusicVolume : 1f) * _scriptVolumes[(int)ScriptVolumeKind.Music],
+            Music: _settings.Music * _scriptVolumes[(int)ScriptVolumeKind.Music],
             Sfx: _settings.Effects * _zoomVolume * _scriptVolumes[(int)ScriptVolumeKind.Sound3D],
             Voice: _settings.Voice * _scriptVolumes[(int)ScriptVolumeKind.Speech],
             Ambient: _settings.Ambient * _zoomVolume * _scriptVolumes[(int)ScriptVolumeKind.Sound3D],
