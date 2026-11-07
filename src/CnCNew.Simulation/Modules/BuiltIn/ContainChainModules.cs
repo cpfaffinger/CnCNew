@@ -24,6 +24,22 @@ internal static class ContainChainModules
         new ModuleBinding<RiderChangeContainData>("RiderChangeContain", ModuleOwnerKind.Object, (configuration, _) => RiderChangeContainData.Parse(configuration), data => new RiderChangeContain(data)),
     ];
 
+    /// <summary>
+    /// A <c>PORTABLE_STRUCTURE</c> on the back of its host (the Overlord's gattling cannon, the Avenger's laser turret, the Helix's cannon) after the host's update of this tick. The
+    /// original keeps it on the host at every change of the host's transform; the port copies it in the host's update, after the host's own movement and before the turn the target
+    /// acquisition gives the host later in the tick, so at 30 Hz the structure follows that turn one frame late. Above 30 Hz the structure stands where the host's begun frame
+    /// ends (the structure decides in the first tick of its frame and reads the host there, as at 30 Hz), and takes the host's heading only in the first tick of the host's frame,
+    /// the heading of the frame end it has decided by then - not the shares of a turn the acquisition gave it in that tick and its update covers in the ticks after.
+    /// </summary>
+    internal static void FollowHostFrame(IWorldServices world, Entity host, Entity rider)
+    {
+        var (x, y, z) = host.FrameEnd(world.Tick);
+        rider.X = x;
+        rider.Y = y;
+        rider.Z = z;
+        if (world.Time.BeginsFrameOf(host, world.Tick)) rider.Angle = host.FrameEndAngle(world.Tick);
+    }
+
     /// <summary>The creation of a contain module's payload (<c>createPayload</c>): the objects appear at the container and are put inside once they exist (the next tick).</summary>
     internal static void RequestPayload(IWorldServices world, Entity container, string name, List<EntityId> pending)
     {
@@ -448,7 +464,7 @@ public sealed class OverlordContain(OverlordContainData data) : TransportContain
         var waiting = _pendingPayload.Count > 0 && ContainChainModules.EnterPayload(world, Entity, _pendingPayload);
         if (_redirectionActivated && Riders.Count > 0 && world.FindEntity(Riders[0]) is { DestroyRequested: false } structure)
         {
-            Follow(structure);
+            ContainChainModules.FollowHostFrame(world, Entity, structure);
             world.MarkDirty(structure);
             waiting = true;
         }

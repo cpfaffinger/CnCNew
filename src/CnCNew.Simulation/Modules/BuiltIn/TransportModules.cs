@@ -777,10 +777,7 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
         {
             if (world.FindEntity(_portable) is { } portable && !portable.DestroyRequested)
             {
-                portable.X = Entity.X;
-                portable.Y = Entity.Y;
-                portable.Z = Entity.Z;
-                portable.Angle = Entity.Angle;
+                ContainChainModules.FollowHostFrame(world, Entity, portable);
                 world.MarkDirty(portable);
             }
             else _portable = EntityId.Invalid;
