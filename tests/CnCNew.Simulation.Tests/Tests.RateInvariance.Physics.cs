@@ -57,10 +57,10 @@ static partial class Tests
                 var before = topple.ToppleAngle;
                 var result = world.Step();
                 if (result.Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 1)) died = tick;
-                // The first update comes one tick after the push; from there on every frame of the tree is perFrame ticks.
-                if (tick >= 2 && (tick - 1) % perFrame == 0) angles.Add(topple.ToppleAngle.Raw);
-                if (tick == 2 + perFrame && perFrame > 1) midFrame = WorldSnapshot.Write(world);
-                if (tick > 1 && tick <= perFrame && topple.ToppleAngle <= before) monotone = false;
+                // The push comes at a frame boundary and the tree's first step is its next frame (F-146): the angle is read where each frame of the original ends, as the 30 Hz tree has it.
+                if (topple.ToppleAngle > Fixed.Zero && world.Time.IsOriginalFrameBoundary(world.Tick)) angles.Add(topple.ToppleAngle.Raw);
+                if (tick == 1 + perFrame && perFrame > 1) midFrame = WorldSnapshot.Write(world);
+                if (tick > perFrame && tick <= 2 * perFrame && topple.ToppleAngle <= before) monotone = false;
             }
             if (midFrame is not null)
             {
@@ -70,7 +70,7 @@ static partial class Tests
                 for (var tick = 0; tick < world.Frames(40); tick++)
                     Check.That(live.Step().StateHash == again.Step().StateHash, "A tree restored inside a frame keeps falling identically (" + rate.TicksPerSecond + " Hz, step " + tick + ").");
             }
-            return (Angles: angles, DiedFrame: died < 0 ? -1 : world.Time.ToOriginalFrames(died - 1), Exact: died < 0 || (died - 1) % perFrame == 0, Monotone: monotone);
+            return (Angles: angles, DiedFrame: died < 0 ? -1 : world.Time.ToOriginalFrames(died - 1), Exact: died < 0 || died % perFrame == 0, Monotone: monotone);
         }, (reference, other, rate) =>
         {
             Check.That(reference.DiedFrame > 3, "Setup: the tree falls for several frames at 30 Hz (" + reference.DiedFrame + ").");
