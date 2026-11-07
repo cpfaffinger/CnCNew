@@ -80,7 +80,8 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     /// <summary>
     /// The AI of each slot in slot order - entry 0 is the first slot (used when the computer plays it: <see cref="AutoPlay"/>, <see cref="Spectator"/>), entry <c>i</c> opponent <c>i</c>.
     /// Missing entries are the simulation's own AI. Empty (the default): every computer slot is the simulation's own AI in a <see cref="SkirmishMatchSession"/>, exactly as before.
-    /// As soon as one slot names the original AI the match runs in a <see cref="ScriptedSkirmishSession"/> (docs/SKIRMISH-AI-ORIGINAL.md).
+    /// As soon as one slot names the original AI the match runs in a <see cref="ScriptedSkirmishSession"/> (docs/SKIRMISH-AI-ORIGINAL.md); the slots that name the built-in AI are
+    /// played by it inside that session with their own profile and strength (a mixed match: it cannot be saved or recorded).
     /// </summary>
     public ImmutableArray<MatchAi> Ai { get; init; } = [];
 
@@ -559,7 +560,8 @@ public sealed class LiveMatch : LiveGame
         for (var index = 0; index <= setup.Opponents.Length; index++)
         {
             var ai = setup.AiOf(index);
-            slots.Add(new ScriptedSkirmishSlot(match.Slots[index].Participant, ai.Difficulty, IsHuman: humanPlays && index == setup.LocalSlot, Team: match.Slots[index].Description.Team, Kind: ai.Kind));
+            slots.Add(new ScriptedSkirmishSlot(match.Slots[index].Participant, ai.Difficulty, IsHuman: humanPlays && index == setup.LocalSlot, Team: match.Slots[index].Description.Team, Kind: ai.Kind,
+                Tactics: ai.Kind == SkirmishAiKind.Builtin ? ai.Tactics : null, Strength: (AiStrength)ai.Strength));
         }
         var standard = ScriptedSkirmishOptions.Standard;
         var seed = match.Description.Seed;

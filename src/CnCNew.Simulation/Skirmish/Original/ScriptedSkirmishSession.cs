@@ -24,9 +24,11 @@ public enum SkirmishAiKind
 }
 
 /// <summary>One slot of a skirmish played with the original AI. <paramref name="Difficulty"/> is the slot's army (<c>SLOT_EASY_AI</c>, <c>SLOT_MED_AI</c>, <c>SLOT_BRUTAL_AI</c>); a human slot ignores it.</summary>
-/// <param name="Kind"><see cref="SkirmishAiKind.Builtin"/>: the slot is played by the simulation's own <see cref="SkirmishAi"/> inside this session (for comparisons; such a session cannot be saved).</param>
+/// <param name="Kind"><see cref="SkirmishAiKind.Builtin"/>: the slot is played by the simulation's own <see cref="SkirmishAi"/> inside this session (a match that mixes the two AIs, or a comparison; such a session cannot be saved).</param>
+/// <param name="Tactics">The tactics profile of a slot played by the built-in AI (null: the AI as it was); the original AI has none.</param>
+/// <param name="Strength">The strength of a slot played by the built-in AI; the original AI's strength is <paramref name="Difficulty"/>.</param>
 public sealed record ScriptedSkirmishSlot(MatchParticipant Participant, ScriptDifficulty Difficulty = ScriptDifficulty.Normal, bool IsHuman = false, int Team = 0,
-    SkirmishAiKind Kind = SkirmishAiKind.Original);
+    SkirmishAiKind Kind = SkirmishAiKind.Original, AiTactics? Tactics = null, AiStrength Strength = AiStrength.Medium);
 
 /// <summary>
 /// Units: <paramref name="MaxTicks"/> is a run budget in ticks of the session's rate; <paramref name="GraceFrames"/> and <paramref name="SciencePointIntervalFrames"/> are logic frames of the
@@ -210,7 +212,7 @@ public sealed class ScriptedSkirmishSession
                 for (var other = 0; other < _slots.Length; other++)
                     if (other != index) hints.Add((starts[other].X, starts[other].Y));
                 _builtin.Add(new SkirmishAi(World, catalog, new SkirmishAiOptions(player, unchecked(_options.Seed + (uint)index * 7919u), bx, by, participant.Side,
-                    SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable()), SubmitBuiltin));
+                    SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable(), Tactics: _slots[index].Tactics, Strength: _slots[index].Strength), SubmitBuiltin));
             }
             else World.SetValidatesOwnSites(player);
             var ring = (catalog.TryGet(participant.BaseBuilding, out var building) ? building.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
