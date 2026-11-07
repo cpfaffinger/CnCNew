@@ -851,8 +851,8 @@ run.Test("Phase 46 (F-35): a team move is a group order", Tests.TeamMoveIsAGroup
 run.Test("Phase 46 (F-35): reinforcements without a transport walk as a group", Tests.ReinforcementsWalkAsAGroup);
 run.Test("Phase 46 (F-35): a move to a skirmish approach path is a group order", Tests.ApproachPathMoveIsAGroupOrder);
 run.Test("Phase 47 (F-78): a waypoint follower goes on when its move has ended", Tests.FollowerGoesOnWhenItsMoveEnds);
-run.Test("Phase 63 (F-144): a rider turning inside its container covers the turn of a frame in shares", Tests.AContainedRiderTurnsOncePerFrame);
-run.Test("Phase 63 (F-145): a train hits in the first tick of its logic frame, as at 30 Hz", Tests.ATrainHitsInTheFirstTickOfItsFrame);
+run.Test("Phase 62 (F-144): a rider turning inside its container covers the turn of a frame in shares", Tests.AContainedRiderTurnsOncePerFrame);
+run.Test("Phase 62 (F-145): a train hits in the first tick of its logic frame, as at 30 Hz", Tests.ATrainHitsInTheFirstTickOfItsFrame);
 run.Test("Phase 47 (F-77): a creation list takes its source's heading where its frame ends", Tests.CreationListTakesTheSourceHeadingWhereItsFrameEnds);
 run.Test("Phase 47 (F-77): a creation list takes its source's place where its frame ends", Tests.CreationListTakesTheSourcePlaceWhereItsFrameEnds);
 run.Test("Phase 48 (F-79): a hauler sees its dock gone in the next frame", Tests.HaulerSeesItsDockGoneInTheNextFrame);
