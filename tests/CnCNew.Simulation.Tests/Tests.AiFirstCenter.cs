@@ -116,7 +116,9 @@ static partial class Tests
     /// The owner's playtest ("the enemy stops collecting"), third cause: a computer player that has lost its carriers had too little money for the next one and no income to get it. The army buys at
     /// prices below a carrier's every think, and the structures and repairs spend what is left, so a player whose carriers a raid killed (America against GLA on Alpine Assault: seeds 1, 3 and 5 of
     /// eight) stood with a supply center, 25 to 700 credits and no carrier until the end of the match. Once a center stands, the price of one carrier stays in the bank, and a missing worker is saved
-    /// for. In those matches no player with a finished supply center may be without a carrier for 90 game seconds.
+    /// for. Two assertions over those matches (a player that a raid has left without a carrier and without its price is broke, and nothing can be asked of the AI then):
+    /// (1) a player with a finished supply center that could afford a carrier (its price in the bank) is never without one for 90 game seconds;
+    /// (2) the army is never bought with money that takes a player with a finished center below the price of a carrier (the purchase of the carrier itself may).
     /// </summary>
     public static void RealComputerPlayersReplaceTheirLostCarriers(string directory)
     {
@@ -134,22 +136,33 @@ static partial class Tests
         {
             var session = SkirmishMatchSession.Start(SkirmishMatchOptions.StandardAt(catalog.Rate) with { AiSeed = seed, WorldSeed = seed ^ 0xC0FFEE06 }, catalog, fingerprint, TerrainMap.Build(map, MapPath), map.Objects,
                 [new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionGLA")), new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionAmerica"))]);
-            var without = session.Players.Select(_ => -1L).ToArray();
+            var prices = session.Players.Select(player => catalog.Templates.Where(template => template.IsKindOf("HARVESTER") && !template.IsKindOf("STRUCTURE") && template.BuildCost > Fixed.Zero
+                && template.Name.StartsWith(SkirmishMatchScenario.FamilyPrefix(everyone.Single(value => value.Faction.Name == player.Faction).Faction), StringComparison.Ordinal)).Min(template => template.BuildCost)).ToArray();
+            var affordableWithout = session.Players.Select(_ => -1L).ToArray();
+            var armyBought = session.Players.Select(_ => 0).ToArray();
+            var armyChecks = session.Players.Select(_ => -1L).ToArray();
             var end = rate.TicksPerSecond * 60 * 18;
             while (session.World.Tick < end && !session.IsOver)
             {
                 session.Step();
                 var world = session.World;
-                if (world.Tick % (rate.TicksPerSecond * 5) != 0) continue;
-                for (var player = 0; player < without.Length; player++)
+                for (var player = 0; player < prices.Length; player++)
                 {
                     var id = session.Players[player].Id;
+                    var bought = session.Ais[player]!.Stats.ArmyProduction.Where(pair => pair.Key.Contains("	queued:", StringComparison.Ordinal)).Sum(pair => pair.Value);
+                    var armyBoughtNow = bought != armyBought[player];
+                    armyBought[player] = bought;
+                    if (armyBoughtNow) armyChecks[player] = world.Tick + 2;
+                    if (world.Tick == armyChecks[player] && !world.IsPlayerDefeated(id) && world.MoneyOf(id) < prices[player]
+                        && world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE") && !entity.HasStatus(ObjectStatusBits.UnderConstruction)))
+                        Check.That(false, $"seed {seed}, tick {world.Tick}: {session.Players[player].Faction} bought army units and is left with {world.MoneyOf(id).Floor()} credits, less than a carrier ({prices[player].Floor()}).");
+                    if (world.Tick % (rate.TicksPerSecond * 5) != 0) continue;
                     var centre = !world.IsPlayerDefeated(id) && world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE")
                         && !entity.HasStatus(ObjectStatusBits.UnderConstruction));
-                    var carriers = world.Entities.Count(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("HARVESTER"));
-                    if (!centre || carriers > 0) { without[player] = -1; continue; }
-                    if (without[player] < 0) without[player] = world.Tick;
-                    Check.That(world.Tick - without[player] <= rate.TicksPerSecond * 90, $"seed {seed}, tick {world.Tick}: {session.Players[player].Faction} has had no carrier since tick {without[player]} and has {world.MoneyOf(id).Floor()} credits.");
+                    var money = world.MoneyOf(id);
+                    if (!centre || money < prices[player] || world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("HARVESTER"))) { affordableWithout[player] = -1; continue; }
+                    if (affordableWithout[player] < 0) affordableWithout[player] = world.Tick;
+                    Check.That(world.Tick - affordableWithout[player] <= rate.TicksPerSecond * 90, $"seed {seed}, tick {world.Tick}: {session.Players[player].Faction} has had {money.Floor()} credits (a carrier costs {prices[player].Floor()}) and no carrier since tick {affordableWithout[player]}.");
                 }
             }
         }
