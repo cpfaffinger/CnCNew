@@ -603,3 +603,7 @@ If the owner wants the switch nevertheless, the levels and the saved state are t
 4. Commit ("feat: the original skirmish AI is the default AI"), then in a commit of its own with that cause:
    `dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write <content> baselines/reference-manifest.json --set full`, run twice and compared.
 5. Bring the documents named above up to date and close register E11 for the default AI in `docs/MULTIPLAYER-PLAN.md`.
+
+## Phase 62: a mixed match
+
+The skirmish setup chooses the engine per computer slot (docs/GAME-SHELL.md, "AI options"). Any Classic slot makes the whole match a `ScriptedSkirmishSession`; the New slots are played by the built-in AI inside it, and `ScriptedSkirmishSlot` carries `Tactics` and `Strength` for them (before, those slots ignored both). Such a match cannot be saved (the session's own message) and records no replay; on a map with scripts of its own only Classic is offered, as before; the Debug options are refused at Start while a Classic slot is in the match.

@@ -1364,3 +1364,7 @@ A map may bring a `map.ini`, and the fingerprint of a match is then not the one 
 client compares the description with its own `FingerprintFor` when it builds the match: a member with another `map.ini` is refused by its own client (`Resolve`) instead of playing into a desync, and a
 host that states a wrong value makes every client refuse. The field makes the server keep nothing new: it is one string of the settings, under the bound the settings had. The handshake stays the
 comparison of the base data, so a member need not have compiled anything to enter a room.
+
+## 26. The room carries the debug options (Phase 62) - protocol version 9
+
+`RoomSettings` carries the three debug options of a match (`MatchDebugOptions`: `BuildTimePercent`, `NeutralRespawnSeconds`, `StartingGeneralPoints`; docs/SIMULATION-CORE.md section 86.8) and validates their ranges; only the host changes them, a member sees them. The match description's encoding goes from 3 to 4 and the skirmish save from 3 to 4; `CommandTypes.Version`, the replay format and `WorldSnapshot` do not change. The default values (100 per cent, off, 0) change nothing of a match. The AI options of the setup (docs/GAME-SHELL.md) use only fields the room carried already: a room has no Classic engine, a match on a server is the built-in AI's.

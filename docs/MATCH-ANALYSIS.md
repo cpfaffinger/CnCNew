@@ -196,3 +196,7 @@ the screen never showed its header line - `ScoreScreen.wnd` hides `ChallengeWinL
 was drawn (`7e6458c`; the tests and the window check had read the text, not the picture); and a timeline's title ran into its top axis label ("Money" over "10 000",
 `5ce44a2`: the plot begins below the title line, measured with the font it is drawn in). 42 of the 54 hashes of `baselines/analysis-screens.txt` changed with them. In the
 modern skin the pages are drawn with the skin's palette and type scale (`baselines/analysis-screens-modern.txt`, 54).
+
+## Phase 62: income over time for the AI
+
+`SimTool econ-survey <content-dir> --out <dir> [--pairings all|<id>,..] [--map <path> --factions A,B,..] [--seeds N] [--first-seed N] [--minutes M] [--jobs N] [--tactics ..] [--strength ..] [--window-seconds S]` plays pairings of the reference manifest (or one map with a list of factions) with the product rules and writes, per match and player, the income in 30-second buckets (supplies delivered by carriers, other income apart), the carriers and what they do, the stock left in reach, and the state around every window in which a living player with a supply center earned nothing for two game minutes. Observation only; it is how the economy stops of `docs/SKIRMISH-AI.md` section 7d were found.
