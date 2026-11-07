@@ -25,6 +25,23 @@ public sealed record StartNetMatchOutput(ShellNetSession Session) : ShellOutput;
 public sealed record ResumeMatchOutput(byte[] Save, string Slot) : ShellOutput;
 
 /// <summary>
+/// The person ended the match that runs from the in-game menu (<see cref="GameShell.LeaveMatch"/>, <see cref="GameShell.RestartMatch"/>, a save chosen in the menu's
+/// load list): the host stops the running game (<see cref="EndedHow"/> says why) and goes on with what the shell does next - the score screen for
+/// <see cref="MatchEnding.Leave"/> (<c>exitQuitMenu</c>: <c>MSG_CLEAR_GAME_DATA</c> shows it), a new match for <see cref="MatchEnding.Restart"/> or <see cref="MatchEnding.Replace"/>.
+/// </summary>
+public sealed record EndMatchOutput(MatchEnding EndedHow) : ShellOutput;
+
+public enum MatchEnding
+{
+    /// <summary>The person left the match (Exit of the in-game menu, confirmed): the score screen follows, the match counts as left by choice.</summary>
+    Leave,
+    /// <summary>The same skirmish begins again (Restart of the in-game menu, confirmed): the shell goes through its load screen, a <see cref="StartMatchOutput"/> follows.</summary>
+    Restart,
+    /// <summary>A saved game replaces the running one: a <see cref="ResumeMatchOutput"/> or <see cref="StartMissionOutput"/> follows at once.</summary>
+    Replace,
+}
+
+/// <summary>
 /// A replay was chosen in the replay list and judged playable (docs/REPLAY-BROWSER.md); the host should open it (<c>ReplayPlayback.Open</c>), show its playback and tell the
 /// shell when it ended (<see cref="GameShell.ReplayFinished"/>), was left (<see cref="GameShell.ReplayStopped"/>) or could not be opened (<see cref="GameShell.ReplayFailed"/>).
 /// </summary>

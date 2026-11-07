@@ -183,22 +183,31 @@ public sealed class ChallengeSelectScreen : ShellScreen
 /// <summary>
 /// <c>SaveLoad.wnd</c>: the main-menu load-game list, from <see cref="GameShell.Saves"/>
 /// (<see cref="SaveGameStore.List"/>). A damaged file shows its <see cref="SaveSlot.Problem"/> instead of a title and
-/// cannot be loaded. There is no running mission to save from the main menu, so <c>ButtonSave</c> stays disabled here
-/// (the in-mission pause menu is where saving happens, see <c>docs/GAME-HUD.md</c>); delete is available either way.
+/// cannot be loaded. There is no running match to save from the main menu, so <c>ButtonSave</c> stays disabled here; delete is available either way.
+/// <para>
+/// Opened from the in-game menu (<see cref="InGameSave"/> given) it is the original's <c>PopupSaveLoad.wnd</c> over the running match
+/// (<c>QuitMenuSystem</c>: <c>ButtonSaveLoad</c> shows <c>getSaveLoadMenuLayout</c>, <c>SLLT_SAVE_AND_LOAD</c>): Save asks for a description (the title of the
+/// file), asks again before it overwrites a slot of that name, and writes the file; Load asks for confirmation and then replaces the running match by the saved one.
+/// </para>
 /// </summary>
 public sealed class LoadGameScreen : ShellScreen
 {
     private ImmutableArray<SaveSlot> _slots = [];
     private int _selected = -1;
+    private readonly InGameSave? _save;
+    private string _pendingSlot = string.Empty;
+    private readonly string _prefix;
 
-    public LoadGameScreen(GameShell shell) : base(shell, ShellLayoutNames.SaveLoad)
+    public LoadGameScreen(GameShell shell, InGameSave? save = null) : base(shell, save is null ? ShellLayoutNames.SaveLoad : ShellLayoutNames.PopupSaveLoad)
     {
+        _save = save;
+        _prefix = LayoutName + ".wnd:";
         Tree.Register("SaveLoadMenuSystem", OnSystem);
         Tree.Register("SaveLoadMenuInput", OnInput);
         // SaveLoadMenuFullScreenInit: winSetFocus(SaveLoadMenu). That child carries the INPUTCALLBACK (the root of the file has none), so Escape only
         // reaches it from there; without a gadget focus the keys would otherwise start at the root and find nobody.
         Tree.KeyboardHome = W("SaveLoadMenu");
-        W("ButtonSave").SetEnabled(false);
+        W("ButtonSave").SetEnabled(save is not null);
         HideConfirmPanels();
         Refresh();
         // PopupSaveLoad.cpp: SaveLoadMenuFade (FULLFADE of SaveLoadMenu) on entry, reversed on shutdown.
@@ -206,6 +215,9 @@ public sealed class LoadGameScreen : ShellScreen
     }
 
     protected override string? ExitTransitionGroup => "SaveLoadMenuFade";
+
+    /// <summary>The popup lies over the running match, which stays visible round it; the full-screen list replaces what is below.</summary>
+    public override bool HidesScreensBelow => _save is null;
 
     private void HideConfirmPanels()
     {
@@ -237,36 +249,46 @@ public sealed class LoadGameScreen : ShellScreen
     {
         switch (e.Kind)
         {
-            case UiEventKind.ListSelected when e.Source == "SaveLoad.wnd:ListboxGames":
+            case UiEventKind.ListSelected when e.Source == _prefix + "ListboxGames":
                 _selected = e.Value;
                 UpdateButtons();
                 return;
-            case UiEventKind.ListDoubleClicked when e.Source == "SaveLoad.wnd:ListboxGames":
+            case UiEventKind.ListDoubleClicked when e.Source == _prefix + "ListboxGames":
                 _selected = e.Value;
                 UpdateButtons();
                 if (_selected >= 0 && _selected < _slots.Length && _slots[_selected].Header is not null) ShowLoadConfirm();
                 return;
-            case UiEventKind.ButtonSelected:
+            case UiEventKind.ButtonSelected when e.Source.StartsWith(_prefix, StringComparison.Ordinal):
                 break;
             default:
                 return;
         }
-        switch (e.Source)
+        switch (e.Source[_prefix.Length..])
         {
-            case "SaveLoad.wnd:ButtonLoad":
+            case "ButtonSave":
+                if (_save is not null) ShowSaveDescription();
+                break;
+            case "ButtonSaveDescConfirm": AcceptDescription(); break;
+            case "ButtonSaveDescCancel": W("SaveDescParent").SetHidden(true); break;
+            case "ButtonOverwriteConfirm":
+                W("OverwriteConfirmParent").SetHidden(true);
+                WriteSave(_pendingSlot);
+                break;
+            case "ButtonOverwriteCancel": W("OverwriteConfirmParent").SetHidden(true); break;
+            case "ButtonLoad":
                 if (_selected >= 0 && _selected < _slots.Length && _slots[_selected].Header is not null) ShowLoadConfirm();
                 break;
-            case "SaveLoad.wnd:ButtonLoadConfirm": AcceptLoad(); break;
-            case "SaveLoad.wnd:ButtonLoadCancel": W("LoadConfirmParent").SetHidden(true); break;
-            case "SaveLoad.wnd:ButtonDelete": if (_selected >= 0 && _selected < _slots.Length) W("DeleteConfirmParent").SetHidden(false); break;
-            case "SaveLoad.wnd:ButtonDeleteConfirm":
+            case "ButtonLoadConfirm": AcceptLoad(); break;
+            case "ButtonLoadCancel": W("LoadConfirmParent").SetHidden(true); break;
+            case "ButtonDelete": if (_selected >= 0 && _selected < _slots.Length) W("DeleteConfirmParent").SetHidden(false); break;
+            case "ButtonDeleteConfirm":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 if (_selected >= 0 && _selected < _slots.Length) Shell.Saves!.Delete(_slots[_selected].Name);
                 W("DeleteConfirmParent").SetHidden(true);
                 Refresh();
                 break;
-            case "SaveLoad.wnd:ButtonDeleteCancel": W("DeleteConfirmParent").SetHidden(true); break;
-            case "SaveLoad.wnd:ButtonBack":
+            case "ButtonDeleteCancel": W("DeleteConfirmParent").SetHidden(true); break;
+            case "ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.CloseTop();
                 break;
@@ -277,6 +299,50 @@ public sealed class LoadGameScreen : ShellScreen
     {
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         W("LoadConfirmParent").SetHidden(false);
+    }
+
+    private void ShowSaveDescription()
+    {
+        Shell.PlaySound(ShellUiSounds.ButtonClick);
+        W("EntryDesc").SetEntryText(_save!.DefaultTitle);
+        W("SaveDescParent").SetHidden(false);
+    }
+
+    private void AcceptDescription()
+    {
+        Shell.PlaySound(ShellUiSounds.ButtonClick);
+        W("SaveDescParent").SetHidden(true);
+        var description = W("EntryDesc").TextEntry!.Text;
+        _pendingSlot = SlotNameFor(description);
+        _pendingTitle = description.Trim().Length > 0 ? description.Trim() : _save!.DefaultTitle;
+        if (_slots.Any(existing => string.Equals(existing.Name, _pendingSlot, StringComparison.Ordinal))) W("OverwriteConfirmParent").SetHidden(false);
+        else WriteSave(_pendingSlot);
+    }
+
+    private string _pendingTitle = string.Empty;
+
+    /// <summary>Turns the free-text description into a name the store accepts (<see cref="SaveGameStore.PathOf"/> rejects anything else).</summary>
+    internal static string SlotNameFor(string description)
+    {
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var builder = new System.Text.StringBuilder();
+        foreach (var ch in description.Trim()) builder.Append(invalid.Contains(ch) || ch == '.' ? '_' : ch);
+        var candidate = builder.ToString().Trim('_', ' ');
+        return candidate.Length > 0 ? candidate : "save";
+    }
+
+    private void WriteSave(string slot)
+    {
+        try
+        {
+            Shell.Saves!.Save(slot, _save!.Write(_pendingTitle));
+        }
+        catch (SaveGameException exception)
+        {
+            Shell.ShowError("Cannot Save", exception.Message);
+            return;
+        }
+        Refresh();
     }
 
     private void AcceptLoad()

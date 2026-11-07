@@ -38,6 +38,8 @@ public sealed class OptionsScreen : ShellScreen
         Tree.Register("OptionsMenuSystem", OnSystem);
         Tree.Register("OptionsMenuInput", OnInput);
         Tree.Register("OptionsMoreSystem", OnSystem);
+        // OptionsMenuInit: winSetFocus(OptionsMenuParent) - the window whose input callback ends the screen on Escape.
+        Tree.KeyboardHome = W("OptionsMenuParent");
         Tree.AddLayout(MoreOptionsLayoutOf(W("ButtonDefaults").Definition));
         Tree.FindByName(MoreOptionsButton)!.SetText("More options");
         W("LabelVersion").SetText("CnCNew 0.1.0");
@@ -48,6 +50,8 @@ public sealed class OptionsScreen : ShellScreen
         BuildResolutionList();
         foreach (var (box, text) in FixedBoxes) ShowFixed(box, text);
         RefreshWidgets();
+        // OptionsMenuInit: in a game the resolution cannot be changed ("disable controls that you can't change the options for in game").
+        if (shell.Phase == ShellPhase.InMatch) W("ComboBoxResolution").SetEnabled(false);
     }
 
     /// <summary>What the layout offers and this game has only one of: one level of detail, no anti-aliasing to choose, and a server that finds this machine by itself. The boxes say so and take no input.</summary>
@@ -152,7 +156,7 @@ public sealed class OptionsScreen : ShellScreen
     private void Accept()
     {
         Shell.PlaySound(ShellUiSounds.ButtonClick);
-        if (Shell.ApplySettings(_working)) Shell.RebuildScreens();
+        if (Shell.ApplySettings(_working) && Shell.Phase == ShellPhase.Menus) Shell.RebuildScreens();
         else Shell.CloseTop();
     }
 

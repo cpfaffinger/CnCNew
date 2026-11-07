@@ -1,0 +1,67 @@
+# A person at the in-game menu of a skirmish (docs/GAME-SHELL.md "The in-game menu"): starts a skirmish from the menus, opens the menu with Escape and presses
+# Options, Save/Load, Restart and Exit. Game.Tests (InGameMenuTests) walks the same steps without a window, scripts/check-ingame-menu.ps1 in the window client.
+wait screen MainMenuScreen
+click MainMenu.wnd:ButtonSinglePlayer
+click MainMenu.wnd:ButtonSkirmish
+wait screen SkirmishSetupScreen
+click SkirmishGameOptionsMenu.wnd:ButtonStart
+limit 240
+wait phase InMatch
+wait match tick atleast 120
+limit 30
+key Escape
+wait match menu equals open
+expect match paused equals yes
+# Options lie over the game; Back returns to the menu
+click QuitMenu.wnd:ButtonOptions
+wait screen OptionsScreen
+expect disabled OptionsMenu.wnd:ComboBoxResolution
+click OptionsMenu.wnd:ButtonBack
+wait match overlay equals no
+expect match menu equals open
+# Save, then load the file back into a running game
+click QuitMenu.wnd:ButtonSaveLoad
+wait screen LoadGameScreen
+click PopupSaveLoad.wnd:ButtonSave
+wait shown PopupSaveLoad.wnd:SaveDescParent
+type PopupSaveLoad.wnd:EntryDesc Menu save
+click PopupSaveLoad.wnd:ButtonSaveDescConfirm
+wait list PopupSaveLoad.wnd:ListboxGames contains Menu save
+pick PopupSaveLoad.wnd:ListboxGames Menu save
+click PopupSaveLoad.wnd:ButtonLoad
+wait shown PopupSaveLoad.wnd:LoadConfirmParent
+click PopupSaveLoad.wnd:ButtonLoadConfirm
+limit 120
+wait match overlay equals no
+wait match menu equals closed
+wait match tick atleast 120
+limit 30
+# Restart: the question, No, then Yes
+key Escape
+wait match menu equals open
+click QuitMenu.wnd:ButtonRestart
+wait screen MessageBoxScreen
+click MessageBox.wnd:ButtonNo
+wait match overlay equals no
+click QuitMenu.wnd:ButtonRestart
+wait screen MessageBoxScreen
+click MessageBox.wnd:ButtonYes
+limit 240
+wait phase InMatch
+wait match menu equals closed
+wait match tick atleast 60
+limit 30
+# Exit: the question, No, then Yes - the score screen follows
+key Escape
+wait match menu equals open
+click QuitMenu.wnd:ButtonExit
+wait screen MessageBoxScreen
+click QuitMessageBox.wnd:ButtonNo
+wait match overlay equals no
+click QuitMenu.wnd:ButtonExit
+wait screen MessageBoxScreen
+click QuitMessageBox.wnd:ButtonYes
+wait phase Results
+wait screen ScoreScreenScreen
+click ScoreScreen.wnd:ButtonOk
+wait screen MainMenuScreen

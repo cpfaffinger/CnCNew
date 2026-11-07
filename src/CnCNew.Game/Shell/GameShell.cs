@@ -514,18 +514,19 @@ public sealed class GameShell
             }
         }
         if (Phase is ShellPhase.Menus or ShellPhase.Results) Net?.Lobby.Pump();
-        foreach (var screen in _stack.ToArray()) screen.Update(dtSeconds);
+        foreach (var screen in (HasInGameScreens ? _stack.Skip(_overlayBase) : _stack).ToArray()) screen.Update(dtSeconds);
         if (_stack.Count > 0 && CurrentScreen.ExitFinished) Pop();
         if (_stack.Count > 0) CurrentScreen.Tree.AdvanceTo((long)_clockMs);
     }
 
     public UiDrawList BuildDrawList()
     {
-        if (Phase is ShellPhase.InMatch or ShellPhase.InMission) return new UiDrawList([], new UiDrawStatistics(0, 0, 0, 0, ImmutableSortedDictionary<string, int>.Empty.WithComparers(StringComparer.Ordinal)));
+        if (Phase is ShellPhase.InMatch or ShellPhase.InMission && !HasInGameScreens) return new UiDrawList([], new UiDrawStatistics(0, 0, 0, 0, ImmutableSortedDictionary<string, int>.Empty.WithComparers(StringComparer.Ordinal)));
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         int windows = 0, unresolvedLabels = 0, unresolvedSizes = 0, border = 0;
         var custom = new SortedDictionary<string, int>(StringComparer.Ordinal);
-        for (var index = FirstDrawnScreen(); index < _stack.Count; index++)
+        // Over a running match only what was opened over it is drawn: the screens below belong to the menus that have been left.
+        for (var index = HasInGameScreens ? Math.Max(FirstDrawnScreen(), _overlayBase) : FirstDrawnScreen(); index < _stack.Count; index++)
         {
             var screen = _stack[index];
             var list = screen.BuildDrawList();
@@ -946,10 +947,13 @@ public sealed class GameShell
     internal void LoadSaveAndContinue(string slot)
     {
         var bytes = Saves!.Read(slot);
+        // Chosen over a running match (the in-game menu's load list): the host drops that game before it builds the loaded one.
+        var replaces = Phase is ShellPhase.InMatch or ShellPhase.InMission;
         if (SkirmishSaveGame.IsSkirmishSave(bytes))
         {
             // Checked here, so that a file that does not fit is refused in the load screen; the host restores the session with the map.
             SkirmishSaveGame.Load(bytes, Data.Rate.TicksPerSecond, Data.FingerprintFor);
+            if (replaces) { ClearInGameScreens(); _outputs.Add(new EndMatchOutput(MatchEnding.Replace)); }
             Phase = ShellPhase.InMatch;
             _outputs.Add(new ResumeMatchOutput(bytes, slot));
             return;
@@ -957,6 +961,7 @@ public sealed class GameShell
         var loaded = SaveGame.Load(bytes, MissionContext, Campaigns);
         CampaignController? controller = null;
         if (loaded.Progress is { } progress && Campaigns?.Find(progress.Campaign) is { } campaign) controller = new CampaignController(MissionContext, campaign, progress);
+        if (replaces) { ClearInGameScreens(); _outputs.Add(new EndMatchOutput(MatchEnding.Replace)); }
         Phase = ShellPhase.InMission;
         _outputs.Add(new StartMissionOutput(loaded.Run, controller));
     }
@@ -987,6 +992,71 @@ public sealed class GameShell
 
     internal void OpenQuitConfirm() => Push(new MessageBoxScreen(this, ShellLayoutNames.QuitMessageBox, "GUI:QuitPopupTitle", "GUI:QuitPopupMessage",
         ShellMessageBoxButtons.YesNo, onAccept: () => _outputs.Add(new ExitRequestedOutput()), onDecline: CloseTop));
+
+    // ------------------------------------------------------------------------------------------------- over a running match (the in-game menu)
+
+    private int _overlayBase = -1;
+
+    /// <summary>
+    /// A screen of the shell lies over the running match: the options, the save/load list or a question of the in-game menu. The shell draws and takes input again while it does
+    /// (<see cref="BuildDrawList"/>, <see cref="HandleInput"/>); the host gives the shell the events and keeps the match's HUD from seeing them.
+    /// </summary>
+    public bool HasInGameScreens => Phase is ShellPhase.InMatch or ShellPhase.InMission && _overlayBase >= 0 && _stack.Count > _overlayBase;
+
+    /// <summary>The shell has no screen up and the running game owns the screen: the case in which the phase alone says the match is shown.</summary>
+    public bool MatchOwnsTheScreen => Phase is ShellPhase.InMatch or ShellPhase.InMission && !HasInGameScreens;
+
+    private void PushInGame(ShellScreen screen)
+    {
+        if (Phase != ShellPhase.InMatch) throw new InvalidOperationException("The in-game screens belong to a running skirmish.");
+        if (!HasInGameScreens) _overlayBase = _stack.Count;
+        Push(screen);
+    }
+
+    /// <summary><c>QuitMenuSystem</c>, <c>ButtonOptions</c>: the options menu lies over the game (<c>getOptionsLayout</c>, <c>hide(FALSE)</c>); Back or Escape closes it again.</summary>
+    public void OpenInGameOptions() => PushInGame(new OptionsScreen(this));
+
+    /// <summary><c>QuitMenuSystem</c>, <c>ButtonSaveLoad</c>: the save and load popup (<c>PopupSaveLoad.wnd</c>) over the game. <paramref name="save"/> writes the running game's file.</summary>
+    public void OpenInGameSaveLoad(InGameSave save) => PushInGame(new LoadGameScreen(this, save));
+
+    /// <summary>
+    /// <c>QuitMenuSystem</c>, <c>ButtonRestart</c> outside a network game: <c>MessageBoxYesNo(GUI:RestartConfirmationTitle, GUI:RestartConfirmation)</c>. Yes ends the match and
+    /// begins <paramref name="setup"/> again (<see cref="RestartMatch"/>), No closes the question.
+    /// </summary>
+    public void AskRestartMatch(MatchSetup setup)
+        => PushInGame(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, "GUI:RestartConfirmationTitle", "GUI:RestartConfirmation", ShellMessageBoxButtons.YesNo, onAccept: () => RestartMatch(setup), onDecline: CloseTop));
+
+    /// <summary>
+    /// <c>QuitMenuSystem</c>, <c>ButtonExit</c>: <c>QuitMessageBoxYesNo(GUI:QuitPopupTitle, GUI:QuitPopupMessage)</c>. Yes leaves the match (<see cref="LeaveMatch"/>), No closes the
+    /// question.
+    /// </summary>
+    public void AskLeaveMatch()
+        => PushInGame(new MessageBoxScreen(this, ShellLayoutNames.QuitMessageBox, "GUI:QuitPopupTitle", "GUI:QuitPopupMessage", ShellMessageBoxButtons.YesNo, onAccept: LeaveMatch, onDecline: CloseTop));
+
+    /// <summary><c>exitQuitMenu</c>: the match is cleared and the score screen follows. The host is told to stop its game (<see cref="EndMatchOutput"/>) and calls <see cref="MatchFinished(MatchResult)"/> with what it has.</summary>
+    public void LeaveMatch()
+    {
+        ClearInGameScreens();
+        _outputs.Add(new EndMatchOutput(MatchEnding.Leave));
+    }
+
+    /// <summary>
+    /// <c>restartMissionMenu</c>: the same match begins again - map, armies, colours and seed of <paramref name="setup"/> - behind the load screen. The host is told to drop its
+    /// game (<see cref="EndMatchOutput"/>); a <see cref="StartMatchOutput"/> follows once the load screen has been drawn.
+    /// </summary>
+    public void RestartMatch(MatchSetup setup)
+    {
+        ArgumentNullException.ThrowIfNull(setup);
+        ClearInGameScreens();
+        _outputs.Add(new EndMatchOutput(MatchEnding.Restart));
+        BeginMatchLoading(setup);
+    }
+
+    private void ClearInGameScreens()
+    {
+        while (HasInGameScreens) Pop(reveal: false);
+        _overlayBase = -1;
+    }
 
     internal void CloseTop()
     {
@@ -1094,6 +1164,7 @@ public sealed class GameShell
     private void Replace(ShellScreen screen)
     {
         while (_stack.Count > 0) Pop(reveal: false);
+        _overlayBase = -1;
         Push(screen);
     }
 }

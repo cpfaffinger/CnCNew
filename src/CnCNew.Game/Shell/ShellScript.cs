@@ -51,6 +51,12 @@ public sealed class ShellScript
     /// </summary>
     public Action<InputEvent>? MatchInput { get; set; }
 
+    /// <summary>
+    /// Where a window of the running match's HUD (the control bar, the in-game menu) can be pressed now, by name; null when a person could not press it. The host sets it with
+    /// <see cref="MatchInput"/> while it owns a match: <c>click QuitMenu.wnd:ButtonRestart</c> then moves the pointer there and presses, as the device does.
+    /// </summary>
+    public Func<string, Vector2?>? MatchPoint { get; set; }
+
     /// <summary>Called with every line of the log as it is written: the client prints them as they happen, so that a check can wait for a step of another process.</summary>
     public Action<string>? Trace { get; set; }
 
@@ -132,7 +138,7 @@ public sealed class ShellScript
             }
             case "key":
                 if (words.Length != 2 || !Enum.TryParse<KeyCode>(words[1], true, out var key)) return Fail(shell, step, "expected 'key KEYCODE'");
-                if (shell.Phase == ShellPhase.InMatch && MatchInput is { } match)
+                if (shell.Phase == ShellPhase.InMatch && !shell.HasInGameScreens && MatchInput is { } match)
                 {
                     match(new KeyEvent(Now(), key, IsDown: true));
                     match(new KeyEvent(Now(), key, IsDown: false));
@@ -144,7 +150,17 @@ public sealed class ShellScript
         }
         // The remaining steps act on a window; they wait until a person could.
         if (words.Length < 2) return Fail(shell, step, "names no window");
-        if (shell.Phase is ShellPhase.InMatch or ShellPhase.InMission || shell.Stack.Count == 0 || shell.CurrentScreen.IsClosing || shell.IsAnimating) return Outcome.Wait;
+        if (shell.MatchOwnsTheScreen)
+        {
+            // A person at a running match presses what the HUD shows: the window is found in the HUD, the pointer goes there.
+            if (step.Verb != "click") return Outcome.Wait;
+            if (MatchInput is not { } hud || MatchPoint?.Invoke(words[1]) is not { } point) return Outcome.Wait;
+            hud(new MouseMoveEvent(Now(), point));
+            hud(new MouseButtonEvent(Now(), MouseButton.Left, IsDown: true, point));
+            hud(new MouseButtonEvent(Now(), MouseButton.Left, IsDown: false, point));
+            return Outcome.DoneWithInput;
+        }
+        if (shell.Stack.Count == 0 || shell.CurrentScreen.IsClosing || shell.IsAnimating) return Outcome.Wait;
         var tree = shell.CurrentScreen.Tree;
         if (tree.FindByName(words[1]) is not { } window || !window.IsVisible || !window.IsEffectivelyEnabled) return Outcome.Wait;
         var argument = Expand(step.Rest[words[1].Length..].Trim());
@@ -249,7 +265,7 @@ public sealed class ShellScript
                 if (words[2].ToLowerInvariant() is not ("original" or "modern")) { problem = $"unknown skin '{words[2]}'"; return false; }
                 return shell.Skin.Id == words[2].ToLowerInvariant();
             case "screen":
-                return shell.Phase is not (ShellPhase.InMatch or ShellPhase.InMission) && shell.Stack.Count > 0 && !shell.CurrentScreen.IsClosing && !shell.IsAnimating
+                return !shell.MatchOwnsTheScreen && shell.Stack.Count > 0 && !shell.CurrentScreen.IsClosing && !shell.IsAnimating
                        && shell.CurrentScreen.GetType().Name.Equals(words[2], StringComparison.OrdinalIgnoreCase);
             case "match":
             {
@@ -263,7 +279,8 @@ public sealed class ShellScript
                 return false;
             }
         }
-        if (shell.Phase is ShellPhase.InMatch or ShellPhase.InMission || shell.Stack.Count == 0) return false;
+        if (shell.MatchOwnsTheScreen && subject == "enabled") return MatchPoint?.Invoke(words[2]) is not null;
+        if (shell.MatchOwnsTheScreen || shell.Stack.Count == 0) return false;
         var window = shell.CurrentScreen.Tree.FindByName(words[2]);
         switch (subject)
         {
@@ -324,17 +341,17 @@ public sealed class ShellScript
     private Outcome Fail(GameShell shell, Step step, string why)
     {
         Failed = true;
-        var where = shell.Phase is ShellPhase.InMatch or ShellPhase.InMission || shell.Stack.Count == 0 ? $"phase {shell.Phase}" : $"phase {shell.Phase}, screen {shell.CurrentScreen.GetType().Name}";
+        var where = shell.MatchOwnsTheScreen || shell.Stack.Count == 0 ? $"phase {shell.Phase}" : $"phase {shell.Phase}, screen {shell.CurrentScreen.GetType().Name}";
         var seen = string.Empty;
         var named = step.Verb is "wait" or "expect" ? 2 : 1;
-        if (step.Words.Length > named && shell.Phase is not (ShellPhase.InMatch or ShellPhase.InMission) && shell.Stack.Count > 0 && shell.CurrentScreen.Tree.FindByName(step.Words[named]) is { } window)
+        if (step.Words.Length > named && !shell.MatchOwnsTheScreen && shell.Stack.Count > 0 && shell.CurrentScreen.Tree.FindByName(step.Words[named]) is { } window)
         {
             seen = $"; the window is {(window.IsVisible ? "shown" : "hidden")}, {(window.IsEffectivelyEnabled ? "enabled" : "disabled")}, text '{(window.TextEntry?.Text ?? TextOf(shell, window)).Replace('\n', ' ')}'";
             if (window.ListBox is { } list) seen += $", rows [{string.Join(" | ", list.Rows.Select(row => string.Join(" ", row.Cells)))}]";
             if (window.ComboBox is { } combo) seen += $", entries [{string.Join(" | ", combo.Entries)}] selected {combo.SelectedIndex}";
         }
         // What the lists of the screen said last (a room's chat list carries the server's refusals).
-        if (shell.Phase is not (ShellPhase.InMatch or ShellPhase.InMission) && shell.Stack.Count > 0)
+        if (!shell.MatchOwnsTheScreen && shell.Stack.Count > 0)
             foreach (var listed in shell.CurrentScreen.Tree.AllWindows.Where(candidate => candidate.IsVisible && candidate.ListBox is { Rows.Count: > 0 }).Take(4))
                 seen += $"; {listed.Name} ends with [{string.Join(" | ", listed.ListBox!.Rows.TakeLast(3).Select(row => string.Join(" ", row.Cells)))}]";
         // A message over the screen is usually the reason: say what it says.

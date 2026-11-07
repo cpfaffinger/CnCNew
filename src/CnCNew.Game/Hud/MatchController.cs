@@ -164,6 +164,13 @@ public sealed partial class MatchController
     public bool IsMenuOpen { get; private set; }
 
     /// <summary>
+    /// The centre, in screen pixels, of a window of the control bar or of the in-game menu a person could press now (it and everything above it is shown and enabled), or null.
+    /// A scripted person (<see cref="CnCNew.Game.Shell.ShellScript"/>) finds the buttons of the HUD by their names here and clicks them with the device's events.
+    /// </summary>
+    public Vector2? PressablePoint(string windowName)
+        => _tree.FindByName(windowName) is { IsVisible: true, IsEffectivelyEnabled: true } window ? new Vector2(window.Rect.X + window.Rect.Width / 2f, window.Rect.Y + window.Rect.Height / 2f) : null;
+
+    /// <summary>
     /// <see langword="false"/> while a mission script has disabled the input (<c>InGameUI::setInputEnabled</c>): every event except the menu key is dropped and the
     /// pointer no longer scrolls the camera; the in-game menu stays reachable and works as usual.
     /// </summary>

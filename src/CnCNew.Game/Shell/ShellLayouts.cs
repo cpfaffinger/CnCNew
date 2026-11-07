@@ -67,6 +67,9 @@ public static class ShellLayoutNames
     /// <summary><c>Window/Menus/SaveLoad.wnd</c>: the main-menu load-game list (<see cref="CnCNew.Game.Save.SaveGameStore"/>).</summary>
     public const string SaveLoad = "SaveLoad";
 
+    /// <summary><c>Window/Menus/PopupSaveLoad.wnd</c>: the same list as a popup over a running match, with Save (the in-game menu's Save/Load button).</summary>
+    public const string PopupSaveLoad = "PopupSaveLoad";
+
     /// <summary><c>Window/Menus/Victorious.wnd</c>: the victory banner shown behind the mission result screen.</summary>
     public const string Victorious = "Victorious";
 
@@ -90,7 +93,7 @@ public static class ShellLayoutNames
     [
         MainMenu, OptionsMenu, SkirmishGameOptionsMenu, SkirmishMapSelectMenu, ScoreScreen, CreditsMenu,
         ShellGameLoadScreen, SinglePlayerLoadScreen, MessageBox, QuitMessageBox,
-        ChallengeMenu, ChallengeLoadScreen, SaveLoad, Victorious, Defeat,
+        ChallengeMenu, ChallengeLoadScreen, SaveLoad, PopupSaveLoad, Victorious, Defeat,
         NetworkDirectConnect, LanLobbyMenu, PopupHostGame, PopupJoinGame, LanGameOptionsMenu, LanMapSelectMenu, MultiplayerLoadScreen,
         ReplayMenu, PopupReplay,
     ];

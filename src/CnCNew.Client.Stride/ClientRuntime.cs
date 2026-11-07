@@ -122,6 +122,8 @@ internal sealed class ClientRuntime : IDisposable
             shellScript.Trace = Console.WriteLine;
             // A key of the script while a match or a playback runs goes where the device's keys go then: to the running game.
             shellScript.MatchInput = runtime._scriptMatchEvents.Add;
+            // ... and a click on a window of the HUD finds it there (the in-game menu's buttons).
+            shellScript.MatchPoint = runtime.PressableInHud;
         }
         if (runtime._shell is { } timed) timed.SkirmishMatchSeconds = SkirmishSeconds;
         if (runtime._shell is { } mapped && UserMapsDirectory is { Length: > 0 } userMaps) mapped.BeginLoadingUserMaps(userMaps, Console.WriteLine);
@@ -243,10 +245,16 @@ internal sealed class ClientRuntime : IDisposable
     /// <summary>What the last match of a server came to, for a check that compares the games of several processes: its last tick and the session hash there.</summary>
     public string? LastNetMatch { get; private set; }
 
+    private Vector2? PressableInHud(string window) => _running?.Match?.PressablePoint(window);
+
     private string? ProbeMatch(string name) => _running?.Host.Match is not { } game ? null : name.ToLowerInvariant() switch
     {
         "tick" => game.Tick.ToString(System.Globalization.CultureInfo.InvariantCulture),
         "over" => game.IsOver ? "yes" : "no",
+        // The in-game menu: whether it is open, whether the game stands still.
+        "menu" => _running?.Match is { IsMenuOpen: true } ? "open" : "closed",
+        "paused" => game.Paused ? "yes" : "no",
+        "overlay" => _shell is { HasInGameScreens: true } ? "yes" : "no",
         "units" => game.World.Entities.Count(entity => entity.Owner == game.Human && !entity.EffectivelyDead).ToString(System.Globalization.CultureInfo.InvariantCulture),
         // A playback (docs/REPLAY-BROWSER.md): how many seeks were made, and how many recorded hashes it compared and found different so far.
         "seeks" => _replaySeeks.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -631,10 +639,27 @@ internal sealed class ClientRuntime : IDisposable
         _scriptMatchEvents.Clear();
         if (_running is { } running)
         {
+            // A screen of the shell over the running game (the in-game menu's options, save and load, questions) takes the events; the game's HUD does not see them.
+            if (_shell is { HasInGameScreens: true } overShell)
+            {
+                foreach (var inputEvent in events) overShell.HandleInput(inputEvent);
+                events.Clear();
+                overShell.Update(seconds);
+            }
             if (running.Host.Match is LiveMatch clicked) GiveStandInClick(running, clicked, events);
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
             _script?.Observe();
             ApplyPendingSelection();
+            // What the shell's screens over the game decided (a restart, leaving, another game loaded, new settings).
+            if (_shell is not null)
+            {
+                foreach (var output in _shell.DrainOutputs()) Carry(output);
+                if (!ReferenceEquals(_running, running))
+                {
+                    _audio.Update(seconds);
+                    return;
+                }
+            }
             if (running.Playback is not null && running.Spectator?.TakeSeekRequest() is { } seekTo)
             {
                 SeekReplay(running, seekTo);
@@ -904,6 +929,16 @@ internal sealed class ClientRuntime : IDisposable
                 }
                 break;
             }
+            case EndMatchOutput ended when _running is { } ending:
+                if (ended.EndedHow == MatchEnding.Leave)
+                {
+                    // exitQuitMenu: the match is cleared and the score screen follows; the match counts as left by choice.
+                    _leaveRequested = true;
+                    FinishRunning(ending);
+                    _leaveRequested = false;
+                }
+                else AbandonRunning(ending);
+                break;
             case StartNetMatchOutput net:
                 _netLoad = new NetMatchLoad(_data, net.Session.Relay ?? throw new InvalidOperationException("The lobby handed no connection over."), BackBufferSize());
                 break;
@@ -994,9 +1029,8 @@ internal sealed class ClientRuntime : IDisposable
         if (game is LiveMatch recorded && RecordingStore is not null) running.Recorder = CnCNew.Game.Replays.MatchRecorder.Attach(recorded);
         // ... and analysed while it runs, for the score screen's "Analysis" (docs/MATCH-ANALYSIS.md).
         if (game is LiveMatch analysed) running.Analysis = CnCNew.Game.Analysis.LiveMatchAnalysis.Attach(analysed);
-        // The in-game menu's "Save/Load" button saves a running skirmish to one slot; the main menu's load list continues it (docs/CAMPAIGN-AND-SAVEGAMES.md, skirmish savegame).
-        if (game is LiveMatch saved && running.Match is { } controller)
-            controller.MenuActionRequested += action => { if (action == MenuAction.SaveLoad) LastSkirmishSave = SaveSkirmish(saved); };
+        // The in-game menu's buttons (options, save and load, restart, exit) open the shell's screens over the running skirmish (docs/GAME-SHELL.md "The in-game menu").
+        if (game is LiveMatch inMenu && running.Match is { } menuHud && _shell is not null) CnCNew.Game.Shell.InGameMenu.Attach(menuHud, inMenu, _shell);
         // "Exit" of the in-game menu in a match of a server: this player leaves by choice (its objects go to an ally or die, as the server's rules say), and the
         // score screen leads back to the room.
         if (game is LiveMatch { Remote: { } leaving } && running.Match is { } netController && _shell?.Net is not null)
@@ -1042,29 +1076,21 @@ internal sealed class ClientRuntime : IDisposable
     /// </summary>
     public static int InputDelayTicks { get; set; }
 
-    /// <summary>The slot the in-game menu saves a skirmish to.</summary>
-    public const string SkirmishSaveSlot = "skirmish";
-
-    /// <summary>What the last save of a skirmish from the in-game menu did: the slot it wrote, or why it could not (shown on the console; the menu has no message line).</summary>
-    public string? LastSkirmishSave { get; private set; }
-
-    private string SaveSkirmish(LiveMatch match)
+    /// <summary>
+    /// The running match is dropped without a score screen: the person restarted it or loaded another game over it. It is recorded as left by choice, as the original stops its recorder
+    /// (<c>restartMissionMenu</c>), and the scene goes with it.
+    /// </summary>
+    private void AbandonRunning(RunningGame running)
     {
-        if (_shell?.Saves is not { } store) return "no save directory";
-        try
-        {
-            var seconds = match.World.Time.ToWholeSeconds(match.World.Tick);
-            var title = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Skirmish, {Path.GetFileNameWithoutExtension(match.Setup.MapPath)}");
-            store.Save(SkirmishSaveSlot, match.Save(title));
-            var text = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"saved to slot '{SkirmishSaveSlot}' at {seconds / 60}:{seconds % 60:D2}");
-            Console.WriteLine($"[save] skirmish {text}");
-            return text;
-        }
-        catch (CnCNew.Game.Save.SaveGameException exception)
-        {
-            Console.WriteLine($"[save] the skirmish cannot be saved: {exception.Message}");
-            return exception.Message;
-        }
+        _running = null;
+        _leaveRequested = true;
+        FinishRecording(running);
+        _leaveRequested = false;
+        _game.SceneSystem.SceneInstance = null;
+        _game.SceneSystem.GraphicsCompositor = null;
+        running.Dispose();
+        _movies.StopAll();
+        _audio.Game.EnterShell();
     }
 
     /// <summary>The match or mission is over: tell the shell (which shows the score or the banner and result screens), drop the world and show the shell again.</summary>
@@ -1100,7 +1126,8 @@ internal sealed class ClientRuntime : IDisposable
                 relay.Dispose();
                 _leaveRequested = false;
             }
-            var result = CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics) with { Analysis = analysis };
+            // A match that was left runs no longer than it did: its length is the tick it stopped at, not the limit it would have ended at.
+            var result = CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.IsOver ? match.EndTick : match.Tick, running.Statistics) with { Analysis = analysis };
             if (seatMayBeHeld) _shell!.MatchLost(result, note!);
             else _shell!.MatchFinished(result, note);
         }
@@ -1139,6 +1166,10 @@ internal sealed class ClientRuntime : IDisposable
         _minimapBatch.End();
     }
 
+    /// <summary>The screens of the shell that lie over the running game (the in-game menu's options, save and load, questions) are drawn after the HUD.</summary>
+    private CnCNew.Ui.Runtime.UiDrawList OverShell(CnCNew.Ui.Runtime.UiDrawList hud)
+        => _shell is { HasInGameScreens: true } shell ? new CnCNew.Ui.Runtime.UiDrawList(hud.Commands.AddRange(shell.BuildDrawList().Commands), hud.Statistics) : hud;
+
     public void Draw(GraphicsContext context, GraphicsDevice device)
     {
         var back = device.Presenter.BackBuffer;
@@ -1154,7 +1185,7 @@ internal sealed class ClientRuntime : IDisposable
 
         // The mission scripts' screen filters (grey-scale, motion blur) go over the finished world and under the HUD. Asking for them is what makes the director count them as displayed.
         if (_running?.Host.Match is LiveMission filtered && filtered.Director.PostEffects is { Any: true } effects) _filters.Apply(context, back, effects);
-        var list = alone && !_warmingUp ? null : _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
+        var list = alone && !_warmingUp ? null : _running is { } running ? OverShell(running.BuildDrawList(back.Width, back.Height)) : _shell?.BuildDrawList();
         _ui.Begin(context, back.Width, back.Height);
         if (list is not null)
         {
