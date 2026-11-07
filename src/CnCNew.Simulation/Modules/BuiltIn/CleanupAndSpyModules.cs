@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
@@ -459,16 +460,16 @@ public sealed class SpyVisionSpecialPower(SpyVisionPowerData data) : SpecialPowe
 
 /// <summary>
 /// <c>AssistedTargetingUpdateModuleData</c>: <c>AssistingClipSize</c> (default 1) and <c>AssistingWeaponSlot</c> (default <c>PRIMARY</c>).
-/// The two <c>Laser*</c> template names draw the feedback beams (presentation) and are typed but not read.
+/// <c>LaserFromAssisted</c> names the feedback beam object; <c>LaserToTarget</c> is typed and never read, as in the original (F-158, <see cref="AssistedTargetingUpdate"/>).
 /// </summary>
-public sealed record AssistedTargetingData(int ClipSize, int Slot) : ModuleData
+public sealed record AssistedTargetingData(int ClipSize, int Slot, string Laser) : ModuleData
 {
     public static AssistedTargetingData Parse(RatedModuleConfiguration configuration)
     {
         var slot = WeaponSlot.Primary;
         if (ModuleConfigReader.Find(configuration, "AssistingWeaponSlot")?.Value.Value is EnumValue value && !WeaponSlot.TryParse(value.Name, out slot))
             throw new UnsupportedModuleConfigurationException("AssistingWeaponSlot");
-        return new AssistedTargetingData(checked((int)ModuleConfigReader.Int(configuration, "AssistingClipSize", 1)), slot);
+        return new AssistedTargetingData(checked((int)ModuleConfigReader.Int(configuration, "AssistingClipSize", 1)), slot, ModuleConfigReader.Text(configuration, "LaserFromAssisted"));
     }
 }
 
@@ -478,7 +479,11 @@ public sealed record AssistedTargetingData(int ClipSize, int Slot) : ModuleData
 /// "Free" is <c>isFreeToAssist</c>: able to attack (alive, complete, not sold) and its current weapon ready, and not already assisting. The reference locks the slot temporarily
 /// (<c>setWeaponLock(slot, LOCKED_TEMPORARILY)</c>, ended by the weapon slot model when the clip empties) and gives the AI an attack order (<c>aiAttackObject</c> with a shot limit); this module fires the
 /// slot's weapon itself (<see cref="IWorldServices.TryFireWeaponSlot"/>: the slot's own clip, reload and last-shot state), one shot per ready weapon, and gives up when the victim is gone or out of the
-/// weapon's range (the shipped users are immobile, so the AI could not approach either). The feedback lasers of <c>makeFeedbackLaser</c> are presentation (a beam object needs end points the simulation cannot carry) and are not created.
+/// weapon's range (the shipped users are immobile, so the AI could not approach either).
+/// F-158, <c>makeFeedbackLaser</c>: <c>assistAttack</c> also makes two beam objects, and the simulation raises <see cref="SimEventKind.AssistFeedbackLaser"/> for each (the beam itself is
+/// drawn by the presentation). Both are made with the assisting battery as the laser's parent, which <c>LaserUpdate::initLaser</c> takes the start from, so the beam "from the requester" starts
+/// and ends at the assisting battery and has no length; the beam to the victim runs from the battery to the place the victim stood. The original's <c>update</c> also resolves the template of
+/// <c>LaserToTarget</c> from the name of <c>LaserFromAssisted</c>, so one name serves both. The beam object's own life is its <c>DeletionUpdate</c> (the presentation reads it).
 /// </summary>
 public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimModule, IUpdateModule
 {
@@ -511,6 +516,12 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
         world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Temporary);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
         world.MarkDirty(Entity);
+        if (data.Laser.Length > 0 && !Entity.Owner.IsSystem)
+        {
+            // makeFeedbackLaser(laser, requester, me) and makeFeedbackLaser(laser, me, victim): the parent is this object both times, the end is where the second object stands.
+            world.EmitAt(SimEventKind.AssistFeedbackLaser, Entity.Id, Entity.Id, data.Laser, 0, Entity.X, Entity.Y, Entity.Z);
+            world.EmitAt(SimEventKind.AssistFeedbackLaser, Entity.Id, victim.Id, data.Laser, 0, victim.X, victim.Y, victim.Z);
+        }
     }
 
     public long Update(IWorldServices world)

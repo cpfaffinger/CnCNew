@@ -162,6 +162,12 @@ public enum SimEventKind : byte
     /// the local player's client decides (<c>Radar::tryInfiltrationEvent</c>, <c>StealthDetectorUpdate::update</c> and <c>OverchargeBehavior::update</c> look at the local or observed player).
     /// </summary>
     RadarNotice = 94,
+
+    /// <summary>
+    /// <c>AssistedTargetingUpdate::makeFeedbackLaser</c> (F-158): a beam object of the template <see cref="SimEvent.Text"/> from <see cref="SimEvent.Entity"/> (the assisting battery, whose position the
+    /// beam follows) to the place the event carries (where <see cref="SimEvent.Other"/> stood when the beam was made; it does not follow). Two are raised for one request, as the original makes two.
+    /// </summary>
+    AssistFeedbackLaser = 95,
 }
 
 /// <summary>The kinds of <see cref="SimEventKind.RadarNotice"/>.</summary>
