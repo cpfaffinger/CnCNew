@@ -1567,6 +1567,28 @@ public sealed partial class SkirmishAi
         }
     }
 
+    /// <summary>
+    /// Every warehouse the player has seen is empty, and the carriers stand idle beside their centers while the map still holds supplies it has not seen: the nearest stocked, safe one of
+    /// the whole map. Like <see cref="FindSupplySource"/> (and the reference's computer player, which looks at every warehouse of the map) this does not ask what the player has explored;
+    /// a warehouse of an enemy or one an enemy guards (<see cref="SupplySourceSafe"/>) is left to him.
+    /// </summary>
+    private Entity? NearestStockedWarehouse(Entity carrier)
+    {
+        Entity? best = null;
+        var bestDistance = Fixed.MaxValue;
+        foreach (var entity in _world.Entities.OrderBy(value => value.Id.Value))
+        {
+            if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) continue;
+            if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) continue;
+            if (Views.EntityPresentationView.WarehouseSupplyBoxes(entity) <= 0) continue;
+            var distance = DistanceSquared(entity.X, entity.Y, carrier.X, carrier.Y);
+            if (distance >= bestDistance || !SupplySourceSafe(entity)) continue;
+            best = entity;
+            bestDistance = distance;
+        }
+        return best;
+    }
+
     /// <summary>A carrier that has stood idle for a while is sent to the nearest warehouse it knows.</summary>
 
     private void OrderCarriers()
@@ -1595,8 +1617,9 @@ public sealed partial class SkirmishAi
                 var distance = DistanceSquared(warehouse.X, warehouse.Y, unit.X, unit.Y);
                 if (distance < best) { best = distance; nearest = warehouse; }
             }
-            if (nearest is not { } target) continue;
-            if (Send(sequence => new DockCommand(_player, sequence, _tick, unit.Id, target.Id)).Accepted) Stats.DockOrders++;
+            var targetId = nearest is { } known ? known.Id : NearestStockedWarehouse(unit)?.Id;
+            if (targetId is not { } chosen) continue;
+            if (Send(sequence => new DockCommand(_player, sequence, _tick, unit.Id, chosen)).Accepted) Stats.DockOrders++;
         }
     }
 }

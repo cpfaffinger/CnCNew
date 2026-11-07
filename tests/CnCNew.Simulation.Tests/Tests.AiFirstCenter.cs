@@ -5,6 +5,9 @@ using CnCNew.Data.World;
 using CnCNew.Formats;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Views;
+using CnCNew.Simulation.World;
 using CnCNew.Simulation.Rules;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Templates;
@@ -56,4 +59,57 @@ static partial class Tests
                 Check.That(delivered[player] > 0, $"{mapPath} seed {seed} at {rate}: {session.Players[player].Faction} delivered no supplies in six game minutes (money {session.World.MoneyOf(session.Players[player].Id).Floor()}).");
         }
     }
+
+    /// <summary>
+    /// The owner's playtest ("the enemy stops collecting"), second cause: when every supply depot a computer player has seen is empty, its carriers used to stand idle beside their centers for the
+    /// rest of the match although the map still held supplies it had not seen (Alpine Assault, America against China, seed 4: from minute 23 on seven carriers idle, 16,000 credits left on the map).
+    /// America against China on Alpine Assault (seed 4) for 28 game minutes: no player with a finished center and a carrier may go three minutes without a delivery while the depots
+    /// that no enemy owns, with no enemy object within 450 units, hold more than 3,000 credits between them.
+    /// </summary>
+    public static void RealIdleCarriersFindSuppliesTheyHaveNotSeen(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";
+        MapData map;
+        using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
+        var rate = SimulationRate.Hz60;
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: RuleProfile.Product);
+        var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+        const uint Seed = 4;
+        var session = SkirmishMatchSession.Start(SkirmishMatchOptions.StandardAt(catalog.Rate) with { AiSeed = Seed, WorldSeed = Seed ^ 0xC0FFEE06 }, catalog, fingerprint, TerrainMap.Build(map, MapPath), map.Objects,
+            [new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionAmerica")), new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"))]);
+        var window = rate.TicksPerSecond * 180;
+        var lastDelivery = new long[session.Players.Length];
+        var end = rate.TicksPerSecond * 60 * 28;
+        while (session.World.Tick < end && !session.IsOver)
+        {
+            var result = session.Step();
+            var world = session.World;
+            if (result.Events is { } events)
+                foreach (var ev in events)
+                {
+                    if (ev.Kind != SimEventKind.SupplyDeposited || ev.Entity == ev.Other || world.FindEntity(ev.Entity) is not { } carrier) continue;
+                    for (var player = 0; player < lastDelivery.Length; player++)
+                        if (session.Players[player].Id == carrier.Owner) lastDelivery[player] = world.Tick;
+                }
+            if (world.Tick % (rate.TicksPerSecond * 10) != 0) continue;
+            for (var player = 0; player < lastDelivery.Length; player++)
+            {
+                var id = session.Players[player].Id;
+                if (world.IsPlayerDefeated(id) || world.Tick - lastDelivery[player] < window) continue;
+                var carriers = world.Entities.Where(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("HARVESTER")).ToArray();
+                var centre = world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE")
+                    && !entity.HasStatus(ObjectStatusBits.UnderConstruction));
+                if (carriers.Length == 0 || !centre) continue;
+                var enemies = world.Entities.Where(entity => !entity.EffectivelyDead && !entity.Owner.IsSystem && world.AreEnemies(id, entity.Owner)).ToArray();
+                var unguarded = world.Entities.Where(entity => entity.Template.IsKindOf("SUPPLY_SOURCE") && !entity.EffectivelyDead && entity.WarehouseSupplyBoxes() > 0
+                    && enemies.All(enemy => (enemy.X - entity.X).Abs() + (enemy.Y - entity.Y).Abs() > Fixed.FromInt(450))).Sum(entity => (long)entity.WarehouseSupplyBoxes() * world.ValuePerSupplyBox);
+                Check.That(unguarded <= 3000, $"tick {world.Tick}: {session.Players[player].Faction} has made no delivery for three minutes, has {carriers.Length} carriers and a center, and {unguarded} credits lie unguarded on the map.");
+            }
+        }
+    }
 }
+
