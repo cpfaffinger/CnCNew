@@ -271,7 +271,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
             return;
         }
 
-        part.ElapsedInState += frame.DeltaSeconds;
+        // W3DModelDraw::doDrawModule pauses the animation as Drawable::getShouldAnimate says; a paused animation stands on its frame and goes on from it.
+        if (!AnimationPauses.Holds(drawable.Pause, draw.AnimationsRequirePower)) part.ElapsedInState += frame.DeltaSeconds;
         var pose = part.Pose!;
         if (drawable.TurretYaw is not null && !state.Turret.IsEmpty) Stats.TurretsDriven++;
         if (part.WheelBones is { Length: > 0 } && part.WheelMultiplier != 0f) Stats.WheelsDriven++;

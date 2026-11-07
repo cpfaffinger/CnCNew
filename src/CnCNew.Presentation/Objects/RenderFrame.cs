@@ -38,8 +38,11 @@ public sealed record DrawableInstance(
     bool Fogged = false,
     ChassisPose Chassis = default,
     Vector3 FlashTint = default,
-    float Opacity = 1f)
+    float Opacity = 1f,
+    AnimationPause Pause = AnimationPause.None)
 {
+    // Pause: why the model animations stand (Drawable::getShouldAnimate), see AnimationPauses.
+
     // FlashTint: what Drawable::getSelectionColor returns while the selection flash envelope plays (SelectionFlashTracker): a signed colour added to the lights of this drawable; zero: none.
 
     public bool HasFlashTint => FlashTint != Vector3.Zero;
