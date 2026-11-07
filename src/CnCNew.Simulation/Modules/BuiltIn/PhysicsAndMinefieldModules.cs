@@ -269,10 +269,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         var time = world.Time;
         if (_subStep != 0)
         {
-            // Between two frames: one more share of the frame's step.
-            Entity.X += time.FrameShare(_velocityX, _subStep);
-            Entity.Y += time.FrameShare(_velocityY, _subStep);
-            Entity.Z += time.FrameShare(_velocityZ, _subStep);
+            // Between two frames: one more share of the frame's step - unless something completed the frame (a death by height puts the object where the frame ends).
+            if (Entity.IsInsideFrameStep) Entity.CoverShare(world.Tick, time.FrameShare(_velocityX, _subStep), time.FrameShare(_velocityY, _subStep), time.FrameShare(_velocityZ, _subStep));
             _subStep = time.NextSubStep(_subStep);
             world.MarkDirty(Entity);
             return SimulationTiming.SleepNone;
@@ -296,9 +294,10 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         if (time.TicksPerOriginalFrame != 1)
         {
             // The landing was judged on the whole step of this frame, as at 30 Hz; the object itself falls the first share of it now and the rest on the next ticks.
-            Entity.X = beforeX + time.FrameShare(_velocityX, 0);
-            Entity.Y = beforeY + time.FrameShare(_velocityY, 0);
-            Entity.Z = beforeZ + time.FrameShare(_velocityZ, 0);
+            // Observers read where the frame ends (Entity.FrameEnd: the bomb's height die, the creation list of its death), as they do for a mover.
+            (Entity.X, Entity.Y, Entity.Z) = (beforeX, beforeY, beforeZ);
+            Entity.SetAhead(world.Tick, _velocityX, _velocityY, _velocityZ);
+            Entity.CoverShare(world.Tick, time.FrameShare(_velocityX, 0), time.FrameShare(_velocityY, 0), time.FrameShare(_velocityZ, 0));
             _subStep = time.NextSubStep(0);
         }
         world.MarkDirty(Entity);

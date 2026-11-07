@@ -862,6 +862,7 @@ run.Test("Phase 46 (F-35): a move to a skirmish approach path is a group order",
 run.Test("Phase 47 (F-78): a waypoint follower goes on when its move has ended", Tests.FollowerGoesOnWhenItsMoveEnds);
 run.Test("Phase 62 (F-144): a rider turning inside its container covers the turn of a frame in shares", Tests.AContainedRiderTurnsOncePerFrame);
 run.Test("Phase 62 (F-145): a train hits in the first tick of its logic frame, as at 30 Hz", Tests.ATrainHitsInTheFirstTickOfItsFrame);
+run.Test("Phase 63 (F-156): a falling bomb dies at the height where its frame ends, as at 30 Hz", Tests.AFallingBombDiesAtTheHeightWhereItsFrameEnds);
 run.Test("Phase 62 (F-146): a toppling tree begins its fall on its own next frame", Tests.ToppleBeginsOnTheTreesNextFrame);
 run.Test("Phase 62 (owner playtest): a preferred weapon yields while its clip reloads empty (rule fix)", Tests.PreferredWeaponYieldsWhileItsClipReloads);
 run.Test("Phase 47 (F-77): a creation list takes its source's heading where its frame ends", Tests.CreationListTakesTheSourceHeadingWhereItsFrameEnds);
