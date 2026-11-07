@@ -190,6 +190,12 @@ public static class HudOverlayRenderer
         var health = Math.Clamp(marker.HealthFraction, 0f, 1f);
         var filled = (int)MathF.Round(width * health);
         if (filled > 0) commands.Add(new UiFillRect(new UiRect((int)MathF.Floor(left), (int)MathF.Floor(top), filled, 5), HealthColor(health)));
+        // Drawable::drawUIText, with the values of DrawGroupInfo.ini: the number of the control group at the left end of the bar, a fifth of its width to the left of it and ten pixels above it.
+        if (marker.GroupNumber >= 0 && marker.GroupText.Length > 0)
+        {
+            var (x, y) = ((int)MathF.Floor(left + width * GroupOffsetX), (int)MathF.Floor(top) + GroupOffsetY);
+            commands.Add(new UiTextDraw(marker.GroupText, null, GroupFont, WndColor.White, BarOutline, x, y, UiTextAlignment.Left, new UiRect(x - 4, y - 4, GroupClipWidth, GroupClipHeight)));
+        }
         var row = (int)MathF.Floor(top) + 7;
         if (marker.Ammo is { } ammo)
         {
@@ -208,6 +214,11 @@ public static class HudOverlayRenderer
     }
 
     private static readonly UiFont LabelFont = new("Arial", 12, true);
+
+    /// <summary><c>DrawGroupInfo.ini</c>: Arial 10 not bold, white with a black shadow, at -20 % of the bar's width and -10 pixels from the bar's top.</summary>
+    private static readonly UiFont GroupFont = new("Arial", 10, false);
+    private const float GroupOffsetX = -0.2f;
+    private const int GroupOffsetY = -10, GroupClipWidth = 40, GroupClipHeight = 40;
 
     /// <summary>The clip around a label's point: wide enough for a long line, from a little above the point to below the tallest scaled line.</summary>
     private const int LabelClipHalfWidth = 200, LabelClipAbove = 8, LabelClipBelow = 64;

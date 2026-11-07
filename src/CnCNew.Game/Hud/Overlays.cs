@@ -21,6 +21,14 @@ public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, f
 
     /// <summary><c>Drawable::drawContained</c>: the seats under the health bar, the infantry first; null for none.</summary>
     public (int Total, int Full, int Infantry)? Seats { get; init; }
+
+    /// <summary>
+    /// <c>Drawable::drawUIText</c>: the control group (Ctrl and a digit) the selected object of the viewer belongs to, 0 to 9, or -1 for none; <see cref="GroupText"/> is the
+    /// game text of its number (<c>NUMBER:n</c>), drawn at the health bar.
+    /// </summary>
+    public int GroupNumber { get; init; } = -1;
+
+    public string GroupText { get; init; } = string.Empty;
 }
 
 /// <summary>An animated icon over an object (<c>Drawable::drawDisabled</c>, <c>drawEnthusiastic</c>): the frame of this moment and its place on the screen.</summary>

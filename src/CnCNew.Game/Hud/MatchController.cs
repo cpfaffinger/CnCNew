@@ -636,6 +636,8 @@ public sealed partial class MatchController
                 {
                     Ammo = mine ? world.AmmoPips(entity) : null,
                     Seats = seats,
+                    GroupNumber = mine ? Input.Selection.GroupOf(entity.Id) : -1,
+                    GroupText = mine && Input.Selection.GroupOf(entity.Id) is >= 0 and var group ? _assets.Text.Get("NUMBER:" + group.ToString(CultureInfo.InvariantCulture)) : string.Empty,
                 });
             }
             if (SimulationQueries.ProductionOf(entity) is { } production)

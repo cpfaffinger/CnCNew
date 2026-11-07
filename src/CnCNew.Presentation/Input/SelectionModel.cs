@@ -52,6 +52,17 @@ public sealed class SelectionModel
 
     public ImmutableArray<EntityId> Group(int index) => [.._groups[index].Select(id => new EntityId(id))];
 
+    /// <summary>
+    /// The control group an object belongs to, 0 to 9, or -1 for none (<c>Player::getSquadNumberForObject</c>: the lowest squad that holds it; creating a group takes its members out of
+    /// every other, so an object is in one at most).
+    /// </summary>
+    public int GroupOf(EntityId id)
+    {
+        for (var index = 0; index < _groups.Length; index++)
+            if (_groups[index].Contains(id.Value)) return index;
+        return -1;
+    }
+
     /// <summary>The live, own selected entities in id order.</summary>
     public ImmutableArray<Entity> OwnSelected(SimulationWorld world)
         => [.._selected.Select(id => world.FindEntity(new EntityId(id))).OfType<Entity>().Where(entity => entity.Owner == LocalPlayer && !entity.DestroyRequested)];

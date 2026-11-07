@@ -30,8 +30,85 @@ internal static class PlaytestHudTests
         harness.Run("A drone in production or carried greys every drone button of a Humvee, alone and in a selection of two, and its order stands in the queue", () => DroneButtons(data));
         harness.Run("Over the own bunker the infantry's pointer is enter, over a building the enemy holds it is attack", () => BuildingCursors(data));
         harness.Run("A ranger with the capture upgrade shows capture over a neutral tech building and takes it by a click, attacks an enemy's and enters a civilian one", () => CaptureCursor(data));
+        harness.Run("A selected unit of a control group shows the group's number at its health bar, one that is not in a group or not selected does not", () => ControlGroupNumber(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// The owner's playtest of 7 November 2026: units pulled together with Ctrl and a digit showed nothing at their health bar. <c>Drawable::drawUIText</c> draws the group's number
+    /// (<c>NUMBER:n</c>, Arial 10, white with a shadow) a fifth of the bar's width to the left of the bar and ten pixels above it - for a selected, locally controlled object only.
+    /// </summary>
+    private static void ControlGroupNumber(GameData data)
+    {
+        var scenario = new DemoScenario("hud-group-number", "hud-group-number", "hud-group-number", 900,
+            [
+                new ScenarioUnit("tank", "ChinaTankBattleMaster", 1, 0, 0, 0f),
+                new ScenarioUnit("other", "ChinaTankBattleMaster", 1, 0, 90, 0f),
+                new ScenarioUnit("enemy", "AmericaTankCrusader", 2, 0, 180, 0f),
+            ], [], 100f, 40f)
+        {
+            HumanFaction = "FactionChina",
+            OpponentFaction = "FactionAmerica",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Frame()
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        long time = 10_000;
+        void Press(KeyCode key, bool control)
+        {
+            if (control) controller.Process(new KeyEvent(time += 16, KeyCode.LeftControl, true));
+            controller.Process(new KeyEvent(time += 16, key, true));
+            controller.Process(new KeyEvent(time += 16, key, false));
+            if (control) controller.Process(new KeyEvent(time += 16, KeyCode.LeftControl, false));
+        }
+        var (tank, other, enemy) = (live.Tags["tank"], live.Tags["other"], live.Tags["enemy"]);
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond / 2; frame++) Frame();
+        string[] Numbers() => [..controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(text => text.Font.Name == "Arial" && text.Font.Size == 10 && text.Text.Length == 1 && char.IsDigit(text.Text[0])).Select(text => text.Text)];
+
+        controller.Input.Selection.Replace([tank, other]);
+        Frame();
+        TestHarness.Assert(Numbers().Length == 0, "without a control group no number is drawn");
+
+        // Ctrl+3 makes the selection group 3 (the lowest index of Ctrl+0..9 is the digit's).
+        Press(KeyCode.D3, control: true);
+        TestHarness.Assert(controller.Input.Selection.GroupOf(tank) == 3 && controller.Input.Selection.GroupOf(other) == 3 && controller.Input.Selection.GroupOf(enemy) == -1, "Ctrl+3 put both tanks into group 3");
+        Frame();
+        var list = controller.BuildDrawList(1280, 720);
+        var numbers = list.Commands.OfType<UiTextDraw>().Where(text => text.Font.Name == "Arial" && text.Font.Size == 10 && text.Text == "3").ToArray();
+        TestHarness.Assert(numbers.Length == 2, $"both selected tanks show the 3 ({numbers.Length})");
+        TestHarness.Assert(numbers.All(text => text is { Alignment: UiTextAlignment.Left, Color.R: 255, Color.G: 255, Color.B: 255, ShadowColor.A: 255 }), "white, left aligned, with a black shadow");
+
+        // Where: the bar of each tank is the one drawn above its ring; the number stands at -20 % of the bar's width and 10 pixels above the bar's top.
+        var plates = list.Commands.OfType<UiBorderRect>().Where(border => border.Rect.Height == 7).ToArray();
+        TestHarness.Assert(plates.Length == 2, $"two bars ({plates.Length})");
+        foreach (var number in numbers)
+        {
+            var plate = plates.OrderBy(border => MathF.Abs(border.Rect.Y - 10 - number.Y)).First();
+            var width = plate.Rect.Width - 2;
+            TestHarness.Assert(Math.Abs(number.X - (plate.Rect.X + 1 - width * 0.2)) <= 1.5 && number.Y == plate.Rect.Y + 1 - 10, $"the number at {number.X},{number.Y} stands at the bar's left end less a fifth of its width ({plate.Rect}) and ten pixels above");
+        }
+
+        // Only a selected unit of the group shows it; one that is not in a group shows nothing; an enemy never does.
+        controller.Input.Selection.Replace([tank]);
+        Frame();
+        TestHarness.Assert(Numbers().SequenceEqual(["3"]), $"one selected tank of the group shows one number ({string.Join(",", Numbers())})");
+        controller.Input.Selection.Replace([enemy]);
+        Frame();
+        TestHarness.Assert(Numbers().Length == 0, "a selected enemy shows no number");
+        controller.Input.Selection.Replace([]);
+        Frame();
+        TestHarness.Assert(Numbers().Length == 0, "a unit of the group that is not selected shows no number (drawsAnyUIText asks isSelected)");
+
+        // A new group takes its members out of the old one: Ctrl+7 on one tank, and the number follows.
+        controller.Input.Selection.Replace([tank]);
+        Press(KeyCode.D7, control: true);
+        Frame();
+        TestHarness.Assert(controller.Input.Selection.GroupOf(tank) == 7 && controller.Input.Selection.GroupOf(other) == 3 && Numbers().SequenceEqual(["7"]), $"the tank is in group 7 now ({string.Join(",", Numbers())})");
     }
 
     private static void RevealGhosts(GameData data)
