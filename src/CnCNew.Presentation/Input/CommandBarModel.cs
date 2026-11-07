@@ -510,6 +510,11 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (module is null) return State(ButtonAvailability.Hidden, ButtonReason.UnknownReference);
                 if (power!.RequiredScience >= 0 && !world.PlayerSciences(player).Has(power.RequiredScience)) return State(ButtonAvailability.Restricted, ButtonReason.MissingScience);
                 if (!module.IsReady(world)) return State(ButtonAvailability.NotReady, ButtonReason.Recharging, ReadyFraction(world, player, (SimModule)module, power));
+                // SPECIAL_CHANGE_BATTLE_PLANS: the button of the plan the center is asked for (BattlePlanUpdate::getCommandOption, its desired plan) is the one that is on, from the click
+                // on - the unpacking, the running and the packing alike - so a CHECK_LIKE button stays pressed.
+                if (button.SpecialPowerOption != 0 && source!.Modules.OfType<BattlePlanUpdate>().FirstOrDefault(plan => ((ISpecialPowerHandler)plan).Handles(world, power.Index)) is { } battlePlan
+                    && (int)battlePlan.DesiredPlan == button.SpecialPowerOption)
+                    return State(ButtonAvailability.Active, ButtonReason.None, 1f);
                 return State(ButtonAvailability.Available, ButtonReason.None, 1f);
             }
             // Not a button of the command set: the places of the container (AddRiders; "if the contained count changes the UI is completely repopulated").
@@ -541,6 +546,11 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 return SimulationQueries.Rappellers(world, entity) > 0 ? State(ButtonAvailability.Available, ButtonReason.None) : State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
             case GuiCommandKind.SetRallyPoint:
                 return production is null ? State(ButtonAvailability.Restricted, ButtonReason.NoProducer) : State(ButtonAvailability.Available, ButtonReason.None);
+            // GUI_COMMAND_STOP with OPTION_ONE is the Strategy Center's own: it stops the artillery cannon, so it works only in bombardment mode.
+            case GuiCommandKind.Stop when button.Has(CommandOptions.OptionOne):
+                return entity.Modules.OfType<BattlePlanUpdate>().FirstOrDefault() is { } bombardier && bombardier.ActivePlan != BattlePlanKind.Bombardment
+                    ? State(ButtonAvailability.Restricted, ButtonReason.NoWeapon)
+                    : State(ButtonAvailability.Available, ButtonReason.None);
             case GuiCommandKind.Stop or GuiCommandKind.SelectAllUnitsOfType or GuiCommandKind.DozerConstructCancel or GuiCommandKind.CancelUnitBuild:
                 return State(ButtonAvailability.Available, ButtonReason.None);
             case GuiCommandKind.AttackMove or GuiCommandKind.Guard or GuiCommandKind.GuardWithoutPursuit or GuiCommandKind.GuardFlyingUnitsOnly:
