@@ -603,9 +603,15 @@ public static partial class RateCases
             if (engine is null) continue;
             rail ??= engine.Modules.OfType<RailroadBehavior>().FirstOrDefault();
             if (rail is null) break;
-            // The first second is left out: the engine is put on its track in its first update.
-            var speed = step <= scene.Time.WholeSecondsToTicks(1) ? Fixed.Zero : (engine.X - lastX).Abs() * scene.Rate.TicksPerSecond;
-            lastX = engine.X;
+            // The first second is left out: the engine is put on its track in its first update. The train takes its whole step in the first tick of its frame (F-145), so the
+            // speed is the distance of a frame of the original, read at the frame ends.
+            var frameEnd = scene.Time.IsOriginalFrameBoundary(scene.World.Tick);
+            var speed = Fixed.Zero;
+            if (frameEnd)
+            {
+                speed = step <= scene.Time.WholeSecondsToTicks(1) ? Fixed.Zero : (engine.X - lastX).Abs() * SimulationRate.OriginalFramesPerSecond;
+                lastX = engine.X;
+            }
             if (speed > top)
             {
                 top = speed;
