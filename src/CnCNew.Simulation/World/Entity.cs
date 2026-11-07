@@ -37,6 +37,12 @@ public sealed class Entity
     public Fixed Y { get; internal set; }
     public Fixed Z { get; internal set; }
 
+    /// <summary>
+    /// Above 30 Hz: a sink (<c>SlowDeathBehavior</c>) that came while a mover was covering a frame's step in shares. The 30 Hz sink comes after the step, so the last share takes it off the
+    /// height it puts the object on (<see cref="Modules.BuiltIn.AIUpdateInterface"/>); a share of the step would put the object on the ground again and lose it. Written only while set.
+    /// </summary>
+    internal Fixed PendingSink { get; set; }
+
     /// <summary><c>Object::getLayer</c>: the bridge layer the object is on, 0 on the ground (<see cref="SimulationWorld.GroundLayer"/>). Written only when it is not the ground.</summary>
     public int Layer { get; internal set; }
 
@@ -545,6 +551,7 @@ public sealed class Entity
             writer.Fixed("aheadZ", AheadZ);
             writer.Int("aheadTick", AheadTick);
         }
+        if (PendingSink != Fixed.Zero) writer.Fixed("pendingSink", PendingSink);
         if (DestroyNotBefore != 0) writer.Int("destroyNotBefore", DestroyNotBefore);
         if (SpeedPerFrame != Fixed.Zero) writer.Fixed("speedPerFrame", SpeedPerFrame);
         if (HasAheadAngle)

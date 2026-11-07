@@ -507,12 +507,20 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
             if (z <= world.LayerHeightAt(x, y, Entity.Layer)) _bounced = true;
             world.MarkDirty(Entity);
         }
+        // A sink that waited for a step the mover did not finish (it was stopped inside its frame) is taken now.
+        if (Entity.PendingSink != Fixed.Zero && !Entity.IsInsideFrameStep)
+        {
+            Entity.Z -= Entity.PendingSink;
+            Entity.PendingSink = Fixed.Zero;
+        }
         var sinking = data.SinkPerFrame > Fixed.Zero && world.Tick >= _sinkTick;
         if (sinking)
         {
             foreach (var module in Entity.ModuleArray)
                 if (module is PhysicsBehavior physics) physics.EndFlight(world);
-            Entity.Z -= data.SinkPerFrame;
+            // The sink comes after the frame's step (the module runs after the object's AI): an object that is covering a step in shares loses it with the last share.
+            if (Entity.IsInsideFrameStep) Entity.PendingSink += data.SinkPerFrame;
+            else Entity.Z -= data.SinkPerFrame;
             world.MarkDirty(Entity);
         }
         if (!_midpointDone && world.Tick >= _midpointTick)

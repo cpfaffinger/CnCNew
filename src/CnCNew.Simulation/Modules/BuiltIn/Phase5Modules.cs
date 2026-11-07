@@ -2747,6 +2747,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             // stands on the ground of that place, as after the 30 Hz step, not on the height of the share it had covered.
             Entity.SetAheadHeight(Entity.AheadX == Fixed.Zero && Entity.AheadY == Fixed.Zero ? Fixed.Zero : world.LayerHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY, Entity.Layer) - Entity.Z);
         }
+        // The 30 Hz sink of a slow death comes after the step: the last share takes it off the height it has put the object on.
+        if (left == 1 && Entity.PendingSink != Fixed.Zero)
+        {
+            Entity.Z -= Entity.PendingSink;
+            Entity.PendingSink = Fixed.Zero;
+        }
         if (_frameArriving)
         {
             // The last step of a move tests no collision, as the 30 Hz arrival does not.
