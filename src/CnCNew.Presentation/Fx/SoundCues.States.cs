@@ -14,7 +14,7 @@ public sealed partial class SoundCueDeriver
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
 
-    private readonly record struct Seen(bool Moving, int Damage, bool Stealthed, bool Detected, bool Opened, byte Pack, int Triggers, int TrackPoint = -1, long Whistle = -1, float Clatter = 0f);
+    private readonly record struct Seen(bool Moving, int Damage, bool Stealthed, bool Detected, bool Opened, byte Pack, int Triggers, int TrackPoint = -1, long Whistle = -1, float Clatter = 0f, int Plan = 0);
 
     private readonly Dictionary<uint, Seen> _seen = [];
 
@@ -30,6 +30,7 @@ public sealed partial class SoundCueDeriver
             {
                 if (module is ParachuteContain chute) now = now with { Opened = chute.Opened };
                 else if (module is SpecialAbilityUpdate ability) now = now with { Pack = ability.PackPhase, Triggers = ability.Triggers };
+                else if (module is BattlePlanUpdate center) now = now with { Plan = ((int)center.Status << 3) | (int)center.CurrentPlan };
                 else if (module is RailroadBehavior { IsLocomotive: true } train)
                     now = now with
                     {
@@ -66,6 +67,18 @@ public sealed partial class SoundCueDeriver
                 else if (now.Pack == SpecialAbilityUpdate.PhaseUnpacking) Play("UnpackSound");
             }
             if (now.Triggers > was.Triggers) Play("TriggerSound");
+            // BattlePlanUpdate::setStatus: a plan that unpacks sounds its unpack and its announcement, one that packs its pack sound (the search-and-destroy idle loop is a loop and is not played here).
+            if (now.Plan != was.Plan && (now.Plan & 7) is >= 1 and <= 3)
+            {
+                var plan = (BattlePlanKind)(now.Plan & 7) switch { BattlePlanKind.Bombardment => "Bombardment", BattlePlanKind.HoldTheLine => "HoldTheLine", _ => "SearchAndDestroy" };
+                var planStatus = (BattlePlanUpdate.TransitionStatus)(now.Plan >> 3);
+                if (planStatus == BattlePlanUpdate.TransitionStatus.Unpacking)
+                {
+                    Play(plan + "PlanUnpackSoundName");
+                    Play(plan + "AnnouncementName");
+                }
+                else if (planStatus == BattlePlanUpdate.TransitionStatus.Packing) Play(plan + "PlanPackSoundName");
+            }
             // RailroadBehavior::updatePositionTrackDistance: a locomotive "just rode over a join IN the tracks"; a quarter of the station's wait before it leaves it whistles.
             if (now.TrackPoint >= 0 && now.TrackPoint != was.TrackPoint) Play("ClicketyClackSound", now.Clatter);
             if (now.Whistle >= 0 && was.Whistle < 0) Play("WhistleSound");

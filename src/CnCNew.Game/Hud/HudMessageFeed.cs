@@ -5,6 +5,7 @@ using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.World;
 using CnCNew.Ui.Text;
 
@@ -39,6 +40,8 @@ public sealed class HudMessageFeed
     private readonly Dictionary<string, string> _objectLabels = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _upgradeLabels = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _factionLabels = new(StringComparer.OrdinalIgnoreCase);
+    // BattlePlanUpdate: the line every player is shown when a Strategy Center begins to unpack a plan, by object and plan (Bombardment, HoldTheLine, SearchAndDestroy).
+    private readonly Dictionary<string, (string Bombardment, string HoldTheLine, string SearchAndDestroy)> _planMessages = new(StringComparer.OrdinalIgnoreCase);
     // Radar.h RadarEventType; the ordinals are what a script passes.
     private const int EventConstruction = 1, EventUpgrade = 2, EventUnderAttack = 3, EventInformation = 4, EventBeaconPulse = 5, EventInfiltration = 6, EventBattlePlan = 7,
         EventStealthDiscovered = 8, EventStealthNeutralized = 9, EventFake = 10;
@@ -130,7 +133,12 @@ public sealed class HudMessageFeed
                 _ => null,
             };
             if (target is null) continue;
-            var label = definition.Fields.FirstOrDefault(field => field.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
+            if (definition is ObjectDefinition && definition.Modules.FirstOrDefault(module => module.Name.Equals("BattlePlanUpdate", StringComparison.OrdinalIgnoreCase)) is { } plans)
+            {
+                string Label(string key) => plans.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"') ?? string.Empty;
+                _planMessages[definition.OriginalName] = (Label("BombardmentMessageLabel"), Label("HoldTheLineMessageLabel"), Label("SearchAndDestroyMessageLabel"));
+            }
+            var label =definition.Fields.FirstOrDefault(field => field.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
             if (label is { Length: > 0 }) target[definition.OriginalName] = label;
         }
     }
@@ -340,6 +348,12 @@ public sealed class HudMessageFeed
                 return;
             case RadarNotices.BattlePlan:
                 CreateEvent(EventBattlePlan, position, simEvent.Tick);
+                // "display a message to *all* users": the plan that begins to unpack is announced to every player, the center's owner or not.
+                if (_planMessages.TryGetValue(subject.Template.Name, out var messages) && subject.Modules.OfType<BattlePlanUpdate>().FirstOrDefault() is { } center)
+                {
+                    var line = center.CurrentPlan switch { BattlePlanKind.Bombardment => messages.Bombardment, BattlePlanKind.HoldTheLine => messages.HoldTheLine, BattlePlanKind.SearchAndDestroy => messages.SearchAndDestroy, _ => string.Empty };
+                    if (line.Length > 0) Message(line);
+                }
                 return;
             case RadarNotices.OverchargeExhausted:
                 if (subject.Owner != human) return;

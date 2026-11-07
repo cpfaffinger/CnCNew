@@ -263,7 +263,10 @@ public sealed class FxCatalog
     }
 
     private static readonly ImmutableHashSet<string> ModuleSoundKeys = ImmutableHashSet.Create(Names, "EnterSound", "ExitSound", "ParachuteOpenSound", "PackSound", "UnpackSound", "TriggerSound",
-        "RunningSound", "ClicketyClackSound", "WhistleSound", "PoweringUpSoundLoop", "UnpackToIdleSoundLoop", "FiringToPackSoundLoop", "GroundAnnihilationSoundLoop");
+        "RunningSound", "ClicketyClackSound", "WhistleSound", "PoweringUpSoundLoop", "UnpackToIdleSoundLoop", "FiringToPackSoundLoop", "GroundAnnihilationSoundLoop",
+        // BattlePlanUpdate: the sounds of the Strategy Center's three plans.
+        "BombardmentPlanUnpackSoundName", "BombardmentPlanPackSoundName", "BombardmentAnnouncementName", "HoldTheLinePlanUnpackSoundName", "HoldTheLinePlanPackSoundName", "HoldTheLineAnnouncementName",
+        "SearchAndDestroyPlanUnpackSoundName", "SearchAndDestroyPlanPackSoundName", "SearchAndDestroyAnnouncementName");
 
     private static ObjectFxInfo ParseObject(ObjectDefinition obj)
     {

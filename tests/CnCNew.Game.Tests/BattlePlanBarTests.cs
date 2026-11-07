@@ -2,6 +2,7 @@ using System.Numerics;
 using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
+using CnCNew.Presentation.Fx;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Ui.Runtime;
@@ -29,6 +30,7 @@ internal static class BattlePlanBarTests
         });
         harness.Run("The Strategy Center's own stop button is grey unless the bombardment runs", () => StopButton(data));
         harness.Run("In a skirmish the Strategy Center of every American general switches its plans by a click on the bar", () => SkirmishCenters(data));
+        harness.Run("A plan that begins to unpack is announced in a line of text and in sound, one that packs sounds its pack", () => MessagesAndSounds(data));
         return harness.Failures;
     }
 
@@ -37,10 +39,13 @@ internal static class BattlePlanBarTests
 
     private sealed class Bar(MatchController controller, LiveGame live)
     {
+        public List<SoundCue> Cues { get; } = [];
+
         public void Frame()
         {
             live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
             controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            Cues.AddRange(live.DrainSoundCues());
         }
 
         public void Seconds(int seconds)
@@ -151,6 +156,33 @@ internal static class BattlePlanBarTests
         bar.Click(Prefix + "HoldTheLine");
         bar.Seconds(1);
         TestHarness.Assert(Stop() is { Availability: ButtonAvailability.Restricted }, $"it is grey again once the bombardment packs ({Stop()?.Availability}, {plan.Status})");
+    }
+
+    private static void MessagesAndSounds(GameData data)
+    {
+        var (controller, bar, plan) = Stage(data);
+        var lines = () => controller.Messages.Log.Lines.Select(line => line.Text).ToArray();
+        var before = lines().Length;
+        bar.Cues.Clear();
+        bar.Click(Prefix + "Bombardment");
+        bar.Seconds(1);
+        var said = lines();
+        TestHarness.Assert(said.Length > before && said.Any(text => text.Contains("ombardment", StringComparison.OrdinalIgnoreCase)) && said.All(text => !text.Contains("MESSAGE:", StringComparison.Ordinal)),
+            $"the unpack of the bombardment is told in a line ({string.Join(" | ", said)})");
+        string Heard() => string.Join(", ", bar.Cues.Select(cue => cue.EventName));
+        TestHarness.Assert(bar.Cues.Any(cue => cue.EventName == "StrategyCenter_BombardmentPlanUnpackSound") && bar.Cues.Any(cue => cue.EventName == "StrategyCenter_BombardmentPlanAnnouncement"),
+            $"and the unpack and the announcement are heard ({Heard()})");
+        bar.Seconds(8);
+        TestHarness.Assert(plan.ActivePlan == BattlePlanKind.Bombardment, "bombardment runs");
+        bar.Cues.Clear();
+        var count = controller.Messages.Shown;
+        bar.Click(Prefix + "HoldTheLine");
+        bar.Seconds(1);
+        TestHarness.Assert(plan.Status == BattlePlanUpdate.TransitionStatus.Packing && bar.Cues.Any(cue => cue.EventName == "StrategyCenter_BombardmentPlanPackSound"), $"the first plan packs with its pack sound ({Heard()})");
+        TestHarness.Assert(controller.Messages.Shown == count, $"a pack-up is told in no line ({string.Join(" | ", lines())})");
+        bar.Seconds(8);
+        TestHarness.Assert(plan.Status == BattlePlanUpdate.TransitionStatus.Unpacking && bar.Cues.Any(cue => cue.EventName == "StrategyCenter_HoldTheLinePlanUnpack")
+            && bar.Cues.Any(cue => cue.EventName == "StrategyCenter_HoldTheLineAnnouncement") && lines().Any(text => text.Contains("old", StringComparison.OrdinalIgnoreCase)), $"the second plan unpacks with its sounds and its line ({Heard()}; {string.Join(" | ", lines())})");
     }
 
     private static void SkirmishCenters(GameData data)
