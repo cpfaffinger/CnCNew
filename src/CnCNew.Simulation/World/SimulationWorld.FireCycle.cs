@@ -23,6 +23,16 @@ namespace CnCNew.Simulation.World;
 /// </summary>
 public sealed partial class SimulationWorld
 {
+    /// <summary>
+    /// A fire order of <paramref name="unit"/> at <paramref name="victim"/>, given within the last two logic frames of the original, waits for its attack machine's shot (F-140):
+    /// another order adds nothing to it, so an order giver that orders while the weapon is ready waits instead of sending an order in every tick until the machine fires. After two
+    /// frames - the longest an aligned machine takes from an order to its shot - the giver orders again, which keeps an attack whose turret still turns from its grace's end.
+    /// </summary>
+    public bool IsShotPending(Entity unit, EntityId victim)
+        => unit.Acquisition is { FireOrdered: true, ShotPending: true } state && state.Victim == victim && _tick - state.OrderedTick < Time.OriginalFrames(FireOrderRepeatFrames);
+
+    private const long FireOrderRepeatFrames = 2;
+
     /// <summary>The first tick of <paramref name="entity"/>'s own logic frame of the original that holds <paramref name="tick"/> (the tick itself at 30 Hz).</summary>
     private long OwnFrameStart(Entity entity, long tick)
     {

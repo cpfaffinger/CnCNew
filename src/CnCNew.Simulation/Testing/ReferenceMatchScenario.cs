@@ -459,7 +459,7 @@ public sealed class ReferenceMatchScenario
             var range = world.MaxWeaponRange(unit);
             if (SquaredReach.Of(range).Contains(best))
             {
-                if (world.ChooseWeapon(unit, nearest, FireOrigin.Ai).CanFire)
+                if (world.ChooseWeapon(unit, nearest, FireOrigin.Ai).CanFire && !world.IsShotPending(unit, nearest.Id))
                 {
                     Add(world, new FireWeaponCommand(unit.Owner, Next(unit.Owner), tick, unit.Id, nearest.Id, WeaponSlot.Best, FireOrigin.Ai));
                     Shots++;

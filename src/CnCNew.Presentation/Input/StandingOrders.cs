@@ -164,7 +164,10 @@ public sealed class StandingOrders
                 else issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
             }
             if (SimulationQueries.CanFireAt(world, unit, target))
-                issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id));
+            {
+                // The order of the last tick waits for its attack machine's shot (F-140): another one would add nothing.
+                if (!world.IsShotPending(unit, target.Id)) issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id));
+            }
             // In reach but not ready to shoot (reloading): the attack has begun all the same, so a turret that has no victim yet takes it now instead of waiting for the next shot.
             else if (!flying && world.HasAimingTurret(unit) && world.AttackTargetOf(unit) != target.Id && !(_standing.TryGetValue(unit.Id.Value, out var told) && told == target.Id))
             {

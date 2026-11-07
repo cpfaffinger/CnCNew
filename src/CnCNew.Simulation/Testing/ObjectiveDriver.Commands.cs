@@ -248,7 +248,7 @@ internal sealed partial class ObjectiveDriver
                 _assaults.Remove(unitId);
                 continue;
             }
-            if (!_world.ChooseWeapon(unit, victim, CnCNew.Simulation.Templates.FireOrigin.Player).CanFire) continue;
+            if (!_world.ChooseWeapon(unit, victim, CnCNew.Simulation.Templates.FireOrigin.Player).CanFire || _world.IsShotPending(unit, victim.Id)) continue;
             var owner = unit.Owner;
             if (_session.Issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, unit.Id, victim.Id)).Accepted) Commands++;
         }

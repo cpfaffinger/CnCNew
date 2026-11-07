@@ -359,6 +359,17 @@ static partial class Tests
         }
         Check.That(stream.SequenceEqual(client), $"The orders between the shots change nothing: {string.Join(",", stream)} / {string.Join(",", client)}.");
         Check.That(once.Count == 1 && once[0] == stream[0], $"One order is one shot, on the machine's frame: {string.Join(",", once)}.");
+
+        // A giver that orders in every tick the weapon could fire, and one that waits while its order's shot is pending (IsShotPending): the same shots, fewer orders.
+        var (world4, feeder4, _, tank4, north4, _) = FireCycleWorld("CycleNineTank");
+        var readyOrders = 0;
+        var ready = CycleShotTicks(world4, feeder4, tank4, north4, 50, w => w.ChooseWeapon(tank4, north4, FireOrigin.Player).CanFire && ++readyOrders > 0);
+        var (world5, feeder5, _, tank5, north5, _) = FireCycleWorld("CycleNineTank");
+        var waitingOrders = 0;
+        var waiting = CycleShotTicks(world5, feeder5, tank5, north5, 50,
+            w => w.ChooseWeapon(tank5, north5, FireOrigin.Player).CanFire && !w.IsShotPending(tank5, north5.Id) && ++waitingOrders > 0);
+        Check.That(waiting.SequenceEqual(ready) && waiting.SequenceEqual(stream), $"A giver that waits for its pending shot fires the same shots: {string.Join(",", waiting)} / {string.Join(",", ready)}.");
+        Check.That(waitingOrders < readyOrders && waitingOrders <= waiting.Count + 1, $"It sends fewer orders: {waitingOrders} against {readyOrders} for {waiting.Count} shots.");
     }
 
     public static void FireCycleSnapshotBetweenShotsContinues()
