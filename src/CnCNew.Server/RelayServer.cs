@@ -550,7 +550,7 @@ public sealed partial class RelayServer
     private void Configure(Peer host, RoomSettings settings)
     {
         if (settings.TickRate is not (30 or 60 or 120) || settings.Slots.Length is < 2 or > Protocol.MaxSlots || settings.MaxTicks <= 0 || settings.StartMoney < 0
-            || settings.MapPath.Length == 0 || settings.TerrainFingerprint.Length == 0 || settings.GraceFrames < 0 || settings.SciencePointIntervalFrames < 0)
+            || settings.MapPath.Length == 0 || settings.TerrainFingerprint.Length == 0 || settings.GraceFrames < 0 || settings.SciencePointIntervalFrames < 0 || !settings.Debug.IsValid)
         {
             Refuse(host, RejectReason.InvalidRequest, "The room settings are not valid.");
             return;

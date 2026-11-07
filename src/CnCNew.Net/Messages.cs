@@ -147,6 +147,8 @@ public enum EndReason : byte
 public static class Protocol
 {
     /// <summary>
+    /// Version 9: the debug options of a match in the room's settings (quick building, returning neutral buildings, general points at the start).
+    /// Version 8: the rules of the map in the room's settings (the server has no game data; a match on a map with rules of its own states them).
     /// Version 7 (phase 53): the votes of a match; a hash a majority of at least three players disagrees with drops the one who said it, and the match goes on.
     /// Version 6 (phase 33): the tactics profile of a slot in the room's settings.
     /// Version 5 (phase 29): the request for the list of a server's rooms and the list - asked on a connection before its hello.
@@ -154,7 +156,7 @@ public static class Protocol
     /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 8;
+    public const ushort Version = 9;
     /// <summary>Rooms one list names at most; a server with more names the first ones in the order of their names.</summary>
     public const int MaxListedRooms = 64;
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
@@ -498,6 +500,9 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
 {
     public static RoomSettings Empty { get; } = new(0, string.Empty, string.Empty, 0, 0, 0, 0, []);
 
+    /// <summary>The debug options of the match (protocol 9): carried into the match description like every other setting.</summary>
+    public MatchDebugOptions Debug { get; init; } = MatchDebugOptions.None;
+
     internal void Write(WireWriter writer)
     {
         writer.I32(TickRate);
@@ -524,6 +529,9 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             writer.I32(slot.AiTactics);
         }
         writer.Text(MapRules, Protocol.MaxIdBytes);
+        writer.I32(Debug.BuildTimePercent);
+        writer.I32(Debug.NeutralRespawnSeconds);
+        writer.I32(Debug.StartingGeneralPoints);
     }
 
     internal static RoomSettings Read(ref WireReader reader)
@@ -547,14 +555,17 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             if (kind > (byte)MatchSlotKind.Spectator) throw new ProtocolException($"Unknown slot kind {kind}.");
             slots.Add(new MatchSlotDescription((MatchSlotKind)kind, reader.Text(Protocol.MaxNameBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32()));
         }
-        return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed, reader.Text(Protocol.MaxIdBytes));
+        var rules = reader.Text(Protocol.MaxIdBytes);
+        var debug = new MatchDebugOptions(reader.I32(), reader.I32(), reader.I32());
+        if (debug.Problem is { } problem) throw new ProtocolException(problem);
+        return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed, rules) { Debug = debug };
     }
 
     /// <summary>Content equality (the slots are compared one by one).</summary>
     public bool SameAs(RoomSettings other)
         => TickRate == other.TickRate && MapPath == other.MapPath && TerrainFingerprint == other.TerrainFingerprint && MaxTicks == other.MaxTicks && StartMoney == other.StartMoney
            && GraceFrames == other.GraceFrames && SciencePointIntervalFrames == other.SciencePointIntervalFrames && HasSeed == other.HasSeed && Seed == other.Seed && AiSeed == other.AiSeed
-           && MapRules == other.MapRules && Slots.SequenceEqual(other.Slots);
+           && MapRules == other.MapRules && Debug == other.Debug && Slots.SequenceEqual(other.Slots);
 }
 
 /// <summary>Host to server: set the room.</summary>
@@ -1277,10 +1288,10 @@ public static class RoomSettingsExtensions
     /// </summary>
     public static MatchDescription ToDescription(this RoomSettings settings, string simulationId, string definitionFingerprint, uint seed, uint aiSeed)
         => new(settings.TickRate, settings.MapPath, settings.TerrainFingerprint, settings.MapRules.Length > 0 ? settings.MapRules : definitionFingerprint, seed, aiSeed, settings.MaxTicks, settings.StartMoney, settings.GraceFrames,
-            settings.SciencePointIntervalFrames, settings.Slots) { SimulationId = simulationId };
+            settings.SciencePointIntervalFrames, settings.Slots) { SimulationId = simulationId, Debug = settings.Debug };
 
     /// <summary>The room settings a description was made from (a host that already holds a description, such as a saved match).</summary>
     public static RoomSettings ToRoomSettings(this MatchDescription description, bool withSeed)
         => new(description.TickRate, description.MapPath, description.TerrainFingerprint, description.MaxTicks, description.StartMoney, description.GraceFrames,
-            description.SciencePointIntervalFrames, description.Slots, withSeed, description.Seed, description.AiSeed, description.DefinitionFingerprint);
+            description.SciencePointIntervalFrames, description.Slots, withSeed, description.Seed, description.AiSeed, description.DefinitionFingerprint) { Debug = description.Debug };
 }
