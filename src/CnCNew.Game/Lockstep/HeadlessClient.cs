@@ -243,7 +243,10 @@ public sealed class HeadlessClient
             if (!driver.TryReleaseTick(tick, Path!.CanStep)) break;
             if (tick == CorruptAtTick)
             {
-                var victim = session.World.Entities.Where(entity => entity.Body is not null && !entity.EffectivelyDead && !entity.DestroyRequested && !entity.Template.IsKindOf("BRIDGE")).OrderBy(entity => entity.Id.Value).First();
+                // The first object that the damage changes: a map's objects come before the players' and may be indestructible.
+                var victim = session.World.Entities.Where(entity => entity.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: false } body
+                    && body is not CnCNew.Simulation.Modules.BuiltIn.ImmortalBody and not CnCNew.Simulation.Modules.BuiltIn.HighlanderBody && body.Health > CnCNew.Simulation.Numerics.Fixed.One
+                    && !entity.EffectivelyDead && !entity.DestroyRequested && !entity.Template.IsKindOf("BRIDGE")).OrderBy(entity => entity.Id.Value).First();
                 session.World.Damage(victim.Id, new CnCNew.Simulation.World.DamageInfo(CnCNew.Simulation.Ids.EntityId.Invalid, CnCNew.Simulation.Numerics.Fixed.One,
                     CnCNew.Simulation.World.DamageTypes.Unresistable, CnCNew.Simulation.World.DeathTypes.Normal, false));
                 Corrupted = FormattableString.Invariant($"object {victim.Id.Value} ({victim.Template.Name}) at tick {tick}");
