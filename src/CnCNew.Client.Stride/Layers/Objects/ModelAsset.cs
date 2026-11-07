@@ -96,8 +96,8 @@ internal sealed class ModelAsset
     /// <summary>The opacity step of a solid drawable; steps are percent, so the few translucent drawables (the building preview) share a handful of cached material variants.</summary>
     public const int SolidOpacity = 100;
 
-    /// <summary>The brightness of an object in the fog (a fog level of one half squared for the linear pipeline, as the terrain layer does).</summary>
-    public const float FogBrightness = 0.25f;
+    /// <summary>The factor on the light of an object in the fog (a fog level of one half squared for the linear pipeline, as the terrain layer does; <see cref="CnCNew.Presentation.Objects.FogDimming"/>).</summary>
+    public static readonly float FogBrightness = CnCNew.Presentation.Objects.FogDimming.DefaultLinearFactor;
     private double _animatedBatchesUpdatedAtSeconds = double.NaN;
 
     private ModelAsset(

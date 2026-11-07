@@ -13,8 +13,8 @@ internal sealed class W3dMaterialFactory(
     Dictionary<MaterialPass, bool> depthWrites)
 {
     /// <summary>
-    /// Brightness factor applied to the surface colour of every material created while it is below one (fogged objects: <c>RTS3DScene</c> draws objects through the shroud
-    /// texture, the terrain layer squares the fog level for the linear colour pipeline, so a fog level of one half darkens to a quarter). Set by the caller around <see cref="Create"/>.
+    /// Factor on the light of every material created while it is below one (fogged objects: <c>RTS3DScene</c> draws objects through the shroud texture, the terrain layer squares
+    /// the fog level for the linear colour pipeline, so a fog level of one half darkens to a quarter; <see cref="CnCNew.Presentation.Objects.FogDimming"/>). Set by the caller around <see cref="Create"/>.
     /// </summary>
     public float Dim { get; set; } = 1f;
 
@@ -88,7 +88,10 @@ internal sealed class W3dMaterialFactory(
                 source.EffectiveDetailAlphaFunction);
         }
 
-        var factor = Tint * Dim;
+        // A colour constant is converted from sRGB to linear light by the renderer in a linear colour space: the fog's factor is encoded first, or it would be squared once more.
+        var factor = graphicsDevice.ColorSpace == ColorSpace.Linear
+            ? new System.Numerics.Vector3(CnCNew.Presentation.Objects.FogDimming.ConstantFor(Tint.X, Dim), CnCNew.Presentation.Objects.FogDimming.ConstantFor(Tint.Y, Dim), CnCNew.Presentation.Objects.FogDimming.ConstantFor(Tint.Z, Dim))
+            : Tint * Dim;
         if (factor != System.Numerics.Vector3.One)
         {
             surface = SubstituteAlpha(new ComputeBinaryColor(surface, new ComputeColor(new Color4(factor.X, factor.Y, factor.Z, 1f)), BinaryOperator.Multiply), surface);
