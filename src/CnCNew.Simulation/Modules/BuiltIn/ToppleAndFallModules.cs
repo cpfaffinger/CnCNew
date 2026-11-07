@@ -169,6 +169,13 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     public long Update(IWorldServices world)
     {
         if (_state != State.Falling) return SimulationTiming.SleepForever;
+        // The original's update runs once per logic frame of the object, and a push lands in the frame before its first one: above 30 Hz the first step begins in the first tick of
+        // the object's next frame, not in the tick after the push (F-146; a tree pushed in the first tick of a frame was half a frame ahead at 60 Hz).
+        if (_framePhase.AtBoundary && !world.Time.BeginsFrameOf(Entity, world.Tick))
+        {
+            for (var ahead = TickOrder.Next; ; ahead++)
+                if (world.Time.BeginsFrameOf(Entity, world.Tick + ahead)) return ahead;
+        }
         // The step of this frame of the original is decided by its first tick, covered by all of its ticks, and concluded (bounce or acceleration) by its last.
         var subTick = _framePhase.Next(world.Time);
         if (subTick == TickOrder.Next)
