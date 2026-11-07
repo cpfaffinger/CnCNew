@@ -380,6 +380,15 @@ public sealed class MissionPresentationDirector
 
     public ImmutableArray<RadarBlip> RadarBlips => [.._radar];
 
+    /// <summary>A script made a radar event (<c>Radar::createEvent</c> through <c>doRadarCreateEvent</c> and its object and team forms): the HUD keeps it as the last event for the space bar.</summary>
+    public event Action<RadarBlip>? RadarEventCreated;
+
+    private void AddRadarBlip(RadarBlip blip)
+    {
+        _radar.Add(blip);
+        RadarEventCreated?.Invoke(blip);
+    }
+
     /// <summary>The radar blips for a host that draws them on its minimap; calling this tells the director the radar events are displayed.</summary>
     public ImmutableArray<RadarBlip> RadarBlipsForDisplay()
     {
@@ -1016,7 +1025,7 @@ public sealed class MissionPresentationDirector
             case "RADAR_CREATE_EVENT":
                 if (output.Arguments.Length > 1 && TryParseCoord(output.Arguments[0], out var x, out var y) && int.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var eventType))
                 {
-                    _radar.Add(new RadarBlip(x, y, eventType, tick));
+                    AddRadarBlip(new RadarBlip(x, y, eventType, tick));
                     Handled(action, Channel.Radar);
                 }
                 else Problem(action, "arguments missing");
@@ -1025,7 +1034,7 @@ public sealed class MissionPresentationDirector
                 if (output.Arguments.Length > 1 && int.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectEventType)
                     && TryNamedPosition(output.Arguments[0], out var ox, out var oy))
                 {
-                    _radar.Add(new RadarBlip(ox, oy, objectEventType, tick));
+                    AddRadarBlip(new RadarBlip(ox, oy, objectEventType, tick));
                     Handled(action, Channel.Radar);
                 }
                 else Problem(action, "unknown named object");
@@ -1034,7 +1043,7 @@ public sealed class MissionPresentationDirector
                 if (output.Arguments.Length > 1 && int.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var teamEventType)
                     && TryTeamPosition(output.Arguments[0], out var tx, out var ty))
                 {
-                    _radar.Add(new RadarBlip(tx, ty, teamEventType, tick));
+                    AddRadarBlip(new RadarBlip(tx, ty, teamEventType, tick));
                     Handled(action, Channel.Radar);
                 }
                 else Problem(action, "team has no living member");

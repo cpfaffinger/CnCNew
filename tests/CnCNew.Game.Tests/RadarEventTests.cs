@@ -1,0 +1,203 @@
+using System.Numerics;
+using CnCNew.Game.Data;
+using CnCNew.Game.Hud;
+using CnCNew.Game.Live;
+using CnCNew.Game.Shell;
+using CnCNew.Presentation.Input;
+using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Mission;
+using CnCNew.Simulation.World;
+using CnCNew.Ui.Text;
+using static CnCNew.Game.Tests.MissionPresentationTests;
+
+namespace CnCNew.Game.Tests;
+
+/// <summary>
+/// F-137, the space bar: <c>Radar::getLastEventLoc</c> is where the last <c>Radar::createEvent</c> happened, and the original makes one for much more than a finished building, an
+/// upgrade and an attack - a beacon, a unit lost, a script's event, an infiltration (hijack, capture, hack, sabotage), stealth found or lost, a battle plan, an overcharge that gave out.
+/// The synthetic tests hand the message feed the events the simulation raises; with <c>--content-dir</c> the same chain runs on a real skirmish, up to the camera of the space bar.
+/// </summary>
+internal static class RadarEventTests
+{
+    public static int Run(string[] args)
+    {
+        var harness = new TestHarness(nameof(RadarEventTests));
+        harness.Run("A script's radar event is the last event, a beacon's pulse is not", ScriptEvents);
+        harness.Run("A mission's script radar event reaches the feed through the director", DirectorEvent);
+        harness.Run("A unit of the local player that is killed is a (fake) radar event, rationed, but not one lost to itself or someone else's", UnitLost);
+        harness.Run("An infiltration of the local player's object (hijack, sabotage, capture start, hack) is a radar event with its line; someone else's is not", Infiltration);
+        harness.Run("A stealth object found or lost, a battle plan and an overcharge that gave out are radar events", Notices);
+        var index = Array.IndexOf(args, "--content-dir");
+        if (index >= 0 && index + 1 < args.Length)
+        {
+            var directory = args[index + 1];
+            harness.Run("Real data: the space bar looks at the last of the events (a beacon, a captured building, a lost unit)", () => SpaceBar(directory));
+        }
+        return harness.Failures;
+    }
+
+    private static (HudMessageFeed Feed, SimulationWorld World, Entity Tank, Entity Barrel) Fixture()
+    {
+        var (map, fixture, terrain) = Mission([], [Placed("Tank", 100m, 100m, "teamHero", "Tank"), Placed("Barrel", 300m, 120m, "teamHero", "Barrel")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        session.Step();
+        var world = session.World;
+        var feed = new HudMessageFeed(new UiMessageLog(TextFixtures.Style.Settings), new LocalizedText(new StringTable("radar-events", StringTableFormat.Csf, [])), fixture.Graph);
+        return (feed, world, world.Entities.Single(entity => entity.Template.Name == "Tank"), world.Entities.Single(entity => entity.Template.Name == "Barrel"));
+    }
+
+    private static SimEvent Event(SimulationWorld world, SimEventKind kind, EntityId entity, EntityId other = default, string text = "", long value = 0, long tick = -1, PlayerId player = default)
+        => new(default, tick < 0 ? world.Tick : tick, kind, entity, other, player, text, value);
+
+    private static void ScriptEvents()
+    {
+        var (feed, world, _, _) = Fixture();
+        TestHarness.Assert(feed.LastRadarEvent is null, "no event before the first");
+        feed.NoteRadarEvent(new Vector2(10, 20), 3, 1);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(10, 20), "a script's event is the last one (doRadarCreateEvent -> Radar::createEvent)");
+        feed.NoteRadarEvent(new Vector2(50, 60), 5, 2);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(10, 20), "RADAR_EVENT_BEACON_PULSE does not become the last event");
+        feed.NoteRadarEvent(new Vector2(70, 80), 0, 3);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(70, 80), "createEvent makes any other ordinal, even one without colours");
+        TestHarness.Assert(world.Tick >= 0, "world exists");
+    }
+
+    private static void DirectorEvent()
+    {
+        var radar = Script("Radar", If("CONDITION_TRUE"), [Do("RADAR_CREATE_EVENT", Coord(123m, 456m, 0m), Int(3))]);
+        var session = Start([radar], null);
+        var director = new MissionPresentationDirector(session) { TextMeasure = new ShellTextMeasure(), TextStyle = TextFixtures.Style, TextScaleOptions = TextFixtures.Options };
+        var seen = new List<RadarBlip>();
+        director.RadarEventCreated += seen.Add;
+        director.BeforeStep();
+        session.Step();
+        director.AfterStep();
+        TestHarness.Assert(seen.Count == 1 && seen[0].X == 123f && seen[0].Y == 456f && seen[0].EventType == 3, $"the director announces the script's radar event ({seen.Count})");
+    }
+
+    private static void UnitLost()
+    {
+        var (feed, world, tank, barrel) = Fixture();
+        var human = tank.Owner;
+        var enemy = new EntityId(9999);
+        feed.Observe(Event(world, SimEventKind.EntityDied, tank.Id, enemy), world, new PlayerId(human.Value + 5));
+        TestHarness.Assert(feed.LastRadarEvent is null, "somebody else's unit lost is no event of ours");
+        feed.Observe(Event(world, SimEventKind.EntityDied, tank.Id, tank.Id), world, human);
+        TestHarness.Assert(feed.LastRadarEvent is null, "a unit that killed itself is not (selfInflicted)");
+        feed.Observe(Event(world, SimEventKind.EntityDied, barrel.Id, enemy), world, human);
+        TestHarness.Assert(feed.LastRadarEvent is null, "a structure is not a unit (the original has Eva for it, no fake event)");
+        feed.Observe(Event(world, SimEventKind.EntityDied, tank.Id, enemy), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(tank), "a unit killed by another is the last event, at its place");
+        feed.NoteRadarEvent(new Vector2(1, 2), 1, world.Tick);
+        feed.Observe(Event(world, SimEventKind.EntityDied, tank.Id, enemy, tick: world.Tick + 1), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(1, 2), "a second loss within ten seconds and 250 units is rationed (Radar::tryEvent)");
+        feed.Observe(Event(world, SimEventKind.EntityDied, tank.Id, enemy, tick: world.Tick + (long)world.Time.OriginalFrames(310)), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(tank), "and again after ten seconds");
+        TestHarness.Assert(feed.Shown == 0, "no line for it (the original only makes the event)");
+    }
+
+    private static void Infiltration()
+    {
+        var (feed, world, tank, barrel) = Fixture(); // the fixture's labels are missing: a line shows its marker, which is enough to count lines
+        var human = tank.Owner;
+        var other = new PlayerId(human.Value + 5);
+        var thief = new EntityId(9999);
+        feed.Observe(Event(world, SimEventKind.ObjectConverted, tank.Id, thief, "HIJACKED", other.Value), world, human);
+        TestHarness.Assert(feed.LastRadarEvent is null && feed.Shown == 0, "a vehicle hijacked from somebody else is not ours to be warned of");
+        feed.Observe(Event(world, SimEventKind.ObjectConverted, tank.Id, thief, "HIJACKED", human.Value), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(tank) && feed.Shown == 1, "our hijacked vehicle: a radar event and RADAR:Infiltration");
+
+        feed.NoteRadarEvent(new Vector2(1, 2), 1, 1);
+        feed.Observe(Event(world, SimEventKind.Sabotaged, barrel.Id, thief, "SabotagePowerPlantCrateCollide"), world, new PlayerId(human.Value + 5));
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(1, 2), "a sabotage of somebody else's building is not ours");
+        feed.Observe(Event(world, SimEventKind.Sabotaged, barrel.Id, thief, "SabotagePowerPlantCrateCollide"), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(barrel) && feed.Shown == 2, "our sabotaged building: a radar event and a line");
+
+        feed.NoteRadarEvent(new Vector2(3, 4), 1, 1);
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, thief, RadarNotices.Infiltration), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(barrel) && feed.Shown == 3, "the start of a capture or a hack on our building");
+        feed.NoteRadarEvent(new Vector2(5, 6), 1, 1);
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, thief, RadarNotices.Infiltration), world, other);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(5, 6) && feed.Shown == 3, "and not on somebody else's");
+
+        // Object::defect needs two real players: a car bomb or a capture between sides without a faction makes no event.
+        feed.NoteRadarEvent(new Vector2(7, 8), 1, 1);
+        feed.Observe(Event(world, SimEventKind.ObjectConverted, tank.Id, thief, "CARBOMB", human.Value), world, human);
+        feed.Observe(Event(world, SimEventKind.StructureCaptured, barrel.Id, thief, value: human.Value, player: other), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(7, 8) && feed.Shown == 3, "a defection needs two playable sides");
+    }
+
+    private static void Notices()
+    {
+        var (feed, world, tank, barrel) = Fixture();
+        var human = tank.Owner;
+        var other = new PlayerId(human.Value + 5);
+        var spotter = new EntityId(9999);
+
+        // Stealth: lost (our unit revealed, always an event) and found (our detector found one, rationed).
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, spotter, RadarNotices.StealthRevealed), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(tank) && feed.Shown == 1, "our stealth unit revealed: a radar event and a line");
+        feed.NoteRadarEvent(new Vector2(1, 2), 1, 1);
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, spotter, RadarNotices.StealthRevealed), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(tank) && feed.Shown == 2, "a unit (not a mine) revealed again makes its event again");
+        feed.NoteRadarEvent(new Vector2(3, 4), 1, 1);
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, spotter, RadarNotices.StealthRevealed), world, other);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(3, 4) && feed.Shown == 2, "somebody's stealth unit revealed by somebody that is not us tells us nothing");
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, barrel.Id, RadarNotices.StealthRevealed), world, other);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(3, 4), "(the detector must be ours)");
+
+        // Battle plan: every client's radar, whoever's plan it is.
+        feed.NoteRadarEvent(new Vector2(5, 6), 1, 1);
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, text: RadarNotices.BattlePlan), world, other);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(barrel), "a strategy center unpacking a plan is an event for everybody");
+
+        // Overcharge: ours only, with its line.
+        var shown = feed.Shown;
+        feed.NoteRadarEvent(new Vector2(7, 8), 1, 1);
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, text: RadarNotices.OverchargeExhausted), world, other);
+        TestHarness.Assert(feed.LastRadarEvent == new Vector2(7, 8) && feed.Shown == shown, "somebody else's overcharge tells us nothing");
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, text: RadarNotices.OverchargeExhausted), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(barrel) && feed.Shown == shown + 1, "ours: a radar event and GUI:OverchargeExhausted");
+    }
+
+    private static void SpaceBar(string directory)
+    {
+        var data = GameData.Load(directory, rate: CnCNew.Tests.TestRate.Default);
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        for (var i = 0; i < (int)match.World.Time.OriginalFrames(4); i++)
+        {
+            match.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        var world = match.World;
+        var human = match.Human;
+        var feed = controller.Messages;
+
+        var enemy = world.Entities.First(entity => entity.Owner != human && !entity.Owner.IsSystem && entity.Template.IsKindOf("COMMANDCENTER"));
+        var mine = world.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var unit = world.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+        SimEvent Make(SimEventKind kind, EntityId entity, EntityId other, long value = 0, PlayerId player = default, string text = "") => new(default, world.Tick, kind, entity, other, player, text, value);
+        void Press() => controller.Input.DispatchMeta(MetaAction.ViewLastRadarEvent, world, match.Camera);
+
+        // A building of ours captured: the old owner's defect, between two playable sides.
+        feed.Observe(Make(SimEventKind.StructureCaptured, mine.Id, enemy.Id, human.Value, enemy.Owner), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(mine), "our building captured by the enemy is the last event");
+        TestHarness.Assert(feed.Log.Lines.Any(line => line.Text.Contains("nfiltrat", StringComparison.OrdinalIgnoreCase)), $"with RADAR:Infiltration ({string.Join(" | ", feed.Log.Lines.Select(line => line.Text))})");
+        // The same capture seen from the other side (our building the thief's) is not our warning.
+        var before = feed.Log.Lines.Length;
+        feed.Observe(Make(SimEventKind.StructureCaptured, enemy.Id, mine.Id, enemy.Owner.Value, human), world, human);
+        TestHarness.Assert(feed.Log.Lines.Length == before, "a capture we make warns the other side, not us");
+
+        // A unit lost, later: the space bar goes to it.
+        feed.Observe(Make(SimEventKind.EntityDied, unit.Id, enemy.Id), world, human);
+        TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(unit), "a unit of ours killed by the enemy is the last event");
+        Press();
+        var seen = match.Camera.Pivot;
+        var target = SimulationQueries.GroundOf(unit);
+        TestHarness.Assert(Vector2.Distance(seen, target) < 1f || Vector2.Distance(seen, target) < Vector2.Distance(SimulationQueries.GroundOf(mine), target), $"the space bar centres the view on it (pivot {seen}, unit {target})");
+    }
+}

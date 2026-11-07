@@ -666,7 +666,10 @@ internal sealed class ClientRuntime : IDisposable
                 if (running.Host.Match is LiveMission mission && _clockMs / 250 % 2 == 0)
                     foreach (var blip in mission.Director.RadarBlipsForDisplay())
                         dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(new Vector2(blip.X, blip.Y), new CnCNew.Presentation.Terrain.Rgba32(255, 255, 255, 255)));
-                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
+                // Radar::createEvent: the events of the game itself blink between their two colours while they live (a mission's script events are drawn above).
+                if (running.Hud is { } radarOwner)
+                    foreach (var (at, red, green, blue) in radarOwner.Messages.RadarEventsToDraw(running.Host.Match.Tick, running.Host.Match.World, _clockMs / 250 % 2 == 1))
+                        dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(at, new CnCNew.Presentation.Terrain.Rgba32(red, green, blue, 255)));                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
             }
             FollowTextFocus(input, running.Match?.Net?.ChatOpen == true, fixedSeconds, events);
             if (_shell is not null && running.Host.Match is LiveMatch ordered) GiveStandInOrder(ordered);

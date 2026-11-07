@@ -27,6 +27,7 @@ public sealed class MissionController : IMissionHudControl
         Hud.Input.Selection.SelectionChanged += mission.Bridge.OnSelectionChanged;
         Hud.MatchEnded += OnEnded;
         mission.Director.InputDisabled += OnInputDisabled;
+        mission.Director.RadarEventCreated += blip => Hud.Messages.NoteRadarEvent(new System.Numerics.Vector2(blip.X, blip.Y), blip.EventType, blip.CreatedAtTick);
         mission.Director.TextMeasure = textMeasure ?? new MonospaceTextMeasure();
         mission.Director.TextStyle = Hud.TextStyle;
         mission.Director.TextScaleOptions = Hud.ScaleOptions;
