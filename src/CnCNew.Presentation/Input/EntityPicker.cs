@@ -49,7 +49,9 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
     {
         if (entity.DestroyRequested || entity.ContainedBy.IsValid) return false;
         if (entity.Template.IsKindOf("ALWAYS_SELECTABLE")) return true;
-        return entity.Template.IsKindOf("SELECTABLE") && !entity.EffectivelyDead && !entity.HasStatus(UnselectableBit) && !entity.HasStatus(MaskedBit);
+        // Object::m_isSelectable starts as the template's KINDOF_SELECTABLE; a map's objectSelectable overrides it (updateObjValuesFromMapProperties).
+        var own = (entity.ScriptDisableMask & Entity.ScriptUnselectable) != 0 ? false : (entity.ScriptDisableMask & Entity.ScriptSelectable) != 0 ? true : entity.Template.IsKindOf("SELECTABLE");
+        return own && !entity.EffectivelyDead && !entity.HasStatus(UnselectableBit) && !entity.HasStatus(MaskedBit);
     }
 
     /// <summary><c>Drawable::isMassSelectable</c>: selectable and not a structure (double-click, select matching and select all only take these).</summary>

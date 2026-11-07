@@ -912,7 +912,8 @@ public sealed partial class SimulationWorld : IWorldServices
             case PlaceMapObjectCommand placed:
                 if (!_templates.TryGet(placed.Template, out var placedTemplate) || !placedTemplate.IsInstantiable) return CommandRejection.UnknownTemplate;
                 if (!placed.Owner.IsSystem && !_players.ContainsKey(placed.Owner.Value)) return CommandRejection.UnknownPlayer;
-                if (placed.HealthPercent < 0 || ((int)placed.Flags & ~0x1F) != 0) return CommandRejection.InvalidArguments;
+                // Every bit of the byte is a flag of the map (MapObjectFlags); only the health can be out of range.
+                if (placed.HealthPercent < 0) return CommandRejection.InvalidArguments;
                 break;
             case DamageCommand damage:
                 if (damage.Amount.IsNegative || !DamageTypes.IsValid(damage.DamageType) || !DeathTypes.IsValid(damage.DeathType)) return CommandRejection.InvalidArguments;

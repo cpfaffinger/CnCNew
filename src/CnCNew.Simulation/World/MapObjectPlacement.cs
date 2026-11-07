@@ -54,6 +54,8 @@ public static class MapObjectPlacement
         if (properties.Find("objectPowered") is { Type: MapPropertyType.Bool, Bool: false }) flags |= MapObjectFlags.Unpowered;
         if (properties.Find("objectUnsellable") is { Type: MapPropertyType.Bool, Bool: true }) flags |= MapObjectFlags.Unsellable;
         if (properties.Find("objectTargetable") is { Type: MapPropertyType.Bool, Bool: true }) flags |= MapObjectFlags.Targetable;
+        if (properties.Find("objectRecruitableAI") is { Type: MapPropertyType.Bool, Bool: false }) flags |= MapObjectFlags.Unrecruitable;
+        if (properties.Find("objectSelectable") is { Type: MapPropertyType.Bool } selectable) flags |= selectable.Bool ? MapObjectFlags.Selectable : MapObjectFlags.Unselectable;
         return flags;
     }
 }

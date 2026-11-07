@@ -883,6 +883,12 @@ public enum MapObjectFlags : byte
     Unsellable = 8,
     /// <summary><c>objectTargetable</c>: <c>OBJECT_STATUS_SCRIPT_TARGETABLE</c>, a player may attack it without forcing although it is no enemy.</summary>
     Targetable = 16,
+    /// <summary><c>objectRecruitableAI</c> no: <c>AIUpdateInterface::setIsRecruitable(false)</c>, no team recruits it.</summary>
+    Unrecruitable = 32,
+    /// <summary><c>objectSelectable</c> yes: <c>Object::setSelectable(true)</c>, applied only where the template's own selectability differs.</summary>
+    Selectable = 64,
+    /// <summary><c>objectSelectable</c> no: <c>Object::setSelectable(false)</c>.</summary>
+    Unselectable = 128,
 }
 
 /// <summary>

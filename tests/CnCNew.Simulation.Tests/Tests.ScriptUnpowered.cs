@@ -165,4 +165,37 @@ static partial class Tests
         Run(session, session.Frames(4));
         Check.That(session.World.DisabledFlagsOf(dark) == DisabledMask.None, "The script's panel flag powers it again.");
     }
+
+    /// <summary>
+    /// <c>Object::updateObjValuesFromMapProperties</c> reads <c>objectRecruitableAI</c> (<c>setIsRecruitable</c>, an object with an AI) and <c>objectSelectable</c> (<c>setSelectable</c>, only where it
+    /// differs from <c>isSelectable</c>): a map's unrecruitable soldier stays out of a team's recruiting from the start, a selectable property on a template that is not selectable and an
+    /// unselectable one on a template that is, set the object's own selectability, and one that changes nothing writes nothing.
+    /// </summary>
+    public static void MapObjectsBringRecruitableAndSelectable()
+    {
+        MapObject With(MapObject placed, params MapProperty[] extra) => placed with { Properties = new MapProperties([..placed.Properties.Items, ..extra]) };
+        MapProperty Bool(string key, bool value) => new(key, MapPropertyType.Bool, value ? 1 : 0, 0m, string.Empty);
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Recruit", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("RECRUIT_TEAM", Scr.Team("Strike"), Scr.Real(0m))], oneShot: true),
+        ], objects: [Placed("BetaSoldier", 100m, 200m, "teamPlayerB", "Free1"), With(Placed("BetaSoldier", 120m, 200m, "teamPlayerB", "Free2"), Bool("objectRecruitableAI", false), Bool("objectSelectable", false)),
+            With(Placed("BetaSoldier", 140m, 200m, "teamPlayerB", "Free3"), Bool("objectRecruitableAI", true), Bool("objectSelectable", true)),
+            With(Placed("ScriptWarehouse", 300m, 60m, "teamA", "Plain"), Bool("objectSelectable", true)), With(Placed("AlphaBunker", 200m, 60m, "teamA", "Hidden"), Bool("objectSelectable", false))]);
+        MapProperties Strike(string name, string owner, string unit) => new([Scr.Text("teamName", name), Scr.Text("teamOwner", owner), Scr.Flag("teamIsSingleton", true), Scr.Text("teamHome", "Far"),
+            new MapProperty("teamProductionPriority", MapPropertyType.Int, 5, 0m, string.Empty),
+            Scr.Text("teamUnitType1", unit), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 3, 0m, string.Empty)]);
+        map = map with { Teams = [..map.Teams, Strike("Strike", PlayerB, "BetaSoldier"), new([Scr.Text("teamName", "teamPlayerB"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true)])] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(10));
+        var (free1, free2, free3, plain, hidden) = (NamedIn(session, "Free1")!, NamedIn(session, "Free2")!, NamedIn(session, "Free3")!, NamedIn(session, "Plain")!, NamedIn(session, "Hidden")!);
+        var strike = session.Engine.TeamInstances.First(team => team.Prototype == "Strike");
+        Check.That(strike.Members.Count == 2 && !strike.Members.Contains(free2.Id.Value) && strike.Members.Contains(free1.Id.Value) && strike.Members.Contains(free3.Id.Value),
+            $"An object whose map says objectRecruitableAI no is never recruited ({strike.Members.Count} members).");
+        Check.That((free2.ScriptDisableMask & Entity.ScriptUnrecruitable) != 0 && free1.ScriptDisableMask == 0 && free3.ScriptDisableMask == 0,
+            "A yes, or a soldier that was selectable already, writes nothing.");
+        Check.That((free2.ScriptDisableMask & Entity.ScriptUnselectable) != 0, "objectSelectable no on a selectable template makes it unselectable.");
+        Check.That((plain.ScriptDisableMask & Entity.ScriptSelectable) != 0 && plain.ScriptDisableMask == Entity.ScriptSelectable, "objectSelectable yes on a template that is not selectable makes it selectable.");
+        Check.That(hidden.ScriptDisableMask == Entity.ScriptUnselectable, "objectSelectable no on a building.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission keeps them.");
+    }
 }

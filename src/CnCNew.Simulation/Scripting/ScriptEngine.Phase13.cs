@@ -535,7 +535,7 @@ public sealed partial class ScriptEngine
                 foreach (var entity in objects)
                 {
                     if (AiOf(entity) is null) continue;
-                    if (value) _unrecruitable.Remove(entity.Id.Value);
+                    if (value) { _unrecruitable.Remove(entity.Id.Value); _world.SetScriptDisable(entity, Entity.ScriptUnrecruitable, false); }
                     else _unrecruitable.Add(entity.Id.Value);
                 }
                 return;
@@ -549,12 +549,14 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary><c>AIUpdateInterface::isRecruitable</c>: a script did not take the object out of recruiting.</summary>
-    private bool IsRecruitable(Entity entity) => !_unrecruitable.Contains(entity.Id.Value);
+    private bool IsRecruitable(Entity entity) => !_unrecruitable.Contains(entity.Id.Value) && (entity.ScriptDisableMask & Entity.ScriptUnrecruitable) == 0;
 
     /// <summary><c>ScriptActions::doTeamStop</c> with disband: every member with an AI is recruitable again.</summary>
     private void MakeRecruitable(Entity entity)
     {
-        if (AiOf(entity) is not null) _unrecruitable.Remove(entity.Id.Value);
+        if (AiOf(entity) is null) return;
+        _unrecruitable.Remove(entity.Id.Value);
+        _world.SetScriptDisable(entity, Entity.ScriptUnrecruitable, false);
     }
 
     private void UpdatePhase13(long tick)

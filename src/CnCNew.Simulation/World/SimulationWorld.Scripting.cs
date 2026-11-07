@@ -147,6 +147,11 @@ public sealed partial class SimulationWorld
         if ((flags & Commands.MapObjectFlags.Unpowered) != 0) bits |= Entity.ScriptUnpowered;
         if ((flags & Commands.MapObjectFlags.Unsellable) != 0) bits |= Entity.ScriptUnsellable;
         if ((flags & Commands.MapObjectFlags.Targetable) != 0) bits |= Entity.ScriptTargetable;
+        // setIsRecruitable acts only on an object with an AI; setSelectable only when the value differs from isSelectable (an ALWAYS_SELECTABLE template stays selectable either way).
+        if ((flags & Commands.MapObjectFlags.Unrecruitable) != 0 && AiOf(entity) is not null) bits |= Entity.ScriptUnrecruitable;
+        var selectableNow = entity.Template.IsKindOf("ALWAYS_SELECTABLE") || entity.Template.IsKindOf("SELECTABLE");
+        if ((flags & Commands.MapObjectFlags.Selectable) != 0 && !selectableNow) bits |= Entity.ScriptSelectable;
+        if ((flags & Commands.MapObjectFlags.Unselectable) != 0 && selectableNow) bits |= Entity.ScriptUnselectable;
         if (bits != 0) entity.ScriptDisableMask |= bits;
         if (attitude != 0 && AiOf(entity) is not null) SetAttitude(entity, attitude);
     }

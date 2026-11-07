@@ -299,7 +299,7 @@ public sealed class Entity
 
     /// <summary>
     /// Script disables and statuses: bit 1 = <c>DISABLED_HELD</c> (<c>NAMED_SET_HELD</c>: nothing acts), bit 2 = <c>OBJECT_STATUS_SCRIPT_DISABLED</c> (<c>PLAYER_DISABLE_FACTORIES</c>: the
-    /// object produces nothing), then <see cref="ScriptUnpowered"/>, <see cref="ScriptUnsellable"/>, <see cref="ScriptTargetable"/>. 0 when never touched.
+    /// object produces nothing), then <see cref="ScriptUnpowered"/>, <see cref="ScriptUnsellable"/>, <see cref="ScriptTargetable"/>, <see cref="ScriptUnrecruitable"/>, <see cref="ScriptSelectable"/>, <see cref="ScriptUnselectable"/>. 0 when never touched.
     /// </summary>
     public byte ScriptDisableMask { get; internal set; }
 
@@ -339,6 +339,15 @@ public sealed class Entity
 
     /// <summary><c>OBJECT_STATUS_SCRIPT_TARGETABLE</c>: a player's units attack it without forcing although it is no enemy (<c>WeaponSet::getAbleToAttackSpecificObject</c>).</summary>
     public const byte ScriptTargetable = 16;
+
+    /// <summary><c>AIUpdateInterface::m_isRecruitable</c> false (a map's <c>objectRecruitableAI</c> no): no team recruits the object (<c>Team::tryToRecruit</c>).</summary>
+    public const byte ScriptUnrecruitable = 32;
+
+    /// <summary><c>Object::m_isSelectable</c> set true where the template is not selectable (a map's <c>objectSelectable</c> yes).</summary>
+    public const byte ScriptSelectable = 64;
+
+    /// <summary><c>Object::m_isSelectable</c> set false where the template is selectable (a map's <c>objectSelectable</c> no).</summary>
+    public const byte ScriptUnselectable = 128;
 
     /// <summary><c>BuildAssistant::canMakeUnit</c>, <c>ControlBar::getCommandAvailability</c>: a script disabled or unpowered the object, so it makes nothing and shows no buttons.</summary>
     public bool IsScriptDisabledOrUnpowered => (ScriptDisableMask & (ScriptDisabled | ScriptUnpowered)) != 0;

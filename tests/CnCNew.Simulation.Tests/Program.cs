@@ -396,6 +396,7 @@ run.Test("Phase 61: a script-unpowered object is disabled as DISABLED_SCRIPT_UND
 run.Test("Phase 61: the panel-flag actions set and clear an object's flags", Tests.ScriptPanelFlags);
 run.Test("Phase 61: the panel flag AI Recruitable keeps a unit out of recruiting", Tests.ScriptPanelFlagRecruitable);
 run.Test("Phase 61: a mission's map objects come with their properties", Tests.MissionMapObjectsComeWithTheirProperties);
+run.Test("Phase 62 (F-141): a map object brings objectRecruitableAI and objectSelectable", Tests.MapObjectsBringRecruitableAndSelectable);
 run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkCrashesIntoABuilding);
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);
 run.Test("Phase 58: a captured airfield takes its parked jets", Tests.AirCapturedAirfieldTakesItsParkedJets);

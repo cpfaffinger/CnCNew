@@ -262,7 +262,7 @@ internal static class MatchAnalysisTests
             var minute = 60L * data.Rate.TicksPerSecond;
             TestHarness.Assert(player.CommandsPerMinute.Length == (match.World.Tick + minute - 1) / minute, $"player {player.Player}: a count of commands for every minute begun");
             // The human of this match only moves its units; the computer player builds its economy and its army.
-            if (player.IsComputer) TestHarness.Assert(player.Spent > 0 && player.Collected > 0 && player.UnitsBuiltCount > 0, $"player {player.Player}: the computer player spent, collected and built");
+            if (player.IsComputer) TestHarness.Assert(player.Spent > 0 && player.Collected > 0 && player.UnitsBuiltCount > 0, $"player {player.Player}: the computer player spent, collected and built ({player.Spent}, {player.Collected}, {player.UnitsBuiltCount})");
             TestHarness.Assert(analysis.SamplesOf(player.Player).Zip(analysis.SamplesOf(player.Player).Skip(1)).All(pair => pair.Second.Collected >= pair.First.Collected && pair.Second.UnitsLost >= pair.First.UnitsLost),
                 $"player {player.Player}: what is counted only grows");
         }

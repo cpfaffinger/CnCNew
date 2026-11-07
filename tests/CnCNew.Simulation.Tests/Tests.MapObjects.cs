@@ -108,6 +108,9 @@ static partial class Tests
             Check.That(restored.StateHash == world.StateHash, $"{rate}: a save keeps the placed objects.");
             var again = restored.Entities.Single(entity => entity.Id == huts[0].Id);
             Check.That(again.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: true } && again.ScriptDisableMask == huts[0].ScriptDisableMask, $"{rate}: restored, still indestructible.");
+            // objectRecruitableAI and objectSelectable (Phase 62): a skirmish places an object with every flag of the map; the check refused the three new bits, so such an object was never made.
+            Check.That(world.Submit(Place("MapHut", 1, 60, 100, MapObjectFlags.Unrecruitable | MapObjectFlags.Selectable | MapObjectFlags.Unselectable | MapObjectFlags.Targetable)).Accepted,
+                $"{rate}: the system places an object with every flag of the map.");
         }
 
         var command = new PlaceMapObjectCommand(PlayerId.System, 7, 0, "MapHut", PlayerId.System, Fixed.FromInt(3), Fixed.FromInt(4), Fixed.One, Fixed.FromDecimal(0.5m), 75,

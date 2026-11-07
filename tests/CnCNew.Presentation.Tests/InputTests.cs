@@ -31,6 +31,7 @@ static class InputTests
         run.Test("Input: CommandMap from the compiled graph equals the text parser", HotkeyMapFromGraph);
         run.Test("Input: modifier-only bindings and control-bar hotkeys through the dispatcher", HotkeyDispatch);
         run.Test("Input: pick rules (radius, minimum, nearest to camera, visibility, containment)", PickRules);
+        run.Test("Input: a map's objectSelectable no keeps a selectable object out of picking (Object::setSelectable)", MapUnselectablePicks);
         run.Test("Input: box and click selection precedence, shift add and toggle, foreign info selection", SelectionPrecedence);
         run.Test("Input: double click, select matching, select all and next unit", SelectionMatching);
         run.Test("Input: control groups create, recall, add, double press and pruning", ControlGroups);
@@ -878,6 +879,21 @@ static class InputTests
         Assert(slant.TryWorldToScreen(EntityPicker.CenterOf(beside), out var besideScreen) && picker.Pick(world, Me, slant, besideScreen) == beside, "seen at a slant, a unit beside a building is picked");
         Assert(slant.TryWorldToScreen(new Vector3(160, 150, 8), out var roof) && picker.Pick(world, Me, slant, roof) == arena.Find("Bunker", Me, 160, 150), "the roof of the building is the building");
         Assert(inBox.Select(entity => entity.Id.Value).SequenceEqual(inBox.Select(entity => entity.Id.Value).Order()) && inBox.Length == 5, $"the box lists the five pickable objects in id order ({inBox.Length})");
+    }
+
+    private static void MapUnselectablePicks()
+    {
+        var arena = new Arena();
+        arena.Spawn("Ranger", Me, 40, 40);
+        arena.StepFrames(2);
+        var view = new TopDownView();
+        var picker = new EntityPicker();
+        var ranger = arena.Find("Ranger", Me, 40, 40);
+        Assert(EntityPicker.IsSelectable(ranger) && picker.Pick(arena.World, Me, view, Screen(40, 40)) == ranger, "a selectable ranger is picked");
+        arena.World.SetScriptDisable(ranger, Entity.ScriptUnselectable, true);
+        Assert(!EntityPicker.IsSelectable(ranger) && picker.Pick(arena.World, Me, view, Screen(40, 40)) is null, "with the map's objectSelectable no it is neither selectable nor picked");
+        arena.World.SetScriptDisable(ranger, Entity.ScriptUnselectable, false);
+        Assert(EntityPicker.IsSelectable(ranger), "and selectable again without it");
     }
 
     private static void SelectionPrecedence()
