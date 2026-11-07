@@ -69,6 +69,12 @@ internal static class SkinScenes
                 Shot("single-player");
                 Click("MainMenu.wnd:ButtonSkirmish");
                 Shot("skirmish-setup");
+                // The AI options of the setup (docs/GAME-SHELL.md): the second slot switched to the Classic AI, tactics greyed for it.
+                Click(AiOptionsScreen.Button);
+                shell.CurrentScreen.Tree.Post(UiEventKind.ComboSelected, shell.CurrentScreen.Tree.FindByName("AiOptions.wnd:ComboEngine0")!, value: 1);
+                shell.CurrentScreen.Tree.Dispatch();
+                Shot("ai-options");
+                Click("AiOptions.wnd:ButtonBack");
                 Click("SkirmishGameOptionsMenu.wnd:ButtonSelectMap");
                 var list = shell.CurrentScreen.Tree.FindByName("SkirmishMapSelectMenu.wnd:ListboxMap")!;
                 var row = new Vector2(list.Rect.X + 20, list.Rect.Y + 8);

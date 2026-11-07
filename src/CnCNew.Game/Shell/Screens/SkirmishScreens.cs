@@ -40,10 +40,13 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     private const int ProfileEntry = ComputerArmyEntry + 3;
     private static readonly ImmutableArray<CnCNew.Simulation.Skirmish.AiTactics> ProfileEntries =
         [CnCNew.Simulation.Skirmish.AiTactics.Rush, CnCNew.Simulation.Skirmish.AiTactics.Turtle, CnCNew.Simulation.Skirmish.AiTactics.Eco];
-    /// <summary>Whether the computer slots are played by the original AI (<see cref="GameShell.SkirmishAi"/>); it has no tactics profiles.</summary>
+    /// <summary>Whether the slot boxes were made for the original AI (<see cref="GameShell.SkirmishAi"/>, the client's <c>--ai original</c>): they then list no tactics profiles.</summary>
     private readonly bool _originalAi;
-    private readonly CnCNew.Simulation.Scripting.ScriptDifficulty[] _difficulty = new CnCNew.Simulation.Scripting.ScriptDifficulty[Slots];
-    private readonly CnCNew.Simulation.Skirmish.AiTactics?[] _tactics = new CnCNew.Simulation.Skirmish.AiTactics?[Slots];
+    /// <summary>
+    /// The AI of every slot (entry 0 is the person's and unused): engine, strength and tactics. The slot's box and the AI options screen are two views of this one value; an engine
+    /// starts as the shell's <see cref="GameShell.SkirmishAi"/>, and a mix of the two engines is possible (docs/GAME-SHELL.md, "AI options").
+    /// </summary>
+    private readonly MatchAi[] _ai = new MatchAi[Slots];
     private const int DefaultArmyEntry = ComputerArmyEntry + 1;
     private string? _selectedMapPath;
     private int _startMoney;
@@ -83,7 +86,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         W("TextEntryPlayerName").SetEntryText(names.Player);
         var computerArmy = names.ComputerArmy;
         _originalAi = Shell.SkirmishAi == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
-        Array.Fill(_difficulty, CnCNew.Simulation.Scripting.ScriptDifficulty.Normal);
+        Array.Fill(_ai, new MatchAi(Shell.SkirmishAi));
         for (var slot = 0; slot < Slots; slot++)
         {
             var template = W($"ComboBoxPlayerTemplate{slot}");
@@ -121,8 +124,13 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 
         // The debug options of the match (docs/GAME-SHELL.md): a button of this project between Start and Back opens their screen. The starting cash above is one of them for the tester.
         Tree.Register("SkirmishDebugOptionsSystem", OnSystem);
-        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new WndScreenRect(DebugButtonLeft, 513, DebugButtonLeft + 174, 549, 800, 600), "SkirmishDebugOptionsSystem"));
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new WndScreenRect(DebugButtonLeft, 513, DebugButtonLeft + AiOptionsScreen.ButtonWidth, 549, 800, 600), "SkirmishDebugOptionsSystem",
+            DebugOptionsScreen.Button, "DebugOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
         ShowDebugButton();
+        // The AI options (docs/GAME-SHELL.md): a second button of this project beside it, for the engine, tactics and strength of every computer slot.
+        Tree.Register("SkirmishAiOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new WndScreenRect(AiButtonLeft, 513, AiButtonLeft + AiOptionsScreen.ButtonWidth, 549, 800, 600), "SkirmishAiOptionsSystem", AiOptionsScreen.Button, "AiOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
+        Tree.FindByName(AiOptionsScreen.Button)!.SetText(AiOptionsScreen.ButtonCaption);
 
         // SkirmishGameOptionsMenuInit: the speed of the preferences (FPS), 15 to 61, beside it its number (setFPSTextBox).
         _gameSpeed = Math.Clamp(Shell.Settings.Skirmish.GameSpeed, MinGameSpeed, MaxGameSpeed);
@@ -142,8 +150,50 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 
     protected override string? ExitTransitionGroup => "SkirmishGameOptionsMenuFade";
 
-    /// <summary>The "Debug options" button stands in the gap between Start (to 268) and Back (from 530) of the layout's 800 x 600.</summary>
-    private const int DebugButtonLeft = 312;
+    /// <summary>The two buttons of this project, "AI options" and "Debug options", stand side by side in the gap between Start (to 268) and Back (from 530) of the layout's 800 x 600, in a smaller type.</summary>
+    private const int DebugButtonLeft = 402;
+    private const int AiButtonLeft = 274;
+
+    /// <summary>The AI of a computer slot as the setup will start it (engine, strength, tactics; <see cref="AiOptionsScreen"/>).</summary>
+    public MatchAi AiOf(int slot) => _ai[slot];
+
+    /// <summary>
+    /// The entry of a slot's box that shows <paramref name="ai"/>: the strength as Easy, Medium or Hard Army - for either engine -, and with the new AI at medium strength its tactics
+    /// profile as Rush, Turtle or Eco Army (the entries exist only when the boxes were made for the new AI). A combination the box has no entry for (a profile at another
+    /// strength) shows its strength.
+    /// </summary>
+    private int EntryOf(MatchAi ai)
+    {
+        if (!_originalAi && ai.Kind == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin && ai.Difficulty == CnCNew.Simulation.Scripting.ScriptDifficulty.Normal && ai.Tactics is { } tactics
+            && ProfileEntries.IndexOf(tactics) is var profile and >= 0) return ProfileEntry + profile;
+        return ComputerArmyEntry + (int)ai.Difficulty;
+    }
+
+    private void ShowSlot(int slot) => W($"ComboBoxPlayer{slot}").SetComboSelection(EntryOf(_ai[slot]));
+
+    /// <summary>Whether the map brings scripts of its own: only the session of the original AI runs them, so every computer slot is played by that AI (<see cref="TryStart"/>).</summary>
+    private bool MapHasScripts => _selectedMapPath is { } path && Shell.MapCatalog.TryGetValue(path, out var map) && map.HasScripts;
+
+    private void OpenAiOptions()
+    {
+        var names = new ShellSkirmishText(Shell.Data.Graph, Shell.TextSource);
+        var rows = ImmutableArray.CreateBuilder<AiOptionsRow>();
+        for (var slot = 1; slot < _startPositionCount; slot++)
+        {
+            if (!_computer[slot]) continue;
+            var faction = _factionIndex[slot] < _factionChoices.Length - 1 ? names.Faction(_factionChoices[_factionIndex[slot]]) : names.Random;
+            rows.Add(new AiOptionsRow(slot, $"Player {slot + 1}: {faction}", _ai[slot]));
+        }
+        var slots = rows.Select(row => row.Slot).ToImmutableArray();
+        Shell.OpenAiOptions(rows.ToImmutable(), MapHasScripts ? AiEngineMode.ClassicOnly : AiEngineMode.Free, readOnly: false, !_debug.IsDefault, chosen =>
+        {
+            for (var index = 0; index < slots.Length; index++)
+            {
+                _ai[slots[index]] = chosen[index];
+                ShowSlot(slots[index]);
+            }
+        });
+    }
 
     private void ShowDebugButton() => Tree.FindByName(DebugOptionsScreen.Button)!.SetText(DebugOptionsScreen.ButtonText(_debug));
 
@@ -281,7 +331,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         ai.Add(MatchAi.Builtin);
         // Team, colour and place of every slot that takes part, in the order of the match's slots; a slot without a place gets a random one by the seed of the description.
         // A map's own scripts run only in the session with the script engine, and that is the session of the original AI (SidesList::prepareForMP_or_Skirmish): a user's map brings them.
-        var scripted = _originalAi || (Shell.MapCatalog.TryGetValue(_selectedMapPath, out var chosenMap) && chosenMap.HasScripts);
+        // Without them each slot is played by the engine it was given; one Classic slot makes the match a scripted one, in which the New slots are played by the built-in AI.
+        var scripted = MapHasScripts;
         var details = ImmutableArray.CreateBuilder<MatchSlotDetails>();
         details.Add(new MatchSlotDetails(_team[0], _color[0], StartPosition: _start[0]));
         for (var slot = 1; slot < _startPositionCount; slot++)
@@ -289,11 +340,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             if (!_computer[slot]) continue;
             details.Add(new MatchSlotDetails(_team[slot], _color[slot], StartPosition: _start[slot]));
             opponents.Add(ResolveFaction(slot));
-            ai.Add(new MatchAi(scripted ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, _difficulty[slot],
-                scripted ? null : _tactics[slot]));
+            var kind = scripted ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : _ai[slot].Kind;
+            ai.Add(new MatchAi(kind, _ai[slot].Difficulty, kind == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin ? _ai[slot].Tactics : null));
         }
         if (opponents.Count == 0) return;
-        if (scripted && !_debug.IsDefault)
+        if (ai.Any(slot => slot.Kind == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original) && !_debug.IsDefault)
         {
             Shell.ShowError("Debug options", "The debug options are not available in a match of the original skirmish AI or on a map with scripts of its own.");
             return;
@@ -319,6 +370,10 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             case UiEventKind.ButtonSelected when e.Source == DebugOptionsScreen.Button:
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.OpenDebugOptions(_debug, readOnly: false, chosen => { _debug = chosen; ShowDebugButton(); });
+                break;
+            case UiEventKind.ButtonSelected when e.Source == AiOptionsScreen.Button:
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                OpenAiOptions();
                 break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
@@ -347,10 +402,12 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
                 _computer[slot] = e.Value >= ComputerArmyEntry;
-                // An army entry is a strength; a profile entry is its profile at medium strength.
-                _difficulty[slot] = e.Value >= ProfileEntry ? CnCNew.Simulation.Scripting.ScriptDifficulty.Normal
-                    : (CnCNew.Simulation.Scripting.ScriptDifficulty)Math.Clamp(e.Value - ComputerArmyEntry, 0, 2);
-                _tactics[slot] = e.Value >= ProfileEntry ? ProfileEntries[Math.Min(e.Value - ProfileEntry, ProfileEntries.Length - 1)] : null;
+                // An army entry is a strength (the slot keeps its engine, its profile goes); a profile entry is the new AI with that profile at medium strength.
+                if (e.Value >= ProfileEntry)
+                    _ai[slot] = new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, CnCNew.Simulation.Scripting.ScriptDifficulty.Normal,
+                        ProfileEntries[Math.Min(e.Value - ProfileEntry, ProfileEntries.Length - 1)]);
+                else if (e.Value >= ComputerArmyEntry)
+                    _ai[slot] = new MatchAi(_ai[slot].Kind, (CnCNew.Simulation.Scripting.ScriptDifficulty)Math.Clamp(e.Value - ComputerArmyEntry, 0, 2));
                 W($"ComboBoxPlayerTemplate{slot}").SetEnabled(_computer[slot]);
                 return;
             }

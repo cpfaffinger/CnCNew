@@ -82,8 +82,8 @@ public sealed class DebugOptionsScreen : ShellScreen
         return parts.Count == 0 ? "off" : string.Join(", ", parts);
     }
 
-    /// <summary>The caption of the button: it says when something is on.</summary>
-    public static string ButtonText(MatchDebugOptions options) => options.IsDefault ? "Debug options" : "Debug options (on)";
+    /// <summary>The caption of the button: it says when something is on (short, because the button stands beside the "AI options" button in a type of 12 points).</summary>
+    public static string ButtonText(MatchDebugOptions options) => options.IsDefault ? "Debug options" : "Debug (on)";
 
     private void Fill(string row, IEnumerable<string> entries)
     {
@@ -215,20 +215,24 @@ public sealed class DebugOptionsScreen : ShellScreen
     /// The "Debug options" button as a layout of its own, standing on <paramref name="rect"/> (in the host screen's 800 x 600): a copy of the shipped <paramref name="template"/> button
     /// under another name with a system callback of its own (<paramref name="callback"/>), because the host screen's layout has no such button.
     /// </summary>
-    public static WndLayout ButtonLayoutOf(WndWindow template, WndScreenRect rect, string callback)
+    public static WndLayout ButtonLayoutOf(WndWindow template, WndScreenRect rect, string callback) => ButtonLayoutOf(template, rect, callback, Button, "DebugOptionsButton.wnd");
+
+    /// <summary>The same under another <paramref name="name"/> and layout file: the "AI options" button of the setup is made the same way (<see cref="AiOptionsScreen.Button"/>).</summary>
+    public static WndLayout ButtonLayoutOf(WndWindow template, WndScreenRect rect, string callback, string name, string file, int? fontSize = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         var button = template with
         {
-            Name = Button,
+            Name = name,
             Rect = rect,
             Status = template.Status & ~WndStatus.Hidden,
             Text = null,
             TooltipText = null,
             Callbacks = template.Callbacks with { System = callback },
+            Font = fontSize is { } size && template.Font is { } font ? font with { Size = size } : template.Font,
             GroupCentered = true,
             Children = [],
         };
-        return new WndLayout("DebugOptionsButton.wnd", 2, new WndLayoutCallbacks(null, null, null), WndDefaults.None, [button], [], ImmutableSortedDictionary<string, int>.Empty);
+        return new WndLayout(file, 2, new WndLayoutCallbacks(null, null, null), WndDefaults.None, [button], [], ImmutableSortedDictionary<string, int>.Empty);
     }
 }

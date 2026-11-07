@@ -990,6 +990,9 @@ public sealed class GameShell
     /// <summary>The debug options of a match (<see cref="DebugOptionsScreen"/>): <paramref name="accepted"/> is told what was chosen; with <paramref name="readOnly"/> they are only shown.</summary>
     internal void OpenDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions current, bool readOnly, Action<CnCNew.Simulation.Skirmish.MatchDebugOptions> accepted)
         => Push(new DebugOptionsScreen(this, current, readOnly, accepted));
+    /// <summary>The AI options of the skirmish setup (<see cref="AiOptionsScreen"/>): <paramref name="accepted"/> is told the AI of every row.</summary>
+    public void OpenAiOptions(System.Collections.Immutable.ImmutableArray<AiOptionsRow> rows, AiEngineMode mode, bool readOnly, bool debugOn, Action<System.Collections.Immutable.ImmutableArray<CnCNew.Game.Live.MatchAi>> accepted)
+        => Push(new AiOptionsScreen(this, rows, mode, readOnly, debugOn, accepted));
     internal void OpenSkirmishSetup() => Push(new SkirmishSetupScreen(this));
     internal void OpenSkirmishMapSelect(SkirmishSetupScreen owner) => Push(new SkirmishMapSelectScreen(this, owner));
     internal void OpenCredits() => Push(new CreditsScreen(this));

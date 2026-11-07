@@ -129,7 +129,7 @@ $gameSuites = @{
     Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests', 'ReplayBrowserTests', 'AttachedEffectsTests', 'MatchAnalysisTests'
     Replays   = 'ReplayBrowserTests', 'NetShellTests', 'MatchAnalysisTests', 'ObserverTests'
     Save      = 'CampaignTests', 'CampaignShellTests'
-    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests', 'MatchAnalysisTests', 'SkinTests', 'CampaignPinTests'
+    Shell     = 'ShellTests', 'AiOptionsTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests', 'MatchAnalysisTests', 'SkinTests', 'CampaignPinTests'
     Spectator = 'SpectatorTests', 'ReplayBrowserTests', 'ObserverTests', 'SkinTests'
 }
 $gameSuitesOfSimulation = 'DeterminismTests', 'LiveMatchTests', 'SourceRuleTests'

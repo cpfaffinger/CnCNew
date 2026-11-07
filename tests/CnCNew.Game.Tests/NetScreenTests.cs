@@ -47,6 +47,7 @@ internal static class NetScreenTests
         harness.Run("The way to a room: submenu, address, connecting, the new server's key, the rooms, the popups", () => WayToRoom(data, baselines, updating));
         harness.Run("A room as its host and as a member, the map picker, the shared load screen", () => RoomAndLoading(data, baselines, updating));
         harness.Run("The debug options of a room: the host changes them and the server is asked, a member sees them and changes nothing", () => RoomDebugOptions(data));
+        harness.Run("The AI options of a room: the host changes the tactics and the strength of the computer slots and the server is asked, a member sees them, the engine is the new AI", () => RoomAiOptions(data, baselines, updating));
         harness.Run("Every way a server, a room or a connection says no has a screen with its text", () => Refusals(data, baselines, updating));
         harness.Run("A match that did not end by its own rules says why over the score screen", () => MatchEnds(data, baselines, updating));
         harness.Run("With window transitions the same way is walked by a script: every group the screens ask for exists, and nothing is clicked while one plays", () => AnimatedWalk(data));
@@ -59,6 +60,7 @@ internal static class NetScreenTests
         {
             harness.Run("The way to a room in the modern skin", () => WayToRoom(data, modern, updating));
             harness.Run("A room, the map picker, the shared load screen in the modern skin", () => RoomAndLoading(data, modern, updating));
+            harness.Run("The AI options of a room in the modern skin", () => RoomAiOptions(data, modern, updating));
             harness.Run("Every refusal has a screen with its text in the modern skin", () => Refusals(data, modern, updating));
             harness.Run("A match that did not end by its own rules says why in the modern skin", () => MatchEnds(data, modern, updating));
         });
@@ -474,7 +476,7 @@ internal static class NetScreenTests
             $"Accept asks the server to change the room, and nothing else in it changes ({string.Join("; ", lobby.Calls)})");
         lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
         Step(shell);
-        TestHarness.Assert(room.Tree.FindByName(DebugButton)!.Text!.Value == "Debug options (on)", "the room the server shows says the options are on");
+        TestHarness.Assert(room.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)", "the room the server shows says the options are on");
 
         // The money is changed after it: the options stay (the settings the screen sends are the server's, with one change).
         lobby.Calls.Clear();
@@ -500,6 +502,79 @@ internal static class NetScreenTests
         ChooseDebug(shell, "ComboQuickBuild", 0);
         Click(shell, "DebugOptions.wnd:ButtonBack");
         TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 0 && lobby.Configured!.Debug == chosen, "and nothing reaches the server");
+    }
+
+    private const string AiButton = "AiOptionsButton.wnd:ButtonAiOptions";
+
+    private static void ChooseAi(GameShell shell, string combo, int entry)
+    {
+        var tree = shell.CurrentScreen.Tree;
+        tree.Post(CnCNew.Ui.Runtime.UiEventKind.ComboSelected, tree.FindByName($"AiOptions.wnd:{combo}")!, value: entry);
+        tree.Dispatch();
+    }
+
+    /// <summary>
+    /// The AI options of a room (docs/GAME-SHELL.md): the room's settings already carry the strength and the tactics of every computer slot (the match description's fields), so the
+    /// host's screen changes them with one change of the settings and no new message; the engine is the new AI, the session of a room has no script engine, and the screen says so.
+    /// </summary>
+    private static void RoomAiOptions(GameData data, Dictionary<string, string> baselines, bool updating)
+    {
+        var (shell, network) = NewShell(data);
+        var lobby = GoToLobby(shell, network);
+        var settings = FourSeats(shell, out _);
+        settings = settings with { Slots = settings.Slots.SetItem(3, settings.Slots[3] with { AiStrength = 2, AiTactics = 1 }) };
+        lobby.ConnectionId = 7;
+        lobby.IsHost = true;
+        lobby.RoomName = "Friday night";
+        lobby.Room = new RoomStateMessage(RoomPhase.Room, settings, TwoMembers);
+        lobby.Stage = LobbyStage.InRoom;
+        Step(shell);
+        Step(shell);
+        var room = (NetRoomScreen)shell.CurrentScreen;
+        var button = room.Tree.FindByName(AiButton) ?? throw new InvalidOperationException("The room has no AI options button.");
+        var debug = room.Tree.FindByName(DebugButton)!;
+        var start = room.Tree.FindByName("LanGameOptionsMenu.wnd:ButtonStart")!;
+        var back = room.Tree.FindByName("LanGameOptionsMenu.wnd:ButtonBack")!;
+        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "AI options" && button.Rect.X > start.Rect.Right && debug.Rect.X > button.Rect.Right && debug.Rect.Right < back.Rect.X,
+            "the room has the AI options button beside the debug options, between Start and Back");
+
+        lobby.Calls.Clear();
+        Click(shell, AiButton);
+        TestHarness.Assert(shell.CurrentScreen is AiOptionsScreen, "the button opens the AI options");
+        var tree = shell.CurrentScreen.Tree;
+        int Shown(string combo) => tree.FindByName($"AiOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
+        TestHarness.Assert(tree.FindByName("AiOptions.wnd:Label0")!.IsVisible && !tree.FindByName("AiOptions.wnd:Label1")!.IsVisible && Shown("ComboEngine0") == 0 && Shown("ComboTactics0") == 1 && Shown("ComboStrength0") == 2
+                           && !tree.FindByName("AiOptions.wnd:ComboEngine0")!.IsEffectivelyEnabled, "one computer slot, shown as the room carries it: New, rush, hard - and the engine cannot be changed");
+        TestHarness.Assert(Enumerable.Range(0, 3).Any(note => tree.FindByName($"AiOptions.wnd:Note{note}")!.Text!.Value.Contains("server", StringComparison.Ordinal)), "a line says that a match on a server is the new AI's");
+        Capture(shell, "Net-AiOptions-Host", baselines, updating);
+        ChooseAi(shell, "ComboTactics0", 3);
+        ChooseAi(shell, "ComboStrength0", 0);
+        TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
+        Click(shell, "AiOptions.wnd:ButtonAccept");
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } asked && asked.Slots[3] == settings.Slots[3] with { AiStrength = 0, AiTactics = 3 }
+                           && asked.Slots.Take(3).SequenceEqual(settings.Slots.Take(3)) && asked.MapPath == settings.MapPath && asked.Debug == settings.Debug, $"Accept asks the server for that one change ({string.Join("; ", lobby.Calls)})");
+
+        // Back asks for nothing.
+        lobby.Calls.Clear();
+        Click(shell, AiButton);
+        ChooseAi(shell, "ComboStrength0", 1);
+        Click(shell, "AiOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 0, "Back asks for nothing");
+
+        // The server shows the room with the change; a member sees it and changes nothing.
+        lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
+        lobby.ConnectionId = 8;
+        lobby.IsHost = false;
+        Step(shell);
+        lobby.Calls.Clear();
+        Click(shell, AiButton);
+        tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(Shown("ComboTactics0") == 3 && Shown("ComboStrength0") == 0 && !tree.FindByName("AiOptions.wnd:ComboTactics0")!.IsEffectivelyEnabled && !tree.FindByName("AiOptions.wnd:ComboStrength0")!.IsEffectivelyEnabled
+                           && !tree.FindByName("AiOptions.wnd:ButtonAccept")!.IsVisible, "a member sees eco at easy, the boxes shut, no Accept");
+        Capture(shell, "Net-AiOptions-Member", baselines, updating);
+        ChooseAi(shell, "ComboStrength0", 2);
+        Click(shell, "AiOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 0, "and nothing reaches the server");
     }
 
     private static void Refusals(GameData data, Dictionary<string, string> baselines, bool updating)

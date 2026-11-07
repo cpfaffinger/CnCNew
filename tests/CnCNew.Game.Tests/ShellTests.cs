@@ -96,6 +96,17 @@ internal static class ShellTests
         TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "skirmish button opens setup");
         Capture(shell, "SkirmishSetup", baselines, updating);
 
+        // The AI options of the setup (docs/GAME-SHELL.md): the one computer slot as the new AI, then switched to Classic with its tactics greyed.
+        Click(shell, AiOptionsScreen.Button);
+        TestHarness.Assert(shell.CurrentScreen is AiOptionsScreen, "the AI options button opens the AI options");
+        Capture(shell, "SkirmishAiOptions", baselines, updating);
+        var aiTree = shell.CurrentScreen.Tree;
+        aiTree.Post(UiEventKind.ComboSelected, aiTree.FindByName("AiOptions.wnd:ComboEngine0")!, value: 1);
+        aiTree.Dispatch();
+        Capture(shell, "SkirmishAiOptions-Classic", baselines, updating);
+        Click(shell, "AiOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "Back returns to the setup");
+
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonSelectMap");
         TestHarness.Assert(shell.CurrentScreen is SkirmishMapSelectScreen, "select-map button opens the map picker");
         Capture(shell, "SkirmishMapSelect", baselines, updating);
@@ -971,7 +982,7 @@ internal static class ShellTests
         Choose(shell, "ComboGeneralPoints", 3);
         Click(shell, "DebugOptions.wnd:ButtonAccept");
         var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 5);
-        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug options (on)", $"Accept gives the setup {chosen} and the button says so");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)", $"Accept gives the setup {chosen} and the button says so");
         Click(shell, DebugButton);
         tree = shell.CurrentScreen.Tree;
         TestHarness.Assert(Selected("ComboQuickBuild") == 1 && Selected("ComboRespawn") == 1 && Selected("ComboRespawnAfter") == 2 && Selected("ComboGeneralPoints") == 3, "reopened, the screen shows what was chosen");

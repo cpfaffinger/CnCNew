@@ -450,7 +450,13 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         W("ButtonEmote").SetEnabled(false);
         // The debug options of the match: a button of this project in the gap between Start (to 251) and Back (from 542); the host changes them, everybody else sees them.
         Tree.Register("RoomDebugOptionsSystem", OnSystem);
-        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new CnCNew.Ui.Wnd.WndScreenRect(310, 516, 484, 552, 800, 600), "RoomDebugOptionsSystem"));
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new CnCNew.Ui.Wnd.WndScreenRect(402, 516, 402 + AiOptionsScreen.ButtonWidth, 552, 800, 600), "RoomDebugOptionsSystem",
+            DebugOptionsScreen.Button, "DebugOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
+        // The AI options of the room (docs/GAME-SHELL.md): the tactics and the strength of every computer slot, which the room's settings carry; the engine is the new AI.
+        Tree.Register("RoomAiOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new CnCNew.Ui.Wnd.WndScreenRect(266, 516, 266 + AiOptionsScreen.ButtonWidth, 552, 800, 600), "RoomAiOptionsSystem",
+            AiOptionsScreen.Button, "AiOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
+        Tree.FindByName(AiOptionsScreen.Button)!.SetText(AiOptionsScreen.ButtonCaption);
         StartSpots.Hide(this);
         Sync();
         Transitions?.SetGroup("LanGameOptionsFade");
@@ -618,6 +624,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             var debugButton = Tree.FindByName(DebugOptionsScreen.Button)!;
             debugButton.SetText(DebugOptionsScreen.ButtonText(settings.Debug));
             debugButton.SetHidden(_mapPickerOpen);
+            Tree.FindByName(AiOptionsScreen.Button)!.SetHidden(_mapPickerOpen);
             W("ComboBoxStartingCash").SetEnabled(IsHost);
             W("ComboBoxStartingCash").SetComboSelection(MoneyChoices.IndexOf(settings.StartMoney));
             W("TextEntryMapDisplay").SetText(MapName(settings.MapPath));
@@ -683,6 +690,35 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
     {
         var seat = Settings.Slots[slot];
         Lobby.RequestSlot(slot, seat.Faction, seat.Team, seat.Color, seat.StartPosition);
+    }
+
+    /// <summary>
+    /// The room's computer slots with the strength and tactics the settings carry (the engine is the new AI: the session of a room has no script engine). The host's choices go to
+    /// the server as one change of the settings; a member sees what the host chose.
+    /// </summary>
+    private void OpenAiOptions()
+    {
+        if (Lobby.Room is null) return;
+        var slots = Settings.Slots;
+        var rows = ImmutableArray.CreateBuilder<AiOptionsRow>();
+        var index = ImmutableArray.CreateBuilder<int>();
+        for (var slot = 0; slot < slots.Length; slot++)
+        {
+            if (slots[slot].Kind != MatchSlotKind.Computer) continue;
+            var faction = slots[slot].Faction.Length == 0 ? _names.Random : _names.Faction(slots[slot].Faction);
+            rows.Add(new AiOptionsRow(slot, $"Player {slot + 1}: {faction}", new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin,
+                (CnCNew.Simulation.Scripting.ScriptDifficulty)Math.Clamp(slots[slot].AiStrength, 0, 2), slots[slot].AiTactics >= 0 ? (CnCNew.Simulation.Skirmish.AiTactics)slots[slot].AiTactics : null)));
+            index.Add(slot);
+        }
+        Shell.OpenAiOptions(rows.ToImmutable(), AiEngineMode.NewOnly, !IsHost, debugOn: false, chosen =>
+        {
+            if (!IsHost || Lobby.Room is null) return;
+            var changed = Settings.Slots;
+            for (var row = 0; row < index.Count; row++)
+                if (index[row] < changed.Length)
+                    changed = changed.SetItem(index[row], changed[index[row]] with { AiStrength = chosen[row].Strength, AiTactics = chosen[row].Tactics is { } tactics ? (int)tactics : -1 });
+            if (!changed.SequenceEqual(Settings.Slots)) Lobby.Configure(Settings with { Slots = changed });
+        });
     }
 
     private void ConfigureSlot(int slot, MatchSlotDescription description) => Lobby.Configure(Settings with { Slots = Settings.Slots.SetItem(slot, description) });
@@ -785,6 +821,12 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             {
                 if (IsHost && Lobby.Room is not null) Lobby.Configure(Settings with { Debug = chosen });
             });
+            return;
+        }
+        if (e.Kind == UiEventKind.ButtonSelected && e.Source == AiOptionsScreen.Button)
+        {
+            Shell.PlaySound(ShellUiSounds.ButtonClick);
+            OpenAiOptions();
             return;
         }
         const string prefix = "LanGameOptionsMenu.wnd:";
