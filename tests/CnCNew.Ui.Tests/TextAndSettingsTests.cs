@@ -394,6 +394,15 @@ public static class TextAndSettingsTests
             Assert(!json.Contains('\r') && json.IndexOf("\"version\"", StringComparison.Ordinal) < json.IndexOf("\"display\"", StringComparison.Ordinal)
                 && json.IndexOf("\"general\"", StringComparison.Ordinal) < json.IndexOf("\"skirmish\"", StringComparison.Ordinal), "Fixed property order and \\n line ends.");
             Assert(json.Contains("\"mode\": \"borderless\"") && json.Contains("\"uiScale\": \"integerMultiple\""), "Enums are camelCase names.");
+
+            // Windowed fullscreen is a value of the existing setting: the version stays, the files of the older values stay valid, the new value round-trips by its name.
+            var fullscreen = settings with { Display = settings.Display with { Mode = DisplayMode.BorderlessFullscreen } };
+            Assert(store.Save(fullscreen).IsEmpty && Encoding.UTF8.GetString(File.ReadAllBytes(store.FilePath)).Contains("\"mode\": \"borderlessFullscreen\""), "Windowed fullscreen is stored as borderlessFullscreen.");
+            var reloaded = store.Load();
+            Assert(reloaded.Status == SettingsLoadStatus.Loaded && reloaded.Issues.IsEmpty && reloaded.FileVersion == GameSettings.CurrentVersion && reloaded.Settings == fullscreen,
+                "It loads cleanly at the same schema version and round-trips.");
+            File.WriteAllBytes(store.FilePath, first);
+            Assert(store.Load() is { Status: SettingsLoadStatus.Loaded, Issues.IsEmpty: true } older && older.Settings.Display.Mode == DisplayMode.Borderless, "A file written before the new value existed still loads as it did.");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

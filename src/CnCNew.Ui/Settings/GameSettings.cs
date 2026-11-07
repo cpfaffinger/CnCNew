@@ -2,7 +2,12 @@ using System.Collections.Immutable;
 
 namespace CnCNew.Ui.Settings;
 
-public enum DisplayMode { Windowed, Borderless, Fullscreen }
+/// <summary>
+/// <see cref="Borderless"/>: a window without a frame of the chosen size. <see cref="Fullscreen"/>: the display is switched to the chosen size (exclusive full screen).
+/// <see cref="BorderlessFullscreen"/>: a window without a frame that covers the desktop at the desktop's own resolution - no mode switch, the chosen size does not count
+/// (stored as <c>borderlessFullscreen</c>; the files of the older values stay valid).
+/// </summary>
+public enum DisplayMode { Windowed, Borderless, Fullscreen, BorderlessFullscreen }
 
 /// <summary>How the 800x600-authored UI maps to the back buffer.</summary>
 public enum UiScaleMode

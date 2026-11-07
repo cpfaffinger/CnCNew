@@ -29,7 +29,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     public static readonly ImmutableArray<(UiSkinName Value, string Text)> SkinChoices = [(UiSkinName.Original, "Original"), (UiSkinName.Modern, "Modern")];
 
     public static readonly ImmutableArray<(DisplayMode Value, string Text)> DisplayModeChoices =
-        [(DisplayMode.Windowed, "Window"), (DisplayMode.Borderless, "Window without frame"), (DisplayMode.Fullscreen, "Full screen")];
+        [(DisplayMode.Windowed, "Window"), (DisplayMode.Borderless, "Window without frame"), (DisplayMode.BorderlessFullscreen, "Windowed fullscreen (borderless)"), (DisplayMode.Fullscreen, "Full screen")];
 
     public static readonly ImmutableArray<(AspectHandling Value, string Text)> AspectChoices =
         [(AspectHandling.KeepHorizontal, "As the original"), (AspectHandling.KeepVertical, "Wider (more to the sides)")];

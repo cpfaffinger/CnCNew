@@ -579,6 +579,8 @@ internal sealed class CnCNewGame(
             _runtime = ClientRuntime.ForShell(this, data, shellRun?.SettingsDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
                 ShellSkirmishAi, network, shellRun?.Script);
             if (shellRun?.Script is not null) _shellWatch.Start();
+            // The display mode the settings keep is the one the window opens in: applied with the first frame (a scripted or smoke run keeps the size of its command line).
+            if (shellRun?.Script is null && !smokeTest) _runtime.RequestSavedDisplay();
             Window.Title = "CnCNew";
             _runtime.Caption = caption;
             ApplyStaging();
@@ -767,6 +769,18 @@ internal sealed class CnCNewGame(
         _updateMilliseconds = _costWatch.Elapsed.TotalMilliseconds;
     }
 
+    /// <summary>The desktop of the display the window is on (its centre decides; the first display when none holds it): where "windowed fullscreen" puts the frameless window.</summary>
+    private global::Stride.Core.Mathematics.Rectangle? DesktopUnderTheWindow()
+    {
+        var outputs = GraphicsDevice.Adapter.Outputs;
+        if (outputs.Length == 0) return null;
+        var bounds = Window.ClientBounds;
+        var centre = new global::Stride.Core.Mathematics.Int2(Window.Position.X + bounds.Width / 2, Window.Position.Y + bounds.Height / 2);
+        foreach (var output in outputs)
+            if (output.DesktopBounds.Contains(centre.X, centre.Y)) return output.DesktopBounds;
+        return outputs[0].DesktopBounds;
+    }
+
     private void UpdateFrame(GameTime gameTime)
     {
         base.Update(gameTime);
@@ -777,12 +791,15 @@ internal sealed class CnCNewGame(
             if (_runtime.Game is { } game && liveOptions is not { Spectate: true }) Window.Title = caption is null ? $"CnCNew — {game.HumanFaction}" : $"CnCNew — {caption.Replace('|', ' ')}";
             if (_runtime.TakePendingResolution() is { } resolution)
             {
-                GraphicsDeviceManager.PreferredBackBufferWidth = resolution.Width;
-                GraphicsDeviceManager.PreferredBackBufferHeight = resolution.Height;
-                // The display mode of the options (docs/UI-MODERN.md section 7): a window, a window without a frame, or the whole screen.
+                // The display mode of the options (docs/UI-MODERN.md section 7): a window, a window without a frame, the whole screen, or a window without a frame over the whole desktop.
+                var desktop = resolution.Mode == CnCNew.Ui.Settings.DisplayMode.BorderlessFullscreen ? DesktopUnderTheWindow() : null;
+                GraphicsDeviceManager.PreferredBackBufferWidth = desktop?.Width ?? resolution.Width;
+                GraphicsDeviceManager.PreferredBackBufferHeight = desktop?.Height ?? resolution.Height;
                 GraphicsDeviceManager.IsFullScreen = resolution.Mode == CnCNew.Ui.Settings.DisplayMode.Fullscreen;
-                Window.IsBorderLess = resolution.Mode == CnCNew.Ui.Settings.DisplayMode.Borderless;
+                Window.IsBorderLess = resolution.Mode is CnCNew.Ui.Settings.DisplayMode.Borderless || desktop is not null;
                 GraphicsDeviceManager.ApplyChanges();
+                // No mode switch: the frameless window is put over the desktop of the display it is on.
+                if (desktop is { } placed) Window.Position = new global::Stride.Core.Mathematics.Int2(placed.X, placed.Y);
             }
             if (_runtime.ShellScript is { } shellScript && Shell is { } shellOptions && (shellScript.IsFinished || _shellWatch.Elapsed.TotalSeconds > shellOptions.ScriptSeconds))
             {

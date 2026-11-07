@@ -599,6 +599,15 @@ internal sealed class ClientRuntime : IDisposable
         return pending;
     }
 
+    /// <summary>
+    /// A start of the game in the display mode the settings keep (a window without frame, windowed fullscreen, full screen): the host applies it with the first frame. The window mode
+    /// needs no request - the client opens one of the size of its command line.
+    /// </summary>
+    public void RequestSavedDisplay()
+    {
+        if (_shell?.Settings.Display is { Mode: not CnCNew.Ui.Settings.DisplayMode.Windowed } display) PendingResolution = (display.Width, display.Height, display.Mode);
+    }
+
     /// <summary>The overlay text a headless run can read (smoke tests): how many UI commands the last frame drew and how many custom draws were left to the host.</summary>
     public UiRenderStats LastFrame => _ui.LastFrame;
 

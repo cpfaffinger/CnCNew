@@ -43,6 +43,7 @@ internal static class SkinTests
         harness.Run("R2: the options, More options and the HUD of a match in both skins and six resolutions", () => Pinned(data, baselines, updating));
         harness.Run("The settings choose the skin, the run's --skin is kept until the person chooses, and More options writes what it shows", () => SettingsChooseTheSkin(data));
         harness.Run("The modern command bar fills the width at every aspect ratio; its pictures keep their proportions and the width goes to the selection plate", () => ModernBarFillsTheWidth(data));
+        harness.Run("More options offers windowed fullscreen (borderless) as a display mode and hands it to the host without a resolution of its own", () => WindowedFullscreen(data));
         harness.Run("The options cover the main menu, a text field asks the host for characters, and the score screen's panel says what the match was", () => ShellDefectsOfTheAcceptance(data));
         harness.Run("R4: a person by script switches to the modern skin in the options and walks skirmish, score, analysis and the replay list with its playback", () => PersonSwitchesTheSkin(data));
         if (updating) SkinPins.Save(BaselinePath, baselines);
@@ -263,6 +264,43 @@ internal static class SkinTests
             && saved.Accessibility.UiTextScalePercent == 125 && saved.Audio.Device == "Headphones (Test)", $"More options saved what it showed ({saved.Display}, {saved.Accessibility}, {saved.Audio.Device})");
         TestHarness.Assert(shell.ScaleOptions.TextScale == 1.25m && shell.CurrentScreen.Tree.Options.TextScale == 1.25m, "the text scale reaches the screens built again");
         TestHarness.Assert(shell.DrainOutputs().OfType<ApplyResolutionOutput>().Any(output => output.Mode == DisplayMode.Borderless), "the display mode goes to the host");
+        Delete(directory);
+    }
+
+    /// <summary>
+    /// The display mode that fills the desktop with a window without a frame (no switch of the display's mode). The shell keeps it as a value of the existing setting and says so to the host
+    /// (<see cref="ApplyResolutionOutput"/>); the window itself is the client's, which a test cannot open.
+    /// </summary>
+    private static void WindowedFullscreen(GameData data)
+    {
+        var directory = Directory("fullscreen");
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonOptions");
+        ShellTestInput.Click(shell, OptionsScreen.MoreOptionsButton);
+        var script = ShellScript.Parse(
+        [
+            "wait screen MoreOptionsScreen",
+            "expect combo MoreOptions.wnd:ComboDisplayMode shows Window",
+            "select MoreOptions.wnd:ComboDisplayMode Windowed fullscreen (borderless)",
+            "expect combo MoreOptions.wnd:ComboDisplayMode shows Windowed fullscreen (borderless)",
+            "click MoreOptions.wnd:ButtonAccept",
+            "wait screen OptionsScreen",
+        ], "windowed-fullscreen");
+        for (var frame = 0; frame < 400 && !script.IsFinished; frame++)
+        {
+            script.Advance(shell, 0.05);
+            shell.Update(0.05);
+            _ = shell.BuildDrawList();
+        }
+        foreach (var line in script.Report().Where(line => line.Contains("FAILED", StringComparison.Ordinal))) Console.WriteLine($"       {line}");
+        TestHarness.Assert(script.IsFinished && !script.Failed, $"the script runs through ({script.StepsDone}/{script.StepCount})");
+        TestHarness.Assert(MoreOptionsScreen.DisplayModeChoices.Select(choice => choice.Value).Distinct().Count() == Enum.GetValues<DisplayMode>().Length, "every display mode can be chosen");
+        var store = new SettingsStore(directory);
+        var saved = store.Load();
+        TestHarness.Assert(saved.Settings.Display.Mode == DisplayMode.BorderlessFullscreen && saved.Issues.IsEmpty, $"the choice is saved ({saved.Settings.Display.Mode})");
+        TestHarness.Assert(shell.DrainOutputs().OfType<ApplyResolutionOutput>().Any(output => output.Mode == DisplayMode.BorderlessFullscreen), "the display mode goes to the host");
+        var again = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        TestHarness.Assert(again.Settings.Display.Mode == DisplayMode.BorderlessFullscreen, "the next start of the game finds it");
         Delete(directory);
     }
 
