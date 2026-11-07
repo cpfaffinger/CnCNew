@@ -204,3 +204,7 @@ of any; below 800 × 600 it is raised, a smaller desktop gives 800 × 600 with a
 - The WND label check in the test is a line scan (`WINDOWTYPE` before `TEXT`), not a WND parser (package B2).
 - The colour-blind and contrast switches are only stored settings; their presentation belongs to the
   presentation. Languages other than English are without a string table in the retail content and therefore tested only synthetically.
+
+## Phase 62: schema 6 and the borderless mode
+
+**Schema 6** (the owner's decision of 7 November 2026, D-21 for everyone): the migration step 5 to 6 sets `display.skin` to `modern` in any older file and keeps every other setting; a file saved at schema 6 keeps the skin chosen in "More options"; a missing file starts in the modern skin. A PC whose settings file had saved `display.skin = original` stayed on the old skin before. **`display.mode`** gains `borderlessFullscreen` (no schema bump; older files still load).

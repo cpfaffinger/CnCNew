@@ -351,3 +351,9 @@ frames and ticks drift against each other.
 
 **No extrapolation.** Interpolation shows a state at most one tick old (16.7 ms at 60 Hz). Whether drawing the viewer's own moving units one tick ahead would pay
 was decided by a measurement against thresholds fixed beforehand (docs/MULTIPLAYER-FINDINGS.md sections 2 and 3): it is not built.
+
+## Phase 62: SubObjectsUpgrade and the pause
+
+`SubObjectsUpgrade` is shown by `SubObjectOverrides` (`ObjectVisual`, `FrameProjector`, `DrawableInstance`, `ObjectLayerCore`): the drawable keeps one answer per sub-object name, a later module wins, and it is applied after the state's own show and hide lines. All 19 modules of the shipped data name sub-objects that exist in their models (the bomb truck's loads 1, 2, 3 and 4, the Helix's bomb wing); the original also hides what hangs below a hidden sub-object's bone (`doHideShowBoneSubObjs`), which the port does not. The power plant's rods are the draw module `ModuleTag_05` with the states `POWER_PLANT_UPGRADING` (played once, first frame) and `POWER_PLANT_UPGRADED` (manual, last frame).
+
+**A pause stops the picture's own motion:** model animations, wheels, animated textures and water run on `LiveGame.AnimationSeconds`, W3D's sync time that `W3DDisplay::draw` freezes while `GameLogic::isGamePaused`; the radar dish and the shadow of the radar tower animate from the same pose and stop together. The layer code that consumes the clock (`ObjectLayerCore`, `TerrainLayer`) is built and not testable without a window.

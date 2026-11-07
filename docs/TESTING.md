@@ -329,3 +329,7 @@ display switched on, and a run without one does not count as tier 4.
   ten-commit rule (§4, no. 7) bounds how long that stays unnoticed.
 - The suite mapping of `Game.Tests` (§3) is a judgment and not derived from coverage data.
 - Nothing here replaces a human: no tier sees a picture or hears a sound.
+
+## Phase 62 additions
+
+`Presentation.Tests` takes `--only <Suite>` (the class name), as `Game.Tests` does. `scripts/check-minimap.ps1` (the on-screen radar against the composed picture, and the fog of an object against its unfogged capture) and `scripts/check-ingame-menu.ps1` are checks of a person's path in the real client; neither is a step of `scripts/test.ps1` yet.

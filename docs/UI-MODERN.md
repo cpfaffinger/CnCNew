@@ -285,3 +285,7 @@ Measured by picture at 800 x 600, 1280 x 720, 1920 x 1080 (`UiRenderTool --skins
 | HUD-09 no text entry | The client never turned Stride's text input on: a real keyboard gave keys and no characters, while a script types characters directly, which is why no check ever saw it | `FollowTextFocus`: on while a text field or the chat line has the focus, and on anew after a press, because Stride's mouse takes the focus back with every press. Checked with characters posted to the hidden edit control in the window client; **no real keyboard could be used on this machine** (the session has no input desktop) |
 | MISS-09 briefing history | Captions are sentences and the list did not wrap them | Wrapped at the list's width as `GadgetListBoxAddEntryText` does |
 | SHELL-03 no tactical analysis | The panel's list was never filled | `TacticalAdvice` (docs/MATCH-ANALYSIS.md) |
+
+## Phase 62: the default skin
+
+The modern skin is the default for every settings file since schema 6 (`docs/UI-TEXT-AND-SETTINGS.md`), not only for a first start; the original skin stays one choice away in "More options".

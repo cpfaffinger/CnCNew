@@ -268,3 +268,7 @@ retaliation (**B**/D).
   `MapTool script-library`, `SimTool reference-manifest results`).
 - Whether any manifest run has a player the port treats as human (relevant to step 6).
 - `privateAttackArea`'s centre (vertex mean vs bounds centre in the port's `TEAM_ATTACK_AREA`).
+
+## Phase 62: what a guard may attack
+
+The victim filter is `getAbleToAttackSpecificObject` with `CMD_FROM_AI`: no `UNATTACKABLE`, `MASKED` or `NO_ATTACK_FROM_AI` object. A vehicle's hulk is `HULK UNATTACKABLE` with default armour, so a sniper's round "hurts" it and only this check keeps a guard off it (a real Pathfinder walked 27 units at an `AmericaVehicleHumveeDeadHull`; tanks, Humvees, a dozer, a truck, a Comanche and a power plant were never the problem). `IsGuardVictim` and the guard look in `SimulationWorld.Guard.cs` apply the three tests, for the victim search and for the chase that follows (`GuardIgnoresWhatItCannotHurt`, `RealGuardIgnoresWhatItCannotHurt`).

@@ -320,3 +320,9 @@ cause analysis above (buffer, winding, light), not a number.
 
 The lines of the visual check above are items WORLD-01 to WORLD-07, UNIT-10 to UNIT-17 and FX-01 to FX-04 of [ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md), each
 with the check that proves what a program can and what only a human can judge; no human has ticked them off.
+
+## Phase 62: the fog and the lines without `=`
+
+**Remembered objects.** An object seen before and now under the fog is drawn at about half its brightness, as in the original (a light factor of (127/255)^2 given to the material as an encoded constant, about 0.5 in display values). The factor had been handed over as 0.25 as a colour constant, which Stride converts from sRGB to linear light, so it reached the surface as 0.05 and a remembered structure showed at 0.23 of its brightness (`FogDimming`, `FogDimmingTests`; `scripts/check-minimap.ps1` part 2: 0.23 before, 0.51 after).
+
+**The INI parser keeps a line without `=`.** Inside a module or a state a field may be written `Key value` (`Model ABPWRPLANT_A1`), which `INI::initFromINIMulti` reads as `Key = value`; the data compiler had dropped every such line (the rods of every power plant, 616 `AliasConditionState`, 21 `ExtraPublicBone`, 21 `AnimationSpeedFactorRange`; the 45 draw errors it caused were never read). The definition snapshot and the world fingerprint moved with the fix.
