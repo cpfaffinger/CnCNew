@@ -11,6 +11,12 @@ namespace CnCNew.Presentation.Objects;
 /// </summary>
 public sealed record ConditionUpgradeSpec(ModelConditionFlag Flag, ImmutableArray<string> TriggeredBy, ImmutableArray<string> ConflictsWith, bool RequiresAllTriggers);
 
+/// <summary>
+/// A <c>SubObjectsUpgrade</c> of the template (<c>SubObjectsUpgrade.cpp</c>): when the module's upgrade completes the named sub-objects are shown and hidden, over whatever the model state says. The module is
+/// found on the entity by its <see cref="Tag"/>, and it alone knows whether its upgrade ran.
+/// </summary>
+public sealed record SubObjectsUpgradeSpec(string Tag, ImmutableArray<string> Show, ImmutableArray<string> Hide);
+
 /// <summary>Everything the presentation needs about one object template, shared by all its drawables.</summary>
 public sealed record ObjectVisual(
     string TemplateName,
@@ -31,6 +37,9 @@ public sealed record ObjectVisual(
 
     /// <summary><c>UpgradeCameo1</c> to <c>UpgradeCameo5</c>: the upgrades the bar shows beside the portrait, a name per place, empty where the object names none.</summary>
     public ImmutableArray<string> UpgradeCameos { get; init; } = [];
+
+    /// <summary>The template's <c>SubObjectsUpgrade</c> modules in module order.</summary>
+    public ImmutableArray<SubObjectsUpgradeSpec> SubObjectUpgrades { get; init; } = [];
 
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
@@ -97,6 +106,9 @@ public sealed class ObjectVisualCatalog
                 Text(module.Fields, "RequiresAllTriggers") is { } all && all.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase)));
         }
 
+        var subObjectUpgrades = definition.Modules.Where(module => module.Name.Equals("SubObjectsUpgrade", StringComparison.OrdinalIgnoreCase))
+            .Select(module => new SubObjectsUpgradeSpec(module.Tag, Names(module.Fields, "ShowSubObjects"), Names(module.Fields, "HideSubObjects"))).ToImmutableArray();
+
         var kindOf = Field(definition.Fields, "KindOf")?.Value.Value is FlagsValue flags ? flags.Names : [];
         var shadow = Field(definition.Fields, "Shadow")?.Value.Value is FlagsValue shadows ? shadows.Names : [];
         var major = Number(definition.Fields, "GeometryMajorRadius") ?? 0m;
@@ -109,6 +121,7 @@ public sealed class ObjectVisualCatalog
             ShadowSpec.From(shadow, Text(definition.Fields, "ShadowTexture"), Size("ShadowSizeX"), Size("ShadowSizeY"), Size("ShadowOffsetX"), Size("ShadowOffsetY")))
         {
             UpgradeCameos = [..Enumerable.Range(1, 5).Select(place => Text(definition.Fields, $"UpgradeCameo{place}") ?? string.Empty)],
+            SubObjectUpgrades = subObjectUpgrades,
         };
 
         float Size(string key) => (float)(Number(definition.Fields, key) ?? 0m);

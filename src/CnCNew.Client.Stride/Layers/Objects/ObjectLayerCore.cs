@@ -335,7 +335,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
             var nodeWorld = boneWorld * instanceMatrix;
             ref var node = ref skeleton.NodeTransformations[rigidPart.NodeIndex];
             // HLodClass::Update_Sub_Object_Transforms: Set_Animation_Hidden(!HTree->Get_Visibility(bone)) - the animation's visibility channel shows and hides the sub-objects of its bones.
-            var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects);
+            var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects, drawable.SubObjectOverrides);
             // W3DModelDraw::hideAllMuzzleFlashes / setMuzzleFlashHidden: the sub-object on a WeaponMuzzleFlash bone is hidden until the weapon fires.
             if (part.MuzzleBoneSlots is { Count: > 0 } flashes && flashes.TryGetValue(rigidPart.BoneIndex, out var flashSlot))
             {
@@ -609,7 +609,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         for (var i = 0; i < part.Skins.Count; i++)
         {
             var skin = part.Skins[i];
-            var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects);
+            var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects, drawable.SubObjectOverrides);
             skin.Entity.Component.Enabled = visible;
             if (!visible) continue;
             if (skin.Flash != flash || skin.Opacity != opacity)
@@ -788,25 +788,10 @@ internal sealed class ObjectLayerCore : IWorldLayer
         }
     }
 
-    /// <summary>The reference's sub-object merge: a name matches the part's full name or the suffix after its container dot; later rules win.</summary>
-    private static bool ComputeVisible(string fullName, bool defaultVisible, System.Collections.Immutable.ImmutableArray<SubObjectVisibility> rules)
-    {
-        var visible = defaultVisible;
-        foreach (var rule in rules)
-        {
-            if (Matches(fullName, rule.SubObject)) visible = !rule.Hide;
-        }
-
-        return visible;
-
-        static bool Matches(string fullName, string ruleName)
-        {
-            if (fullName.Equals(ruleName, StringComparison.OrdinalIgnoreCase)) return true;
-            var dot = fullName.IndexOf('.');
-            var suffix = dot < 0 ? fullName : fullName[(dot + 1)..];
-            return suffix.Equals(ruleName, StringComparison.OrdinalIgnoreCase);
-        }
-    }
+    /// <summary>The reference's sub-object merge (<see cref="SubObjectOverrides.IsVisible"/>): the state's lines, then what an upgrade showed or hid.</summary>
+    private static bool ComputeVisible(string fullName, bool defaultVisible, System.Collections.Immutable.ImmutableArray<SubObjectVisibility> rules,
+        System.Collections.Immutable.ImmutableArray<SubObjectVisibility> overrides)
+        => SubObjectOverrides.IsVisible(fullName, defaultVisible, rules, overrides);
 
     private static uint Hash(uint key, int salt)
     {

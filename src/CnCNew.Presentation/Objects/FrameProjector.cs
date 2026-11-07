@@ -440,7 +440,7 @@ public sealed class FrameProjector
         var owner = _options.Viewer is { } viewer && entity.Container?.ApparentOwnerFor(world, viewer) is { } apparent ? apparent : entity.Owner;
         return new Capture(entity.Id.Value, visual, owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, selections,
-            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis, AnimationPauses.Of(world, entity));
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis, AnimationPauses.Of(world, entity), SubObjectOverrides.Of(entity, visual));
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
@@ -492,7 +492,7 @@ public sealed class FrameProjector
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), Mix(previous?.Travel, capture.Travel, alpha), capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= _healingIconTicks && capture.Health01 < 1f && Tick > _healingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id), Pause: capture.Pause);
+        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id), Pause: capture.Pause, SubObjectOverrides: capture.SubObjectOverrides);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -532,5 +532,6 @@ public sealed class FrameProjector
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
         float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
-        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0, long HealedAtTick = -1, ChassisPose Chassis = default, AnimationPause Pause = AnimationPause.None);
+        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0, long HealedAtTick = -1, ChassisPose Chassis = default, AnimationPause Pause = AnimationPause.None,
+        ImmutableArray<SubObjectVisibility> SubObjectOverrides = default);
 }

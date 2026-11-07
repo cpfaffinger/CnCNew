@@ -39,8 +39,11 @@ public sealed record DrawableInstance(
     ChassisPose Chassis = default,
     Vector3 FlashTint = default,
     float Opacity = 1f,
-    AnimationPause Pause = AnimationPause.None)
+    AnimationPause Pause = AnimationPause.None,
+    ImmutableArray<SubObjectVisibility> SubObjectOverrides = default)
 {
+    // SubObjectOverrides: what the object's executed SubObjectsUpgrade modules show and hide (Drawable::showSubObject), applied by the renderer after the state's own ShowSubObject/HideSubObject lines; default: none.
+
     // Pause: why the model animations stand (Drawable::getShouldAnimate), see AnimationPauses.
 
     // FlashTint: what Drawable::getSelectionColor returns while the selection flash envelope plays (SelectionFlashTracker): a signed colour added to the lights of this drawable; zero: none.
