@@ -138,7 +138,7 @@ public sealed class HudMessageFeed
                 string Label(string key) => plans.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"') ?? string.Empty;
                 _planMessages[definition.OriginalName] = (Label("BombardmentMessageLabel"), Label("HoldTheLineMessageLabel"), Label("SearchAndDestroyMessageLabel"));
             }
-            var label =definition.Fields.FirstOrDefault(field => field.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
+            var label = definition.Fields.FirstOrDefault(field => field.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
             if (label is { Length: > 0 }) target[definition.OriginalName] = label;
         }
     }
