@@ -143,6 +143,7 @@ try
         "rate-audit" when args.Length >= 2 => CnCNew.SimTool.RateAudit.Run(args),
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
         "ai-survey" => CnCNew.SimTool.AiSurvey.Run(args),
+        "econ-survey" => CnCNew.SimTool.EconSurvey.Run(args),
         "ai-census" => CnCNew.SimTool.AiCensus.Run(args),
         "ai-profiles" => CnCNew.SimTool.AiProfiles.Run(args),
         "ai-profiles-report" => CnCNew.SimTool.AiProfiles.Report(args),
