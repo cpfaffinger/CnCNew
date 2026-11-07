@@ -94,10 +94,15 @@ public enum SelectionGroupKind
 {
     /// <summary>Several buildings of one template, selected together: the bar is theirs, an order goes to one of them or to all.</summary>
     Structures,
+    /// <summary>The active kind of a selection of several kinds of unit (Tab): the bar is that kind's, its orders go to the units of the kind.</summary>
+    Subgroup,
 }
 
-/// <summary>What the bar stands for when it is not one object's: <see cref="Count"/> objects of <see cref="Template"/>.</summary>
-public sealed record SelectionGroup(SelectionGroupKind Kind, string Template, int Count);
+/// <summary>
+/// What the bar stands for when it is not one object's: <see cref="Count"/> objects of <see cref="Template"/>. For a <see cref="SelectionGroupKind.Subgroup"/>, <see cref="Index"/>
+/// (1-based) of <see cref="Total"/> kinds in the order Tab walks them says which kind it is.
+/// </summary>
+public sealed record SelectionGroup(SelectionGroupKind Kind, string Template, int Count, int Index, int Total);
 
 public sealed record CommandBarView(
     CommandBarContext Context,
@@ -110,7 +115,7 @@ public sealed record CommandBarView(
 {
     public CommandBarButton? this[int slot] => slot >= 1 && slot <= Slots.Length ? Slots[slot - 1] : null;
 
-    /// <summary>Set when the bar is that of a structure group; null for one object and for the buttons all of a mixed selection share. <see cref="Producer"/> is the lead building then: the first of the group, whose queue is shown.</summary>
+    /// <summary>Set when the bar is that of a structure group or of the active subgroup of a mixed selection; null for one object and for the buttons all of a mixed selection share. <see cref="Producer"/> is the lead building then: the first of the group, whose queue is shown.</summary>
     public SelectionGroup? Group { get; init; }
 }
 
@@ -287,9 +292,15 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         var units = selected.Where(entity => !entity.Template.IsKindOf("IGNORED_IN_GUI") && !entity.HasStatus(ObjectStatusBits.Sold)).ToList();
         if (units.Count == 0) return Empty(CommandBarContext.BeingSold);
         if (units.Count == 1) return BuildSingle(world, player, units[0]);
-        // Several buildings of one template are a structure group.
+        // Several buildings of one template are a structure group; the active kind of a mixed selection is a subgroup (Tab).
         if (selection.OwnStructureTemplate(world) is { } structureTemplate)
-            return BuildGroup(world, player, units, new SelectionGroup(SelectionGroupKind.Structures, structureTemplate, units.Count));
+            return BuildGroup(world, player, units, new SelectionGroup(SelectionGroupKind.Structures, structureTemplate, units.Count, 0, 0));
+        if (selection.ActiveSubgroupIn(world) is { } active)
+        {
+            var members = units.Where(unit => unit.Template.Name.Equals(active, StringComparison.Ordinal)).ToList();
+            var kinds = selection.Subgroups(world);
+            if (members.Count > 0) return BuildGroup(world, player, members, new SelectionGroup(SelectionGroupKind.Subgroup, active, members.Count, kinds.IndexOf(active, StringComparer.Ordinal) + 1, kinds.Length));
+        }
         return BuildMulti(world, player, units);
     }
 
@@ -368,7 +379,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     }
 
     /// <summary>
-    /// The bar of several buildings of one template: the whole command set of the lead - the first of them -, not only
+    /// The bar of several objects of one template (buildings selected together, or the active kind of a mixed selection): the whole command set of the lead - the first of them -, not only
     /// the buttons the original marks for a multiple selection. A button shows when one of the objects it fits shows it, is enabled when one of them can do it, and
     /// <see cref="CommandBarButton.Sources"/> names the objects that can; the controller chooses among them (the shortest queue takes a production order, every one takes
     /// the orders that fit all alike). The queue shown is the lead's.

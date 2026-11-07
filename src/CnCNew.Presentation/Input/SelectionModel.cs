@@ -86,11 +86,61 @@ public sealed class SelectionModel
 
     public void Clear() => Replace([]);
 
+    // ------------------------------------------------------------------------------------------------ subgroups
+
+    /// <summary>
+    /// The template of the active subgroup of a selection that holds several kinds of object (Tab, a feature of this client after StarCraft), or null while the bar shows what it
+    /// always showed for such a selection - the buttons all the selected objects share. Kept while the selection only shrinks; any other change of the selection resets it. A name
+    /// that is no longer a subgroup of the selection is not active (<see cref="ActiveSubgroupIn"/>).
+    /// </summary>
+    public string? ActiveSubgroup { get; private set; }
+
+    /// <summary>Raised when Tab changed the active subgroup: a pending targeting mode belonged to the earlier one.</summary>
+    public event Action? SubgroupChanged;
+
+    /// <summary>
+    /// The kinds of the selected objects in the order Tab walks them (template names, ordinal; the order of the plates of the modern bar), when the selection is the player's own and holds
+    /// at least two kinds; empty otherwise - a selection of one kind has no subgroups.
+    /// </summary>
+    public ImmutableArray<string> Subgroups(SimulationWorld world)
+    {
+        var own = OwnSelected(world);
+        if (own.Length < 2 || own.Length != _selected.Count) return [];
+        var kinds = own.Select(entity => entity.Template.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToImmutableArray();
+        return kinds.Length >= 2 ? kinds : [];
+    }
+
+    /// <summary><see cref="ActiveSubgroup"/> if it still names one of the selection's kinds, otherwise null.</summary>
+    public string? ActiveSubgroupIn(SimulationWorld world)
+        => ActiveSubgroup is { } active && Subgroups(world).Contains(active, StringComparer.Ordinal) ? active : null;
+
+    /// <summary>The own selected objects of one kind, in selection order.</summary>
+    public ImmutableArray<Entity> SubgroupMembers(SimulationWorld world, string template)
+        => [..OwnSelected(world).Where(entity => entity.Template.Name.Equals(template, StringComparison.Ordinal))];
+
+    /// <summary>
+    /// Tab (<paramref name="forward"/>) and Shift+Tab: the next or the earlier kind of a selection of several kinds. The walk is a ring: it begins on the buttons all objects share, goes
+    /// through the kinds one by one and returns there after the last. False, doing nothing, when the selection has no subgroups.
+    /// </summary>
+    public bool CycleSubgroup(SimulationWorld world, bool forward)
+    {
+        var kinds = Subgroups(world);
+        if (kinds.IsEmpty) return false;
+        var current = ActiveSubgroupIn(world) is { } active ? kinds.IndexOf(active, StringComparer.Ordinal) : -1;
+        var next = current + (forward ? 1 : -1);
+        if (next >= kinds.Length) next = -1;
+        else if (next < -1) next = kinds.Length - 1;
+        ActiveSubgroup = next < 0 ? null : kinds[next];
+        SubgroupChanged?.Invoke();
+        return true;
+    }
+
     public void Replace(IEnumerable<EntityId> ids)
     {
         var next = new SortedSet<uint>(ids.Select(id => id.Value));
         if (Picker.ScriptUnselectableCount > 0) next.RemoveWhere(Picker.IsScriptUnselectable);
         if (next.SetEquals(_selected)) return;
+        if (!next.IsSubsetOf(_selected)) ActiveSubgroup = null;
         _selected.Clear();
         _selected.UnionWith(next);
         SelectionChanged?.Invoke(Selected);
@@ -101,7 +151,9 @@ public sealed class SelectionModel
         var before = new SortedSet<uint>(_selected);
         edit(_selected);
         if (Picker.ScriptUnselectableCount > 0) _selected.RemoveWhere(Picker.IsScriptUnselectable);
-        if (!before.SetEquals(_selected)) SelectionChanged?.Invoke(Selected);
+        if (before.SetEquals(_selected)) return;
+        if (!_selected.IsSubsetOf(before)) ActiveSubgroup = null;
+        SelectionChanged?.Invoke(Selected);
     }
 
     private enum Side { Mine, Friends, Civilians, Enemies }

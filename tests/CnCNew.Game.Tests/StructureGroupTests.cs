@@ -14,8 +14,8 @@ namespace CnCNew.Game.Tests;
 
 /// <summary>
 /// The owner's wishes of 7 November 2026 for the selection (a feature of this client, StarCraft is the model): buildings of one kind selected together with a double click, E, Ctrl and a
-/// digit; one bar for all of them, where a production order goes to the building with the shortest queue and the orders that fit all alike go to all (the rally point, selling).
-/// Each on real data, through the events a person's hands make.
+/// digit; one bar for all of them, where a production order goes to the building with the shortest queue and the orders that fit all alike go to all (the rally point, selling);
+/// and Tab through the kinds of a mixed selection of units. Each on real data, through the events a person's hands make.
 /// </summary>
 internal static class StructureGroupTests
 {
@@ -37,6 +37,8 @@ internal static class StructureGroupTests
         harness.Run("A player-wide upgrade is ordered once, an object upgrade goes to one building that can still take it, to the next one when clicked again", () => Upgrades(data));
         harness.Run("The rally point and Sell reach every building of the group; a right click on the ground sets the rally point of all", () => RallyAndSell(data));
         harness.Run("The bar of the original skin tags the group with the kind and the count and the modern bar's plate says the same; one selected building draws nothing new", () => Draws(data));
+        harness.Run("Tab walks the kinds of a selection of units, Shift+Tab back; the bar and the highlight follow; a button acts on the kind only, a right click on all", () => TabSubgroups(data));
+        harness.Run("Tab keeps the diplomacy window when the selection has one kind, and a new selection or a lost kind ends the subgroup", () => TabFallsBack(data));
         harness.Run("E on a building whose bar has a button on E keeps the button", () => EKeepsButton(data));
         return harness.Failures;
     }
@@ -438,6 +440,123 @@ internal static class StructureGroupTests
         var texts = modern.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text).ToArray();
         TestHarness.Assert(texts.Any(text => text.StartsWith("3 x ", StringComparison.Ordinal)), $"the plate of the modern bar names the three ({string.Join("|", texts.Where(text => text.Contains(" x ", StringComparison.Ordinal)))})");
         TestHarness.Assert(!texts.Any(text => text.EndsWith(" x3", StringComparison.Ordinal)), "the modern bar has no second tag");
+    }
+
+    // ------------------------------------------------------------------------------------------------ Tab
+
+    private static Rig MixedRig(GameData data, string name, GameSettings? settings = null)
+        => new(data, name,
+        [
+            new ScenarioUnit("r1", "AmericaInfantryRanger", 1, 0, 0, 0f), new ScenarioUnit("r2", "AmericaInfantryRanger", 1, 20, 0, 0f),
+            new ScenarioUnit("c1", "AmericaTankCrusader", 1, 0, 40, 0f), new ScenarioUnit("c2", "AmericaTankCrusader", 1, 30, 40, 0f), new ScenarioUnit("c3", "AmericaTankCrusader", 1, 60, 40, 0f),
+            new ScenarioUnit("d1", "AmericaVehicleDozer", 1, 0, 80, 0f),
+        ], settings: settings, lookX: 30f);
+
+    private static void TabSubgroups(GameData data)
+    {
+        var rig = MixedRig(data, "tab-subgroups");
+        var all = new[] { "r1", "r2", "c1", "c2", "c3", "d1" }.Select(rig.Tag).ToArray();
+        rig.Selection.Replace(all);
+        rig.Frame(2);
+        var selection = rig.Selection;
+        TestHarness.Assert(selection.Subgroups(rig.Live.World).SequenceEqual(["AmericaInfantryRanger", "AmericaTankCrusader", "AmericaVehicleDozer"]), "three kinds, in the order of the plate");
+        TestHarness.Assert(rig.Controller.CommandBar is { Context: CommandBarContext.MultiSelect, Group: null }, "before Tab the bar is the one for the selection as a whole (the buttons all share)");
+        var combined = rig.Controller.CommandBar.Slots.Count(slot => slot is not null);
+        TestHarness.Assert(rig.SlotOf(button => button.Button.Kind == GuiCommandKind.DozerConstruct) < 0, "and has no construction button");
+
+        // Tab: the rangers.
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        var bar = rig.Controller.CommandBar;
+        TestHarness.Assert(bar.Group is { Kind: SelectionGroupKind.Subgroup, Template: "AmericaInfantryRanger", Count: 2, Index: 1, Total: 3 } && bar.Context == CommandBarContext.Command, $"Tab: the rangers, 1 of 3 ({bar.Group})");
+        TestHarness.Assert(selection.Selected.Length == 6, "the selection itself is unchanged");
+        var markers = rig.Controller.Overlay.Selected;
+        TestHarness.Assert(markers.Count(marker => marker.ActiveKind) == 2 && markers.Where(marker => marker.ActiveKind).All(marker => rig.Live.World.FindEntity(marker.Entity)!.Template.Name == "AmericaInfantryRanger"),
+            "the two rangers are marked as the active kind");
+        var drawn = rig.Controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(drawn.Commands.OfType<UiTextDraw>().Any(text => text.Text.EndsWith("x2 [1/3]", StringComparison.Ordinal)), "the bar's tag names the kind, its count and its place");
+
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        TestHarness.Assert(rig.Controller.CommandBar.Group is { Template: "AmericaTankCrusader", Count: 3, Index: 2 }, "Tab again: the Crusaders");
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        bar = rig.Controller.CommandBar;
+        TestHarness.Assert(bar.Group is { Template: "AmericaVehicleDozer", Count: 1, Index: 3 } && rig.SlotOf(button => button.Button.Kind == GuiCommandKind.DozerConstruct) > 0, "the third: the dozer, with its construction buttons");
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        TestHarness.Assert(rig.Controller.CommandBar is { Context: CommandBarContext.MultiSelect, Group: null } && rig.Controller.CommandBar.Slots.Count(slot => slot is not null) == combined, "after the last kind the bar is the shared one again");
+        rig.Key(KeyCode.Tab, KeyCode.LeftShift);
+        rig.Frame();
+        TestHarness.Assert(rig.Controller.CommandBar.Group is { Template: "AmericaVehicleDozer" }, "Shift+Tab goes back, to the last kind");
+        rig.Key(KeyCode.Tab, KeyCode.LeftShift);
+        rig.Frame();
+        TestHarness.Assert(rig.Controller.CommandBar.Group is { Template: "AmericaTankCrusader" }, "and on");
+
+        // The modern plate names the kind and marks its cell.
+        var modern = MixedRig(data, "tab-subgroups-modern", GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = CnCNew.Ui.Skins.UiSkin.Modern.Name } });
+        modern.Selection.Replace(new[] { "r1", "r2", "c1", "c2", "c3", "d1" }.Select(modern.Tag));
+        modern.Frame(2);
+        modern.Key(KeyCode.Tab);
+        modern.Frame();
+        var texts = modern.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text).ToArray();
+        TestHarness.Assert(texts.Any(text => text.EndsWith("(1/3)", StringComparison.Ordinal) && text.StartsWith("2 x ", StringComparison.Ordinal)), $"the modern plate names the active kind ({string.Join("|", texts.Where(text => text.Contains('/')))})");
+    }
+
+    private static void TabFallsBack(GameData data)
+    {
+        var rig = MixedRig(data, "tab-fallback");
+        var selection = rig.Selection;
+
+        // The subgroup acts for its kind only: every unit walks off, the rangers are stopped by their Stop button, the others go on.
+        var all = new[] { "r1", "r2", "c1", "c2", "c3", "d1" };
+        selection.Replace(all.Select(rig.Tag));
+        rig.Frame(2);
+        rig.Controller.Input.Commands.IssueContext(rig.Live.World, new ContextHint(ContextAction.Move, CursorKind.Move, EntityId.Invalid, new Vector3(rig.Live.Anchor.X + 600f, rig.Live.Anchor.Y, 0f)), null);
+        rig.Frame(10);
+        TestHarness.Assert(all.All(tag => rig.Entity(tag).HasMoveTarget), "a move order of the whole selection reaches every unit, with no subgroup active");
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        var stop = rig.SlotOf(button => button.Button.Kind == GuiCommandKind.Stop);
+        TestHarness.Assert(stop > 0, "the rangers' bar has Stop");
+        rig.ClickButton(stop);
+        rig.Frame(3);
+        TestHarness.Assert(!rig.Entity("r1").HasMoveTarget || rig.Entity("r1").X < rig.Entity("c1").X, "the rangers were stopped");
+        TestHarness.Assert(rig.Entity("c1").HasMoveTarget && rig.Entity("c2").HasMoveTarget && rig.Entity("d1").HasMoveTarget, "the Crusaders and the dozer still walk");
+
+        // A right click on the ground orders everyone, as always.
+        rig.Click(new Vector2(640, 470), MouseButton.Right);
+        rig.Frame(3);
+        TestHarness.Assert(all.All(tag => rig.Entity(tag).HasMoveTarget), "a right click on the ground moves the whole selection, with a kind active");
+
+        // The kind survives a unit dying out of another kind; it ends when its own kind is gone, and with a new selection.
+        selection.Clear();
+        selection.Replace(all.Select(rig.Tag));
+        rig.Frame(2);
+        rig.Key(KeyCode.Tab);
+        rig.Key(KeyCode.Tab);
+        TestHarness.Assert(selection.ActiveSubgroup == "AmericaTankCrusader", "the Crusaders are active");
+        selection.Replace(all.Where(tag => tag != "d1").Select(rig.Tag));
+        TestHarness.Assert(selection.ActiveSubgroup == "AmericaTankCrusader", "a selection that only shrinks keeps it");
+        selection.Replace(all.Select(rig.Tag));
+        TestHarness.Assert(selection.ActiveSubgroup is null, "a selection that grows ends it");
+        rig.Key(KeyCode.Tab);
+        selection.Replace(new[] { "c1", "c2", "c3" }.Select(rig.Tag));
+        TestHarness.Assert(selection.ActiveSubgroupIn(rig.Live.World) is null && selection.Subgroups(rig.Live.World).IsEmpty, "one kind has no subgroups");
+
+        // One kind selected: Tab opens the diplomacy window, as the original's key does, and Shift+Tab does nothing.
+        rig.Frame();
+        TestHarness.Assert(!rig.Controller.IsDiplomacyOpen, "the window is closed");
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        TestHarness.Assert(rig.Controller.IsDiplomacyOpen, "Tab with one kind selected opens the diplomacy window");
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        TestHarness.Assert(!rig.Controller.IsDiplomacyOpen, "and closes it again");
+
+        // A selection holding something foreign has no subgroups either.
+        rig.Selection.Replace(new[] { "r1", "c1" }.Select(rig.Tag));
+        TestHarness.Assert(selection.Subgroups(rig.Live.World).Length == 2, "two kinds of the player's own are subgroups");
     }
 
     private static void EKeepsButton(GameData data)

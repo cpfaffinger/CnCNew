@@ -43,6 +43,7 @@ public sealed class GameInputController
         Camera = new CameraInputController(Settings.Camera);
         CommandBar = buttons is null ? null : new CommandBarModel(buttons, text);
         Selection.SelectionChanged += _ => Commands.Cancel();
+        Selection.SubgroupChanged += Commands.Cancel;
     }
 
     public GameInputSettings Settings { get; }
@@ -165,6 +166,10 @@ public sealed class GameInputController
         }
         if (key.IsDown)
         {
+            // Tab walks the kinds of a selection of several kinds (Shift+Tab backwards), as in StarCraft. In the original Tab is the diplomacy window's key (CommandMap.ini DIPLOMACY): it
+            // keeps that meaning whenever the selection has only one kind, and the window stays on the communicator button of the bar.
+            if (key.Key == KeyCode.Tab && modifiers is KeyModifiers.None or KeyModifiers.Shift && Commands.Mode != CommandModeKind.Placement
+                && Selection.CycleSubgroup(world, forward: modifiers == KeyModifiers.None)) return;
             _keyDownModifiers[key.Key] = modifiers;
             if (Fire(new KeyBinding(key.Key, modifiers, KeyTransition.Down), world, view) && Hotkeys.Resolve(new KeyBinding(key.Key, modifiers, KeyTransition.Down), HotkeyContexts.Game).Contains(MetaAction.Stop))
                 _stoppedOnPress.Add(key.Key);

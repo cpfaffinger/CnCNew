@@ -638,6 +638,7 @@ public sealed partial class MatchController
         var selected = ImmutableArray.CreateBuilder<UnitMarker>();
         var rally = ImmutableArray.CreateBuilder<RallyPointMarker>();
         var rallyPlaces = ImmutableArray.CreateBuilder<Vector3>();
+        var activeKind = Input.Selection.ActiveSubgroupIn(world);
         foreach (var id in Input.Selection.Selected)
         {
             if (world.FindEntity(id) is not { } entity) continue;
@@ -652,6 +653,7 @@ public sealed partial class MatchController
                     Seats = seats,
                     GroupNumber = mine ? Input.Selection.GroupOf(entity.Id) : -1,
                     GroupText = mine && Input.Selection.GroupOf(entity.Id) is >= 0 and var group ? _assets.Text.Get("NUMBER:" + group.ToString(CultureInfo.InvariantCulture)) : string.Empty,
+                    ActiveKind = activeKind is not null && entity.Template.Name.Equals(activeKind, StringComparison.Ordinal),
                 });
             }
             if (SimulationQueries.ProductionOf(entity) is { } production)
@@ -898,9 +900,18 @@ public sealed partial class MatchController
         var health = first.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
         if (entities.Length == 1) return new ModernSelection(_descriptions.DisplayName(first.Template.Name), 1, health, []);
         var kinds = ImmutableArray.CreateBuilder<(string, int)>();
+        var active = Input.Selection.ActiveSubgroupIn(Match.World);
+        var activeIndex = -1;
         foreach (var group in entities.GroupBy(entity => entity.Template.Name, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
-            if (Match.Data.Visuals.TryGet(group.Key, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _)) kinds.Add((image, group.Count()));
-        return new ModernSelection(entities.Length.ToString(CultureInfo.InvariantCulture) + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable());
+            if (Match.Data.Visuals.TryGet(group.Key, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _))
+            {
+                if (group.Key.Equals(active, StringComparison.Ordinal)) activeIndex = kinds.Count;
+                kinds.Add((image, group.Count()));
+            }
+        // The active kind of a mixed selection (Tab) names itself, with its place among the kinds.
+        if (CommandBar.Group is { Kind: SelectionGroupKind.Subgroup } subgroup)
+            return new ModernSelection(string.Create(CultureInfo.InvariantCulture, $"{subgroup.Count} x {_descriptions.DisplayName(subgroup.Template)} ({subgroup.Index}/{subgroup.Total})"), entities.Length, health, kinds.ToImmutable(), activeIndex);
+        return new ModernSelection(entities.Length.ToString(CultureInfo.InvariantCulture) + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable(), activeIndex);
     }
 
     /// <summary>
@@ -1045,7 +1056,7 @@ public sealed partial class MatchController
     /// <summary>The <c>SelectPortrait</c> of the single selected object, if the image table has it.</summary>
     private string? SelectedPortrait()
     {
-        // The bar of a structure group shows the portrait of its kind, with the count over it (GroupTag).
+        // The bar of a structure group or of the active kind of a mixed selection shows the portrait of that kind, with the count over it (GroupTag).
         string name;
         if (CommandBar.Group is { } group) name = group.Template;
         else if (Input.Selection.Selected.ToArray() is [var only] && Match.World.FindEntity(only) is { } entity) name = entity.Template.Name;
@@ -1308,13 +1319,16 @@ public sealed partial class MatchController
     }
 
     /// <summary>
-    /// What the original bar cannot say about several buildings that share it: their name and how many there are, over the portrait window. The modern bar's plate says the same in its own text.
+    /// What the original bar cannot say about several buildings that share it, or about the active kind of a mixed selection: its name and how many there are (and, for a kind, its
+    /// place among the kinds Tab walks), over the portrait window. The modern bar's plate says the same in its own text.
     /// </summary>
     private ImmutableArray<UiDrawCommand> GroupTag(SelectionGroup group)
     {
         if (_tree.FindByName("ControlBar.wnd:RightHUD") is not { } anchor) return [];
         var name = _descriptions.DisplayName(group.Template);
-        var text = string.Create(CultureInfo.InvariantCulture, $"{name} x{group.Count}");
+        var text = group.Kind == SelectionGroupKind.Structures
+            ? string.Create(CultureInfo.InvariantCulture, $"{name} x{group.Count}")
+            : string.Create(CultureInfo.InvariantCulture, $"{name} x{group.Count} [{group.Index}/{group.Total}]");
         var font = TextStyle.Font(InGameUiFontRole.Message, _tree.Viewport, _scaleOptions);
         var rect = anchor.Rect;
         var width = _textMeasure.MeasureWidth(text, font);

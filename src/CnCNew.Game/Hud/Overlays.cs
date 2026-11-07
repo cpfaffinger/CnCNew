@@ -29,6 +29,9 @@ public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, f
     public int GroupNumber { get; init; } = -1;
 
     public string GroupText { get; init; } = string.Empty;
+
+    /// <summary>Tab chose this object's kind among the kinds of a mixed selection: it is drawn with a second, white ring (the original has no subgroups).</summary>
+    public bool ActiveKind { get; init; }
 }
 
 /// <summary>An animated icon over an object (<c>Drawable::drawDisabled</c>, <c>drawEnthusiastic</c>): the frame of this moment and its place on the screen.</summary>

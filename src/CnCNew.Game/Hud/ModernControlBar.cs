@@ -7,7 +7,8 @@ using CnCNew.Ui.Wnd;
 namespace CnCNew.Game.Hud;
 
 /// <summary>What the selection plate of the modern bar shows: one object with its health, or the kinds of several.</summary>
-internal sealed record ModernSelection(string Name, int Count, float Health, ImmutableArray<(string Image, int Count)> Kinds);
+/// <param name="ActiveKind">The index in <paramref name="Kinds"/> of the kind Tab chose in a mixed selection, or -1.</param>
+internal sealed record ModernSelection(string Name, int Count, float Health, ImmutableArray<(string Image, int Count)> Kinds, int ActiveKind = -1);
 
 /// <summary>
 /// The command bar of the modern skin (docs/UI-MODERN.md section 17): a band across the whole width of the window at every aspect ratio. Nothing of it is stretched art. The radar, the
@@ -172,12 +173,19 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
             var height = Math.Max(1, Math.Min(Scale(40), inner.Bottom - y));
             var width = height * 4 / 3;
             var x = inner.X;
+            var kindIndex = -1;
             foreach (var (image, count) in selection.Kinds)
             {
+                kindIndex++;
                 if (x + width > inner.Right) break;
                 var cell = new UiRect(x, y, width, height);
                 commands.Add(new UiImageDraw(image, cell, WndColor.White, false, false));
                 commands.Add(new UiBorderRect(cell, palette.Border));
+                if (kindIndex == selection.ActiveKind)
+                {
+                    commands.Add(new UiBorderRect(cell.Inset(-1), palette.Accent));
+                    commands.Add(new UiBorderRect(cell.Inset(-2), palette.Accent));
+                }
                 var label = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 var labelWidth = measure.MeasureWidth(label, caption);
                 commands.Add(new UiFillRect(new UiRect(cell.Right - labelWidth - Scale(4), cell.Bottom - measure.LineHeight(caption), labelWidth + Scale(4), measure.LineHeight(caption)), palette.Canvas));

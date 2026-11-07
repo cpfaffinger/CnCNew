@@ -21,6 +21,7 @@ public static class HudOverlayRenderer
     private static readonly WndColor Own = new(60, 255, 90, 255);
     private static readonly WndColor Enemy = new(255, 60, 60, 255);
     private static readonly WndColor Neutral = new(255, 230, 80, 255);
+    private static readonly WndColor ActiveKindColor = new(255, 255, 255, 255);
     private static readonly WndColor MoveOrder = new(90, 255, 120, 220);
     private static readonly WndColor AttackOrder = new(255, 90, 80, 220);
     /// <summary>The waypoint line colour of <c>W3DWaypointBuffer::setDefaultLineStyle</c> (0.25, 0.5, 1.0).</summary>
@@ -75,6 +76,8 @@ public static class HudOverlayRenderer
             if (marker.Hovered) { }
             else if (marker.IsStructure) Brackets(commands, StructureCenter(marker), StructureHalf(marker), color);
             else Ring(commands, marker.Center, MathF.Max(marker.Radius, 6f), 2f, color, RingSegments);
+            // The kind Tab chose in a mixed selection: a second ring outside the first, in white.
+            if (marker.ActiveKind && !marker.Hovered) Ring(commands, marker.IsStructure ? StructureCenter(marker) : marker.Center, MathF.Max(marker.IsStructure ? StructureHalf(marker) : marker.Radius, 6f) + 4f, 2f, ActiveKindColor, RingSegments);
             HealthBar(commands, marker);
         }
 
