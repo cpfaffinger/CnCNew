@@ -241,6 +241,12 @@ public abstract class LiveGame
         set => _driver.RequestSpeed(value);
     }
 
+    /// <summary>
+    /// The clock of the picture's own motion - model animations (a radar dish, a flag), the scroll of water and of animated textures, wheels and their shadows. It runs on real time but
+    /// stands still while the game is paused: <c>W3DDisplay::draw</c> stops W3D's sync time when <c>GameLogic::isGamePaused</c>, and everything W3D animates follows that time.
+    /// </summary>
+    public double AnimationSeconds { get; private set; }
+
     public RenderFrame Frame { get; private set; }
 
     /// <summary>
@@ -439,6 +445,7 @@ public abstract class LiveGame
         if (!Paused) _fraction = alpha;
         Frame = _projector.Project(alpha, Extrapolate && !Paused ? (float)_driver.Ahead : 0f);
         frameObserver?.PhaseEnded(PresentationPhase.Project);
+        if (!Paused) AnimationSeconds += seconds;
     }
 
     /// <summary>Called once per <see cref="Advance"/> after the ticks, before the frame is projected, with the game time that passed (0 while paused); a mission plays its scripted camera here.</summary>

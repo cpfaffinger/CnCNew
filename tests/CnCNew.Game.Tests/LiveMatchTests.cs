@@ -48,6 +48,21 @@ internal static class LiveMatchTests
             live.Advance(1);
             TestHarness.Assert(live.Tick == tick, "pause stops the simulation");
         });
+        harness.Run("A pause stops the clock of the picture's motion (model animations, water), a game that runs advances it", () =>
+        {
+            var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+            var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
+            var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+            live.Advance(1.0);
+            var running = live.AnimationSeconds;
+            TestHarness.Assert(Math.Abs(running - 1.0) < 1e-9, $"a running game's animation clock follows the frame time ({running})");
+            live.Paused = true;
+            for (var frame = 0; frame < 30; frame++) live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            TestHarness.Assert(live.AnimationSeconds == running, "a paused game's animation clock stands still");
+            live.Paused = false;
+            live.Advance(0.5);
+            TestHarness.Assert(Math.Abs(live.AnimationSeconds - (running + 0.5)) < 1e-9, "and goes on from where it stood when the game does");
+        });
         harness.Run("A live match is a room of the embedded relay: the viewer may sit in any slot, team and colour reach the description, orders come back in bundles", () =>
         {
             var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));

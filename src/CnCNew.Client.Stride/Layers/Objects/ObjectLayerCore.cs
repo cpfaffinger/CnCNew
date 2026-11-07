@@ -272,14 +272,14 @@ internal sealed class ObjectLayerCore : IWorldLayer
         }
 
         // W3DModelDraw::doDrawModule pauses the animation as Drawable::getShouldAnimate says; a paused animation stands on its frame and goes on from it.
-        if (!AnimationPauses.Holds(drawable.Pause, draw.AnimationsRequirePower)) part.ElapsedInState += frame.DeltaSeconds;
+        if (!AnimationPauses.Holds(drawable.Pause, draw.AnimationsRequirePower)) part.ElapsedInState += frame.AnimationDeltaSeconds;
         var pose = part.Pose!;
         if (drawable.TurretYaw is not null && !state.Turret.IsEmpty) Stats.TurretsDriven++;
         if (part.WheelBones is { Length: > 0 } && part.WheelMultiplier != 0f) Stats.WheelsDriven++;
         // W3DModelDraw::handleClientTurretPositioning: Capture_Bone + Control_Bone on the turret bones; a changed angle needs the pose evaluated again.
         if (ApplyTurret(state.Turret, drawable.TurretYaw, drawable.TurretPitch, asset, pose, part.TurretApplied, 0)
             | ApplyTurret(state.AltTurret, drawable.AltTurretYaw, drawable.AltTurretPitch, asset, pose, part.TurretApplied, 2)
-            | (draw.ModuleType == "W3DTruckDraw" && ApplyWheels(draw, drawable, asset, pose, part, frame.DeltaSeconds)))
+            | (draw.ModuleType == "W3DTruckDraw" && ApplyWheels(draw, drawable, asset, pose, part, frame.AnimationDeltaSeconds)))
             part.LastFrame = float.NaN;
         if (part.Binding is not null)
         {
@@ -300,7 +300,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
             part.LastFrame = 0;
         }
 
-        asset.RefreshAnimatedBatches(frame.CommandList, frame.TotalSeconds);
+        asset.RefreshAnimatedBatches(frame.CommandList, frame.AnimationSeconds);
 
         var team = drawable.TeamColor;
         var rigidModel = asset.GetRigidModel(team);

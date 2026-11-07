@@ -195,7 +195,7 @@ internal sealed class TerrainLayer : IWorldLayer
         foreach (var draw in _waterDraws)
         {
             var moved = MoveWater(draw.Batch, match);
-            if (draw.Batch.Animated) draw.Batch.ApplyScroll(frame.TotalSeconds);
+            if (draw.Batch.Animated) draw.Batch.ApplyScroll(frame.AnimationSeconds);
             if (moved || draw.Batch.Animated) draw.VertexBuffer.SetData(frame.CommandList, draw.Batch.Vertices);
         }
 

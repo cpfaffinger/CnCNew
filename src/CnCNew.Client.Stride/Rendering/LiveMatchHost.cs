@@ -61,6 +61,7 @@ internal sealed class LiveMatchHost : IDisposable
     {
         var seconds = fixedSeconds ?? gameTime.Elapsed.TotalSeconds;
         _total += seconds;
+        var animationBefore = Match.AnimationSeconds;
         if (width > 0 && height > 0) Match.Camera.SetViewportSize(new System.Numerics.Vector2(width, height));
         if (step is null)
         {
@@ -70,7 +71,7 @@ internal sealed class LiveMatchHost : IDisposable
         else step(seconds);
         _camera.ViewMatrix = Match.Camera.View.ToStride();
         _camera.ProjectionMatrix = Match.Camera.Projection.ToStride();
-        var frame = new WorldFrame(Match, Match.ObjectFrame, commandList, (float)seconds, _total);
+        var frame = new WorldFrame(Match, Match.ObjectFrame, commandList, (float)seconds, _total, (float)(Match.AnimationSeconds - animationBefore), Match.AnimationSeconds);
         foreach (var layer in _layers) layer.Update(frame);
     }
 
