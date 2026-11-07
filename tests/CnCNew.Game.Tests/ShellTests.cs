@@ -54,6 +54,7 @@ internal static class ShellTests
         if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         harness.Run("Options persist and reload", () => OptionsPersist(data));
         harness.Run("The game speed slider of the skirmish setup shows its number and speeds the match up (the owner's playtest)", () => SkirmishGameSpeed(data));
+        harness.Run("The starting cash of the skirmish setup reaches 75,000 and 100,000, and a match starts with it", () => SkirmishStartingCash(data));
         harness.Run("The score counters count by the owner of an object: units built, supplies collected, losses and kills", () => ScoreCountersByOwner(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
@@ -875,6 +876,46 @@ internal static class ShellTests
         shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var started = shell.DrainOutputs().OfType<StartMatchOutput>().Single().Setup;
         TestHarness.Assert(Math.Abs(started.Speed - 1.5) < 1e-9 && shell.Settings.Skirmish.GameSpeed == 45, $"the match runs at 45 / 30 and the setting keeps 45 ({started.Speed}, {shell.Settings.Skirmish.GameSpeed})");
+    }
+
+    private static void SkirmishStartingCash(GameData data)
+    {
+        // The owner's playtest: the list stopped at 50,000. The room of a network match offers the same list (SkirmishSetupScreen.MoneyChoices).
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var money = shell.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash")!;
+        var entries = money.ComboBox!.Entries.Select(entry => new string(entry.Where(char.IsDigit).ToArray())).ToArray();
+        TestHarness.Assert(entries.SequenceEqual(["5000", "10000", "15000", "20000", "30000", "40000", "50000", "75000", "100000"]), $"the list offers 75,000 and 100,000 after 50,000: {string.Join(", ", money.ComboBox.Entries)}");
+        foreach (var (index, amount) in new[] { (7, 75_000), (8, 100_000) })
+        {
+            var environment = NewEnvironment();
+            shell = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            Click(shell, "MainMenu.wnd:ButtonSkirmish");
+            var tree = shell.CurrentScreen.Tree;
+            tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash")!, value: index);
+            tree.Dispatch();
+            Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+            shell.BuildDrawList();
+            shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            var setup = shell.DrainOutputs().OfType<StartMatchOutput>().Single().Setup;
+            TestHarness.Assert(setup.Options.StartMoney == amount && shell.Settings.Skirmish.LastStartMoney == amount, $"entry {index} starts the match with {amount} and the setup remembers it ({setup.Options.StartMoney})");
+
+            // The match: the description (what a server is told) carries the amount and each player's purse holds it.
+            var live = LiveMatch.Create(data, setup with { Options = setup.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
+            TestHarness.Assert(live.Description.StartMoney == amount, $"the match description carries {amount} ({live.Description.StartMoney})");
+            live.Session.Step();
+            live.Session.Step();
+            var purse = live.Session.World.MoneyOf(live.Human).Floor();
+            TestHarness.Assert(purse == amount, $"the human starts with {amount}, not {purse}");
+
+            // Remembered: the next setup of the same settings directory shows the amount chosen.
+            var again = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            Click(again, "MainMenu.wnd:ButtonSinglePlayer");
+            Click(again, "MainMenu.wnd:ButtonSkirmish");
+            TestHarness.Assert(again.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash")!.ComboBox!.SelectedIndex == index, $"the next setup preselects entry {index}");
+        }
     }
 
     private static void ScoreCountersByOwner(GameData data)

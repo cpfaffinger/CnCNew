@@ -407,7 +407,7 @@ public interface IMapPickerOwner
 public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
 {
     private const int Slots = 8;
-    private static readonly ImmutableArray<int> MoneyChoices = [5_000, 10_000, 15_000, 20_000, 30_000, 40_000, 50_000];
+    private static ImmutableArray<int> MoneyChoices => SkirmishSetupScreen.MoneyChoices;
     private const int OpenEntry = 0, ClosedEntry = 1, ArmyEntry = 2, SeatEntry = 3;
 
     private readonly ShellNetSession _session;

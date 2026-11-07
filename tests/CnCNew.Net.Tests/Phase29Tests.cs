@@ -256,6 +256,14 @@ static partial class NetTests
         Step(10);
         Check.That(host.Room!.Settings.StartMoney == 20_000 && host.Room.Members.Count(member => member.Slot >= 0) == 3 && !host.Room.Members.Any(member => member.Ready),
             $"a change of the settings keeps the seats and takes back every 'ready' ({string.Join(", ", host.Room.Members.Select(member => $"{member.Name}@{member.Slot}{(member.Ready ? " ready" : string.Empty)}"))})");
+        // The setup offers up to 100,000 credits (the owner's playtest): the room takes them on, and the amount survives the wire.
+        host.Configure(settings with { StartMoney = 100_000 });
+        Step(10);
+        Check.That(host.Room!.Settings.StartMoney == 100_000 && clients.All(client => client.Room is null || client.Room.Settings.StartMoney == 100_000) && host.Room.Members.Count(member => member.Slot >= 0) == 3,
+            $"a room with 100,000 credits is accepted by the server and seen by every member ({host.Room.Settings.StartMoney})");
+        Check.That(MessageCodec.TryDecode(MessageCodec.Encode(new RoomConfigMessage(host.Room.Settings)), out var wire, out _) && wire is RoomConfigMessage { Settings.StartMoney: 100_000 }, "100,000 credits survive the wire");
+        host.Configure(settings with { StartMoney = 20_000 });
+        Step(10);
         host.Configure(settings with { Slots = settings.Slots.SetItem(2, settings.Slots[2] with { Kind = MatchSlotKind.Closed }) });
         Step(10);
         Check.That(host.Room!.Members.Single(member => member.Name == "enemy").Slot == -1 && host.Room.Members.Count(member => member.Slot >= 0) == 2, "a seat that is closed is left by who sat in it; the others stay");

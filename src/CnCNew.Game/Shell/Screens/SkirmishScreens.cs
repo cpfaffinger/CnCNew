@@ -24,7 +24,8 @@ namespace CnCNew.Game.Shell.Screens;
 public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 {
     private const int Slots = 8;
-    private static readonly ImmutableArray<int> MoneyChoices = [5_000, 10_000, 15_000, 20_000, 30_000, 40_000, 50_000];
+    /// <summary>The starting cash the setup offers (<c>ComboBoxStartingCash</c>); the network room offers the same list. 75,000 and 100,000 were added on the owner's request.</summary>
+    internal static readonly ImmutableArray<int> MoneyChoices = [5_000, 10_000, 15_000, 20_000, 30_000, 40_000, 50_000, 75_000, 100_000];
 
     private readonly ImmutableArray<string> _factionChoices;
     private readonly bool[] _computer = new bool[Slots];
