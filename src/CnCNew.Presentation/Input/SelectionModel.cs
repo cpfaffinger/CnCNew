@@ -16,6 +16,20 @@ namespace CnCNew.Presentation.Input;
 public sealed record SelectionSettings(int MaxSelectionSize = 0, float MinPickRadiusPixels = 8f, long GroupDoubleTapMilliseconds = 500);
 
 /// <summary>
+/// What the original tells the player when it selects more units at once (<c>InGameUI::selectMatchingAcrossScreen</c>, <c>selectMatchingAcrossMap</c>,
+/// <c>selectAllUnitsByTypeAcrossScreen</c>, <c>selectAllUnitsByTypeAcrossMap</c>): a line in the message list at the top left.
+/// </summary>
+public enum SelectionAnnouncement
+{
+    /// <summary><c>GUI:NothingSelected</c>: there was nothing of the player's own to find more of.</summary>
+    NothingSelected,
+    /// <summary><c>GUI:SelectedAcrossScreen</c>: units were added from the screen.</summary>
+    AcrossScreen,
+    /// <summary><c>GUI:SelectedAcrossMap</c>: the search went over the whole map.</summary>
+    AcrossMap,
+}
+
+/// <summary>
 /// The local player's selection and control groups (<c>SelectionXlat.cpp</c>, <c>InGameUI.cpp</c> selection helpers). Own objects form a
 /// commandable selection; a single enemy, neutral or allied object may be selected for information only (<see cref="IsCommandable"/> false).
 /// The selection is kept in ascending id order, so every command derived from it is issued in a canonical order.
@@ -42,6 +56,9 @@ public sealed class SelectionModel
 
     /// <summary>Raised with the new selection whenever it changes.</summary>
     public event Action<ImmutableArray<EntityId>>? SelectionChanged;
+
+    /// <summary>Raised when a selection of many units (the matching units, select all, a double click) tells the player what it did (<see cref="SelectionAnnouncement"/>).</summary>
+    public event Action<SelectionAnnouncement>? Announced;
 
     public ImmutableArray<EntityId> Selected => [.._selected.Select(id => new EntityId(id))];
     public bool IsEmpty => _selected.Count == 0;
@@ -183,28 +200,56 @@ public sealed class SelectionModel
             set.UnionWith(keep);
             set.Add(picked.Id.Value);
         });
-        SelectMatching(world, acrossMap ? null : view);
+        // SelectionXlat: selectMatchingAcrossMap / selectMatchingAcrossScreen, each with its message.
+        if (acrossMap) MatchingAcrossMap(world);
+        else MatchingAcrossScreen(world, view);
         return true;
     }
 
     /// <summary>
     /// <c>InGameUI::selectMatchingAcrossRegion</c>: adds every own, uncontained, mass-selectable object whose template equals a selected own object's
-    /// template, on screen (<paramref name="view"/>) or across the map (null). Returns the number added.
+    /// template, on screen (<paramref name="view"/>) or across the map (null). Returns the number added, or -1 when nothing of the player's own is selected.
     /// </summary>
     public int SelectMatching(SimulationWorld world, IViewProjection? view)
     {
         var templates = OwnSelected(world).Select(entity => entity.Template.Name).ToHashSet(StringComparer.Ordinal);
-        if (templates.Count == 0) return 0;
+        if (templates.Count == 0) return -1;
         var pool = view is null ? world.Entities.OrderBy(entity => entity.Id.Value).ToImmutableArray() : Picker.OnScreen(world, LocalPlayer, view);
         return AddUpToLimit(pool.Where(entity => entity.Owner == LocalPlayer && EntityPicker.IsMassSelectable(entity) && templates.Contains(entity.Template.Name)));
     }
 
-    /// <summary><c>MSG_META_SELECT_MATCHING_UNITS</c> (<c>selectUnitsMatchingCurrentSelection</c>): the screen first, the whole map when the screen added nothing. -1: nothing own is selected.</summary>
+    /// <summary><c>InGameUI::selectMatchingAcrossScreen</c>: the matching units on screen; says "nothing selected" when there was nothing to match, "across screen" when units were added, nothing when none were.</summary>
+    private int MatchingAcrossScreen(SimulationWorld world, IViewProjection view)
+    {
+        var added = SelectMatching(world, view);
+        if (added == -1) Announced?.Invoke(SelectionAnnouncement.NothingSelected);
+        else if (added > 0) Announced?.Invoke(SelectionAnnouncement.AcrossScreen);
+        return added;
+    }
+
+    /// <summary>
+    /// <c>InGameUI::selectMatchingAcrossMap</c>: the matching units of the whole map. Says "across map" when units were added, and also when none were - unless the first selected
+    /// object is a structure, which has no fellows to look for across the map.
+    /// </summary>
+    private int MatchingAcrossMap(SimulationWorld world)
+    {
+        var added = SelectMatching(world, null);
+        if (added == -1) Announced?.Invoke(SelectionAnnouncement.NothingSelected);
+        else if (added > 0 || !FirstSelectedIsStructure(world)) Announced?.Invoke(SelectionAnnouncement.AcrossMap);
+        return added;
+    }
+
+    private bool FirstSelectedIsStructure(SimulationWorld world)
+        => _selected.Count > 0 && world.FindEntity(new EntityId(_selected.Min)) is { } first && first.Template.IsKindOf("STRUCTURE");
+
+    /// <summary>
+    /// <c>MSG_META_SELECT_MATCHING_UNITS</c> (<c>selectUnitsMatchingCurrentSelection</c>): the screen first, the whole map when the screen added nothing - each step says what it did
+    /// (<see cref="Announced"/>). -1: nothing own is selected.
+    /// </summary>
     public int SelectMatchingUnits(SimulationWorld world, IViewProjection view)
     {
-        if (OwnSelected(world).IsEmpty) return -1;
-        var added = SelectMatching(world, view);
-        return added > 0 ? added : SelectMatching(world, null);
+        var onScreen = MatchingAcrossScreen(world, view);
+        return onScreen == 0 ? MatchingAcrossMap(world) : onScreen;
     }
 
     /// <summary>
@@ -220,7 +265,16 @@ public sealed class SelectionModel
         _lastGroup = -1;
         if (_selected.Any(id => world.FindEntity(new EntityId(id)) is not { } entity || !Qualifies(entity))) Change(set => set.Clear());
         var added = AddUpToLimit(Picker.OnScreen(world, LocalPlayer, view).Where(Qualifies));
-        return added > 0 ? added : AddUpToLimit(world.Entities.OrderBy(entity => entity.Id.Value).Where(Qualifies));
+        // selectAllUnitsByTypeAcrossScreen says "across screen" when it added any; selectAllUnitsByTypeAcrossMap says "across map" - when it added none as well, unless the first
+        // selected object is a structure.
+        if (added > 0)
+        {
+            Announced?.Invoke(SelectionAnnouncement.AcrossScreen);
+            return added;
+        }
+        added = AddUpToLimit(world.Entities.OrderBy(entity => entity.Id.Value).Where(Qualifies));
+        if (added > 0 || !FirstSelectedIsStructure(world)) Announced?.Invoke(SelectionAnnouncement.AcrossMap);
+        return added;
     }
 
     private int AddUpToLimit(IEnumerable<Entity> candidates)

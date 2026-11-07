@@ -65,6 +65,7 @@ internal static class HudTests
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
         harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
         harness.Run("Hack, weapon switch, overcharge, hijack, car bomb, sabotage: a press does what the button says", () => ButtonsOfUnits(data));
+        harness.Run("E tells the player what it selected: nothing selected, across the map, and no line for a structure that has no fellows", () => SelectionMessages(data));
         harness.Run("The sneak attack: a press puts the tunnel at the cursor and the power is used where it is put down", () => SneakAttack(data));
         harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
@@ -691,6 +692,39 @@ internal static class HudTests
             "the paradrop shows once the player has its science, in the order of the set");
         var list = controller.BuildDrawList(1280, 720);
         TestHarness.Assert(list.Commands.OfType<UiImageDraw>().Any(image => image.Image == "SACParatroopers"), "with its cameo");
+    }
+
+    /// <summary>
+    /// <c>InGameUI::selectMatchingAcrossScreen</c> and <c>selectMatchingAcrossMap</c> put a line into the message list at the top left: <c>GUI:NothingSelected</c> when there was nothing
+    /// to match, <c>GUI:SelectedAcrossScreen</c> when units were added from the screen, <c>GUI:SelectedAcrossMap</c> for the map - also when none were added, unless the first selected
+    /// object is a structure. The port selected silently.
+    /// </summary>
+    private static void SelectionMessages(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        var text = controller.Assets.Text;
+        string[] Lines() => [.. controller.Messages.Log.Lines.Select(line => line.Text)];
+        void PressE()
+        {
+            controller.Process(new KeyEvent(time += 16, KeyCode.E, true));
+            controller.Process(new KeyEvent(time += 16, KeyCode.E, false));
+        }
+
+        controller.Input.Selection.Clear();
+        PressE();
+        TestHarness.Assert(Lines() is [var nothing] && nothing == text.Get("GUI:NothingSelected") && !nothing.Contains("??", StringComparison.Ordinal), $"E with nothing selected says so ({string.Join(" | ", Lines())})");
+
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER") && !entity.EffectivelyDead);
+        controller.Input.Selection.Replace([dozer.Id]);
+        PressE();
+        var expected = text.Get("GUI:SelectedAcrossMap");
+        TestHarness.Assert(Lines().Length == 2 && Lines()[1] == expected && expected.Length > 0 && !expected.Contains("??", StringComparison.Ordinal), $"E with a lone dozer looks across the map and says so ({string.Join(" | ", Lines())})");
+
+        var center = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        controller.Input.Selection.Replace([center.Id]);
+        PressE();
+        TestHarness.Assert(Lines().Length == 2, $"E on a structure finds no fellows and says nothing ({string.Join(" | ", Lines())})");
     }
 
     private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport, GameSettings? settings = null, bool started = true)

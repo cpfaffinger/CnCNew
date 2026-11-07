@@ -126,6 +126,13 @@ public sealed partial class MatchController
             label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
             new GameInputSettings(MapMouseScheme(settings), Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
         Input.UiRequest += OnInputUiRequest;
+        // InGameUI::selectMatchingAcrossScreen and friends tell the player what a selection of many units did, in the message list.
+        Input.Selection.Announced += announcement => Messages.Message(announcement switch
+        {
+            SelectionAnnouncement.NothingSelected => "GUI:NothingSelected",
+            SelectionAnnouncement.AcrossScreen => "GUI:SelectedAcrossScreen",
+            _ => "GUI:SelectedAcrossMap",
+        });
 
         match.BeforeTick = world => Input.Tick(world);
         match.CommandResolved += Input.Commands.OnResolved;
