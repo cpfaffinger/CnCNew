@@ -775,6 +775,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
     public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
 
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
+    private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
     private long _nextWake = -1;
 
@@ -815,6 +816,8 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
             if (StealthOf(candidate) is { } stealth)
             {
+                // "if( them->testStatus( OBJECT_STATUS_DETECTED ) == FALSE )": the UI feedback of the local players (a radar event, a message, a sound) is for the moment of discovery.
+                if (!candidate.HasStatus(DetectedBit)) world.Emit(SimEventKind.RadarNotice, candidate.Id, Entity.Id, RadarNotices.StealthRevealed, 0);
                 // markAsDetected(m_updateRate + 1): the extra step is one logic frame of the original, so the mark outlasts the next scan by the same game time at every rate.
                 stealth.MarkDetected(world, data.UpdateRateTicks + world.Time.TicksPerOriginalFrame);
                 continue;

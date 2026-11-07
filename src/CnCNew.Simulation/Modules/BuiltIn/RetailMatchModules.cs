@@ -388,6 +388,7 @@ public sealed class OverchargeBehavior(OverchargeData data) : SimModule, IUpdate
         if (body.Health < body.MaxHealth * data.NotAllowedBelowRatio)
         {
             Enable(world, false);
+            world.Emit(SimEventKind.RadarNotice, Entity.Id, EntityId.Invalid, RadarNotices.OverchargeExhausted, 0);
             return SimulationTiming.SleepForever;
         }
         return SimulationTiming.SleepNone;

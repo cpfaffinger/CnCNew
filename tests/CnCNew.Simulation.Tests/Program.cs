@@ -563,6 +563,11 @@ run.Test("Specials: spy vision power, reference counts, reveal and duration", Te
 run.Test("Specials: spy vision upgrades, kind filter and self-powered cycle", Tests.SpecialsSpyVisionUpgrades);
 run.Test("Specials: assisted targeting (request range, free check, secondary clip)", Tests.SpecialsAssistedTargeting);
 run.Test("Specials: battle plans (cycle, army bonuses, center bonus, paralysis, snapshot)", Tests.SpecialsBattlePlanCycle);
+run.Test("Radar notice (F-137): the start of a capture tells the victim's radar once", Tests.RadarNoticeAtTheStartOfACapture);
+run.Test("Radar notice (F-137): a hijack names the vehicle's former owner", Tests.HijackNamesTheFormerOwner);
+run.Test("Radar notice (F-137): a stealth object found is told once, for the detector's enemy only", Tests.RadarNoticeWhenAStealthObjectIsFound);
+run.Test("Radar notice (F-137): a battle plan that begins to unpack is told", Tests.RadarNoticeWhenABattlePlanUnpacks);
+run.Test("Radar notice (F-137): an overcharge that gives out is told once", Tests.RadarNoticeWhenAnOverchargeGivesOut);
 run.Test("Turret switch (F-57): the strategy center's gun works only under bombardment and its pack-up waits for the turret", Tests.TurretSwitchStrategyCenter);
 run.Test("Turret switch (F-57): a deploy-style unit aims its turret once set up and centres it before packing", Tests.TurretSwitchDeployStyle);
 run.Test("Sniper estimate (F-49): a sniper cannot aim at an empty structure with a contain module", Tests.SniperDoesNotTargetAnEmptyStructure);

@@ -183,6 +183,8 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
                 _nextReadyTick = world.Tick + world.Time.ZeroIsNextFrame(data.TransitionIdleTicks);
                 break;
             case TransitionStatus.Unpacking:
+                // "play a radar blip showing the battle plan change in the color of the" player: every client's radar, whoever the player is.
+                world.Emit(Events.SimEventKind.RadarNotice, Entity.Id, Ids.EntityId.Invalid, Events.RadarNotices.BattlePlan, 0);
                 _nextReadyTick = world.Tick + world.Time.ZeroIsNextFrame(AnimationTicks(_currentPlan));
                 break;
             case TransitionStatus.Active:

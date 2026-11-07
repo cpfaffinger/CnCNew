@@ -110,7 +110,7 @@ public enum SimEventKind : byte
     /// </summary>
     CrateCollected = 80,
 
-    /// <summary>A vehicle changed hands or purpose (<c>Entity</c>: the vehicle, <c>Other</c>: the converting object, <c>Text</c>: <c>HIJACKED</c> or <c>CARBOMB</c>).</summary>
+    /// <summary>A vehicle changed hands or purpose (<c>Entity</c>: the vehicle, <c>Other</c>: the converting object, <c>Text</c>: <c>HIJACKED</c> or <c>CARBOMB</c>, <c>Value</c>: the id of the player who owned the vehicle until now).</summary>
     ObjectConverted = 81,
 
     /// <summary>A building was sabotaged (<c>Entity</c>: the building, <c>Other</c>: the saboteur, <c>Text</c>: the module name, <c>Value</c>: the stolen cash, the disabling ticks or 0).</summary>
@@ -155,6 +155,26 @@ public enum SimEventKind : byte
     /// whistle still sounds is the audio layer's to know.
     /// </summary>
     TrainWhistle = 93,
+
+    /// <summary>
+    /// A place the original's <c>TheRadar</c> is told about for the sake of one object's story: <see cref="SimEvent.Text"/> is a <see cref="RadarNotices"/> name, <see cref="SimEvent.Entity"/>
+    /// the object it happened to or at (its owner at that moment is the victim), <see cref="SimEvent.Other"/> the actor where there is one. The simulation does not know whose radar it is;
+    /// the local player's client decides (<c>Radar::tryInfiltrationEvent</c>, <c>StealthDetectorUpdate::update</c> and <c>OverchargeBehavior::update</c> look at the local or observed player).
+    /// </summary>
+    RadarNotice = 94,
+}
+
+/// <summary>The kinds of <see cref="SimEventKind.RadarNotice"/>.</summary>
+public static class RadarNotices
+{
+    /// <summary><c>StealthDetectorUpdate::update</c>: a stealthed object that was not detected has just been (<c>Entity</c>), by <c>Other</c>.</summary>
+    public const string StealthRevealed = "StealthRevealed";
+    /// <summary><c>Radar::tryInfiltrationEvent</c> at the start of a capture or a hack (<c>SpecialAbilityUpdate::startPreparation</c>): <c>Entity</c> is the target.</summary>
+    public const string Infiltration = "Infiltration";
+    /// <summary><c>BattlePlanUpdate::setStatus</c>, <c>TRANSITIONSTATUS_UNPACKING</c>: the strategy center <c>Entity</c> begins to unpack a plan.</summary>
+    public const string BattlePlan = "BattlePlan";
+    /// <summary><c>OverchargeBehavior::update</c>: the overcharge of <c>Entity</c> switched itself off for want of health.</summary>
+    public const string OverchargeExhausted = "OverchargeExhausted";
 }
 
 /// <summary>

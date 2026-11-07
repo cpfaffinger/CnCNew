@@ -291,6 +291,7 @@ public sealed class ConvertToCarBombCrateCollide(ConvertToCarBombData data) : Cr
     {
         if (!CrateModules.GoalAllows(Entity, other)) return false;
         if (StickyBombUpdate.CheckAndDetonateBoobyTrap(world, other, Entity) && (other.EffectivelyDead || Entity.EffectivelyDead)) return false;
+        var formerOwner = other.Owner;
         other.Status |= 1UL << CarBombBit;
         world.WeaponSetFlagsChanged(other);
         if (data.Fx.Length > 0) world.Emit(SimEventKind.FxRequested, other.Id, Entity.Id, data.Fx, 0);
@@ -298,7 +299,7 @@ public sealed class ConvertToCarBombCrateCollide(ConvertToCarBombData data) : Cr
         world.Emit(SimEventKind.ObjectNameTransferred, Entity.Id, other.Id, string.Empty, 0);
         world.SetVeterancy(other, Entity.VeterancyLevel);
         world.MarkDirty(other);
-        world.Emit(SimEventKind.ObjectConverted, other.Id, Entity.Id, "CARBOMB", 0);
+        world.Emit(SimEventKind.ObjectConverted, other.Id, Entity.Id, "CARBOMB", formerOwner.Value);
         Collected(world, other, 0);
         return true;
     }
@@ -340,6 +341,7 @@ public sealed class ConvertToHijackedVehicleCrateCollide(CrateCollideData crate)
     protected override bool ExecuteCrateBehavior(IWorldServices world, Entity other)
     {
         if (!CrateModules.GoalAllows(Entity, other)) return false;
+        var formerOwner = other.Owner;
         world.TransferOwnership(other.Id, Entity.Owner);
         other.Status |= 1UL << HijackedBit;
         CrateModules.AiOf(other)?.OrderIdle(world);
@@ -347,7 +349,7 @@ public sealed class ConvertToHijackedVehicleCrateCollide(CrateCollideData crate)
         var highest = Math.Max(other.VeterancyLevel, Entity.VeterancyLevel);
         world.SetMinVeterancyLevel(Entity, highest);
         world.SetMinVeterancyLevel(other, highest);
-        world.Emit(SimEventKind.ObjectConverted, other.Id, Entity.Id, "HIJACKED", 0);
+        world.Emit(SimEventKind.ObjectConverted, other.Id, Entity.Id, "HIJACKED", formerOwner.Value);
         world.MarkDirty(other);
         Collected(world, other, 0);
 

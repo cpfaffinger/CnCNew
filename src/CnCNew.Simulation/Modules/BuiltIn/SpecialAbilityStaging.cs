@@ -438,6 +438,9 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             if (CaptureKind(world) == CaptureType.BlackLotus && world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return;
         }
         if (!PrepareKind(world, target)) return;
+        // "Warn the victim so he might have a chance to react!": the capture and the hacks that go through a building or a vehicle tell the victim's radar.
+        if (target is not null && KindOf(world) is AbilityKind.InfantryCapture or AbilityKind.BlackLotusCapture or AbilityKind.HackerDisable or AbilityKind.VehicleHack or AbilityKind.StealCash)
+            world.Emit(SimEventKind.RadarNotice, target.Id, Entity.Id, RadarNotices.Infiltration, 0);
         power.Trigger(world);
         if (CrateModules.AiOf(Entity) is { } ai) ai.OrderIdle(world, false);
         Entity.Status |= 1UL << UsingAbilityBit;
