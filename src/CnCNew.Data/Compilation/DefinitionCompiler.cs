@@ -434,7 +434,7 @@ public static class DefinitionCompiler
         var fieldBuilder = ImmutableArray.CreateBuilder<DefinitionField>();
         var seen = new HashSet<string>(Names);
         var active = SelectActive(block.Children, c.Options.Conditions, doc.Document.Source).ToArray();
-        foreach (var property in active.OfType<IniProperty>())
+        foreach (var property in Properties(active))
         {
             c.Keys++;
             if (implemented)
@@ -495,7 +495,7 @@ public static class DefinitionCompiler
     {
         var active = SelectActive(block.Children, c.Options.Conditions, doc.Document.Source).ToArray();
         var fields = ImmutableArray.CreateBuilder<DefinitionField>();
-        foreach (var property in active.OfType<IniProperty>())
+        foreach (var property in Properties(active))
         {
             c.Keys++;
             fields.Add(new DefinitionField(property.Name, DefinitionValueParser.Parse(property.Name, property.Value, property.Location), property.Location));
@@ -729,6 +729,24 @@ public static class DefinitionCompiler
         output.Add(new LoadedDocument(document with { Nodes = document.Nodes.Where(node => node is not IniStatement statement || !IsInclude(statement.Text)).ToArray() },
             file, file.Class == IniFileClass.MapOverlay));
         stack.Pop();
+    }
+
+    /// <summary>
+    /// The fields of a module or section in file order. <c>INI::initFromINIMulti</c> splits a line at whitespace and "=", so <c>Model ABPWRPLANT_A1</c> is the field <c>Model = ABPWRPLANT_A1</c>:
+    /// the parser keeps a line without "=" as a statement, and a field written that way (45 <c>Model</c> lines of the five Cold Fusion Reactors' control rods, 616 <c>AliasConditionState</c>, <c>ExtraPublicBone</c>,
+    /// <c>AnimationSpeedFactorRange</c>) must not be lost.
+    /// </summary>
+    private static IEnumerable<IniProperty> Properties(IEnumerable<IniNode> active)
+    {
+        foreach (var node in active)
+        {
+            if (node is IniProperty property) yield return property;
+            else if (node is IniStatement { Text: var text, Location: var location } && !text.StartsWith('#'))
+            {
+                var split = text.IndexOf(' ');
+                if (split > 0 && text[(split + 1)..].Trim() is { Length: > 0 } value) yield return new IniProperty(text[..split], value, location);
+            }
+        }
     }
 
     private static IEnumerable<IniNode> SelectActive(IEnumerable<IniNode> nodes, ImmutableHashSet<string> symbols, string source)

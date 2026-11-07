@@ -41,6 +41,7 @@ WeaponBonusesAreTypedAndStrict();
 SingleBitsMatchTheRuntimeCast();
 FingerprintEncodingIsPinned();
 BridgeBlocksAreStrictlyTyped();
+FieldsWithoutAnEqualsSignAreFields();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -82,6 +83,29 @@ static void BridgeBlocksAreStrictlyTyped()
     Assert(!graph.Audit.Compatibility.Any(entry => entry.Name == "Bridge" || entry.Name.StartsWith("Bridge/", StringComparison.Ordinal)), "A Bridge block leaves no compatibility case behind.");
     Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One("Bridge Sample\n  BridgeWidth = 3\nEnd\n")), "Unknown Bridge key 'BridgeWidth'");
     Throws<Exception>(() => DefinitionCompiler.Compile(One("Bridge Sample\n  NumFXPerType = many\nEnd\n")), "many");
+}
+
+static void FieldsWithoutAnEqualsSignAreFields()
+{
+    // INI::initFromINIMulti splits a line at whitespace and "=": the control rods of the Cold Fusion Reactor are "Model ABPWRPLANT_A1", and a state's aliases are "AliasConditionState RIDER1".
+    const string text = """
+    Object Plant
+      Draw = W3DModelDraw ModuleTag_05
+        ExtraPublicBone Explosion01
+        ConditionState = NONE
+          Model ABPWRPLANT_A1
+          AnimationSpeedFactorRange 0.9 1.1
+        End
+        AliasConditionState RIDER1
+      End
+    End
+    """;
+    var graph = DefinitionCompiler.Compile(One(text), ModuleRegistry.Default);
+    var module = graph.Definitions.OfType<ObjectDefinition>().Single().Modules.Single();
+    Assert(module.Fields.Any(field => field.Name == "ExtraPublicBone" && field.Value.OriginalText == "Explosion01"), "A module field without '=' is a field.");
+    Assert(module.Fields.Any(field => field.Name == "AliasConditionState" && field.Value.OriginalText == "RIDER1"), "so is an alias line.");
+    var state = module.Sections.Single();
+    Assert(state.Fields.Select(field => (field.Name, field.Value.OriginalText)).SequenceEqual([("Model", "ABPWRPLANT_A1"), ("AnimationSpeedFactorRange", "0.9 1.1")]), "A state's field without '=' is a field, in file order.");
 }
 
 static void ParserPreservesStructureAndLocations()

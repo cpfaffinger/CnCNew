@@ -7,6 +7,7 @@ CnCNew.Tests.TestRateOption.Announce("The time-scale tests name their rates them
 // Register one class per line.
 Func<string[], int>[] suites =
 [
+    UpgradeVisualTests.Run,
     ObjectTests.Run,
     FxTests.Run,
     TerrainTests.Run,
@@ -38,9 +39,12 @@ Func<string[], int>[] suites =
     SpectatorTests.Run,
 ];
 
+// "--only Suite[,Suite]" runs the named suites (the name of the class that holds `Run`), for a focused check while working.
+var only = args.SkipWhile(argument => argument != "--only").Skip(1).FirstOrDefault()?.Split(',');
 var failures = 0;
 foreach (var suite in suites)
 {
+    if (only is not null && !only.Contains(suite.Method.DeclaringType?.Name, StringComparer.OrdinalIgnoreCase)) continue;
     failures += suite(args);
 }
 
