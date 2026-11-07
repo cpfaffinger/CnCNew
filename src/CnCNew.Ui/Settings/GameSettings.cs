@@ -29,7 +29,7 @@ public enum AspectHandling
 
 /// <summary>
 /// The interface skin (docs/UI-MODERN.md): the original's pictures, or the modern skin derived from the original's layouts at run time. A presentation
-/// choice only; the original is the default until the owner decides (D-21).
+/// choice only; the modern skin is the default (D-21, and for every settings file since schema 6).
 /// </summary>
 public enum UiSkinName { Original, Modern }
 
@@ -96,7 +96,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

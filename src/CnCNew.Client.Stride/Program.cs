@@ -141,7 +141,7 @@ var replayFile = GetArgument(args, "--replay");
 CnCNew.Client.Stride.ClientRuntime.ReplayDirectory = GetArgument(args, "--replay-dir");
 CnCNew.Client.Stride.ClientRuntime.ReplayCheckpointSeconds = int.Parse(GetArgument(args, "--replay-checkpoint-seconds") ?? CnCNew.Game.Replays.ReplayPlayback.DefaultCheckpointSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
 CnCNew.Client.Stride.ClientRuntime.SkirmishSeconds = int.Parse(GetArgument(args, "--skirmish-seconds") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
-// --skin original|modern: the interface skin of this run (docs/UI-MODERN.md); without it the settings decide (display.skin, the original by default). A skin chosen
+// --skin original|modern: the interface skin of this run (docs/UI-MODERN.md); without it the settings decide (display.skin, the modern skin by default and for every file since schema 6). A skin chosen
 // in the options replaces it.
 CnCNew.Client.Stride.ClientRuntime.Skin = GetArgument(args, "--skin") is { } skinText ? CnCNew.Ui.Skins.UiSkin.Parse(skinText).Name : null;
 if (replayFile is not null && (matchMap is not null || missionMap is not null || modelPath is not null || shellScriptPath is not null || contentDirectory is null))

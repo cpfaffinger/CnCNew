@@ -42,6 +42,7 @@ public static class TextAndSettingsTests
             ("CorruptSettingsAreKeptAside", CorruptSettingsAreKeptAside),
             ("NewerSettingsVersionIsAnErrorAndUntouched", NewerSettingsVersionIsAnErrorAndUntouched),
             ("OlderSettingsVersionsMigrateExplicitly", OlderSettingsVersionsMigrateExplicitly),
+            ("ModernSkinIsTheDefaultForEveryFile", ModernSkinIsTheDefaultForEveryFile),
             ("ResolutionsClassifyAndFit", ResolutionsClassifyAndFit),
         };
 
@@ -457,13 +458,13 @@ public static class TextAndSettingsTests
             var found = result.Issues.Select(issue => $"{issue.Path}:{issue.Code}").ToArray();
             string[] wanted =
             [
-                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
+                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
                 "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.lastFactions:invalid-type",
                 "audio.ambient:clamped",
             ];
             Assert(found.SequenceEqual(wanted), $"Binding issues: {string.Join(", ", found)}.");
             Assert(result.Status == SettingsLoadStatus.Migrated && result.Settings.Display.Mode == DisplayMode.Fullscreen && result.Settings.Display.Width == 1280
-                && result.Settings.Display.Aspect == AspectHandling.KeepHorizontal && result.Settings.Display.Skin == UiSkinName.Original && result.Settings.Audio.Device.Length == 0
+                && result.Settings.Display.Aspect == AspectHandling.KeepHorizontal && result.Settings.Display.Skin == UiSkinName.Modern && result.Settings.Audio.Device.Length == 0
                 && result.Settings.Audio.Ambient == 1f && result.Settings.General.Language == "French" && result.Settings.Skirmish.LastFactions.IsEmpty,
                 "Valid values are kept, invalid ones use the defaults.");
         }
@@ -524,7 +525,7 @@ public static class TextAndSettingsTests
             Assert(result.Issues.Length == GameSettings.CurrentVersion && result.Issues.All(issue => issue.Code == "migrated"), "Every migration step is reported.");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration, migration]), "same schema version");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration with { FromVersion = GameSettings.CurrentVersion }]), "must start below");
-            Assert(SettingsStore.Migrations.Length == 4 && SettingsStore.Migrations[3].FromVersion == 4, "Schema version 5 ships the steps from versions 1 to 4.");
+            Assert(SettingsStore.Migrations.Length == 5 && SettingsStore.Migrations[4].FromVersion == 5, "Schema version 6 ships the steps from versions 1 to 5.");
 
             // Version 1 to 2 (Phase 38): the skin and the device come in at what version 1 meant, the aspect the client never applied becomes the one it drew.
             var version1 = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default))
@@ -539,10 +540,58 @@ public static class TextAndSettingsTests
                 "The version 1 file was written as version 1 had it.");
             File.WriteAllText(Path.Combine(directory, SettingsStore.FileName), version1);
             var upgraded = new SettingsStore(directory).Load();
-            // A player who chose nothing under version 1 played the original skin, and keeps it.
-            var original = GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = UiSkinName.Original } };
-            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == original && upgraded.Issues.Length == 4 && upgraded.Issues.All(issue => issue.Code == "migrated"),
-                $"A version 1 file of the defaults loads with the skin it had: {string.Join(", ", upgraded.Issues.Select(issue => issue.Path + ":" + issue.Code))}.");
+            // The modern skin is the default for every file (schema 6, 7 November 2026): the original skin a version 1 file meant is replaced like any other.
+            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == GameSettings.Default && upgraded.Issues.Length == 5 && upgraded.Issues.All(issue => issue.Code == "migrated"),
+                $"A version 1 file of the defaults loads in the modern skin: {string.Join(", ", upgraded.Issues.Select(issue => issue.Path + ":" + issue.Code))}.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void ModernSkinIsTheDefaultForEveryFile()
+    {
+        string FileOf(int version, UiSkinName skin) => Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }))
+            .Replace($"\"version\": {GameSettings.CurrentVersion}", $"\"version\": {version}", StringComparison.Ordinal);
+        UiSkinName SkinLoaded(string text, out SettingsLoadResult result)
+        {
+            var directory = Scratch();
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, SettingsStore.FileName), text);
+                result = new SettingsStore(directory).Load();
+                return result.Settings.Display.Skin;
+            }
+            finally { Directory.Delete(directory, recursive: true); }
+        }
+
+        // No file: the defaults, modern.
+        var empty = Scratch();
+        try { Assert(new SettingsStore(empty).Load().Settings.Display.Skin == UiSkinName.Modern, "no settings file starts in the modern skin"); }
+        finally { Directory.Delete(empty, recursive: true); }
+
+        // A file of schema 5 (the owner's test PC: saved with the original skin) is migrated to modern; its other settings are kept.
+        var five = FileOf(5, UiSkinName.Original).Replace("\"mode\": \"windowed\"", "\"mode\": \"borderless\"", StringComparison.Ordinal)
+            .Replace("\"lastStartMoney\": 10000", "\"lastStartMoney\": 30000", StringComparison.Ordinal);
+        Assert(five.Contains("\"skin\": \"original\"", StringComparison.Ordinal) && five.Contains("\"version\": 5", StringComparison.Ordinal), "the schema 5 file holds the original skin");
+        Assert(SkinLoaded(five, out var migrated) == UiSkinName.Modern && migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 5
+            && migrated.Issues.Count(issue => issue.Code == "migrated") == 1
+            && migrated.Settings.Display.Mode == DisplayMode.Borderless && migrated.Settings.Skirmish.LastStartMoney == 30000,
+            "a schema 5 file with the original skin loads in the modern skin and keeps its other settings");
+        Assert(SkinLoaded(FileOf(5, UiSkinName.Modern), out _) == UiSkinName.Modern, "a schema 5 file with the modern skin stays modern");
+
+        // A file saved after the migration with the original skin chosen (More options) stays original, through any number of loads and saves.
+        var directory = Scratch();
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, SettingsStore.FileName), five);
+            var store = new SettingsStore(directory);
+            var first = store.Load().Settings;
+            Assert(first.Display.Skin == UiSkinName.Modern, "migrated to modern");
+            store.Save(first with { Display = first.Display with { Skin = UiSkinName.Original } });
+            var saved = store.Load();
+            Assert(saved.Status == SettingsLoadStatus.Loaded && saved.FileVersion == GameSettings.CurrentVersion && saved.Settings.Display.Skin == UiSkinName.Original
+                && saved.Settings.Display.Mode == DisplayMode.Borderless, "the original skin chosen after the migration is kept and the file is current");
+            store.Save(saved.Settings);
+            Assert(store.Load().Settings.Display.Skin == UiSkinName.Original, "and it sticks across saves");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

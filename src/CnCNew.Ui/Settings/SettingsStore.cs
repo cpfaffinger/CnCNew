@@ -43,7 +43,8 @@ public sealed class SettingsStore
 
     /// <summary>
     /// Schema steps shipped with this build: version 2 (Phase 38) adds the interface skin and the sound device, each at the value version 1 meant, and replaces the three
-    /// aspect values of version 1, which no client applied, by the one the camera drew (<c>keepHorizontal</c>).
+    /// aspect values of version 1, which no client applied, by the one the camera drew (<c>keepHorizontal</c>). Version 6 (7 November 2026) makes the modern skin the
+    /// skin of every file written before it, whatever it held; a file written at version 6 keeps the skin its owner chose.
     /// </summary>
     public static ImmutableArray<SettingsMigration> Migrations { get; } =
     [
@@ -67,6 +68,11 @@ public sealed class SettingsStore
         new SettingsMigration(4, "skirmish.gameSpeed added (30, the original's speed)", root =>
         {
             if (root["skirmish"] is JsonObject skirmish && !skirmish.ContainsKey("gameSpeed")) skirmish["gameSpeed"] = SkirmishMemory.NormalGameSpeed;
+            return root;
+        }),
+        new SettingsMigration(5, "display.skin becomes modern for everyone (the owner's decision of 7 November 2026: a file that held the original skin, from schema 1's default or from a first run before D-21, no longer pins it; the skin chosen in More options is saved at schema 6 and stays)", root =>
+        {
+            if (root["display"] is JsonObject display) display["skin"] = SettingsJson.Name(UiSkinName.Modern);
             return root;
         }),
     ];
