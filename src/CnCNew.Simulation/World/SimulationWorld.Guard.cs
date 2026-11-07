@@ -424,6 +424,8 @@ public sealed partial class SimulationWorld
             {
                 if (candidate.DestroyRequested || candidate.EffectivelyDead || candidate.Body is null || candidate.ContainedBy.IsValid || !AreEnemies(entity, candidate)) continue;
                 if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT")) continue;
+                // getAbleToAttackSpecificObject with CMD_FROM_AI: "this object is not currently auto-acquireable".
+                if (candidate.HasStatus(NoAttackFromAiBit)) continue;
                 // The retaliation's look adds PartitionFilterRejectBuildings: ordinary buildings are no target.
                 if (guard.Retaliate && !AcquiresStructure(entity, candidate, false, IsComputerPlayer(entity.Owner))) continue;
                 if (candidate.HasStatus(StealthedStatus) && !candidate.HasStatus(DetectedStatus)) continue;
@@ -611,12 +613,12 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// A victim of the guard: alive, an enemy, not inside a container, not stealthed and undetected - but, unlike <see cref="IsAttackable"/>, not asked to be visible: the guard's look
+    /// A victim of the guard: alive, an enemy, not inside a container, not stealthed and undetected, no masked or <c>UNATTACKABLE</c> object (a wreck) - but, unlike <see cref="IsAttackable"/>, not asked to be visible: the guard's look
     /// has no fog filter (<c>lookForInnerTarget</c>; Reforged adds one) and its attack walks into the fog after what it found.
     /// </summary>
     private bool IsGuardVictim(Entity entity, Entity victim)
         => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && AreEnemies(entity, victim)
-           && !(victim.HasStatus(StealthedStatus) && !victim.HasStatus(DetectedStatus));
+           && !(victim.HasStatus(StealthedStatus) && !victim.HasStatus(DetectedStatus)) && !IsNoTarget(victim);
 
     private bool WithinGuardRadius(Entity victim, Fixed cx, Fixed cy, Fixed radius)
     {

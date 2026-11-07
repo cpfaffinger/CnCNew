@@ -291,6 +291,7 @@ run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point 
 run.Test("Phase 41 (F-60, step 3): a Battle Bus passes its weapon bonus to its riders", Tests.FireFromContainersPassedBonus);
 run.Test("Phase 41 (F-58, step 1): a guard drives to an enemy in its inner range, kills it and returns", Tests.GuardPositionChasesAndReturns);
 run.Test("Phase 41 (F-58, step 1): a guard gives up beyond its outer range; the guard modes; a computer's ranges", Tests.GuardGivesUpAndModes);
+run.Test("A guard attacks only what it can hurt: a sniper does not walk at a vehicle", Tests.GuardIgnoresWhatItCannotHurt);
 run.Test("Phase 41 (F-58, step 1): a guard answers an attacker beyond its inner range", Tests.GuardAnswersAnAttacker);
 run.Test("Phase 41 (F-58, step 6): a human player's idle units answer an attack on a friend nearby", Tests.GuardRetaliation);
 run.Test("Rule fix guard-answers-only-when-idle: a returning guard walks on to its post before it answers", Tests.GameFixGuardAnswersOnlyWhenIdle);
@@ -913,6 +914,7 @@ if (contentDirectory is not null) run.Test("Real data: helicopters take goals of
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): the four Strategy Centers switch between their three battle plans", () => Tests.RealBattlePlansSwitch(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a guarding Pathfinder walks only at what it can attack (no vehicle, no wreck)", () => Tests.RealGuardIgnoresWhatItCannotHurt(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on the bridge of a skirmish map, and with the bridge down the way is gone", () => Tests.RealDataUnitsCrossABridge(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a player starts with one builder at every rate", () => Tests.RealPlayersStartWithOneBuilder(contentDirectory));
