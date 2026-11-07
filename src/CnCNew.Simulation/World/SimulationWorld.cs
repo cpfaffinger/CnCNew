@@ -1028,7 +1028,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!TurretsLetAttack(source)) return CommandRejection.NoWeapon;
                 var choice = ChooseWeaponInView(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) return choice.Rejection;
-                if (!CanPlayerSee(command.Player, fireTarget)) return CommandRejection.TargetNotVisible;
+                if (!(fire.Origin == FireOrigin.Player ? CanPlayerForceTarget(command.Player, fireTarget) : CanPlayerSee(command.Player, fireTarget))) return CommandRejection.TargetNotVisible;
                 break;
             }
             case SetWeaponLockCommand lockOrder:

@@ -472,7 +472,8 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool KeepsAttackIntent(Entity attacker, Entity victim, TurretState state, long tick)
     {
-        if (IsHiddenFrom(attacker.Owner, victim)) return false;
+        if (IsHiddenFrom(attacker.Owner, victim)
+            && !(attacker.Acquisition is { FireOrdered: true, OrderOrigin: FireOrigin.Player } forced && forced.Victim == victim.Id && StealthYieldsToForce(attacker, victim))) return false;
         if (state.Pursuing) { state.LoseInterestAt = 0; return true; }
         var range = MaxWeaponRange(attacker);
         var (victimX, victimY, _) = victim.FrameEnd(_tick);

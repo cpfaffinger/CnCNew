@@ -350,7 +350,7 @@ public sealed partial class SimulationWorld
                 // The command giver names the attack; its machine fires in the unit's frames (F-140), and the world notices when the attack is over.
                 // "No order for longer than the grace" is noticed in the step after the grace: a logic frame of the original at every rate, not a tick.
                 // A fire order may name a victim that is no enemy (the force-fire of a player): its attack goes on as long as any other attack would.
-                var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false));
+                var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false, forced: state.OrderOrigin == FireOrigin.Player));
                 if (ordered && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks)
                 {
                     if (state.FireOrdered) StepOrderedFire(entity, state, victim!);
@@ -361,7 +361,7 @@ public sealed partial class SimulationWorld
             else if (state.Forced)
             {
                 // A slave's forced attack (F-65): it walks at its victim as the guard's attack does, without a fog filter, until it cannot attack it any more.
-                if (victim is not null && (IsGuardVictim(entity, victim) || (state.Neutral && IsNeutralVictim(entity, victim)) || IsClearingVictim(entity, victim))
+                if (victim is not null && (IsGuardVictim(entity, victim) || (state.Neutral && IsNeutralVictim(entity, victim)) || IsClearingVictim(entity, victim, ignoringStealth: !HasFiredAt(entity, victim)))
                     && GuardEngage(entity, ai, state, victim, tick)) return;
                 if (ContinueAttack(entity, state, victim) is { } next && GuardEngage(entity, ai, state, next, tick)) return;
                 EndEngagement(entity, ai, state);
@@ -510,9 +510,31 @@ public sealed partial class SimulationWorld
     /// The victim is still one the unit may attack: alive, an enemy and not hidden (<c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c>). "Fog no longer prevents attacking at all. it prevents
     /// targeting in findClosestEnemy" (<c>WeaponSet.cpp</c>): only a human player's unit looks through the fog filter, in <see cref="ConsiderMoodTarget"/>.
     /// </summary>
-    private bool IsAttackable(Entity entity, Entity victim, bool enemiesOnly = true)
+    /// <para><paramref name="forced"/>: a player's fire order, which at a victim that is no enemy to look at is the force-fire (<see cref="StealthYieldsToForce"/>).</para>
+    private bool IsAttackable(Entity entity, Entity victim, bool enemiesOnly = true, bool forced = false)
         => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && (!enemiesOnly || AreEnemies(entity, victim))
-           && !IsHiddenFrom(entity.Owner, victim) && !IsNoTarget(victim);
+           && (!IsHiddenFrom(entity.Owner, victim) || (forced && StealthYieldsToForce(entity, victim))) && !IsNoTarget(victim);
+
+    /// <summary>
+    /// <c>WeaponSet::getAbleToAttackSpecificObject</c> for a forced attack (<c>ATTACK_NEW_TARGET_FORCED</c>, <c>ATTACK_CONTINUED_TARGET_FORCED</c>): stealth does not keep it off a victim of
+    /// the attacker's own player (<c>sameOwnerForceAttack</c>), nor off a <c>DISGUISER</c> in disguise - "force-attack allows you to attack disguised things, which also happen to be
+    /// stealthed". The port's fire orders carry no forced flag, and need none here: an undetected stealthed victim of the own player, or one in disguise as a non-enemy, is a victim a
+    /// player can only name by force-fire.
+    /// </summary>
+    private bool StealthYieldsToForce(Entity entity, Entity victim)
+        => victim.Owner == entity.Owner || (victim.Template.IsKindOf("DISGUISER") && victim.HasStatus(DisguisedStatus));
+
+    /// <summary>
+    /// A player may name <paramref name="entity"/> in a fire order: seen (<see cref="CanPlayerSee"/>), or a <c>DISGUISER</c> in disguise in a visible cell, which the force-fire may attack
+    /// although its disguise hides it from the player (<see cref="StealthYieldsToForce"/>).
+    /// </summary>
+    public bool CanPlayerForceTarget(PlayerId player, Entity entity)
+    {
+        if (CanPlayerSee(player, entity)) return true;
+        if (_vision is null || entity.ContainedBy.IsValid || !entity.Template.IsKindOf("DISGUISER") || !entity.HasStatus(DisguisedStatus)) return false;
+        var (x, y, _) = entity.FrameEnd(_tick);
+        return IsPositionVisibleTo(player, x, y) && !IsBeacon(entity);
+    }
 
     /// <summary><c>WeaponSet::getAbleToAttackSpecificObject</c>: "an OBJECT_STATUS_MASKED object is not really a valid target", and "the KINDOF version, for things that aren't really game objects".</summary>
     private static bool IsNoTarget(Entity victim) => victim.HasStatus(MaskedBit) || victim.Template.IsKindOf("UNATTACKABLE");
@@ -648,7 +670,8 @@ public sealed partial class SimulationWorld
         var reach = SquaredReach.Of(range);
         foreach (var candidate in EntitiesOwnedBy(new PlayerId(state.ContinueOwner)).AsSpan())
         {
-            if (candidate == victim || !IsClearingVictim(entity, candidate) || !CanAttack(entity, candidate, false, out _)) continue;
+            // After the first shot: the original has cleared IGNORING_STEALTH before it looks for the next victim (AIAttackFireWeaponState::update).
+            if (candidate == victim || !IsClearingVictim(entity, candidate, ignoringStealth: false) || !CanAttack(entity, candidate, false, out _)) continue;
             var dx = candidate.X - state.ContinueX;
             var dy = candidate.Y - state.ContinueY;
             var distance = dx * dx + dy * dy;

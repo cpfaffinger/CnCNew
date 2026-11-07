@@ -124,12 +124,18 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// A victim of an attack with a weapon that has a continue range: an enemy's or a neutral object, alive, not inside a container; its stealth does not hide it - the original sets
-    /// <c>OBJECT_STATUS_IGNORING_STEALTH</c> on a unit that attacks with such a weapon (<c>AIAttackState::onEnter</c>).
+    /// A victim of an attack with a weapon that has a continue range: an enemy's or a neutral object, alive, not inside a container. <paramref name="ignoringStealth"/>: its stealth does
+    /// not hide it - the original sets <c>OBJECT_STATUS_IGNORING_STEALTH</c> on a unit that begins an attack with such a weapon (<c>AIAttackState::onEnter</c>) and for the search of a
+    /// mine (<c>AIUpdateInterface::privateAttackPosition</c>), and clears it with the attack's first shot (<c>AIAttackFireWeaponState::update</c>, "clear this, just in case"), before
+    /// it looks for the next victim of the continue range.
     /// </summary>
-    private bool IsClearingVictim(Entity entity, Entity victim)
+    private bool IsClearingVictim(Entity entity, Entity victim, bool ignoringStealth = true)
         => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && victim.Owner != entity.Owner
-           && RelationshipOf(entity.Owner, victim.Owner) is Relationship.Enemies or Relationship.Neutral && ContinueRangeOf(entity) > Fixed.Zero;
+           && RelationshipOf(entity.Owner, victim.Owner) is Relationship.Enemies or Relationship.Neutral && ContinueRangeOf(entity) > Fixed.Zero
+           && (ignoringStealth || !IsHiddenFrom(entity.Owner, victim));
+
+    /// <summary>The attack's first shot at <paramref name="victim"/> has gone (the firing tracker counts the shots at a victim): the original's <c>IGNORING_STEALTH</c> is cleared.</summary>
+    private static bool HasFiredAt(Entity entity, Entity victim) => entity.Firing is { } firing && firing.Victim == victim.Id && firing.Shots > 0;
 
     /// <summary>A neutral object that may be attacked as a forced attack's victim: the guard's test, with neutral in place of enemies.</summary>
     private bool IsNeutralVictim(Entity entity, Entity victim)

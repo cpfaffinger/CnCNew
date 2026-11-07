@@ -75,7 +75,8 @@ public static class SimulationQueries
     public static bool CanFireAt(SimulationWorld world, Entity source, Entity target, FireOrigin origin = FireOrigin.Player)
     {
         if (target.DestroyRequested || target.Body is null) return false;
-        return world.ChooseWeaponInView(source, target, origin).CanFire && world.CanPlayerSee(source.Owner, target);
+        return world.ChooseWeaponInView(source, target, origin).CanFire
+               && (origin == FireOrigin.Player ? world.CanPlayerForceTarget(source.Owner, target) : world.CanPlayerSee(source.Owner, target));
     }
 
     /// <summary>The unit can take an attack order: it has a weapon, or it is a container whose riders may fire (<c>Object::isAbleToAttack</c>, F-60).</summary>
