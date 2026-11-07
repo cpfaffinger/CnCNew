@@ -301,13 +301,13 @@ public sealed partial class SkirmishAi
         var before = Stats.Commands;
         Stats.Thinks++;
         if (_world.Navigation is { } seen) StampVisibleCells(seen);
-        ProduceWorkers();
-        BuildStructures();
+        var workerPrice = ProduceWorkers();
+        BuildStructures(workerPrice);
         ManageSites();
         RepairStructures();
         BuyScience();
         UsePowers();
-        ProduceArmy();
+        ProduceArmy(workerPrice);
         SetRallyPoints();
         CommandArmy();
         UseTunnels();
@@ -489,38 +489,66 @@ public sealed partial class SkirmishAi
 
     private int InFlight(Role role) => _inFlight.Count(value => (value.Role & role) != 0);
 
-    /// <summary>Builders first, then supply carriers: the base cannot grow or earn without them.</summary>
-    private void ProduceWorkers()
+    /// <summary>
+    /// Builders first, then supply carriers: the base cannot grow or earn without them. Returns the price the army must leave in the bank: that of a missing worker that could be queued
+    /// but for its price, and, once a supply center stands, that of a replacement carrier. The army buys at its own, lower prices every think, and a player that has lost its carriers
+    /// would otherwise never see the price of the next one - with no carrier there is no income.
+    /// </summary>
+    private Fixed ProduceWorkers()
     {
+        var saving = Fixed.Zero;
         var builders = CountAlive(Role.Builder, false) + InFlight(Role.Builder);
         var supply = CountAlive(Role.SupplyCenter, false);
         // The GLA worker also carries and goes off to look at the supply source, and with one of them the base would stand still until it is back.
         var builderCarries = _units.Any(value => (RoleOf(value.Template) & Role.Builder) != 0 && (RoleOf(value.Template) & Role.Carrier) != 0);
         var wantBuilders = supply > 0 || _structures.Count > 1 || builderCarries ? 2 : 1;
-        if (builders < wantBuilders) QueueWorker(Role.Builder);
+        if (builders < wantBuilders) saving = QueueWorker(Role.Builder);
         var carriers = CountAlive(Role.Carrier, false) + InFlight(Role.Carrier);
         var wantCarriers = _warehouses.Count == 0 && CountAlive(Role.Carrier, false) > 0 ? 0 : Math.Min(_plan.MaxCarriers, _plan.CarriersPerCenter * Math.Max(0, supply));
-        if (carriers < wantCarriers) QueueWorker(Role.Carrier);
+        if (carriers < wantCarriers) saving = Fixed.Max(saving, QueueWorker(Role.Carrier));
+        // Once a center stands, the price of a replacement carrier stays in the bank: a raid that kills every carrier at once leaves a player with less than that price and no income, for good.
+        if (supply > 0) saving = Fixed.Max(saving, CheapestWorkerPrice(Role.Carrier));
+        return saving;
     }
 
-    private void QueueWorker(Role wanted)
+    private Fixed CheapestWorkerPrice(Role wanted)
     {
+        var cheapest = Fixed.Zero;
+        foreach (var producer in _structures)
+        {
+            if (ProductionOf(producer) is null) continue;
+            foreach (var template in ProducibleBy(producer.Template))
+                if ((RoleOf(template) & wanted) != 0 && PrerequisitesMet(template) && (cheapest == Fixed.Zero || template.BuildCost < cheapest)) cheapest = template.BuildCost;
+        }
+        return cheapest;
+    }
+
+    /// <summary>Queues the first worker of the wanted role that can be paid; if there is none but one only waits for its price, returns the cheapest such price.</summary>
+    private Fixed QueueWorker(Role wanted)
+    {
+        var shortOf = Fixed.Zero;
         foreach (var producer in _structures)
         {
             var production = ProductionOf(producer);
             if (production is null || !production.HasRoom) continue;
             foreach (var template in ProducibleBy(producer.Template))
             {
-                if ((RoleOf(template) & wanted) == 0 || template.BuildCost > _budget || !PrerequisitesMet(template)) continue;
+                if ((RoleOf(template) & wanted) == 0 || !PrerequisitesMet(template)) continue;
+                if (template.BuildCost > _budget)
+                {
+                    if (shortOf == Fixed.Zero || template.BuildCost < shortOf) shortOf = template.BuildCost;
+                    continue;
+                }
                 if (Backoff(unchecked(producer.Id.Value * 31u + (uint)template.Index + 1_000_000u), ShortRetryFrames)) continue;
                 var result = Send(sequence => new QueueProductionCommand(_player, sequence, _tick, producer.Id, template.Name));
                 if (!result.Accepted) continue;
                 _budget -= template.BuildCost;
                 _inFlight.Add((RoleOf(template), _tick + _world.ScaleBuildTicks(template.BuildTicks) + _time.OriginalFrames(InFlightMarginFrames)));
                 Stats.Productions++;
-                return;
+                return Fixed.Zero;
             }
         }
+        return shortOf;
     }
 
     private static ProductionUpdate? ProductionOf(Entity entity)
@@ -674,7 +702,7 @@ public sealed partial class SkirmishAi
         return next;
     }
 
-    private void BuildStructures()
+    private void BuildStructures(Fixed workerPrice)
     {
         var goals = PlanGoals();
         if (goals.Length == 0) return;
@@ -697,7 +725,7 @@ public sealed partial class SkirmishAi
             var next = NextStructure(role, out _);
             if (next is null) { if (essential) break; continue; }
             // What the first center will cost is not spent on the buildings behind it either.
-            var behind = role == Role.SupplyCenter ? reserved : Fixed.Max(reserved, centerPrice);
+            var behind = role == Role.SupplyCenter ? reserved : Fixed.Max(Fixed.Max(reserved, centerPrice), workerPrice);
             if (next.BuildCost + behind > _budget)
             {
                 if (reserved == Fixed.Zero) reserved = next.BuildCost;
@@ -1061,10 +1089,10 @@ public sealed partial class SkirmishAi
     /// "unaffordable" and 328 times with an order (docs/AI-OBSERVED-2026-10-08.md).
     /// </para>
     /// </summary>
-    private void ProduceArmy()
+    private void ProduceArmy(Fixed workerPrice)
     {
         var armyCount = _units.Count(value => (RoleOf(value.Template) & Role.Army) != 0);
-        var spendable = armyCount < 4 && CountAlive(Role.SupplyCenter, true) > 0 ? _budget : _budget - _reserve;
+        var spendable = Fixed.Max(Fixed.Zero, (armyCount < 4 && CountAlive(Role.SupplyCenter, true) > 0 ? _budget : _budget - _reserve) - workerPrice);
         var served = new HashSet<uint>();
         while (true)
         {
