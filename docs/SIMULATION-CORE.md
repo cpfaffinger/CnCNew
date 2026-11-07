@@ -5135,3 +5135,114 @@ The register said the original checks stealth only when an attack approaches or 
 - **F-139**: a builder killed in its frame's first tick after its update leaves its idle stamp (`boredSince`) where the previous frame set it above 30 Hz; the 30 Hz look of that frame wrote it before the death. A field of a dead object with no consequence; it ends a field comparison of a whole match, which `--ignore boredSince` passes.
 - **F-140**: the original's attack machine alternates AIM_AT_TARGET and FIRE_WEAPON one state per frame (`AIAttackFireWeaponState::update` fires and returns success into AIM, whose `onEnter` continues; AIM's next update returns success into FIRE's `onEnter`), so FIRE's update - the only place a shot is fired - runs every other frame, and an odd delay between shots looks like it rounds up by a frame. The port fires when the weapon is ready. If it holds, it changes every fight of every match: Phase 62 measures it first.
 - The Avenger's laser turret riding its tank turns back a frame early at 60 Hz (America against China, frame 13,111), and a GLA worker's place parts (China against GLA, frame 18,927): both on the state before §85.4, which changes every pairing; to be traced again on the final state.
+
+## 86. Phase 62: the original's fire cycle
+
+### 86.1 F-140: the attack machine fires every other frame
+
+The original's `AttackStateMachine` (`AIStates.cpp`) has `AIM_AT_TARGET` succeed into `FIRE_WEAPON`, and `FIRE_WEAPON` go back to `AIM_AT_TARGET` on success and on failure; a
+turret's `TurretStateMachine` (`TurretAI.cpp`) does the same with `TURRETAI_AIM` and `TURRETAI_FIRE`. `StateMachine::updateStateMachine` runs one state's update per logic frame and
+enters the next state at the end of it (`internalSetState`), so the update of the state entered in a frame comes in the next one. After a shot the weapon aims in the next frame and
+fires in the one after: the gap after a delay of D frames is the smallest even number from max(D, 2) on; a contact weapon on the body, whose aim state succeeds as it is entered
+("Contact weapons don't aim. They just go boom."), checks every frame and fires every max(D, 1) frames; `Object::preFireCurrentWeapon` starts a wind-up when the fire state is entered,
+if the weapon will be ready by the next frame, so a wind-up comes one frame earlier than the port began it. The port fired whenever the weapon was ready: the Ranger's rifle
+(`DelayBetweenShots` of 4 frames on a 30-frame clip reload) fired 11 % too often. Zero Hour Reforged names the same cycle (`holdToRetailFireCycle`).
+
+Every attack machine now carries a `FireCycle` (its phase and the tick its update is due), written only while it runs: the body's on the attack on an object
+(`AcquisitionState.Cycle`) and on the attack on a place (`AttackPlaceState.Cycle`), a turret's on its `TurretState`. It steps in the unit's own frames - its acquisition step (its own
+attacks, guarding, riders, slaves), a fire order, the attack on a place - and the ready ticks of the weapons are unchanged; readiness is judged per frame of the unit. The machines
+restart when a new attack begins and when the target leaves the weapon's range (`AIAttackState::onEnter`/`onExit`, `outOfWeaponRangeObject`); an attack whose weapons are all out
+of ammunition fails (`AIAttackState::update`). An ordered attack (a fire order) runs its machine in every frame of the unit whether an order arrives in it or not, and fires once per
+order received since its last shot (`AcquisitionState.ShotPending`), so the stream of a command giver - which orders while the weapon is ready - fires on the machine's frames. The
+paths the original fires outside the attack machine keep their timing: a script's one-off command button, an order to an object without an AI.
+
+Tests (`Tests.FireCycle.cs`, at 30, 60 and 120 Hz with the same frames): delays of 9, 10 and 0 frames, a clip and its reload on the body and on a turret (the Ranger's rifle 0, 4, 8,
+30; the Overlord's gun 0, 10, 70, 80, 140), a contact weapon, a wind-up, a turret that turns again while it reloads, an ordered attack against the unit's own, a snapshot between two
+shots; two real-data tests count the shots of the attack machine. Existing tests that encoded the immediate shot of an order or the old gaps are changed with a note naming F-140.
+
+### 86.2 An order giver waits for its pending shot
+
+With the shot on the machine's frame the weapon stays ready for up to two frames after an order, and the givers of fire orders - a player's standing orders, the reference
+driver, the objective driver - sent one in every tick of them: the reference match grew from 306,705 to 884,368 commands, and on the wire every one is an intent of the 64 a player
+may send in a tick. `SimulationWorld.IsShotPending` says that an order of the last two frames still waits for its shot; the givers wait, and order again after two frames, so an
+attack whose turret still turns keeps its grace (`OrderedAttackGraceFrames`).
+
+### 86.3 Two causes found on the way
+
+A deploy-style unit (`DeployStyleAIUpdate`) that is ordered to move ends its attack at once and only holds the walk while it packs (`DeployStyleAIUpdate::aiDoCommand` hands the
+order to `AIUpdateInterface`); the port kept the attack, whose machine went on asking to deploy. No field of the manifest moved.
+
+A boarder's arrival reads its container where the frame ends (rule 4 of the frame convention, §43): above 30 Hz a container that moves is still covering its step in the frame's
+first tick, so a boarder at the edge of the reach went in at 60 Hz and gave up at 30 Hz (the default match America against China on Alpine Assault parted at frame 9,557 once F-140
+had moved its course).
+
+### 86.4 F-40: the forced exceptions and the first shot of a continue range
+
+`WeaponSet::getAbleToAttackSpecificObject` refuses a stealthed victim that the attacker's player does not see, except for a forced attack (`ATTACK_FORCED`, a player's order)
+on an object of the attacker's own player (`sameOwnerForceAttack`) and on a `DISGUISER` in disguise, which a player sees as the object it looks like. The port refused both: a
+player's fire order on such a victim is checked with `SimulationWorld.CanPlayerForceTarget` now (seen, or a disguised `DISGUISER` in a visible cell, not inside a container, no
+beacon), `IsAttackable` lets a forced attack through for the two cases (`StealthYieldsToForce`), and an attack keeps a hidden victim only when it is a player's forced attack on
+that victim (`KeepsAttackIntent`). `AIAttackState::onEnter` sets `IGNORING_STEALTH` for a weapon with a continue range and its first shot clears it: the next victim of a mine
+clearer is one its player sees (`IsClearingVictim(..., ignoringStealth: !HasFiredAt(...))`, `ContinueAttack` never ignores stealth), and the bored dozer's `findMine` does not
+ignore it either. `3bc6b71f`; tests `ForcedAttackIgnoresStealthOfOwnAndDisguised`, `ContinueRangeSeesStealthAfterTheFirstShot`, both failing on the code before at 30, 60 and
+120 Hz. No field of either manifest moved.
+
+### 86.5 F-141's rest and F-137
+
+The rest of F-141 (`Drawable::getShouldAnimate`, the map properties `objectRecruitableAI` and `objectSelectable`) is in §85.7, the train's boarder in §85.5. The map's flags
+came with a defect that only the real data showed: the pre-check of `PlaceMapObjectCommand` still refused every flag above the five of Phase 60, so a map that names
+`objectSelectable` or `objectRecruitableAI` lost those objects, and the analysis of `Game.Tests` saw a Chinese computer player that collected nothing. Every bit of the byte is a flag now; the fix went into the same commit (`8edef006`), with a line of `MapObjectsComeWithTheirProperties` that
+places an object with all of them. F-137 (`62136c49`, `f8a4d3f0`): `SimEventKind.RadarNotice` (94) where the original tells the radar about one object (a stealthed object
+found, the start of a capture or a hack, a battle plan, an overcharge that gave out), a hijack and a car bomb name the former owner, and the space bar knows every radar event
+of the original (`HudMessageFeed`); not built: their sounds and the minimap blip of the new kinds.
+
+### 86.6 The rate differences of the final state (item 2)
+
+The 16 pairings were compared at 30 and 60 Hz on the state before this item (`SimTool rate-compare --map-diff ... --fields --frames 50000 --persist 10`, options of Phase 45 and `boredSince`): five were the same game to frame 50,000 (Alpine Assault ChinaTank against AirForce, Bitter Winter ChinaTank against AirForce and GLA against America, Death Valley ChinaTank against AirForce and GLA against America), eleven parted. Eight causes, each read where the first lasting difference began:
+
+- **F-144** (`29beec0b`; test `AContainedRiderTurnsOncePerFrame`): a rider that is already contained - the pilot under its parachute that looks for a vehicle - covered a new turn in every tick above 30 Hz, because `CollideWhereTheFrameEnds` took being contained for having just entered a container (Bitter Winter America against China, frame 20,885).
+- **F-145** (test `ATrainHitsInTheFirstTickOfItsFrame`): the map's locomotive covered its step tick by tick and answered what it hit in the frame's last tick, so a supply truck it ran over saw its death a frame later than at 30 Hz and its hulk and debris lay elsewhere (Alpine Assault America against China, frame 26,609). The train now takes the whole 30 Hz step, the carriages and the collision in the first tick of the lead's frame; it moves once per frame of the original above 30 Hz.
+- **F-146** (`88489c81`; test `ToppleBeginsOnTheTreesNextFrame`): a toppling tree or fence began its first step in the tick after the push, half a frame ahead above 30 Hz when a vehicle pushed it in a frame's first tick (Armored Fury, four pairings, and Bitter Winter China against GLA). The rate suite's own test had encoded that lead (it read the fall one tick after the push) and was changed with it.
+- **F-147** (test `BoredDozerSeesAHurtBeforeItsUpdate`, `...LooksBeforeAHealOfTheSameTick`): the 30 Hz look of the bored dozer runs inside its update and sees what lower ids and the phases before the updates did, not what a second dozer healed after it; above 30 Hz the look stood at the frame end behind all of that, so a dozer took no repair at 60 Hz that it took at 30 Hz (Alpine Assault GLA against America). The structure is chosen in the frame's first tick; the old first-hurt filter (F-85, F-138) is gone and `ActiveBody.HurtSince` is no longer read.
+- **F-148** (test `ASinkingBodyThatWalksEndsEachFrameBelowTheGround`): a slow death that sinks a body while it still walks put the sink in the frame's first tick and the last movement share put the object back on the ground (Alpine Assault China against GLA, a worker's height); `Entity.PendingSink` holds the sink until the last share.
+
+After these five the same eleven runs were compared again on the final code. After these five the eleven runs that had parted were compared again on the code of that state: **six of them are the same game at 30 and 60 Hz to frame 50,000 now** (Alpine Assault China against GLA and GLA against America, Armored Fury GLA against America, Bitter Winter America against China and China against GLA - together with the five that were never apart that is ten of the sixteen); the other six parted later or elsewhere, each at a new first lasting difference that the fixes uncovered: Alpine Assault America against China at frame 26,690 (F-149), Armored Fury America against China at 14,280 (F-152), China against GLA at 26,584 (F-153), ChinaTank against AirForce at 6,006 (F-154), Death Valley America against China at 33,240 (F-150) and China against GLA at 21,554 (F-151); each is registered with its fields and frame, not traced.
+
+One manifest measurement covers the five (`47e77f18`), not one per cause - every measurement is an hour of both cores: 49 of 50 runs move their hashes at 60 Hz, one outcome field moves (Alpine Assault America against China ends at tick 76,621 instead of 78,211, the same winner), the ten decided pairings stay decided, the reference match stays a stalemate at tick 108,000 with 884,368 commands, the stress test is unchanged.
+
+Registered, not fixed: **F-149** the hulk of a supply truck killed by the train has another height at frame 26,690 (Alpine Assault America against China: `.z` 80.18 at 30 Hz, 79.96 at 60 Hz - a thrown body's gravity), **F-150** an Avenger's laser turret riding its tank turns a frame early at 60 Hz (Death Valley America against China, frame 33,240), **F-151** two Red Guards on Death Valley (China against GLA, frame 21,554) stand a fraction of a unit apart at the two rates (a collision or avoidance step of infantry).
+
+### 86.7 The owner's playtest of 7 November 2026
+
+Twenty-three findings of a skirmish on `9f04c34a`; each was reproduced by a program where it could be, fixed as the original does it where the original has the feature, and pinned. **No human has seen the fixes.**
+
+- **The modern skin is the default for everyone** (settings schema 6: the migration sets `display.skin` to modern in every older file; a skin chosen afterwards in "More options" sticks). Starting cash goes up to 75,000 and 100,000. **Windowed fullscreen** is a display mode (`borderlessFullscreen`, a frameless window at the desktop's resolution of its display; the saved mode is applied at start now).
+- **Pause:** the picture's own motion (model animations, wheels, animated textures, water) now stands while the match is paused (`W3DDisplay::draw` freezes the sync time of W3D); the music pauses as `GameLogic::setGamePaused(TRUE)` pauses it in the original instead of being ducked. The in-game menu's Options, Save/Load, Restart and Exit work in a skirmish (they only raised an event before; Save wrote one fixed slot). E and select-all print `GUI:SelectedAcrossScreen`, `GUI:SelectedAcrossMap` or `GUI:NothingSelected`.
+- **Fog:** an object remembered under the fog was shown at 0.23 of its brightness instead of the original's 0.5 - the fog factor was passed as a colour constant, which Stride converts from sRGB to linear light (`FogDimming`). The minimap texture was read as linear light and everything came out brightened, so the three levels of the shroud barely differed; it is an sRGB texture now. A unit of a control group shows its group's number beside its health bar (`DrawGroupInfo`).
+- **Strategy Center:** the plan switched in the simulation on all four centers (a real-data test at the three rates), what was missing is what the player sees: the button of the wanted plan is pressed (`COMMAND_ACTIVE`) from the click on, the stop button greys unless bombardment runs, an "Initiated" line and the unpack, pack and announcement sounds. The doors do not yet play at the plan's 7 s (the original stretches them with `setAnimationLoopDuration`).
+- **Guard:** a unit on guard walked at wrecks - a hulk is `UNATTACKABLE` with default armour, so the sniper's round "hurt" it and the guard's victim test never looked at the kind (`getAbleToAttackSpecificObject`). Garrisoning: `OpenContain::onCollide` takes a unit in on contact with the building's geometry; the port skipped every structure and the walk ended at the centre (now the rotated footprint grown by the unit's radius).
+- **Reactor and upgrades:** the INI writes `Model ABPWRPLANT_A1` without an `=`, and the data compiler dropped every such line inside a module or state - the rods of every reactor (never drawn, upgraded or not), 616 `AliasConditionState`, 21 `ExtraPublicBone`, 21 `AnimationSpeedFactorRange`; the 45 draw errors it caused had never been read. `INI::initFromINIMulti` reads them as fields. And the presentation never read `SubObjectsUpgrade` (the bomb truck's load, the Helix's bomb wing): all 19 modules show and hide their sub-objects now. The definition snapshot and the world fingerprint move.
+- **Comanche:** the original keeps a preferred weapon while it merely reloads (`WeaponSet::chooseBestWeaponForTarget`: "preferred weapons are also kept if they are merely reloading"), so the helicopter waits for its missiles; the owner wants the cannon. A rule fix (`preferred-weapon-yields-while-clip-empty`, product profile): a preferred weapon with an empty clip no longer counts as ready.
+
+### 86.8 The debug options of a match
+
+`MatchDebugOptions(BuildTimePercent = 100, NeutralRespawnSeconds = 0, StartingGeneralPoints = 0)` is part of the match description (encoding **3 to 4**, the skirmish save **3 to 4**, protocol **8 to 9**; `CommandTypes.Version`, the replay format and `WorldSnapshot` unchanged): every machine builds the same match. **Quick build:** `SimulationWorld.ScaleBuildTicks` shortens the time inside `BuildTicksUnderPower` and the upgrade queue before the power ratio - 10 per cent of the normal time for units, structures and upgrades; cost, refund, progress bars, tooltips and the AI's in-flight estimate follow (sciences have no research time). **Returning neutral buildings:** the world records the map's neutral `STRUCTURE` objects when it places them (a building that starts as rubble, map health 0, is never recorded); after N game seconds a destroyed, rubble or zero-health one comes back at its place, angle, flags and attitude as a new neutral object at full health, retried every second when the place is blocked; the state (records and timers) is in the snapshot and the hash only when the option is on. **General points:** `GiveSciencePointsCommand` at tick 0 for every player. `ReplayRunner.CreateWorld` reads the options from the replay header's description, so a bare-world replay follows them. Tests: four simulation tests at the three rates, one `Net.Tests` test, one setup and one room test in `Game.Tests`; a match left at the defaults is the match of before (the quick reference set differs only in `commandStreamSha256`, which carries the encoding).
+
+### 86.9 The Daisy Cutter and the fuel air bomb that never exploded (F-155)
+
+`SUPERWEAPON_DaisyCutter` drops `DaisyCutterBomb`; when the bomb dies at 50 units `OCL_DaisyCutterExplode` makes `DaisyCutterGas` `LIKE_EXISTING`, which must fall to 40 units, ignite and fire `DaisyCutterDetonationWeapon`. `ObjectCreationNugget::reallyCreate` calls `setAllowToFall(true)` for a `LIKE_EXISTING` object made by an airborne source and the original's physics applies gravity to everything above the ground; the port's physics module only fell what it was told to release, so the gas hung at about 49 units for ever (the chain showed plane, bomb and gas created, then nothing). A `LIKE_EXISTING` object with a physics module that is made above the ground now starts a physics flight and may leave the ground (`SpawnThrow.AllowToFall`, `PhysicsBehavior.Launch(allowToFall)`; the pending-spawn state gets an optional `throwFall`, written only when set). Test `RealDaisyCutterAndFuelAirBomb` on real data: the power from the command centre, the Daisy Cutter and the fuel air bomb of `SCIENCE_MOAB`, two enemy tanks and a barracks at the target destroyed, a tank 400 units away untouched, at 30, 60 and 120 Hz. The A-10 strike, the carpet bomb and the artillery barrage were probed and destroy their targets; the upgraded fuel air bomb (`MOAB`) already detonated, and its own B-3 carrier dies in its blast in the port (it is about 95 units above the 150-unit radius; not checked against the original). **Open (F-156):** the gas falls for 29, 33 and 35 frames at 30, 60 and 120 Hz because `DeliverPayloadAIUpdate` releases the bomb a frame earlier above 30 Hz.
+
+### 86.10 The economy of the built-in AI (F-160)
+
+`docs/SKIRMISH-AI.md` 7d: three causes found by `SimTool econ-survey` (no first supply centre, idle carriers while supplies remain, lost carriers not replaced) and fixed in `BuildStructures`, `ProduceWorkers`, `QueueWorker`, `ProduceArmy` and `OrderCarriers`; no AI state field was added.
+
+### 86.11 What it moved (measured)
+
+Measured on the final state of this phase (`5d9f4f53`, 60 Hz):
+
+- **Reference manifest** (one measurement for all the causes of the phase after `47e77f18`, the rate corrections, not one per cause): 49 of 50 runs move their hashes; **nine of the 16 pairings are decided** (ten after the rate corrections, 12 at Phase 61); Alpine Assault China against GLA, ChinaTank against AirForce and GLA against America end in a stalemate at tick 90,000, Armored Fury and Death Valley America against China become decided wins for America; every other decided run keeps its winner or changes its end tick; the retail reference match (a stalemate at tick 108,000, `085358A5CDC18557` / `6C30ECE5558348E3`, 884,368 commands) and the stress test (`20359BA8A2093B99` / `2967E6B3B1BCFDDD`) are the same as after the rate corrections. Balance not judged.
+- **Input manifest** (`e95e9b87`): the definition snapshot grows from 153,936,514 to 154,213,270 bytes (the parser fix), the world fingerprint moves, the whole catalog has one more value (the new rule fix); every other catalog is unchanged. The compatibility baseline stays at 632.
+- **AI survey** (`SimTool ai-survey --seeds 4 --minutes 45`, 64 matches, before F-140 and after it): 53 and 51 decided; the econ fixes were measured separately (`docs/SKIRMISH-AI.md` 7d).
+- **Tests:** the whole synthetic `Simulation.Tests` was green at 30 Hz on the state with the five rate fixes and the first agents' work (not rerun on the final state outside tier 4); the rate-equivalence suite has one case outside tolerance left, `Boss_InfantryAngryMobNexus` (known since Phase 34), and its timed group passes since the train's speed is read per frame; `Net.Tests` 59 of 59; the whole `Game.Tests` in Release: 364 passes, eight failures - four pictures of the room and the kicked screen that were rewritten with the AI options and read the older binary (green after the rebuild), and the analysis and observer pictures of computer matches, which were rewritten on purpose (`e7509e3f`). `Presentation.Tests` ran per suite in the worktrees of the agents, not once on the final state.
+- **Version numbers:** match description encoding **4**, skirmish state save **4**, protocol **9**, settings schema **6**; `CommandTypes.Version` 27, replay 26, `WorldSnapshot` 11, `MissionSnapshot` 4, transport 2 unchanged.
+- **Not run:** `scripts/perf-profile.ps1`, the clean room, the campaign checks, the survey on the final state, the determinism matrix; no human has seen, heard or played any of it.

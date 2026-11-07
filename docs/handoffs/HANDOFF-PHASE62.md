@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 62
-> **Status:** current (written 6 November 2026 at the end of Phase 61)
+> **Status:** done by machine (7 November 2026; `docs/SIMULATION-CORE.md` §86; written 6 November 2026 at the end of Phase 61)
 > **Predecessor:** HANDOFF-PHASE61.md · **Results in:** `docs/SIMULATION-CORE.md` §86, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -57,3 +57,15 @@ Tier 4 at the final state; every item built or named with its reason.
 ## Final report and N+1
 
 Numbers with commit hashes, the tier that ran, what was not run, what no human has seen; the registers of `docs/plan/` brought up to date; the next brief written.
+
+## Result (7 November 2026)
+
+Done by machine, on one machine; no human has seen or heard any of it. Per item:
+
+1. **F-140:** built (§86.1, §86.2): every attack machine carries a `FireCycle`; the givers of fire orders wait for their pending shot (the reference match's command count grew from 306,705 to 884,368; the wait did not change the manifest, the cause is bigger armies and F-143, named). The Ranger's rifle no longer fires 11 % too often. Two causes found on the way (§86.3).
+2. **The rate differences:** the 16 pairings were compared; eleven had parted, five causes were found and fixed (F-144 to F-148, §86.6), **ten of the sixteen are the same game at 30 and 60 Hz now**, the other six have their first lasting difference registered (F-149 to F-154).
+3. **F-40's rest, 4. F-141's rest, 5. F-137, 6. the train's boarder:** built (§86.4, §86.5, §85.5, §85.7).
+
+Added on the same day: the owner's playtest of 7 November (23 findings, §86.7 to §86.10) - see `docs/ACCEPTANCE-FINDINGS.md`.
+
+Found on the way: F-143 (overlapping units of two players; the approach goal of a minimum-range weapon is the attacker's own place), F-149 to F-159 (open), the INI parser that dropped every `Key value` line (F-161), the Daisy Cutter's gas (F-155), the AI economy (F-160).

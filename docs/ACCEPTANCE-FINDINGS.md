@@ -115,3 +115,31 @@ A skirmish on `aed7048c`, twelve findings. Each is read in the original's source
 | 12 | The computer's Chinooks hover over the supply center and collect nothing | Reproduced on Alpine Assault (`SimTool ai-match`, a trace of the supply AI): the Chinooks do collect and deliver, but those that wait for a warehouse hovered in the one that docked, so three of four looked idle | As 3: a dock's approach takes a goal cell of its own (`39e53c30`) |
 
 Not judged by a program: whether the shadows and the maps' light look like the original's; how the capture, the idle worker and the space bar feel.
+
+## The owner's playtest of 7 November 2026
+
+Build `9f04c34a` on a handheld-sized test PC; 23 findings, each read in the original where it has the feature, each fixed or named as a limit; **no human has seen the fixes.** `docs/SIMULATION-CORE.md` §86.7 to §86.10 has the causes.
+
+| # | Finding | Cause | Fix |
+|---|---|---|---|
+| 1, 5 | The interface is still the old stock one; make the new skin the default | the modern skin was the default for a first start only; a saved `display.skin = original` stayed | settings schema 6 sets it for every file |
+| 2 | A pause does not stop the buildings' motion (the radar tower's shadow, the dish); the music runs on | the picture's own motion ran on real time; the port ducked the music, the original pauses it | `LiveGame.AnimationSeconds`, the mixer holds the track |
+| 3 | The pause menu's Load/Save, Options and Restart do nothing | the HUD only raised an event; the client handled one fixed Save slot | the original's screens and questions, Exit too |
+| 4 | Windowed fullscreen | missing | `display.mode` = `borderlessFullscreen` |
+| 6, 13 | The reactor lacks details; an upgraded reactor shows no rods | the INI parser dropped every `Key value` line without `=` inside a module or state (the rods' states); the presentation never read `SubObjectsUpgrade` | parser fix, `SubObjectOverrides` |
+| 7 | A depot under the fog is almost invisible | the fog factor passed as a colour constant reached the surface in linear light (0.23 of the brightness instead of 0.5) | `FogDimming` |
+| 8 | No fog on the minimap | the minimap texture was read as linear light | an sRGB texture |
+| 9 | Starting cash to 75k and 100k | | the shared list |
+| 10, 11 | Select buildings like units; production distributed over them; the rally point for all | the original selects one building at a time | structure groups, `ProductionBalancer` (docs/PRESENTATION-INPUT.md 5a) |
+| 12 | Tab through the abilities of a mixed selection | | Tab subgroups |
+| 14 | Units garrison up to the building's middle | the port skipped structures in the touch rule | the wall |
+| 15 | A control group is not shown at the health bar | not drawn | the group number |
+| 16 | A sniper on guard walks at vehicles | the guard did not test `UNATTACKABLE` (a vehicle's hulk) | the original's test |
+| 17 | E and EE print no message | missing | `GUI:SelectedAcrossScreen` and the two others |
+| 18 | The Patriots show no beams when they pass a target on | not drawn | **open** (F-158) |
+| 19 | The enemy stops collecting | three economy stops of the built-in AI | `docs/SKIRMISH-AI.md` 7d |
+| 20 | A fuel bomb never explodes | the gas made in the air never fell | F-155 |
+| 21 | The Strategy Center's plans do not switch | they switched; the bar showed nothing (no pressed button, no message, no sound) | the pressed button, the line, the sounds; the doors' speed open (F-157) |
+| 22 | The Comanche does not fire its cannon at buildings while its missiles reload | the original's rule: a preferred weapon is kept while it reloads | a rule fix |
+| 23 | Debug options: quick build, returning neutral buildings, general points | | `MatchDebugOptions`, protocol 9 |
+| 24 | Choose the AI (old or new, aggressive, turtle, eco) in the setup | the engine was a command-line option | the AI options screen |
