@@ -102,6 +102,22 @@ static partial class Tests
             Until(() => plan.ActivePlan == BattlePlanKind.Bombardment, "bombardment", 2 * sevenSeconds);
             Until(() => plan.ActivePlan == BattlePlanKind.HoldTheLine, "hold the line after the unpack", 2 * sevenSeconds + 8 * frame);
             Check.That((ranger.WeaponBonusConditions & (bombardBit | searchBit)) == 0 && (ranger.WeaponBonusConditions & holdBit) != 0, $"{centerName}: only hold the line is in force at the end.");
+
+            // A second center of the same player (a captured one; the build limit keeps a player's own to one): the plans of both count, and one center changing its plan leaves the other's in force.
+            var second = Spawn(centerName, 1, 700, 600);
+            var secondPlan = second.Modules.OfType<BattlePlanUpdate>().Single();
+            for (var tick = 0; tick < world.Frames(30); tick++) world.Step();
+            Check.That(world.Submit(new UseSpecialPowerCommand(new PlayerId(1), ++sequence, world.Tick, second.Id, "SpecialAbilityChangeBattlePlans", SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero, 1)).Accepted,
+                $"{centerName}: the second center is told to bombard.");
+            Until(() => secondPlan.ActivePlan == BattlePlanKind.Bombardment, "the second center's bombardment", sevenSeconds + 6 * frame);
+            Check.That((ranger.WeaponBonusConditions & (bombardBit | holdBit)) == (bombardBit | holdBit), $"{centerName}: the army has the bonuses of both centers.");
+            Choose(3, "search and destroy at the first center");
+            Until(() => plan.ActivePlan == BattlePlanKind.SearchAndDestroy, "search and destroy at the first center", 2 * sevenSeconds + 8 * frame);
+            Check.That((ranger.WeaponBonusConditions & (bombardBit | searchBit)) == (bombardBit | searchBit) && (ranger.WeaponBonusConditions & holdBit) == 0 && world.DamageScalarOf(ranger) == Fixed.One,
+                $"{centerName}: the first center changed, the second one's bombardment stays and hold the line is gone.");
+            world.Kill(second.Id);
+            for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
+            Check.That((ranger.WeaponBonusConditions & bombardBit) == 0 && (ranger.WeaponBonusConditions & searchBit) != 0, $"{centerName}: the second center destroyed, its bombardment goes with it.");
         }
     }
 }
