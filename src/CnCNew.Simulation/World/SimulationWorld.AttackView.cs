@@ -133,7 +133,8 @@ public sealed partial class SimulationWorld
     private readonly PriorityQueue<int, long> _attackSearchOpen = new();
 
     /// <summary>
-    /// <c>Pathfinder::findAttackPath</c> for a ground unit of the kind <c>ATTACK_NEEDS_LINE_OF_SIGHT</c>: the place it moves to so that it can fire at the victim - first up to nine
+    /// <c>Pathfinder::findAttackPath</c> for a mobile ground unit with a weapon that is not a contact weapon (F-143: <c>AIAttackApproachTargetState::computePath</c> asks it for every
+    /// such attacker; the port asks it for a unit of the kind <c>ATTACK_NEEDS_LINE_OF_SIGHT</c> and for one that stands inside its weapon's minimum range): the place it moves to so that it can fire at the victim - first up to nine
     /// points half a cell apart straight toward the victim, then a search outward from the unit toward the victim over at most 2,500 cells; the first that is passable for the
     /// unit, within the weapon's range less a quarter cell (and outside its minimum range plus as much) and has a clear view is the goal. Null when the search finds none:
     /// the unit then walks at the victim and stops where it can fire (the fallback of <c>doPathfind</c>). Not modelled: the test of <c>checkDestination</c> that no other unit
@@ -141,17 +142,40 @@ public sealed partial class SimulationWorld
     /// </summary>
     public (Fixed X, Fixed Y)? FindAttackPosition(Entity unit, Entity victim)
     {
-        if (!AttackUsesLineOfSight || Navigation is not { } grid || Terrain is not { } terrain || !unit.Template.IsKindOf(NeedsLineOfSightKind)) return null;
+        if (Navigation is not { } grid || Terrain is not { } terrain || unit.Template.IsKindOf("IMMOBILE")) return null;
         if (unit.Template.Locomotor is not { } locomotor || (locomotor.Surfaces & LocomotorSurfaces.Air) != 0) return null;
-        var choice = ChooseWeapon(unit, victim, FireOrigin.Ai);
-        if (choice.Slot < 0 || ActiveWeaponSet(unit) is not { } set || !set.HasWeapon(choice.Slot)) return null;
-        var weapon = _templates.Weapons[set.Weapons[choice.Slot]];
+        var (unitX, unitY, _) = unit.FrameEnd(_tick);
+        var (victimX, victimY, _) = victim.FrameEnd(_tick);
+        WeaponInfo? chosen = null;
+        var tooClose = false;
+        // In range but the view is blocked: only a unit of the kind that needs a view is held back by that (F-55).
+        if (AttackUsesLineOfSight && unit.Template.IsKindOf(NeedsLineOfSightKind))
+        {
+            var choice = ChooseWeapon(unit, victim, FireOrigin.Ai);
+            if (choice.Slot >= 0 && ActiveWeaponSet(unit) is { } set && set.HasWeapon(choice.Slot)) chosen = _templates.Weapons[set.Weapons[choice.Slot]];
+        }
+        if (chosen is null)
+        {
+            // F-143: computePath asks with getCurrentWeapon, and the port's choice filters by range, so a victim inside the minimum range of the only weapon answers no slot. The
+            // original asks findAttackPath of every mobile attacker; the port asks it where the walk at the victim would not do: a unit that stands inside its weapon's minimum
+            // range (stacked on the victim, or the victim ran up to it) has to move out of it, while a unit further away passes into the range ring and stops there as the search's
+            // goal would stop it.
+            if (CurrentWeapon(unit) is not { } current || current.MinimumAttackRange <= Fixed.Zero) return null;
+            var closeRange = SquaredReach.Of(current.MinimumAttackRange + GoalRangeMargin);
+            var offX = victimX - unitX;
+            var offY = victimY - unitY;
+            if (!closeRange.ContainsStrictly(offX * offX + offY * offY)) return null;
+            chosen = current;
+            tooClose = true;
+        }
+
+        var weapon = chosen;
+        // A contact weapon paths into its victim ("let the attacker pathfind into the target").
+        if (IsContactWeapon(weapon)) return null;
         var range = weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(unit));
         var far = SquaredReach.Of(range - GoalRangeMargin);
         var hasNear = weapon.MinimumAttackRange > Fixed.Zero;
         var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin);
-        var (unitX, unitY, _) = unit.FrameEnd(_tick);
-        var (victimX, victimY, _) = victim.FrameEnd(_tick);
 
         bool Fits(Fixed x, Fixed y)
         {
@@ -238,6 +262,15 @@ public sealed partial class SimulationWorld
                     cost[next] = through;
                     open.Enqueue(next, Key(through + Heuristic(nx, ny), next));
                 }
+        }
+
+        // computeAttackPath, no place to fire from: "if the move is a short distance, just do a find closest path to our current position. This will unstack us if we are on top
+        // of another unit". The original reaches this with a goal its strip-back moved out of range; here the search found none, and a unit inside its minimum range steps to the
+        // nearest free place beside where it stands (adjustDestination) instead of walking at the victim's point, which it already stands on.
+        if (tooClose)
+        {
+            var (freeX, freeY) = (unitX, unitY);
+            if (FindPossibleDestination(unit, ref freeX, ref freeY) && (freeX != unitX || freeY != unitY)) return (freeX, freeY);
         }
         return null;
 

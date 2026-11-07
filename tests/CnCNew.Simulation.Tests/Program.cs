@@ -275,6 +275,7 @@ run.Test("Phase 58: a ground path wants its width (findGroundPath)", Tests.AGrou
 run.Test("Phase 41 (F-55c): a unit that needs a line of sight does not fire through a structure (outOfWeaponRangeObject)", Tests.AttackNeedsAClearView);
 run.Test("Phase 41 (F-55d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight)", Tests.AcquisitionPassesBlockedCandidates);
 run.Test("Phase 41 (F-55e): the approach of an attack goes where it can fire (findAttackPath)", Tests.ApproachGoesWhereItCanFire);
+run.Test("Phase 63 (F-143): the approach of an attacker with a minimum range keeps the range (findAttackPath)", Tests.AttackApproachKeepsTheMinimumRange);
 run.Test("Phase 41: a destroyed rider leaves its container (Object::onDestroy)", Tests.DestroyedRiderLeavesItsContainer);
 run.Test("Phase 41 (F-61): a garrisoned building belongs to its occupants (recalcApparentControllingPlayer, canEnterObject)", Tests.GarrisonBelongsToItsOccupants);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
