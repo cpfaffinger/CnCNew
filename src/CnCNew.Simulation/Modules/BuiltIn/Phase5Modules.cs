@@ -1895,17 +1895,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (Entity.HasMoveTarget)
         {
             // OpenContain::onCollide: an object whose enter target is this container is taken in as soon as the two touch; it does not have to reach the container's centre
-            // (which another boarder, or a rider that found no room and stands there, may keep it from). A structure keeps the old rule (the walk ends at its wall): its
-            // bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
+            // (which another boarder, or a rider that found no room and stands there, may keep it from). Two objects touch when their geometries overlap: a box-shaped
+            // structure is touched at its wall (a garrison is entered at the edge of the footprint, not at its middle), anything else by the two bounding circles.
             // Decided where the 30 Hz step decides it (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md): in the tick that decided a
             // logic frame's step, with both where that frame ends; the boarder is put there and goes in, in the first tick of the frame like a move that ends.
-            if (container.Template.IsKindOf("STRUCTURE") || !DecidedThisTick(world)) return;
-            var touch = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
+            if (!DecidedThisTick(world)) return;
             var (endX, endY, _) = Entity.FrameEnd(world.Tick);
-            var (insideX, insideY, _) = container.FrameEnd(world.Tick);
-            var tx = insideX - endX;
-            var ty = insideY - endY;
-            if (!SquaredReach.Of(touch).Contains(tx * tx + ty * ty)) return;
+            if (!TouchesContainer(Entity, container, endX, endY, world.Tick)) return;
             // The partition manager's collision is three-dimensional (PartitionManager.cpp, the height test of the geometries): a container hovering above the boarder is not
             // touched, the approach goes on to its end.
             if (!VerticalOverlap(Entity, container)) return;
@@ -1924,6 +1920,26 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var dy = containerY - ownY;
         if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return;
         world.EnterOnArrival(Entity, container);
+    }
+
+    /// <summary>
+    /// Whether the boarder at (<paramref name="x"/>, <paramref name="y"/>) overlaps the container's geometry in the plane, where the container's frame ends: a box-shaped structure is
+    /// measured against its rotated rectangle grown by the boarder's radius (its bounding circle reaches far beyond the walls of a box that is not square), everything else against
+    /// the two bounding circles.
+    /// </summary>
+    private static bool TouchesContainer(Entity boarder, Entity container, Fixed x, Fixed y, long tick)
+    {
+        var (insideX, insideY, _) = container.FrameEnd(tick);
+        var (dx, dy) = (x - insideX, y - insideY);
+        var template = container.Template;
+        var radius = boarder.Template.BoundingCircleRadius;
+        if (template.IsBox && template.IsKindOf("STRUCTURE"))
+        {
+            var angle = container.FrameEndAngle(tick);
+            var (cos, sin) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
+            return (dx * cos + dy * sin).Abs() <= template.GeometryMajorRadius + radius && (dy * cos - dx * sin).Abs() <= template.GeometryMinorRadius + radius;
+        }
+        return SquaredReach.Of(template.BoundingCircleRadius + radius).Contains(dx * dx + dy * dy);
     }
 
     /// <summary><c>Object::isAboveTerrain</c>: the object's position lies above the ground under it.</summary>
