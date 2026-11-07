@@ -655,29 +655,50 @@ public sealed partial class SkirmishAi
         return PlanState.Impossible;
     }
 
+    /// <summary>
+    /// The structure to raise for <paramref name="role"/> now: the first candidate that can be built, or the first missing prerequisite of one; null while a prerequisite is on its way or nothing
+    /// fits. <paramref name="target"/> is the candidate itself (what the role is about), also while only a prerequisite can be raised.
+    /// </summary>
+    private ObjectTemplate? NextStructure(Role role, out ObjectTemplate? target)
+    {
+        ObjectTemplate? next = null;
+        target = null;
+        foreach (var candidate in StructureCandidates(role))
+        {
+            var state = Plan(candidate, 0, out next);
+            if (state == PlanState.Impossible) continue;
+            if (state == PlanState.Waiting) next = null;
+            target = candidate;
+            break;
+        }
+        return next;
+    }
+
     private void BuildStructures()
     {
         var goals = PlanGoals();
         if (goals.Length == 0) return;
         var used = new HashSet<uint>();
         var reserved = Fixed.Zero;
+        // Until the first supply center stands, its price is not spent on anything else - whatever stops the center in this think (its prerequisite is being raised, every builder is at work,
+        // a builder is on its way to look at the ground, the retry interval): the army would spend it, and a player without a center never earns again.
+        var centerPrice = Fixed.Zero;
+        if (Array.IndexOf(goals, Role.SupplyCenter) >= 0 && CountAlive(Role.SupplyCenter, true) == 0)
+        {
+            NextStructure(Role.SupplyCenter, out var firstCenter);
+            if (firstCenter is not null) centerPrice = firstCenter.BuildCost;
+        }
         foreach (var role in goals)
         {
             var builder = PickBuilder(used);
             if (builder is null) break;
             // EconomyFirst (a mission's player agent): until the first supply center stands nothing else is started - a base without income cannot pay for the rest.
             var essential = _options.EconomyFirst && role == Role.SupplyCenter && CountAlive(Role.SupplyCenter, true) == 0;
-            ObjectTemplate? next = null;
-            foreach (var candidate in StructureCandidates(role))
-            {
-                var state = Plan(candidate, 0, out next);
-                if (state == PlanState.Impossible) continue;
-                if (state == PlanState.Waiting) next = null;
-                break;
-            }
+            var next = NextStructure(role, out _);
             if (next is null) { if (essential) break; continue; }
             // What the first center will cost is not spent on the buildings behind it either.
-            if (next.BuildCost + reserved > _budget)
+            var behind = role == Role.SupplyCenter ? reserved : Fixed.Max(reserved, centerPrice);
+            if (next.BuildCost + behind > _budget)
             {
                 if (reserved == Fixed.Zero) reserved = next.BuildCost;
                 break;
@@ -701,9 +722,10 @@ public sealed partial class SkirmishAi
             if (!result.Accepted) { if (essential) break; continue; }
             used.Add(builder.Id.Value);
             _budget -= next.BuildCost;
+            if (bySupplies) centerPrice = Fixed.Zero;
             Stats.Constructions++;
         }
-        _reserve = reserved;
+        _reserve = Fixed.Max(reserved, centerPrice);
     }
 
     private Fixed _reserve;
