@@ -46,6 +46,7 @@ internal static class NetScreenTests
         var updating = Environment.GetEnvironmentVariable("CNCNEW_UPDATE_BASELINES") == "1";
         harness.Run("The way to a room: submenu, address, connecting, the new server's key, the rooms, the popups", () => WayToRoom(data, baselines, updating));
         harness.Run("A room as its host and as a member, the map picker, the shared load screen", () => RoomAndLoading(data, baselines, updating));
+        harness.Run("The debug options of a room: the host changes them and the server is asked, a member sees them and changes nothing", () => RoomDebugOptions(data));
         harness.Run("Every way a server, a room or a connection says no has a screen with its text", () => Refusals(data, baselines, updating));
         harness.Run("A match that did not end by its own rules says why over the score screen", () => MatchEnds(data, baselines, updating));
         harness.Run("With window transitions the same way is walked by a script: every group the screens ask for exists, and nothing is clicked while one plays", () => AnimatedWalk(data));
@@ -128,7 +129,12 @@ internal static class NetScreenTests
         public void AcceptServer() { Calls.Add("AcceptServer"); Stage = LobbyStage.Browsing; }
         public void RefreshRooms() => Calls.Add("RefreshRooms");
         public void Enter(string room, string password = "", bool watch = false, ulong seatToken = 0) { Calls.Add($"Enter '{room}' '{password}'{(watch ? " watch" : string.Empty)}{(seatToken != 0 ? " seat" : string.Empty)}"); RoomName = room; Stage = LobbyStage.Entering; }
-        public void Configure(RoomSettings settings) => Calls.Add($"Configure {string.Join(",", settings.Slots.Select(slot => slot.Kind))} {settings.StartMoney} {settings.MapPath}");
+        public RoomSettings? Configured { get; private set; }
+        public void Configure(RoomSettings settings)
+        {
+            Configured = settings;
+            Calls.Add($"Configure {string.Join(",", settings.Slots.Select(slot => slot.Kind))} {settings.StartMoney} {settings.MapPath}");
+        }
         public void RequestSlot(int slot, string faction, int team, int color, int startPosition) => Calls.Add($"RequestSlot {slot} '{faction}' {team} {color} {startPosition}");
         public void LeaveSlot() => Calls.Add("LeaveSlot");
         public void SetReady(bool ready) => Calls.Add($"SetReady {ready}");
@@ -419,6 +425,81 @@ internal static class NetScreenTests
         Capture(shell, "Net-Loading-Failed", baselines, updating);
         Click(shell, "MessageBox.wnd:ButtonOk");
         TestHarness.Assert(shell.CurrentScreen is NetLobbyScreen, "behind the message stands the server's front");
+    }
+
+    private const string DebugButton = "DebugOptionsButton.wnd:ButtonDebugOptions";
+
+    private static void ChooseDebug(GameShell shell, string combo, int entry)
+    {
+        var tree = shell.CurrentScreen.Tree;
+        tree.Post(CnCNew.Ui.Runtime.UiEventKind.ComboSelected, tree.FindByName($"DebugOptions.wnd:{combo}")!, value: entry);
+        tree.Dispatch();
+    }
+
+    /// <summary>
+    /// The debug options travel with the room (protocol 9): the host opens them from the button between Start and Back, Accept asks the server to change the room, the room the server
+    /// shows says "(on)" for everybody; a member can look at them, not change them.
+    /// </summary>
+    private static void RoomDebugOptions(GameData data)
+    {
+        var (shell, network) = NewShell(data);
+        var lobby = GoToLobby(shell, network);
+        var settings = FourSeats(shell, out _);
+        lobby.ConnectionId = 7;
+        lobby.IsHost = true;
+        lobby.RoomName = "Friday night";
+        lobby.Room = new RoomStateMessage(RoomPhase.Room, settings, TwoMembers);
+        lobby.Stage = LobbyStage.InRoom;
+        Step(shell);
+        Step(shell);
+        var room = (NetRoomScreen)shell.CurrentScreen;
+        var button = room.Tree.FindByName(DebugButton) ?? throw new InvalidOperationException("The room has no debug button.");
+        var start = room.Tree.FindByName("LanGameOptionsMenu.wnd:ButtonStart")!;
+        var back = room.Tree.FindByName("LanGameOptionsMenu.wnd:ButtonBack")!;
+        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "Debug options" && button.Rect.X > start.Rect.Right && button.Rect.Right < back.Rect.X,
+            $"the host's room has the button between Start and Back ('{button.Text?.Value}')");
+
+        // The host chooses; Accept is a request to the server, which then shows the room with the options.
+        lobby.Calls.Clear();
+        Click(shell, DebugButton);
+        TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "the button opens the debug options");
+        ChooseDebug(shell, "ComboQuickBuild", 1);
+        ChooseDebug(shell, "ComboRespawn", 1);
+        ChooseDebug(shell, "ComboRespawnAfter", 0);
+        ChooseDebug(shell, "ComboGeneralPoints", 4);
+        TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
+        Click(shell, "DebugOptions.wnd:ButtonAccept");
+        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 10);
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } asked && asked.Debug == chosen && asked.MapPath == settings.MapPath && asked.Slots.SequenceEqual(settings.Slots),
+            $"Accept asks the server to change the room, and nothing else in it changes ({string.Join("; ", lobby.Calls)})");
+        lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
+        Step(shell);
+        TestHarness.Assert(room.Tree.FindByName(DebugButton)!.Text!.Value == "Debug options (on)", "the room the server shows says the options are on");
+
+        // The money is changed after it: the options stay (the settings the screen sends are the server's, with one change).
+        lobby.Calls.Clear();
+        var money = room.Tree.FindByName("LanGameOptionsMenu.wnd:ComboBoxStartingCash")!;
+        room.Tree.Post(CnCNew.Ui.Runtime.UiEventKind.ComboSelected, money, value: 0);
+        room.Tree.Dispatch();
+        TestHarness.Assert(lobby.Configured is { StartMoney: 5_000 } changed && changed.Debug == chosen, "a change of the money keeps the options");
+        lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
+        Step(shell);
+
+        // A member sees them and cannot change them.
+        lobby.ConnectionId = 8;
+        lobby.IsHost = false;
+        Step(shell);
+        lobby.Calls.Clear();
+        Click(shell, DebugButton);
+        TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "a member can look at them");
+        var tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(tree.FindByName("DebugOptions.wnd:ComboQuickBuild")!.ComboBox!.SelectedIndex == 1 && tree.FindByName("DebugOptions.wnd:ComboRespawn")!.ComboBox!.SelectedIndex == 1
+                           && tree.FindByName("DebugOptions.wnd:ComboRespawnAfter")!.ComboBox!.SelectedIndex == 0 && tree.FindByName("DebugOptions.wnd:ComboGeneralPoints")!.ComboBox!.SelectedIndex == 4,
+            "they show what the host chose");
+        TestHarness.Assert(!tree.FindByName("DebugOptions.wnd:ComboQuickBuild")!.IsEffectivelyEnabled && !tree.FindByName("DebugOptions.wnd:ButtonAccept")!.IsVisible, "the boxes are shut and there is no Accept");
+        ChooseDebug(shell, "ComboQuickBuild", 0);
+        Click(shell, "DebugOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 0 && lobby.Configured!.Debug == chosen, "and nothing reaches the server");
     }
 
     private static void Refusals(GameData data, Dictionary<string, string> baselines, bool updating)

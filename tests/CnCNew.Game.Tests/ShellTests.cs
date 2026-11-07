@@ -55,6 +55,7 @@ internal static class ShellTests
         harness.Run("Options persist and reload", () => OptionsPersist(data));
         harness.Run("The game speed slider of the skirmish setup shows its number and speeds the match up (the owner's playtest)", () => SkirmishGameSpeed(data));
         harness.Run("The starting cash of the skirmish setup reaches 75,000 and 100,000, and a match starts with it", () => SkirmishStartingCash(data));
+        harness.Run("The debug options of the skirmish setup: the button, the screen, the choices reach the match description, the world and the general's window", () => SkirmishDebugOptions(data));
         harness.Run("The score counters count by the owner of an object: units built, supplies collected, losses and kills", () => ScoreCountersByOwner(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
@@ -916,6 +917,97 @@ internal static class ShellTests
             Click(again, "MainMenu.wnd:ButtonSkirmish");
             TestHarness.Assert(again.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash")!.ComboBox!.SelectedIndex == index, $"the next setup preselects entry {index}");
         }
+    }
+
+    private const string DebugButton = "DebugOptionsButton.wnd:ButtonDebugOptions";
+
+    private static void Choose(GameShell shell, string combo, int entry)
+    {
+        var tree = shell.CurrentScreen.Tree;
+        tree.Post(UiEventKind.ComboSelected, tree.FindByName($"DebugOptions.wnd:{combo}")!, value: entry);
+        tree.Dispatch();
+    }
+
+    /// <summary>
+    /// The owner's request: debug options in the setup. A button of this project (the layouts of the original are not touched) opens a screen with quick building, returning neutral
+    /// buildings and general points; Accept hands them to the setup, Back drops them; Start puts them into the match setup and the match description, the world plays them and the
+    /// general's window has the points. A setup without them starts the original game.
+    /// </summary>
+    private static void SkirmishDebugOptions(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var setup = (SkirmishSetupScreen)shell.CurrentScreen;
+        var button = setup.Tree.FindByName(DebugButton) ?? throw new InvalidOperationException("The setup has no debug button.");
+        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "Debug options" && setup.DebugOptions.IsDefault, $"the setup offers 'Debug options', all off ('{button.Text?.Value}')");
+        var start = setup.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonStart")!;
+        var back = setup.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonBack")!;
+        TestHarness.Assert(button.Rect.X > start.Rect.Right && button.Rect.Right < back.Rect.X && button.Rect.Y == start.Rect.Y, "the button stands between Start and Back, in no one's way");
+
+        Click(shell, DebugButton);
+        TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "the button opens the debug options");
+        var tree = shell.CurrentScreen.Tree;
+        string[] Entries(string combo) => [.. tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.Entries];
+        int Selected(string combo) => tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
+        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 90 % less build time"]) && Entries("ComboRespawn").SequenceEqual(["Off", "On"])
+                           && Entries("ComboRespawnAfter").SequenceEqual(["30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes"])
+                           && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "1", "3", "5", "10", "20", "50"]), $"the choices: {string.Join(" | ", Entries("ComboQuickBuild").Concat(Entries("ComboRespawnAfter")).Concat(Entries("ComboGeneralPoints")))}");
+        TestHarness.Assert(Selected("ComboQuickBuild") == 0 && Selected("ComboRespawn") == 0 && Selected("ComboRespawnAfter") == 2 && Selected("ComboGeneralPoints") == 0
+                           && !tree.FindByName("DebugOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled, "everything is off; the respawn time waits at 2 minutes, greyed until the respawn is switched on");
+        TestHarness.Assert(tree.FindByName("DebugOptions.wnd:Title")!.Text!.Value == "Debug options" && !shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Entry", StringComparison.Ordinal)),
+            "the screen is named and shows no placeholder");
+
+        // Back drops what was chosen.
+        Choose(shell, "ComboQuickBuild", 1);
+        Click(shell, "DebugOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions.IsDefault, "Back leaves the options as they were");
+
+        // Accept hands them over: quick build, respawn switched on (120 s by default), 5 general points.
+        Click(shell, DebugButton);
+        Choose(shell, "ComboQuickBuild", 1);
+        Choose(shell, "ComboRespawn", 1);
+        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("DebugOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled, "switching the respawn on enables its time");
+        Choose(shell, "ComboGeneralPoints", 3);
+        Click(shell, "DebugOptions.wnd:ButtonAccept");
+        var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 5);
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug options (on)", $"Accept gives the setup {chosen} and the button says so");
+        Click(shell, DebugButton);
+        tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(Selected("ComboQuickBuild") == 1 && Selected("ComboRespawn") == 1 && Selected("ComboRespawnAfter") == 2 && Selected("ComboGeneralPoints") == 3, "reopened, the screen shows what was chosen");
+        Choose(shell, "ComboRespawnAfter", 4);
+        Click(shell, "DebugOptions.wnd:ButtonAccept");
+        TestHarness.Assert(setup.DebugOptions.NeutralRespawnSeconds == 600, "another time can be chosen");
+        Click(shell, DebugButton);
+        Choose(shell, "ComboRespawnAfter", 2);
+        Click(shell, "DebugOptions.wnd:ButtonAccept");
+
+        // Start: the setup, the description, the world and the general's window.
+        Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+        shell.BuildDrawList();
+        shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        var started = shell.DrainOutputs().OfType<StartMatchOutput>().Single().Setup;
+        TestHarness.Assert(started.Debug == chosen, $"Start puts the options into the match setup ({started.Debug})");
+        var live = LiveMatch.Create(data, started with { Options = started.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
+        TestHarness.Assert(live.Description.Debug == chosen && CnCNew.Simulation.Skirmish.MatchDescription.Decode(live.Description.Encode()).Debug == chosen, "the match description carries them");
+        live.Session.Step();
+        live.Session.Step();
+        var world = live.Session.World;
+        TestHarness.Assert(world.BuildTimePercent == 10 && world.NeutralRespawnSeconds == 120, $"the world plays them ({world.BuildTimePercent} %, {world.NeutralRespawnSeconds} s)");
+        var control = LiveMatch.Create(data, started with { Debug = CnCNew.Simulation.Skirmish.MatchDebugOptions.None, Options = started.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
+        control.Session.Step();
+        control.Session.Step();
+        TestHarness.Assert(world.SciencePointsOf(live.Human) == control.Session.World.SciencePointsOf(live.Human) + 5 && control.Session.World.BuildTimePercent == 100 && control.Description.Debug.IsDefault,
+            $"the human has 5 general points more than in the match without them ({world.SciencePointsOf(live.Human)} against {control.Session.World.SciencePointsOf(live.Human)})");
+
+        // A setup that was not touched starts the original game.
+        var plain = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+        Click(plain, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(plain, "MainMenu.wnd:ButtonSkirmish");
+        Click(plain, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+        plain.BuildDrawList();
+        plain.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        TestHarness.Assert(plain.DrainOutputs().OfType<StartMatchOutput>().Single().Setup.Debug.IsDefault, "without a choice the match is the original game");
     }
 
     private static void ScoreCountersByOwner(GameData data)

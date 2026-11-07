@@ -986,6 +986,10 @@ public sealed class GameShell
 
     internal void OpenOptions() => Push(new OptionsScreen(this));
     internal void OpenMoreOptions() => Push(new MoreOptionsScreen(this));
+
+    /// <summary>The debug options of a match (<see cref="DebugOptionsScreen"/>): <paramref name="accepted"/> is told what was chosen; with <paramref name="readOnly"/> they are only shown.</summary>
+    internal void OpenDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions current, bool readOnly, Action<CnCNew.Simulation.Skirmish.MatchDebugOptions> accepted)
+        => Push(new DebugOptionsScreen(this, current, readOnly, accepted));
     internal void OpenSkirmishSetup() => Push(new SkirmishSetupScreen(this));
     internal void OpenSkirmishMapSelect(SkirmishSetupScreen owner) => Push(new SkirmishMapSelectScreen(this, owner));
     internal void OpenCredits() => Push(new CreditsScreen(this));

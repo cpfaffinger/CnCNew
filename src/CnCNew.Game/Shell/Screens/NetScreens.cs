@@ -448,6 +448,9 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         // Superweapon limits are not a rule of this build's matches.
         W("CheckboxLimitSuperweapons").SetEnabled(false);
         W("ButtonEmote").SetEnabled(false);
+        // The debug options of the match: a button of this project in the gap between Start (to 251) and Back (from 542); the host changes them, everybody else sees them.
+        Tree.Register("RoomDebugOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new CnCNew.Ui.Wnd.WndScreenRect(310, 516, 484, 552, 800, 600), "RoomDebugOptionsSystem"));
         StartSpots.Hide(this);
         Sync();
         Transitions?.SetGroup("LanGameOptionsFade");
@@ -612,6 +615,9 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             start.SetEnabled(IsHost || me is { Slot: >= 0 });
             W("ButtonSelectMap").SetEnabled(IsHost);
             W("ButtonSelectMap").SetHidden(_mapPickerOpen);
+            var debugButton = Tree.FindByName(DebugOptionsScreen.Button)!;
+            debugButton.SetText(DebugOptionsScreen.ButtonText(settings.Debug));
+            debugButton.SetHidden(_mapPickerOpen);
             W("ComboBoxStartingCash").SetEnabled(IsHost);
             W("ComboBoxStartingCash").SetComboSelection(MoneyChoices.IndexOf(settings.StartMoney));
             W("TextEntryMapDisplay").SetText(MapName(settings.MapPath));
@@ -670,7 +676,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         var standard = SkirmishMatchOptions.StandardAt(Shell.Data.Rate);
         var maxTicks = Shell.Network is { MatchSeconds: > 0 } network ? Shell.Data.Rate.Time.WholeSecondsToTicks(network.MatchSeconds) : SkirmishMatchOptions.NoTimeLimit;
         return new RoomSettings(Shell.Data.Rate.TicksPerSecond, mapPath, fingerprint, maxTicks, current.StartMoney > 0 ? current.StartMoney : standard.StartMoney, standard.GraceTicks,
-            standard.SciencePointInterval, slots.MoveToImmutable(), MapRules: Shell.Data.FingerprintFor(mapPath).ToUpperInvariant());
+            standard.SciencePointInterval, slots.MoveToImmutable(), MapRules: Shell.Data.FingerprintFor(mapPath).ToUpperInvariant()) { Debug = current.Debug };
     }
 
     private void TakeSeat(int slot)
@@ -772,6 +778,15 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
         if (_syncing) return;
+        if (e.Kind == UiEventKind.ButtonSelected && e.Source == DebugOptionsScreen.Button)
+        {
+            Shell.PlaySound(ShellUiSounds.ButtonClick);
+            Shell.OpenDebugOptions(Settings.Debug, readOnly: !IsHost, chosen =>
+            {
+                if (IsHost && Lobby.Room is not null) Lobby.Configure(Settings with { Debug = chosen });
+            });
+            return;
+        }
         const string prefix = "LanGameOptionsMenu.wnd:";
         if (!e.Source.StartsWith(prefix, StringComparison.Ordinal)) return;
         var name = e.Source[prefix.Length..];

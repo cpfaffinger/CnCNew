@@ -62,6 +62,12 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     /// <summary>0 keeps the seeds of <see cref="Options"/>.</summary>
     public int Seed { get; init; }
 
+    /// <summary>
+    /// The debug options of the setup (<see cref="MatchDebugOptions"/>): quick building, returning neutral buildings, general points at the start. They go into the match description
+    /// like every other setting, so a hosted match carries them to every machine. The default is the original game.
+    /// </summary>
+    public MatchDebugOptions Debug { get; init; } = MatchDebugOptions.None;
+
     /// <summary>The human slot is played by the computer player (demos, captures, profiling); the viewer stays player 1.</summary>
     public bool AutoPlay { get; init; }
 
@@ -121,7 +127,7 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
                 human ? MatchSlotDescription.MediumStrength : ai.Strength, AiTactics: !human && ai.Kind == SkirmishAiKind.Builtin && ai.Tactics is { } tactics ? (int)tactics : -1));
         }
         return new MatchDescription(data.Rate.TicksPerSecond, MapPath, terrain.Fingerprint, data.FingerprintFor(MapPath).ToUpperInvariant(), options.WorldSeed, options.AiSeed, options.MaxTicks, options.StartMoney,
-            options.GraceTicks, options.SciencePointInterval, slots.ToImmutable());
+            options.GraceTicks, options.SciencePointInterval, slots.ToImmutable()) { Debug = Debug };
     }
 
     /// <summary>The AI of a slot (<see cref="Ai"/>).</summary>
@@ -355,6 +361,8 @@ public sealed class LiveMatch : LiveGame
         var terrain = TerrainMap.Build(map, setup.MapPath);
 
         var humanPlays = !setup.AutoPlay && !setup.Spectator;
+        // The scripted session of the original AI builds its own world and would play the options without telling: it is refused instead.
+        if (setup.UsesOriginalAi && !setup.Debug.IsDefault) throw new NotSupportedException("The debug options are not available in a match of the original skirmish AI.");
         // The room: the setup becomes the settings of a local server, the viewer takes his seat (or none), the server starts the match and hands back its description.
         var relay = CnCNew.Game.Lockstep.LocalRelay.Open(data.Fingerprint);
         relay.StartMatch(setup.Describe(data, terrain).ToRoomSettings(withSeed: true), humanPlays ? setup.LocalSlot : -1);
@@ -522,6 +530,7 @@ public sealed class LiveMatch : LiveGame
             AutoPlay = viewer == CnCNew.Game.Save.SkirmishViewer.AutoPlay,
             Spectator = viewer == CnCNew.Game.Save.SkirmishViewer.Spectator,
             Details = [..match.Slots.Select(slot => new MatchSlotDetails(slot.Description.Team, slot.Color, slot.StartPosition))],
+            Debug = description.Debug,
         };
     }
 

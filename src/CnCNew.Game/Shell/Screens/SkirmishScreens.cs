@@ -47,6 +47,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     private const int DefaultArmyEntry = ComputerArmyEntry + 1;
     private string? _selectedMapPath;
     private int _startMoney;
+    private CnCNew.Simulation.Skirmish.MatchDebugOptions _debug = CnCNew.Simulation.Skirmish.MatchDebugOptions.None;
     private int _gameSpeed = CnCNew.Ui.Settings.SkirmishMemory.NormalGameSpeed;
 
     /// <summary>The range of <c>SliderGameSpeed</c> (<c>SkirmishGameOptionsMenu.cpp</c>: <c>max(15, min(61, ...))</c>); above 60 there is no limit (<c>GREATER_NO_FPS_LIMIT</c>).</summary>
@@ -118,6 +119,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
         money.SetComboSelection(MoneyChoices.IndexOf(_startMoney));
 
+        // The debug options of the match (docs/GAME-SHELL.md): a button of this project between Start and Back opens their screen. The starting cash above is one of them for the tester.
+        Tree.Register("SkirmishDebugOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new WndScreenRect(DebugButtonLeft, 513, DebugButtonLeft + 174, 549, 800, 600), "SkirmishDebugOptionsSystem"));
+        ShowDebugButton();
+
         // SkirmishGameOptionsMenuInit: the speed of the preferences (FPS), 15 to 61, beside it its number (setFPSTextBox).
         _gameSpeed = Math.Clamp(Shell.Settings.Skirmish.GameSpeed, MinGameSpeed, MaxGameSpeed);
         W("SliderGameSpeed").SetSliderValue(_gameSpeed);
@@ -135,6 +141,14 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     }
 
     protected override string? ExitTransitionGroup => "SkirmishGameOptionsMenuFade";
+
+    /// <summary>The "Debug options" button stands in the gap between Start (to 268) and Back (from 530) of the layout's 800 x 600.</summary>
+    private const int DebugButtonLeft = 312;
+
+    private void ShowDebugButton() => Tree.FindByName(DebugOptionsScreen.Button)!.SetText(DebugOptionsScreen.ButtonText(_debug));
+
+    /// <summary>The debug options chosen so far (the match's, when Start is pressed).</summary>
+    public CnCNew.Simulation.Skirmish.MatchDebugOptions DebugOptions => _debug;
 
     private ImmutableArray<HonorEntry> _honors = [];
 
@@ -279,10 +293,15 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
                 scripted ? null : _tactics[slot]));
         }
         if (opponents.Count == 0) return;
+        if (scripted && !_debug.IsDefault)
+        {
+            Shell.ShowError("Debug options", "The debug options are not available in a match of the original skirmish AI or on a map with scripts of its own.");
+            return;
+        }
         // A person plays until the match is decided (D-8); a check's short match (the client's --skirmish-seconds) has its length in game time.
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney, MaxTicks = SkirmishMatchOptions.NoTimeLimit };
         if (Shell.SkirmishMatchSeconds > 0) options = options with { MaxTicks = Shell.Data.Rate.Time.WholeSecondsToTicks(Shell.SkirmishMatchSeconds) };
-        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable(), Speed = GameSpeedFactor,
+        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable(), Speed = GameSpeedFactor, Debug = _debug,
             PlayerName = W("TextEntryPlayerName").TextEntry?.Text is { Length: > 0 } typed ? typed : null };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         _ = Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney, GameSpeed = _gameSpeed } });
@@ -297,6 +316,10 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
                 OnStartSpot(spot, e.Kind == UiEventKind.ButtonSelectedRight);
                 break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonStart": TryStart(); break;
+            case UiEventKind.ButtonSelected when e.Source == DebugOptionsScreen.Button:
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                Shell.OpenDebugOptions(_debug, readOnly: false, chosen => { _debug = chosen; ShowDebugButton(); });
+                break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.CloseTop();
