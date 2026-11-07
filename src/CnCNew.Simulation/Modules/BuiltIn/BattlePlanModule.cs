@@ -163,6 +163,12 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
         return SimulationTiming.SleepNone;
     }
 
+    /// <summary>
+    /// The time <c>BattlePlanUpdate::setStatus</c> gives the door animation of the plan in transition (<c>setAnimationLoopDuration</c> on unpacking and on packing): the plan's animation time
+    /// in ticks, 0 while the center is idle or its plan runs. The drawable stretches the animation of the door state to it (F-157).
+    /// </summary>
+    public long DoorAnimationTicks => _status is TransitionStatus.Unpacking or TransitionStatus.Packing ? AnimationTicks(_currentPlan) : 0;
+
     private long AnimationTicks(BattlePlanKind plan) => plan switch
     {
         BattlePlanKind.Bombardment => data.BombardmentTicks,

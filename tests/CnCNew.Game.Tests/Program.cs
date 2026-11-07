@@ -39,6 +39,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(SkinTests), SkinTests.Run),
     (nameof(AiOptionsTests), AiOptionsTests.Run),
     (nameof(AttachedEffectsTests), AttachedEffectsTests.Run),
+    (nameof(DoorAnimationTests), DoorAnimationTests.Run),
     (nameof(ProjectileFlightTests), ProjectileFlightTests.Run),
     (nameof(CampaignPinTests), CampaignPinTests.Run),
     (nameof(RadarEventTests), RadarEventTests.Run),

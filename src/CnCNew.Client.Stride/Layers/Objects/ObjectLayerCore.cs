@@ -783,6 +783,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
         if (state.Flags.HasFlag(AnimationFlags.RandomStart) && binding.Animation.DurationSeconds > 0)
         {
             // Different instances of the same unit should not play in lockstep; jitter the starting point within the clip's duration.
+        // Drawable::setAnimationLoopDuration (W3DModelDraw::setCurAnimDurationInMsec) replaces the frame rate multiplier of the state's animation (the Strategy Center's doors, F-157).
+        if (drawable.AnimationSeconds > 0f) part.Speed = AnimationDurations.Speed(binding.Animation.FrameCount, binding.Animation.FrameRate, drawable.AnimationSeconds);
             var jitterFraction = ((seed >> 20) % 1000) / 1000.0;
             part.ElapsedInState = jitterFraction * binding.Animation.DurationSeconds;
         }

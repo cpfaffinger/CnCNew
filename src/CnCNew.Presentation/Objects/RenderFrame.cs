@@ -40,8 +40,11 @@ public sealed record DrawableInstance(
     Vector3 FlashTint = default,
     float Opacity = 1f,
     AnimationPause Pause = AnimationPause.None,
-    ImmutableArray<SubObjectVisibility> SubObjectOverrides = default)
+    ImmutableArray<SubObjectVisibility> SubObjectOverrides = default,
+    float AnimationSeconds = 0f)
 {
+    // AnimationSeconds: the time the animation of the drawable's current state is stretched to (Drawable::setAnimationLoopDuration), see AnimationDurations; 0: its own speed.
+
     // SubObjectOverrides: what the object's executed SubObjectsUpgrade modules show and hide (Drawable::showSubObject), applied by the renderer after the state's own ShowSubObject/HideSubObject lines; default: none.
 
     // Pause: why the model animations stand (Drawable::getShouldAnimate), see AnimationPauses.
