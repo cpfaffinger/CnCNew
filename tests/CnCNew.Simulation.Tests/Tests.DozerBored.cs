@@ -173,4 +173,106 @@ static partial class Tests
             Check.That(other == reference, $"{rate}: the repair is taken in the same frame ({other} against {reference}).");
         }
     }
+
+    /// <summary>
+    /// A structure hurt in the first tick of the frame the dozer looks in, before the dozer's update (here by a command, which runs before every update), is seen by the 30 Hz look and
+    /// is taken for repair in that look - at 60 and 120 Hz as well, where the look stands at the frame's end. Before, a hurt anywhere in the frame was held back to the next look,
+    /// a whole <c>BoredTime</c> later (Alpine Assault GLA against America, frame 15,967: the poison of a command centre hurts it in its own update, before the dozer's).
+    /// </summary>
+    public static void BoredDozerSeesAHurtBeforeItsUpdate()
+    {
+        long Run(SimulationRate rate)
+        {
+            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/DozerBored.ini"] = DozerBoredIni });
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            Check.That(feeder.Spawn(1, "BoredDozer", owner: 1, x: 160, y: 100).Accepted && feeder.Spawn(1, "BoredHut", owner: 1, x: 260, y: 100).Accepted, "Dozer and hut spawn.");
+            world.Step();
+            var dozer = world.Entities.Single(value => value.Template.Name == "BoredDozer");
+            var hut = world.Entities.Single(value => value.Template.Name == "BoredHut");
+            var ai = dozer.Modules.OfType<DozerAIUpdate>().Single();
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            long Frame() => (world.Tick - 1 - dozer.SpawnTick) / perFrame;
+            long done = -1;
+            for (var step = 0; step < world.Frames(800) && done < 0; step++)
+            {
+                world.Step();
+                if (ai.HasBuilderTask) continue;
+                if (hut.Body!.Health == hut.Body.MaxHealth) done = Frame();
+            }
+            Check.That(done > 0, $"{rate}: the first repair ends.");
+            // Stand before the first tick of the frame of the next look (151 frames on) and hurt the hut with a command, which runs before the dozer's update.
+            while (Frame() < done + 150 || (world.Tick - 1 - dozer.SpawnTick) % perFrame != perFrame - 1) world.Step();
+            Check.That(feeder.Damage(hut.Id.Value, 300).Accepted, $"{rate}: the hut is hurt in the first tick of the frame of the look.");
+            long again = -1;
+            for (var step = 0; step < world.Frames(300) && again < 0; step++)
+            {
+                world.Step();
+                if (ai.HasBuilderTask) again = Frame();
+            }
+            Check.That(again > 0, $"{rate}: the repair is taken.");
+            return again - done;
+        }
+
+        var reference = Run(SimulationRate.Hz30);
+        Check.That(reference <= 160, $"At 30 Hz the look that comes with the hurt takes the repair ({reference} frames after the first repair ended).");
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var other = Run(rate);
+            Check.That(other == reference, $"{rate}: the repair is taken in the same frame ({other} against {reference}).");
+        }
+    }
+
+    /// <summary>
+    /// The look of an idle dozer sees the world as its update meets it in the frame's first tick: a structure that a second dozer (a higher id, so its update comes after) heals to full
+    /// health in that same tick is still hurt for the look, as at 30 Hz. Above 30 Hz the look stands at the frame's end and read the healed structure. The first dozer takes the repair
+    /// in the same frame at 30, 60 and 120 Hz for every moment the second one's heal falls in; at 30 Hz one of them is the very frame of the look.
+    /// </summary>
+    public static void BoredDozerLooksBeforeAHealOfTheSameTick()
+    {
+        (long Task, long Full) Run(SimulationRate rate, long lookFrame, long orderBefore)
+        {
+            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/DozerBored.ini"] = DozerBoredIni });
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            Check.That(feeder.Spawn(1, "BoredDozer", owner: 1, x: 160, y: 100).Accepted && feeder.Spawn(1, "BoredHut", owner: 1, x: 260, y: 100).Accepted
+                && feeder.Spawn(1, "BoredDozer", owner: 1, x: 262, y: 118).Accepted, "Two dozers and a hut spawn.");
+            world.Step();
+            var first = world.Entities.First(value => value.Template.Name == "BoredDozer");
+            var second = world.Entities.Last(value => value.Template.Name == "BoredDozer");
+            var hut = world.Entities.Single(value => value.Template.Name == "BoredHut");
+            Check.That(first.Id.Value < second.Id.Value, "The dozer that looks is the first in the order of updates.");
+            // The hut is hurt by one unit of health only: the second dozer's first slice makes it whole.
+            world.Damage(hut.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(499), DamageTypes.Healing, DeathTypes.None, false));
+            var ai = first.Modules.OfType<DozerAIUpdate>().Single();
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            long Frame() => (world.Tick - 1 - first.SpawnTick) / perFrame;
+            long task = -1, full = -1;
+            for (var step = 0; step < world.Frames(400) && (task < 0 || full < 0); step++)
+            {
+                if (orderBefore >= 0 && Frame() == lookFrame - orderBefore - 1 && (world.Tick - 1 - first.SpawnTick) % perFrame == perFrame - 1)
+                    Check.That(feeder.Repair(1, second.Id.Value, hut.Id.Value).Accepted, $"{rate}: the second dozer is sent to repair.");
+                world.Step();
+                if (task < 0 && ai.HasBuilderTask) task = Frame();
+                if (full < 0 && hut.Body!.Health == hut.Body.MaxHealth) full = Frame();
+            }
+            return (task, full);
+        }
+
+        // The look comes with nobody's heal: the frame it takes the repair in.
+        var alone = Run(SimulationRate.Hz30, 0, -1);
+        Check.That(alone.Task > 100, $"The first dozer takes the repair at its look ({alone.Task}).");
+        var met = false;
+        foreach (var before in new long[] { 0, 1, 2, 3 })
+        {
+            var reference = Run(SimulationRate.Hz30, alone.Task, before);
+            met |= reference.Full == alone.Task;
+            foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+            {
+                var other = Run(rate, alone.Task, before);
+                Check.That(other == reference, $"{rate}: look and heal fall in the same frames ({other} against {reference}, the second dozer sent {before} frames before the look).");
+            }
+        }
+        Check.That(met, "One of the orders makes the second dozer's heal fall in the frame of the look.");
+    }
 }

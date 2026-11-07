@@ -100,13 +100,19 @@ internal struct DozerBoredom
     // The builder had a task when its frame began (F-72): the original's one update of the frame asks that before the step; above 30 Hz a task that ends in the frame's first
     // tick is gone where the frame ends.
     private bool _busy;
+    // Above 30 Hz: the structure the look chose in the first tick of the frame it ends in (_pickTick), where the 30 Hz look is (see Look); invalid when it chose none.
+    private EntityId _pick;
+    private long _pickTick;
 
     /// <summary>The idle state is entered (its <c>onEnter</c>): at the builder's creation, and when its dozer brain is reset.</summary>
     public void Enter(IWorldServices world, Entity entity) => _since = world.Time.BeginsFrameOf(entity, world.Tick + TickOrder.Next)
         ? world.Tick : NextFrameEnd(world, entity);
 
-    /// <summary>The first look of a builder made at this tick.</summary>
-    public long FirstLook(IWorldServices world, long boredTicks) => _since + boredTicks + world.Time.TicksPerOriginalFrame;
+    /// <summary>The first look of a builder made at this tick: the first tick of the frame in which the look is due.</summary>
+    public long FirstLook(IWorldServices world, long boredTicks) => LookTick(world, _since + boredTicks + world.Time.TicksPerOriginalFrame);
+
+    /// <summary>The tick a look due at the frame end <paramref name="dueTick"/> begins at: the first tick of that frame.</summary>
+    private static long LookTick(IWorldServices world, long dueTick) => dueTick - (world.Time.TicksPerOriginalFrame - TickOrder.Next);
 
     /// <summary>
     /// After the base's update (<paramref name="hadTask"/>: the builder had a task before it): the idle state's update where the frame ends; the sleep until it must look again.
@@ -116,8 +122,20 @@ internal struct DozerBoredom
         var entity = ai.Entity;
         var frame = world.Time.TicksPerOriginalFrame;
         if (hadTask && world.Time.BeginsFrameOf(entity, world.Tick)) _busy = true;
+        if (frame != TickOrder.Next && world.Time.BeginsFrameOf(entity, world.Tick))
+        {
+            // The 30 Hz look runs inside the builder's update and sees the world as that update meets it: what the phases before the updates and the objects with a lower id did
+            // in the tick, not what a higher id did after it (a second dozer that heals the structure to full health in the same tick). Above 30 Hz the structure is chosen in
+            // the frame's first tick, where that update falls, and the order is given where the frame ends.
+            var lookDue = world.Tick + frame - TickOrder.Next - _since >= boredTicks + frame;
+            _pick = lookDue && !_busy && !ai.HasBuilderTask && FindObjectToRepair(world, entity, boredRange) is { } chosen ? chosen.Id : EntityId.Invalid;
+            _pickTick = lookDue ? world.Tick : 0;
+        }
         if (world.Time.BeginsFrameOf(entity, world.Tick + TickOrder.Next))
         {
+            var picked = frame != TickOrder.Next && _pickTick == world.Tick - frame + TickOrder.Next;
+            var pick = _pick;
+            (_pick, _pickTick) = (EntityId.Invalid, 0);
             // A task that ended in this frame enters the idle state now (its onEnter sets the stamp); a builder that is not idle where the frame ends resets it.
             if (_busy || ai.HasBuilderTask || !ai.IsIdle)
             {
@@ -127,7 +145,9 @@ internal struct DozerBoredom
             else if (world.Tick - _since >= boredTicks + frame)
             {
                 _since = world.Tick;
-                if (FindObjectToRepair(world, entity, boredRange) is { } target) ai.OrderRepair(world, target, fromPlayer: false);
+                // A module that was not awake in the frame's first tick has chosen nothing: it looks now.
+                var target = picked ? world.FindEntity(pick) : FindObjectToRepair(world, entity, boredRange);
+                if (target is not null) ai.OrderRepair(world, target, fromPlayer: false);
                 // Nothing to repair: "maybe go clear some mines, if I feel like it" (F-69) - the mine-clearing flag is set, and the closest mine in range is attacked; the walk to it
                 // is decided in the builder's next frame, which begins with the next tick.
                 else if (world.FindMineToClear(entity, boredRange) is { } mine)
@@ -146,7 +166,8 @@ internal struct DozerBoredom
             return NextFrameEnd(world, entity) - world.Tick;
         }
         // The next look lies after this tick: the stamp is the last frame end that was looked at, and a look is due a whole frame after it at the earliest.
-        return Math.Min(sleep, _since + boredTicks + frame - world.Tick);
+        var due = _since + boredTicks + frame;
+        return Math.Min(sleep, (world.Tick < LookTick(world, due) ? LookTick(world, due) : due) - world.Tick);
     }
 
     private static long NextFrameEnd(IWorldServices world, Entity entity)
@@ -164,11 +185,12 @@ internal struct DozerBoredom
         Entity? best = null;
         var bestDistance = Fixed.Zero;
         var reach = SquaredReach.Of(range);
+        var (x, y, _) = self.FrameEnd(world.Tick);
         foreach (var candidate in world.EntitiesOwnedBy(self.Owner).AsSpan())
         {
-            if (candidate == self || !AIUpdateInterface.IsRepairable(candidate) || FirstHurtInThisFrame(world, candidate)) continue;
-            var dx = candidate.X - self.X;
-            var dy = candidate.Y - self.Y;
+            if (candidate == self || !AIUpdateInterface.IsRepairable(candidate)) continue;
+            var dx = candidate.X - x;
+            var dy = candidate.Y - y;
             var distance = dx * dx + dy * dy;
             if (!reach.Contains(distance)) continue;
             if (best is null || distance < bestDistance)
@@ -180,26 +202,23 @@ internal struct DozerBoredom
         return best;
     }
 
-    /// <summary>
-    /// Above 30 Hz the look stands at the frame's end, for the update of the frame's first tick: what first hurt the structure after that update comes after the look, as it does at 30 Hz
-    /// (F-85) - also when more than one hit came in the frame (F-138: the first one is counted, not the last).
-    /// </summary>
-    private static bool FirstHurtInThisFrame(IWorldServices world, Entity candidate)
-    {
-        var perFrame = world.Time.TicksPerOriginalFrame;
-        return perFrame != TickOrder.Next && candidate.Body is ActiveBody { HurtSince: > 0 } body && body.HurtSince > world.Tick - perFrame;
-    }
-
     public readonly void Describe(IStateWriter writer)
     {
         writer.Int("boredSince", _since);
         if (_busy) writer.Bool("boredBusy", true);
+        if (_pickTick != 0)
+        {
+            writer.Int("boredPickTick", _pickTick);
+            if (_pick.IsValid) writer.Int("boredPick", _pick.Value);
+        }
     }
 
     public void Load(IStateReader reader)
     {
         _since = reader.Has("boredSince") ? reader.Int("boredSince") : 0;
         _busy = reader.Has("boredBusy") && reader.Bool("boredBusy");
+        _pickTick = reader.Has("boredPickTick") ? reader.Int("boredPickTick") : 0;
+        _pick = reader.Has("boredPick") ? new EntityId((uint)reader.Int("boredPick")) : EntityId.Invalid;
     }
 }
 

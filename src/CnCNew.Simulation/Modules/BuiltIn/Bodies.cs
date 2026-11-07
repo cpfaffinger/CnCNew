@@ -65,7 +65,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
     public Fixed MaxHealth { get; protected set; }
     public Fixed PreviousHealth { get; protected set; }
 
-    /// <summary>The tick in which the body last fell from full health; 0 while it is at full health.</summary>
+    /// <summary>The tick in which the body last fell from full health; 0 while it is at full health. Nothing reads it any more (the bored dozer chooses its structure in the frame's first tick); it stays state so that no hash moves.</summary>
     public long HurtSince { get; private set; }
 
     /// <summary><c>m_currentSubdualDamage</c>.</summary>
