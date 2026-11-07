@@ -115,7 +115,18 @@ internal sealed class ModelAsset
         Radius = radius;
         Height = height;
         HasHouseColorMeshes = hasHouseColorMeshes;
+        // Every sub-object of the model, the rigid ones first and then the skinned ones: what the show/hide of a state or an upgrade works on (W3DModelDraw::doHideShowBoneSubObjs).
+        PartNames = [.. rigidParts.Select(rigid => rigid.FullName), .. skinParts.Select(skin => skin.FullName)];
+        PartBones = [.. rigidParts.Select(rigid => rigid.BoneIndex), .. skinParts.Select(skin => skin.BoneIndex)];
+        PartDefaults = [.. rigidParts.Select(rigid => rigid.DefaultVisible), .. skinParts.Select(skin => skin.DefaultVisible)];
+        BoneParents = [.. model.Skeleton.Parents];
     }
+
+    /// <summary>The full names, bones and default visibility of the rigid parts followed by the skinned parts, and the parent of each bone: input of <c>SubObjectOverrides.Resolve</c>.</summary>
+    public string[] PartNames { get; }
+    public int[] PartBones { get; }
+    public bool[] PartDefaults { get; }
+    public int[] BoneParents { get; }
 
     public string Name { get; }
     public W3dModel Model { get; }

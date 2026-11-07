@@ -42,6 +42,50 @@ public static class SubObjectOverrides
         return visible;
     }
 
+    /// <summary>
+    /// The visibility of every part of a model, as <c>W3DModelDraw::doHideShowSubObjs</c> and <c>updateSubObjects</c> leave it (F-159): the part's own default, then each rule of the state and then
+    /// each of <paramref name="overrides"/> in turn - and a rule that shows or hides a part also shows or hides every part whose bone hangs below the bone of that part
+    /// (<c>doHideShowBoneSubObjs</c>: "hide all other child objects that use this bone as a parent"), so a later rule can bring back a child an earlier one took with its parent.
+    /// <paramref name="parents"/> is the model's bone hierarchy (the parent index of each bone, -1 for the root); <paramref name="bones"/> the bone each part hangs on.
+    /// </summary>
+    public static void Resolve(ReadOnlySpan<string> names, ReadOnlySpan<int> bones, ReadOnlySpan<bool> defaults, ReadOnlySpan<int> parents,
+        ImmutableArray<SubObjectVisibility> rules, ImmutableArray<SubObjectVisibility> overrides, Span<bool> visible)
+    {
+        defaults.CopyTo(visible);
+        if (rules.IsDefaultOrEmpty && overrides.IsDefaultOrEmpty) return;
+        if (!rules.IsDefaultOrEmpty)
+            foreach (var rule in rules) Apply(names, bones, parents, rule, visible);
+        if (!overrides.IsDefaultOrEmpty)
+            foreach (var rule in overrides) Apply(names, bones, parents, rule, visible);
+    }
+
+    private static void Apply(ReadOnlySpan<string> names, ReadOnlySpan<int> bones, ReadOnlySpan<int> parents, SubObjectVisibility rule, Span<bool> visible)
+    {
+        for (var part = 0; part < names.Length; part++)
+        {
+            if (!Matches(names[part], rule.SubObject)) continue;
+            visible[part] = !rule.Hide;
+            var bone = bones[part];
+            for (var child = 0; child < names.Length; child++)
+                if (child != part && HangsBelow(bones[child], bone, parents)) visible[child] = !rule.Hide;
+        }
+    }
+
+    /// <summary>
+    /// The test of <c>doHideShowBoneSubObjs</c>: walk up from <paramref name="bone"/> while the bone is not the root, and the part is a child when a parent on the way is <paramref name="ancestor"/>
+    /// (the root itself counts, so everything below a part on bone 0 that does not sit on bone 0 is its child).
+    /// </summary>
+    private static bool HangsBelow(int bone, int ancestor, ReadOnlySpan<int> parents)
+    {
+        var current = bone;
+        for (var steps = 0; current != 0 && steps <= parents.Length; steps++)
+        {
+            current = current < parents.Length ? Math.Max(parents[current], 0) : 0;
+            if (current == ancestor) return true;
+        }
+        return false;
+    }
+
     private static bool Matches(string fullName, string ruleName)
     {
         if (fullName.Equals(ruleName, StringComparison.OrdinalIgnoreCase)) return true;

@@ -329,13 +329,15 @@ internal sealed class ObjectLayerCore : IWorldLayer
         var skeleton = rigidComponent.Skeleton;
         var shadowFloor = castsVolume ? ShadowFloor(drawable, part, frame.Match) : 0f;
         var shadowStill = drawable.IsStatic || drawable.IsStructure;
-        foreach (var rigidPart in asset.RigidParts)
+        var partVisible = PartVisibility(part, asset, state, drawable);
+        for (var rigidIndex = 0; rigidIndex < asset.RigidParts.Length; rigidIndex++)
         {
+            var rigidPart = asset.RigidParts[rigidIndex];
             var boneWorld = pose.GetBoneWorldTransform(rigidPart.BoneIndex);
             var nodeWorld = boneWorld * instanceMatrix;
             ref var node = ref skeleton.NodeTransformations[rigidPart.NodeIndex];
             // HLodClass::Update_Sub_Object_Transforms: Set_Animation_Hidden(!HTree->Get_Visibility(bone)) - the animation's visibility channel shows and hides the sub-objects of its bones.
-            var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects, drawable.SubObjectOverrides);
+            var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && partVisible[rigidIndex];
             // W3DModelDraw::hideAllMuzzleFlashes / setMuzzleFlashHidden: the sub-object on a WeaponMuzzleFlash bone is hidden until the weapon fires.
             if (part.MuzzleBoneSlots is { Count: > 0 } flashes && flashes.TryGetValue(rigidPart.BoneIndex, out var flashSlot))
             {
@@ -606,10 +608,11 @@ internal sealed class ObjectLayerCore : IWorldLayer
             RebuildSkins(part, asset, drawable.TeamColor);
         }
 
+        var partVisible = PartVisibility(part, asset, state, drawable);
         for (var i = 0; i < part.Skins.Count; i++)
         {
             var skin = part.Skins[i];
-            var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects, drawable.SubObjectOverrides);
+            var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && partVisible[asset.RigidParts.Length + i];
             skin.Entity.Component.Enabled = visible;
             if (!visible) continue;
             if (skin.Flash != flash || skin.Opacity != opacity)
@@ -780,20 +783,32 @@ internal sealed class ObjectLayerCore : IWorldLayer
         var max = (double)state.AnimationSpeedMax;
         var fraction = ((seed >> 8) % 1000) / 1000.0;
         part.Speed = max > min ? min + (max - min) * fraction : (min > 0 ? min : 1.0);
+        // Drawable::setAnimationLoopDuration (W3DModelDraw::setCurAnimDurationInMsec) replaces the frame rate multiplier of the state's animation (the Strategy Center's doors, F-157).
+        if (drawable.AnimationSeconds > 0f) part.Speed = AnimationDurations.Speed(binding.Animation.FrameCount, binding.Animation.FrameRate, drawable.AnimationSeconds);
         if (state.Flags.HasFlag(AnimationFlags.RandomStart) && binding.Animation.DurationSeconds > 0)
         {
             // Different instances of the same unit should not play in lockstep; jitter the starting point within the clip's duration.
-        // Drawable::setAnimationLoopDuration (W3DModelDraw::setCurAnimDurationInMsec) replaces the frame rate multiplier of the state's animation (the Strategy Center's doors, F-157).
-        if (drawable.AnimationSeconds > 0f) part.Speed = AnimationDurations.Speed(binding.Animation.FrameCount, binding.Animation.FrameRate, drawable.AnimationSeconds);
             var jitterFraction = ((seed >> 20) % 1000) / 1000.0;
             part.ElapsedInState = jitterFraction * binding.Animation.DurationSeconds;
         }
     }
 
-    /// <summary>The reference's sub-object merge (<see cref="SubObjectOverrides.IsVisible"/>): the state's lines, then what an upgrade showed or hid.</summary>
-    private static bool ComputeVisible(string fullName, bool defaultVisible, System.Collections.Immutable.ImmutableArray<SubObjectVisibility> rules,
-        System.Collections.Immutable.ImmutableArray<SubObjectVisibility> overrides)
-        => SubObjectOverrides.IsVisible(fullName, defaultVisible, rules, overrides);
+    /// <summary>
+    /// The reference's sub-object merge (<see cref="SubObjectOverrides.Resolve"/>): the state's lines, then what an upgrade showed or hid, each also showing or hiding the sub-objects that hang
+    /// below the bone of the part it names (F-159). A model with nothing to show or hide draws its default parts.
+    /// </summary>
+    private static bool[] PartVisibility(DrawPartState part, ModelAsset asset, ModelStateSpec state, DrawableInstance drawable)
+    {
+        if (state.SubObjects.IsDefaultOrEmpty && drawable.SubObjectOverrides.IsDefaultOrEmpty) return asset.PartDefaults;
+        if (part.PartVisible is not null && part.PartVisibleState == part.StateIndex && ReferenceEquals(part.PartVisibleAsset, asset) && part.PartVisibleOverrides.Equals(drawable.SubObjectOverrides)) return part.PartVisible;
+        var visible = part.PartVisible is { } kept && kept.Length == asset.PartNames.Length ? kept : new bool[asset.PartNames.Length];
+        SubObjectOverrides.Resolve(asset.PartNames, asset.PartBones, asset.PartDefaults, asset.BoneParents, state.SubObjects, drawable.SubObjectOverrides, visible);
+        part.PartVisible = visible;
+        part.PartVisibleState = part.StateIndex;
+        part.PartVisibleAsset = asset;
+        part.PartVisibleOverrides = drawable.SubObjectOverrides;
+        return visible;
+    }
 
     private static uint Hash(uint key, int salt)
     {

@@ -37,7 +37,35 @@ internal static class UpgradeVisualTests
         t.Run("every SubObjectsUpgrade names real sub-objects and overrides them once its upgrade ran", () => SubObjectsUpgrades(rig));
         t.Run("a bomb truck draws the load its upgrades chose", () => BombTruckLoads(rig));
         t.Run("every ModelConditionUpgrade and RadarUpgrade changes a state of the object", () => ConditionUpgrades(rig));
+        t.Run("F-159: counted by hand, hiding a part hides what hangs below its bone", ChildrenOfHiddenPartsByHand);
+        t.Run("F-159: a hidden or shown part takes the parts that hang below its bone with it, on the shipped models", () => ChildrenOfHiddenParts(rig));
         return t.Failures;
+    }
+
+    /// <summary>
+    /// <c>W3DModelDraw::doHideShowBoneSubObjs</c>, counted by hand on a model of four parts (the bones form a chain 1 - 2 - 3 and a branch 1 - 4; the part "b" hangs on bone 2): hiding "b" hides "c" on bone 3,
+    /// not "a" on bone 1 and not "d" on bone 4; a later rule shows "c" again; hiding "a" takes the rest; a name that matches nothing changes nothing.
+    /// </summary>
+    private static void ChildrenOfHiddenPartsByHand()
+    {
+        string[] names = ["M.a", "M.b", "M.c", "M.d"];
+        int[] bones = [1, 2, 3, 4];
+        bool[] defaults = [true, true, true, true];
+        int[] parents = [-1, 0, 1, 2, 1];
+        var visible = new bool[4];
+        string Shown(ImmutableArray<SubObjectVisibility> rules, ImmutableArray<SubObjectVisibility> overrides = default)
+        {
+            SubObjectOverrides.Resolve(names, bones, defaults, parents, rules, overrides, visible);
+            return string.Concat(visible.Select(value => value ? '1' : '0'));
+        }
+        Assert(Shown(default) == "1111", "no rule: the defaults");
+        Assert(Shown([new("b", true)]) == "1001", $"hiding b hides c below it and nothing else ({Shown([new("b", true)])})");
+        Assert(Shown([new("a", true)]) == "0000", "hiding a hides the whole chain and the branch below bone 1");
+        Assert(Shown([new("b", true), new("c", false)]) == "1011", "a later rule shows c again, b stays hidden");
+        Assert(Shown([new("b", true)], [new("b", false)]) == "1111", "an override that shows b shows what hangs below it");
+        Assert(Shown([new("c", true)]) == "1101", "a leaf hides only itself");
+        Assert(Shown([new("zzz", true)]) == "1111", "a name that matches no part changes nothing");
+        Assert(Shown([new("M.b", true)]) == "1001", "the full name matches as well");
     }
 
     private static void NoDrawErrors(Rig rig)
@@ -129,6 +157,57 @@ internal static class UpgradeVisualTests
             checkedModules++;
         }
         Assert(checkedModules == 19, $"19 SubObjectsUpgrade modules are checked ({checkedModules})");
+    }
+
+    /// <summary>
+    /// F-159 on the shipped models: for every state of every object that shows or hides a sub-object, <see cref="SubObjectOverrides.Resolve"/> gives each part below the bone of a named part the
+    /// answer of the last rule that names the part or one of the parts it hangs below - and on a good share of them that is not what the plain per-part test gave.
+    /// </summary>
+    private static void ChildrenOfHiddenParts(Rig rig)
+    {
+        var library = new CnCNew.W3D.W3dAssetLibrary(path => rig.Content.Exists(path) ? rig.Content.OpenRead(path) : null);
+        var statesChecked = 0;
+        var changed = 0;
+        var children = 0;
+        foreach (var visual in rig.Visuals.Visuals)
+            foreach (var state in visual.Draws.SelectMany(draw => draw.States).Where(state => !state.SubObjects.IsDefaultOrEmpty && state.Model is not null))
+            {
+                CnCNew.W3D.W3dModel model;
+                try { model = library.GetModel(state.Model!); }
+                catch (Exception exception) when (exception is CnCNew.W3D.W3dMissingAssetException or InvalidDataException) { continue; }
+                var lod = model.SubObjects.Where(part => part.IsRenderable).GroupBy(part => part.LodIndex).OrderByDescending(group => group.Count()).ThenBy(group => group.Key).FirstOrDefault();
+                if (lod is null) continue;
+                var parts = lod.ToArray();
+                var parents = model.Skeleton.Parents.ToArray();
+                var visible = new bool[parts.Length];
+                SubObjectOverrides.Resolve(parts.Select(part => part.Name).ToArray(), parts.Select(part => part.BoneIndex).ToArray(), parts.Select(part => part.IsVisibleByDefault).ToArray(), parents,
+                    state.SubObjects, default, visible);
+                statesChecked++;
+                for (var index = 0; index < parts.Length; index++)
+                {
+                    var plain = SubObjectOverrides.IsVisible(parts[index].Name, parts[index].IsVisibleByDefault, state.SubObjects, default);
+                    if (plain == visible[index]) continue;
+                    changed++;
+                    // Only a rule of an ancestor part can have moved it: some rule names a part whose bone the part hangs below.
+                    var named = state.SubObjects.Any(rule => parts.Any(other => other != parts[index] && other.Name.EndsWith(rule.SubObject, StringComparison.OrdinalIgnoreCase)
+                        && AncestorOf(other.BoneIndex, parts[index].BoneIndex, parents)));
+                    Assert(named, $"{visual.TemplateName}/{parts[index].Name}: the answer differs from the plain one without a rule of a part above it");
+                    children++;
+                }
+            }
+        Console.WriteLine($"       F-159: {statesChecked} states with show/hide lines; {changed} parts decided by a part above them");
+        Assert(statesChecked > 100, $"the shipped data has many states with show/hide lines ({statesChecked})");
+        Assert(children > 0, "on the shipped models there are parts that hang below a part a state hides or shows");
+    }
+
+    private static bool AncestorOf(int ancestor, int bone, int[] parents)
+    {
+        for (var current = bone; current > 0 && current < parents.Length;)
+        {
+            current = Math.Max(parents[current], 0);
+            if (current == ancestor) return true;
+        }
+        return false;
     }
 
     /// <summary>The bomb truck chooses its load by two upgrades; the part of the model that is drawn follows the module that ran last, over the state's own HideSubObject line.</summary>

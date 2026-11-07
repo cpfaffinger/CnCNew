@@ -40,6 +40,15 @@ internal sealed class DrawPartState
     public AnimationSpec? Animation;
     public W3dAnimationBinding? Binding;
     public double Speed = 1.0;
+
+    /// <summary>
+    /// The visibility of every sub-object of the model (<see cref="ModelAsset.PartNames"/>) under the state's show/hide lines and the upgrades' overrides, with the children of a hidden or shown part
+    /// (F-159); resolved again only when the state, the overrides or the model change.
+    /// </summary>
+    public bool[]? PartVisible;
+    public int PartVisibleState = -1;
+    public ModelAsset? PartVisibleAsset;
+    public System.Collections.Immutable.ImmutableArray<CnCNew.Presentation.Objects.SubObjectVisibility> PartVisibleOverrides;
     public double ElapsedInState;
     public float LastFrame = float.NaN;
 
