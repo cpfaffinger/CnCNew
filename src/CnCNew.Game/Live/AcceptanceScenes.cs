@@ -211,13 +211,13 @@ public static class AcceptanceScenes
         ],
         0, 0, 20f, 42f, 330f);
 
-    /// <summary>Eight napalm hits within three seconds make a firestorm (<c>HistoricBonusCount</c>, <c>HistoricBonusTime</c>): five MiGs fly in side by side.</summary>
+    /// <summary>Eight napalm hits within three seconds make a firestorm (<c>HistoricBonusCount</c>, <c>HistoricBonusTime</c>): five MiGs fly in side by side. They begin outside their range of 320, so they turn towards the plant before they fire: a jet that begins in range fires at once, facing the way it took off, and its missiles fall far from the plant, too scattered to count together.</summary>
     public static DemoScenario Firestorm { get; } = new(
         "acc-firestorm", "Firestorm",
         "Five MiGs fire napalm at one spot. To see: the first hits burn on the ground, and when enough of them have fallen at one place a tall firestorm rises there and burns what stands around it.",
         1500,
         [
-            ..Enumerable.Range(0, 5).Select(index => new ScenarioUnit($"mig{index + 1}", "ChinaJetMIG", 1, -260, -40 + 20 * index, 0f)),
+            ..Enumerable.Range(0, 5).Select(index => new ScenarioUnit($"mig{index + 1}", "ChinaJetMIG", 1, -520, -40 + 20 * index, 0f)),
             new("plant", "AmericaPowerPlant", 2, 80, 0, 180f),
             new("barracks", "AmericaBarracks", 2, 120, 90, 180f),
         ],

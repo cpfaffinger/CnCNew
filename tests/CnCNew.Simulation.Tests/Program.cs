@@ -943,6 +943,7 @@ if (contentDirectory is not null) run.Test("Real data: the original skirmish AI 
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI plays the same match at 30, 60 and 120 Hz", () => Tests.RealOriginalSkirmishAiAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the ten weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (F-109): the napalm of five MiGs flying at a power plant makes a firestorm at 30, 60 and 120 Hz", () => Tests.RealNapalmMakesAFirestorm(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-64): the Scud Storm launches its nine missiles at 30, 60 and 120 Hz", () => Tests.RealScudStormLaunches(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-36): a dying Crusader throws its debris at 30, 60 and 120 Hz", () => Tests.RealDebrisFlies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
