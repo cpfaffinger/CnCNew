@@ -175,8 +175,9 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <c>setExtraFriction</c> adds <paramref name="extraFriction"/> to the forward, lateral and aerodynamic frictions.
     /// </summary>
     public void Launch(IWorldServices world, Fixed forceX, Fixed forceY, Fixed forceZ, Fixed yawRate, Fixed pitchRate, Fixed rollRate, bool rates, bool bounce, Fixed mass,
-        (Fixed X, Fixed Y, Fixed Z) inherit = default, Fixed extraFriction = default)
+        (Fixed X, Fixed Y, Fixed Z) inherit = default, Fixed extraFriction = default, bool allowToFall = false)
     {
+        if (allowToFall) _allowToFall = true;
         if ((inherit.X.Raw | inherit.Y.Raw | inherit.Z.Raw) != 0)
         {
             var own = Mass;

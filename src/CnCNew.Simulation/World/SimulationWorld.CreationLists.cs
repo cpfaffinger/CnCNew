@@ -360,7 +360,14 @@ public sealed partial class SimulationWorld
         SpawnThrow? thrown = null;
         // INHERIT_VELOCITY: the source's velocity becomes a force on the object, before anything else of the throw.
         var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics ? VelocityOf(source) : default;
-        if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = sourceAngle;
+        var fallsLikeItsSource = false;
+        if (disposition.HasFlag(CreationDisposition.LikeExisting))
+        {
+            angle = sourceAngle;
+            // "if (sourceObj && sourceObj->isAboveTerrain()) physics->setAllowToFall(true)": what is made in the air (the Daisy Cutter's gas) falls - the original's physics module applies
+            // gravity to everything above the ground, this one only to what it was told to let go.
+            fallsLikeItsSource = physics && baseZ > LayerHeightAt(baseX, baseY, source.Layer);
+        }
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
             angle = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
@@ -435,6 +442,8 @@ public sealed partial class SimulationWorld
         }
         // "if (!m_nameAreObjects) objUp->setMass(m_mass)" belongs to the dispositions that throw, not to the inherited velocity.
         var massed = thrown is not null;
+        if (fallsLikeItsSource)
+            thrown = (thrown ?? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero)) with { AllowToFall = true };
         if ((inherit.X.Raw | inherit.Y.Raw | inherit.Z.Raw) != 0)
         {
             var before = thrown ?? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero);

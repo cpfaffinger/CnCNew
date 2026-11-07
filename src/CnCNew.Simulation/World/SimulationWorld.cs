@@ -191,7 +191,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// source's velocity applied as a force before the mass is set (<c>INHERIT_VELOCITY</c>) and the extra friction (<c>setExtraFriction</c>).
     /// </summary>
     private readonly record struct SpawnThrow(Fixed ForceX, Fixed ForceY, Fixed ForceZ, Fixed Yaw, Fixed Pitch, Fixed Roll, bool Rates, bool Bounce, Fixed Mass,
-        Fixed InheritX = default, Fixed InheritY = default, Fixed InheritZ = default, Fixed ExtraFriction = default);
+        Fixed InheritX = default, Fixed InheritY = default, Fixed InheritZ = default, Fixed ExtraFriction = default, bool AllowToFall = false);
 
     // Ticks per logic frame of the original: how long after the spawn phase that asked for it an object requested inside that phase appears (ProcessSpawns). 1 at 30 Hz.
     private readonly long _firstFrameTicks;
@@ -2189,7 +2189,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (module is Modules.BuiltIn.PhysicsBehavior physics)
                 {
                     physics.Launch(this, thrown.ForceX, thrown.ForceY, thrown.ForceZ, thrown.Yaw, thrown.Pitch, thrown.Roll, thrown.Rates, thrown.Bounce, thrown.Mass,
-                        (thrown.InheritX, thrown.InheritY, thrown.InheritZ), thrown.ExtraFriction);
+                        (thrown.InheritX, thrown.InheritY, thrown.InheritZ), thrown.ExtraFriction, thrown.AllowToFall);
                     break;
                 }
         // FLOATING: findUpdateModule("FloatUpdate")->setEnabled(TRUE).
@@ -2808,6 +2808,7 @@ public sealed partial class SimulationWorld : IWorldServices
                     writer.Fixed("throwInheritZ", thrown.InheritZ);
                 }
                 if (thrown.ExtraFriction != Fixed.Zero) writer.Fixed("throwExtraFriction", thrown.ExtraFriction);
+                if (thrown.AllowToFall) writer.Bool("throwFall", true);
             }
             writer.EndObject();
         }

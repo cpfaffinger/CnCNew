@@ -130,7 +130,7 @@ public sealed partial class SimulationWorld
                             pending.Has("throwMass") ? pending.Fixed("throwMass") : default,
                             pending.Has("throwInheritX") ? pending.Fixed("throwInheritX") : default, pending.Has("throwInheritX") ? pending.Fixed("throwInheritY") : default,
                             pending.Has("throwInheritX") ? pending.Fixed("throwInheritZ") : default,
-                            pending.Has("throwExtraFriction") ? pending.Fixed("throwExtraFriction") : default)
+                            pending.Has("throwExtraFriction") ? pending.Fixed("throwExtraFriction") : default, pending.Has("throwFall"))
                         : null,
                     pending.Has("floating"),
                     pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("stickTo"))) : default,
