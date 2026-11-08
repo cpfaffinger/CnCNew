@@ -136,6 +136,8 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
     public override string ModuleName => "OCLUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public long NextCreationTick => _nextCreation;
+    /// <summary><c>m_timerStartedFrame</c>: the tick the running delay began.</summary>
+    public long TimerStartedTick => _timerStarted;
 
     public long Update(IWorldServices world)
     {

@@ -31,8 +31,55 @@ internal static class PlaytestHudTests
         harness.Run("Over the own bunker the infantry's pointer is enter, over a building the enemy holds it is attack", () => BuildingCursors(data));
         harness.Run("A ranger with the capture upgrade shows capture over a neutral tech building and takes it by a click, attacks an enemy's and enters a civilian one", () => CaptureCursor(data));
         harness.Run("A selected unit of a control group shows the group's number at its health bar, one that is not in a group or not selected does not", () => ControlGroupNumber(data));
+        harness.Run("A selected supply drop zone shows its countdown on the bar: the share of the delay, the minutes and seconds to the next plane, and a sell button", () => OclTimerWindow(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// The owner's playtest of 4 November 2026 (finding 12): the supply drop zone "shows no countdown". The original's bar switches to <c>CB_CONTEXT_OCL_TIMER</c> for an object with an
+    /// <c>OCLUpdate</c>: <c>OCLTimerWindow</c> with a progress bar of <c>getCountdownPercent</c>, the remaining time as "minutes:seconds" and the sell button.
+    /// </summary>
+    private static void OclTimerWindow(GameData data)
+    {
+        var scenario = new DemoScenario("hud-ocl-timer", "hud-ocl-timer", "hud-ocl-timer", 30 * 60 * 5,
+            [new ScenarioUnit("zone", "AmericaSupplyDropZone", 1, 0, 0, 0f), new ScenarioUnit("tank", "AmericaTankCrusader", 1, 0, 200, 0f)], [], 100f, 40f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Seconds(int seconds)
+        {
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * seconds; frame++)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            }
+        }
+        string[] Clock() => [..controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text).Where(text => text.Any(char.IsDigit) && text.Contains(':'))];
+        const string Window = "ControlBar.wnd:OCLTimerWindow";
+        var (zone, tank) = (live.Tags["zone"], live.Tags["tank"]);
+        Seconds(31);
+        controller.Input.Selection.Replace([tank]);
+        Seconds(1);
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(!controller.IsWindowShown(Window), "a tank shows no timer");
+        controller.Input.Selection.Replace([zone]);
+        Seconds(1);
+        var text = string.Join("|", Clock());
+        TestHarness.Assert(controller.IsWindowShown(Window), $"the selected drop zone shows the timer window ({controller.CommandBar.Context}, {controller.CommandBar.CommandSet}, sel {controller.Input.Selection.Selected.Count()})");
+        TestHarness.Assert(controller.IsWindowShown("ControlBar.wnd:OCLTimerSellButton"), "with its sell button");
+        var progress = controller.WindowProgress("ControlBar.wnd:OCLTimerProgressBar");
+        TestHarness.Assert(progress is >= 24 and <= 28, $"about a quarter of the two minutes have passed ({progress} %)");
+        TestHarness.Assert(text.Contains("1:27") || text.Contains("1:28") || text.Contains("1:26"), $"about a minute and a half remains ({text})");
+        Seconds(5);
+        TestHarness.Assert(string.Join("|", Clock()) != text, "the clock counts down");
+        Seconds(100);
+        controller.BuildDrawList(1280, 720);
+        var later = controller.WindowProgress("ControlBar.wnd:OCLTimerProgressBar");
+        TestHarness.Assert(later is >= 0 and < 20, $"after the plane came the delay begins again ({later} %)");
     }
 
     /// <summary>

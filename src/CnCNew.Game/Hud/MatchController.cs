@@ -481,6 +481,9 @@ public sealed partial class MatchController
             case "ControlBar.wnd:ButtonCancelConstruction":
                 Input.Commands.CancelConstruction(CommandBar.Producer);
                 break;
+            case "ControlBar.wnd:OCLTimerSellButton":
+                Input.Commands.Sell(CommandBar.Producer);
+                break;
             case "ControlBar.wnd:ButtonIdleWorker":
                 Input.DispatchMeta(MetaAction.SelectNextIdleWorker, Match.World, Match.Camera);
                 break;
@@ -852,6 +855,8 @@ public sealed partial class MatchController
     /// </summary>
     public UiRect? WindowRect(string decoratedName) => _tree.FindByName(decoratedName)?.Rect;
     public bool IsWindowEnabled(string decoratedName) => _tree.FindByName(decoratedName)?.IsEnabled ?? false;
+    public bool IsWindowShown(string decoratedName) => _tree.FindByName(decoratedName)?.IsVisible ?? false;
+    public int WindowProgress(string decoratedName) => _tree.FindByName(decoratedName)?.ProgressPercent ?? -1;
 
     // ------------------------------------------------------------------------------------------------------------ draw list
 
@@ -1198,6 +1203,7 @@ public sealed partial class MatchController
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         // InGameUI::updateIdleWorker: the button is enabled while the local player has an idle worker, disabled otherwise.
         _tree.FindByName("ControlBar.wnd:ButtonIdleWorker")?.SetEnabled(Input.Selection.IdleWorkerCount > 0);
+        RefreshOclTimer(view);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
         if (view.Context == CommandBarContext.UnderConstruction && Match.World.FindEntity(view.Producer) is { } site) underConstructionDesc?.SetText(site.Template.Name);
 
@@ -1224,12 +1230,28 @@ public sealed partial class MatchController
 
         // ControlBar::setPortraitByObject: one selected object shows its SelectPortrait in the cameo window and the right-hand window loses its image; with nothing (or
         // several things) selected the unit window is hidden and the right-hand window shows the side's logo. The queue lies over both.
-        var portrait = view.Context == CommandBarContext.Command && view.Queue.IsEmpty ? SelectedPortrait() : null;
+        var portrait = view.Context is CommandBarContext.Command or CommandBarContext.OclTimer && view.Queue.IsEmpty ? SelectedPortrait() : null;
         _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(portrait is null);
         _tree.FindByName("ControlBar.wnd:CameoWindow")?.SetEnabledImage0(portrait);
         ShowUpgradeCameos(portrait is not null);
         RefreshPowerBar();
         _showsSideLogo = portrait is null && view.Queue.IsEmpty;
+    }
+
+    /// <summary>
+    /// <c>ControlBar::populateOCLTimer</c> and <c>updateOCLTimerTextDisplay</c>: the window of a building that creates something on a timer shows "minutes:seconds" and the share of the delay
+    /// that has passed; its sell button shows for a building that is not a tech building.
+    /// </summary>
+    private void RefreshOclTimer(CommandBarView view)
+    {
+        var shown = view.Context == CommandBarContext.OclTimer && view.Timer is not null;
+        _tree.FindByName("ControlBar.wnd:OCLTimerWindow")?.SetHidden(!shown);
+        if (!shown) return;
+        var timer = view.Timer!;
+        _tree.FindByName("ControlBar.wnd:OCLTimerSellButton")?.SetHidden(!timer.CanSell);
+        _tree.FindByName("ControlBar.wnd:OCLTimerProgressBar")?.SetProgress((int)(timer.Fraction * 100f));
+        var seconds = timer.RemainingSeconds;
+        _tree.FindByName("ControlBar.wnd:OCLTimerStaticText")?.SetText(_assets.Text.Format(seconds % 60 < 10 ? "CONTROLBAR:OCLTimerDescWithPadding" : "CONTROLBAR:OCLTimerDesc", seconds / 60, seconds % 60));
     }
 
     /// <summary>The superweapon countdowns over the world view (see <see cref="SuperweaponTimers"/>); each owner's house colour, the names from the string table.</summary>
@@ -1266,6 +1288,9 @@ public sealed partial class MatchController
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         // ControlBarScheme's BuildUpClockColor (R:0 G:0 B:0 A:160 in every shipped scheme).
         var cooldown = new WndColor(0, 0, 0, 160);
+        // populateOCLTimer: setControlCommand(Command_Sell) gives the sell button its cameo.
+        if (CommandBar is { Context: CommandBarContext.OclTimer, Timer.CanSell: true } && _tree.FindByName("ControlBar.wnd:OCLTimerSellButton") is { } sellButton && _assets.Images.TryGet("SSSell2", out _))
+            commands.Add(new UiImageDraw("SSSell2", sellButton.Rect, WndColor.White, false, false));
 
         for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
         {

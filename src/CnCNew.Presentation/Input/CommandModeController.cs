@@ -949,6 +949,8 @@ public sealed class CommandModeController
         => Issue((sequence, tick) => new CancelProductionCommand(Player, sequence, tick, producer, index)).Accepted;
 
     /// <summary>The cancel button of a structure under construction (<c>MSG_DOZER_CANCEL_CONSTRUCT</c>).</summary>
+    public bool Sell(EntityId building) => Issue((sequence, tick) => new SellCommand(Player, sequence, tick, building)).Accepted;
+
     public bool CancelConstruction(EntityId site) => Issue((sequence, tick) => new CancelConstructCommand(Player, sequence, tick, site)).Accepted;
 
     // ------------------------------------------------------------------------------------------------ ticking and plumbing

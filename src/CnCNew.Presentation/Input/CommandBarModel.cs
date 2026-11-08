@@ -88,7 +88,12 @@ public enum CommandBarContext
     NoCommandSet,
     Command,
     MultiSelect,
+    /// <summary>A building that runs an <c>OCLUpdate</c> (a supply drop zone, a reinforcement pad): the countdown to its next creation, with the sell or rally button (<see cref="CommandBarView.Timer"/>).</summary>
+    OclTimer,
 }
+
+/// <summary><c>ControlBar::updateContextOCLTimer</c>: the share of the delay that has passed (<c>OCLUpdate::getCountdownPercent</c>), the whole seconds still to wait and whether the sell button shows (a tech building has none).</summary>
+public sealed record OclTimerView(float Fraction, int RemainingSeconds, bool CanSell);
 
 public enum SelectionGroupKind
 {
@@ -117,6 +122,9 @@ public sealed record CommandBarView(
 
     /// <summary>Set when the bar is that of a structure group or of the active subgroup of a mixed selection; null for one object and for the buttons all of a mixed selection share. <see cref="Producer"/> is the lead building then: the first of the group, whose queue is shown.</summary>
     public SelectionGroup? Group { get; init; }
+
+    /// <summary>The countdown of <see cref="CommandBarContext.OclTimer"/>.</summary>
+    public OclTimerView? Timer { get; init; }
 }
 
 public sealed record SpecialPowerView(string Power, EntityId Source, bool Ready, float ReadyFraction);
@@ -304,6 +312,16 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         return BuildMulti(world, player, units);
     }
 
+    private static CommandBarView OclTimer(SimulationWorld world, Entity entity, OCLUpdate timer)
+    {
+        var frame = world.Time.TicksPerOriginalFrame;
+        var remaining = Math.Max(0, timer.NextCreationTick - world.Tick);
+        var length = timer.NextCreationTick - timer.TimerStartedTick;
+        var fraction = length <= 0 ? 0f : Math.Clamp(1f - (float)remaining / length, 0f, 1f);
+        var seconds = (int)(remaining / frame / (CnCNew.Data.OriginalFrame.PerSecond));
+        return Empty(CommandBarContext.OclTimer) with { Producer = entity.Id, Timer = new OclTimerView(fraction, seconds, entity.Template.IsKindOf("STRUCTURE") && !entity.Template.IsKindOf("TECH_BUILDING")) };
+    }
+
     private static CommandBarView Empty(CommandBarContext context)
         => new(context, string.Empty, [..Enumerable.Repeat<CommandBarButton?>(null, GridSlots)], [], EntityId.Invalid, [], false);
 
@@ -313,6 +331,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             return Empty(CommandBarContext.UnderConstruction) with { CanCancelConstruction = true, Producer = entity.Id };
         var setName = ActiveCommandSet(world, entity);
         if (setName is null && StructureInventory(world, entity, true) is { } inventory) return inventory;
+        // ControlBar::evaluateContextUI: an object with an OCLUpdate shows its timer before any command set.
+        if (entity.Modules.OfType<OCLUpdate>().FirstOrDefault() is { } oclTimer) return OclTimer(world, entity, oclTimer);
         if (setName is null || !Catalog.TryGetSet(setName, out var set)) return Empty(CommandBarContext.NoCommandSet) with { CommandSet = setName ?? string.Empty };
         var slots = new CommandBarButton?[GridSlots];
         var hotkeys = new HashSet<char>();
