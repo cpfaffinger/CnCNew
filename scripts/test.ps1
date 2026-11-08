@@ -111,8 +111,8 @@ $stepsOfArea = @{
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
     video        = @{ affected = 'video';                                   gate = 'video-content', 'game' }
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
-    game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins' }
+    game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins', 'check-ingame-menu' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'check-minimap', 'check-ingame-menu', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins' }
     scripts      = @{ affected = 'setup';                                   gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'video', 'presentation', 'sim', 'net'
@@ -221,6 +221,8 @@ $steps = @(
     New-Step 'check-spectator' 'Spectator mode through the client'            (Script-Run 'check-spectator') -Content
     New-Step 'check-dozer'  'Build click path through the client'             ((Script-Run 'check-dozer-build') + '-Quick') -Content
     New-Step 'check-hotkeys' 'Build keys through the client'                  (Script-Run 'check-build-hotkeys') -Content
+    New-Step 'check-minimap' 'The fog on the radar and on objects in the window client: the minimap as composed, a fogged object at half its brightness' (Script-Run 'check-minimap') -Content -Environment
+    New-Step 'check-ingame-menu' 'The in-game menu of a skirmish in the window client by script: Options, Save/Load, Restart, Exit' (Script-Run 'check-ingame-menu') -Content -Environment
     New-Step 'sim-content'  'Simulation.Tests (real data, with the rate suite)' ((Release-Run $simTests) + $content) -Content -Release $simTests
     New-Step 'reference'    'Reference manifest, full set'                    ((Release-Run $simTool) + 'reference-manifest' + 'check' + $ContentDir + 'baselines/reference-manifest.json' + '--set' + 'full') -Content -Release $simTool
     New-Step 'check-match'  'Match description in three processes'            ((Script-Run 'check-match-description') + '-NoBuild') -Content -Release $simTool

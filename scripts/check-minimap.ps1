@@ -11,7 +11,7 @@
   Then it captures the same scene with CNCNEW_OBJECT_FOG=1 (every object drawn as if it stood in the fog) and CNCNEW_TERRAIN_REVEAL=1 (the ground bright) and compares
   the brightness of the command centre's lit parts with the plain capture: the original multiplies a fogged object by 127/255 in display values (ratio about 0.5); the
   client multiplied its light by 0.25 once more through the colour conversion and showed 0.23.
-  Exit code 0 when both agree, 1 otherwise.
+  Exit code 0 when both agree, 1 otherwise, 3 (not run) on a machine without a display.
 
 .EXAMPLE
   .\scripts\check-minimap.ps1
@@ -30,6 +30,11 @@ $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
 if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Content directory not found: $ContentDir (pass -ContentDir)." }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
+Add-Type -AssemblyName System.Windows.Forms
+if ([System.Windows.Forms.Screen]::AllScreens.Count -eq 0) {
+    Write-Host 'NOT RUN: this machine has no display; the window client cannot open a device.'
+    exit 3
+}
 $project = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 if (-not $NoBuild) {
     dotnet build $project -c Release --nologo -v quiet
