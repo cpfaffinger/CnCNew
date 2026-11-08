@@ -33,6 +33,12 @@ public interface IWorldServices
     /// <summary>The time service of the world's tick rate: logic frames of the original, seconds and per-second values to ticks and per-tick values.</summary>
     SimulationTime Time { get; }
 
+    /// <summary>
+    /// True from the start of a tick until its module updates have run: whoever gives an order to an object in this stretch (the commands, the timers, another module's update)
+    /// finds the object's own update still to come in this very tick, as at 30 Hz, where it is the same tick. Not state.
+    /// </summary>
+    bool UpdatesStillToRun { get; }
+
     /// <summary>The loaded map's terrain; <see langword="null"/> in fixture worlds (flat ground at height 0, no boundaries).</summary>
     TerrainMap? Terrain { get; }
 

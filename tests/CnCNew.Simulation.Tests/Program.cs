@@ -779,6 +779,7 @@ run.Test("Phase 45 (F-69): a dozer goes on to the next mine", Tests.DozerGoesOnT
 run.Test("Phase 45 (F-69): the disarm-mines button clears the mine near the place", Tests.DisarmMinesButtonClearsTheMineNearThePlace);
 run.Test("Container exit: a destroyed transport scatters its riders", Tests.ContainerExitDeadTransportScattersItsRiders);
 run.Test("Container exit: the same frames and places at 30, 60 and 120 Hz, snapshot in mid-exit", Tests.ContainerExitIsTheSameAtEveryRate);
+run.Test("Phase 64 (F-164): a rider of a transport killed before the updates decides in that frame, at 30, 60 and 120 Hz", Tests.ARiderOfATransportKilledByATimerDecidesInThatFrame);
 run.Test("Player leaves: riders are put out, everything of the player dies, a tech building becomes neutral; pending in a snapshot, round trip in the replay format", Tests.PlayerLeaveKillsEverythingOfThePlayer);
 run.Test("Player leaves by choice: the first living ally inherits objects and money; without one everything dies", Tests.PlayerLeaveHandsOverToALivingAlly);
 run.Test("Command limits: a point or an angle beyond the limit is refused for every kind of order, the limit itself is an order, the system is not bound; which types are orders of a player", Tests.CommandCoordinatesHaveALimit);

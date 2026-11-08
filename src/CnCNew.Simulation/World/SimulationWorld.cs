@@ -95,6 +95,10 @@ public sealed partial class SimulationWorld : IWorldServices
     private ulong _timerSum;
     private ulong _commandSum;
     private UpdateNode? _currentUpdate;
+    private bool _updatesRan = true;
+
+    /// <inheritdoc />
+    public bool UpdatesStillToRun => !_updatesRan;
 
     private sealed class PlayerState(PlayerId id, string name, int team, bool isComputer)
     {
@@ -1862,6 +1866,7 @@ public sealed partial class SimulationWorld : IWorldServices
             node.Update.NextWake = wake;
             if (wake < SimulationTiming.SleepForever) _updates.Push(node);
         }
+        _updatesRan = true;
     }
 
     public void WakeAt(Entity entity, IUpdateModule module, long tick)
@@ -2367,6 +2372,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public TickResult Step()
     {
         _stepping = true;
+        _updatesRan = false;
         try
         {
             return PhaseObserver is { } observer ? StepObserved(observer) : StepPlain();
