@@ -864,6 +864,7 @@ run.Test("Phase 62 (F-144): a rider turning inside its container covers the turn
 run.Test("Phase 62 (F-145): a train hits in the first tick of its logic frame, as at 30 Hz", Tests.ATrainHitsInTheFirstTickOfItsFrame);
 run.Test("Phase 63 (F-156): a falling bomb dies at the height where its frame ends, as at 30 Hz", Tests.AFallingBombDiesAtTheHeightWhereItsFrameEnds);
 run.Test("Phase 63 (F-150): the structure on a host's back faces and stands as at 30 Hz at every frame end", Tests.APortableStructureFollowsItsHostAsAt30Hz);
+run.Test("Phase 63 (F-153): a disable does not stop a turret in the middle of its frame's step", Tests.ADisableDoesNotStopATurretInTheMiddleOfItsFrame);
 run.Test("Phase 62 (F-146): a toppling tree begins its fall on its own next frame", Tests.ToppleBeginsOnTheTreesNextFrame);
 run.Test("Phase 62 (owner playtest): a preferred weapon yields while its clip reloads empty (rule fix)", Tests.PreferredWeaponYieldsWhileItsClipReloads);
 run.Test("Phase 47 (F-77): a creation list takes its source's heading where its frame ends", Tests.CreationListTakesTheSourceHeadingWhereItsFrameEnds);

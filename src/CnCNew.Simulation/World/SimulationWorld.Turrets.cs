@@ -611,13 +611,23 @@ public sealed partial class SimulationWorld
             }
             // updateTurretAI runs inside AIUpdate::update, so a turret stands while its object's AI is skipped (a disable other than DISABLED_HELD), and the AI itself leaves it
             // standing while the object is paralyzed, unmanned, EMP'd, subdued or hacked - all of them disables other than DISABLED_HELD.
-            if ((entity.DisabledFlags(tick) & ~DisabledMask.Held) != DisabledMask.None) continue;
+            // Above 30 Hz a disable that comes after the turret's decision in a frame (the power gone in a later phase of the same tick) must not stop the rest of that frame's step: the 30 Hz
+            // turret has taken the whole step in the tick it decided it, and the disable holds it from the next frame on (F-153, a Gatling cannon that lost its power mid-step).
+            var disabled = (entity.DisabledFlags(tick) & ~DisabledMask.Held) != DisabledMask.None;
 
             var changed = false;
             var resting = true;
             for (var index = 0; index < states.Length; index++)
             {
                 if (states[index] is not { } state || set[index] is not { } info) continue;
+                if (disabled)
+                {
+                    if (state.SubSteps == 0) { resting = false; continue; }
+                    ContinueFrameStep(state);
+                    changed = true;
+                    resting = false;
+                    continue;
+                }
                 if (NeedsStep(info, state)) changed |= StepTurret(entity, info, state, tick);
                 if (NeedsStep(info, state)) resting = false;
             }
