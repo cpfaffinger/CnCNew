@@ -111,6 +111,17 @@ public sealed class ParticleWorld
         return system.Id;
     }
 
+    /// <summary><c>ParticleSystem::setPosition</c> of a system that is not attached to an object: it stands at <paramref name="position"/> from the next step on.</summary>
+    public void SetPosition(int systemId, Vector3 position)
+    {
+        foreach (var system in _systems)
+            if (system.Id == systemId && !system.Removed && !system.Attached.IsValid)
+            {
+                system.Local.Translation = position;
+                system.LocalIdentity = false;
+            }
+    }
+
     /// <summary>The template names of the systems that run now, in creation order (a check of what is shown).</summary>
     public ImmutableArray<string> RunningTemplates => [.. _systems.Where(system => !system.Removed).Select(system => system.Template.Name)];
 

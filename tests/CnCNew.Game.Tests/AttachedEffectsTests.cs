@@ -31,6 +31,7 @@ internal static class AttachedEffectsTests
         harness.Run("The Black Lotus's data stream: an arc from the unit to its target while the hack runs", () => DataStream(data));
         harness.Run("F-158: a Patriot battery that joins another's attack draws its data stream to the victim for the laser object's life", () => PatriotDataStream(data));
         harness.Run("W3DLaserDraw: the data stream is green, tiled by its width and scrolls along the beam as the data says", () => LaserLooks(data, args[index + 1]));
+        harness.Run("LaserUpdate: the laser objects' muzzle and target particle systems stand at the beam's ends for the laser's life", () => LaserFlares(data));
         harness.Run("A damaged building smokes and burns: TransitionDamageFX and the body's bones", () => DamagedBuilding(data));
         harness.Run("A building set on fire by the flame burns: the body's aflame category and the fire one size up", () => BurningBuilding(data));
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
@@ -211,6 +212,56 @@ internal static class AttachedEffectsTests
         // The scroll depends on the frames of the original only: -0.25 per second is a 30th of that per frame, wrapped into [0, 1).
         float Scroll(long frames) => spec.Draw(Vector3.Zero, new Vector3(300f, 0f, 0f), (_, _) => 0f, frames).Laser!.ScrollV;
         TestHarness.Assert(Math.Abs(Scroll(30) - 0.75f) < 1e-6f && Math.Abs(Scroll(60) - 0.5f) < 1e-6f && Math.Abs(Scroll(120) - 0f) < 1e-6f && Math.Abs(Scroll(1) - (1f - 0.25f / 30f)) < 1e-6f, "a second moves it a quarter of the texture's length against the beam's direction");
+    }
+
+    /// <summary>
+    /// <c>LaserUpdate::clientUpdate</c>: a laser object's <c>MuzzleParticleSystem</c> is made at the beam's start and its <c>TargetParticleSystem</c> at the end the first time it updates,
+    /// both follow the ends, and they end with the laser object. Shipped data: which laser objects name which systems, and a Laser General Paladin's shot (a laser that lives 95 ms).
+    /// </summary>
+    private static void LaserFlares(GameData data)
+    {
+        var lasers = data.AttachedEffects.Lasers;
+        (string, string) Names(string laser) => (lasers[laser].MuzzleSystem, lasers[laser].TargetSystem);
+        TestHarness.Assert(Names("AvengerPointDefenseLaserBeam") == ("PaladinPointDefenseLaserFlare", "AvengerDestroySmoke"), "the Avenger's point defense laser: a flare at the muzzle, smoke at the target");
+        TestHarness.Assert(Names("AirF_PointDefenseLaserBeam") == ("PaladinPointDefenseLaserFlare", "GenericLaserFlare") && Names("SupW_PointDefenseDroneLaserBeam") == ("PaladinPointDefenseLaserFlare", "GenericLaserFlare"), "the Air Force's and the drones' point defense lasers");
+        TestHarness.Assert(Names("Lazr_PaladinLaserBeam") == ("GenericBlueLaserFlare", "GenericBlueLaserFlare") && Names("Lazr_CrusaderLaserBeam") == ("PaladinPointDefenseLaserFlare", "GenericRedLaserFlare")
+            && Names("Lazr_PatriotLaserBeam") == ("PaladinPointDefenseLaserFlare", "GenericRedLaserFlare") && Names("Lazr_HowitzerLaserBeam") == ("GenericLaserFlare", "GenericLaserFlare"), "the Laser General's beams");
+        TestHarness.Assert(Names("AvengerLaserBeam") == ("PaladinPointDefenseLaserFlare", "AvengerStarburst"), "the Avenger's cannon beam: a flare and a starburst");
+        TestHarness.Assert(Names("PatriotBinaryDataStream") == ("", ""), "the Patriot's data stream names none");
+        var named = lasers.Where(pair => pair.Value.MuzzleSystem.Length + pair.Value.TargetSystem.Length > 0).ToArray();
+        TestHarness.Assert(named.Length >= 10, $"every laser object that names one is read ({named.Length})");
+        var unknown = named.SelectMany(pair => new[] { pair.Value.MuzzleSystem, pair.Value.TargetSystem }).Where(name => name.Length > 0 && data.Fx.FindParticleSystem(name) is null).Distinct().ToArray();
+        TestHarness.Assert(unknown.Length == 0, $"and every system they name exists ({string.Join(", ", unknown)})");
+        TestHarness.Assert(data.AttachedEffects.LaserFrames["Lazr_PaladinLaserBeam"] == 3, "the Paladin's laser lives 95 ms, three frames, by its LifetimeUpdate");
+
+        var scene = LiveScenario.Create(data, new DemoScenario("attached-laser-flares", "paladin", "paladin", 300,
+            [new ScenarioUnit("a", "Lazr_AmericaTankPaladin", 2, 0f, 0f), new ScenarioUnit("dozer", "ChinaVehicleDozer", 1, 120f, 0f)],
+            [new ScenarioOrder(30, "a", ScenarioOrderKind.Attack, "dozer")], 0f, 0f) { HumanFaction = "FactionChina", OpponentFaction = "FactionAmerica" }, Viewport);
+        var shotFrames = new SortedSet<long>();
+        var withFlares = new SortedSet<long>();
+        var placed = 0;
+        var ran = false;
+        Run(scene, () =>
+        {
+            var frame = scene.World.Tick / scene.World.Time.TicksPerOriginalFrame;
+            var beam = scene.Attached.ProjectileStreams.FirstOrDefault(stream => stream.Texture.StartsWith("EXLaser4", StringComparison.OrdinalIgnoreCase) && stream.Laser is not null);
+            var flares = scene.Attached.FlareSystems;
+            if (beam is not null) shotFrames.Add(frame);
+            if (flares.Length > 0) withFlares.Add(frame);
+            if (flares.Length > 0 && Running(scene).Contains("GenericBlueLaserFlare")) ran = true;
+            if (beam is null || flares.Length != 2) return;
+            foreach (var particle in scene.Fx.Particles.Capture().Particles)
+            {
+                var at = particle.Position;
+                if (particle.SystemId == flares[0] && Vector3.Distance(at, beam.Points[0]) < 40f) placed++;
+                if (particle.SystemId == flares[1] && Vector3.Distance(at, beam.Points[^1]) < 40f) placed++;
+            }
+        });
+        Console.WriteLine($"       paladin: beam in frames {string.Join(",", shotFrames)}; flares in frames {string.Join(",", withFlares)}; {placed} particles near the ends");
+        TestHarness.Assert(shotFrames.Count > 0, "the Paladin's beam is drawn");
+        TestHarness.Assert(withFlares.SetEquals(shotFrames), "the two systems exist exactly while the beam is drawn, and are gone when the laser dies");
+        TestHarness.Assert(placed > 0, "and their particles stand at the muzzle and at the target");
+        TestHarness.Assert(ran, "the flare systems run");
     }
 
     private static void DragonFlame(GameData data)

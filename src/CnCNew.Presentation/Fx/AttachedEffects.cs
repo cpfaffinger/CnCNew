@@ -85,6 +85,7 @@ public sealed class AttachedEffectCatalog
         var lasers = ImmutableDictionary.CreateBuilder<string, LaserSpec>(StringComparer.OrdinalIgnoreCase);
         var laserLives = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         var laserNames = new List<(string Weapon, string Name, string Bone)>();
+        var laserFlares = new Dictionary<string, (string Muzzle, string Target)>(StringComparer.OrdinalIgnoreCase);
         var abilities = new List<(string Owner, string Object, string Bone)>();
         var strafes = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         var rules = new BodyParticleRule[BodyKeys.Length];
@@ -100,6 +101,7 @@ public sealed class AttachedEffectCatalog
                         string Key(string key) => module.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;
                         bool Has(string key) => module.Fields.Any(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
                         float Amount(string key) => float.TryParse(Key(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number : 0f;
+                        if (module.Name.Equals("LifetimeUpdate", StringComparison.Ordinal)) laserLives[obj.OriginalName] = (long)MathF.Ceiling(Amount("MinLifetime") * CnCNew.Data.OriginalFrame.PerSecond / 1000f);
                         if (module.Name.Equals("DeletionUpdate", StringComparison.Ordinal)) laserLives[obj.OriginalName] = (long)MathF.Ceiling(Amount("MinLifetime") * CnCNew.Data.OriginalFrame.PerSecond / 1000f);
                         if (module.Name.Equals("W3DLaserDraw", StringComparison.Ordinal))
                             lasers[obj.OriginalName] = new LaserSpec(Key("Texture"), Amount("InnerBeamWidth"), Math.Max(1, (int)Amount("Segments")), Amount("ArcHeight"))
@@ -113,6 +115,8 @@ public sealed class AttachedEffectCatalog
                                 SegmentOverlapRatio = Amount("SegmentOverlapRatio"),
                                 TilingScalar = Has("TilingScalar") ? Amount("TilingScalar") : 1f,
                             };
+                        if (module.Name.Equals("LaserUpdate", StringComparison.Ordinal) && (Key("MuzzleParticleSystem").Length > 0 || Key("TargetParticleSystem").Length > 0))
+                            laserFlares[obj.OriginalName] = (Key("MuzzleParticleSystem"), Key("TargetParticleSystem"));
                         if (module.Name.Equals("SpecialAbilityUpdate", StringComparison.Ordinal) && Key("SpecialObject").Length > 0) abilities.Add((obj.OriginalName, Key("SpecialObject"), Key("SpecialObjectAttachToBone")));
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
                     }
@@ -158,6 +162,8 @@ public sealed class AttachedEffectCatalog
             if (streamDraws.TryGetValue(name, out var spec)) streams[weapon] = spec;
             else problems.Add($"Weapon {weapon}: the stream object '{name}' has no W3DProjectileStreamDraw");
         }
+        foreach (var (name, flare) in laserFlares)
+            if (lasers.TryGetValue(name, out var flared)) lasers[name] = flared with { MuzzleSystem = flare.Muzzle, TargetSystem = flare.Target };
         var weaponLasers = ImmutableDictionary.CreateBuilder<string, WeaponLaser>(StringComparer.OrdinalIgnoreCase);
         foreach (var (weapon, name, bone) in laserNames)
         {
@@ -276,6 +282,12 @@ public sealed record WeaponLaser(LaserSpec Laser, string Bone, long Frames);
 /// </summary>
 public sealed record LaserSpec(string Texture, float Width, int Segments, float ArcHeight)
 {
+    /// <summary><c>MuzzleParticleSystem</c> of the laser object's <c>LaserUpdate</c>: a system at the beam's start while the laser lives (empty: none).</summary>
+    public string MuzzleSystem { get; init; } = string.Empty;
+
+    /// <summary><c>TargetParticleSystem</c>: a system at the beam's end while the laser lives (empty: none).</summary>
+    public string TargetSystem { get; init; } = string.Empty;
+
     /// <summary><c>NumBeams</c>: overlapping bands that make the beam; 1 draws only the inner one.</summary>
     public int NumBeams { get; init; } = 1;
 
@@ -652,6 +664,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     private void UpdateStreams(SimulationWorld world, IFxWorldView view)
     {
         var frame = ImmutableArray.CreateBuilder<StreamInstance>();
+        _flareSeen.Clear();
         var ended = new List<(uint, string)>();
         foreach (var (key, stream) in _streams)
         {
@@ -678,6 +691,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         if (_beams.Count > 0) AddBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         if (_feedbackBeams.Count > 0) AddFeedbackBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
+        ReleaseFlares();
         _streamFrame = frame.ToImmutable();
         UpdateRopes(world);
     }
@@ -734,10 +748,56 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
                 _beamEnds[beam.Victim] = aimed.Position + (victim.Template.IsKindOf("PROJECTILE") || victim.Z > world.GroundHeightAt(victim.X, victim.Y) + Simulation.Numerics.Fixed.FromInt(9) ? Vector3.Zero : new Vector3(0f, 0f, 10f));
             if (!_beamEnds.TryGetValue(beam.Victim, out var end)) continue;
             var start = beam.Laser.Bone.Length > 0 && BonePosition(beam.Source, beam.Laser.Bone, pose) is { } found ? found : pose.Position;
+            PlaceFlares((0, beam.Source.Value, beam.Victim.Value, beam.Shot), beam.Laser.Laser, start, end);
             frame.Add(beam.Laser.Laser.Draw(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f, originalFrame - beam.Shot));
         }
         if (_beams.Count == 0) _beamEnds.Clear();
     }
+
+    private readonly Dictionary<(int Kind, uint A, uint B, long C), (int Muzzle, int Target)> _flares = [];
+    private readonly HashSet<(int Kind, uint A, uint B, long C)> _flareSeen = [];
+
+    /// <summary>
+    /// <c>LaserUpdate::clientUpdate</c>: the laser object's muzzle system is made at the beam's start the first time the beam is updated and its target system at the end, and both are
+    /// set to the ends every update; they end with the laser object (its destructor destroys them). A beam that is not placed in an update has ended.
+    /// </summary>
+    private void PlaceFlares((int, uint, uint, long) key, LaserSpec laser, Vector3 start, Vector3 end)
+    {
+        if (laser.MuzzleSystem.Length == 0 && laser.TargetSystem.Length == 0) return;
+        _flareSeen.Add(key);
+        if (!_flares.TryGetValue(key, out var made))
+        {
+            _flares[key] = made = (StartFlare(laser.MuzzleSystem, start), StartFlare(laser.TargetSystem, end));
+            return;
+        }
+        if (made.Muzzle != 0) fx.Particles.SetPosition(made.Muzzle, start);
+        if (made.Target != 0) fx.Particles.SetPosition(made.Target, end);
+    }
+
+    private int StartFlare(string name, Vector3 position)
+    {
+        if (name.Length == 0) return 0;
+        if (fx.Catalog.FindParticleSystem(name) is not { } template)
+        {
+            _missingTemplates++;
+            return 0;
+        }
+        return fx.Particles.Spawn(template, new ParticleSpawn(position));
+    }
+
+    private void ReleaseFlares()
+    {
+        foreach (var key in _flares.Keys.Where(key => !_flareSeen.Contains(key)).ToList())
+        {
+            var (muzzle, target) = _flares[key];
+            if (muzzle != 0) fx.Particles.Destroy(muzzle);
+            if (target != 0) fx.Particles.Destroy(target);
+            _flares.Remove(key);
+        }
+    }
+
+    /// <summary>The particle systems at the ends of the beams that live now, in creation order of their beams.</summary>
+    public ImmutableArray<int> FlareSystems => [.. _flares.Values.SelectMany(pair => new[] { pair.Muzzle, pair.Target }).Where(id => id != 0)];
 
     private readonly record struct FeedbackBeam(EntityId Source, Vector3 End, LaserSpec Laser, long Born, long Frames);
 
@@ -765,6 +825,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         foreach (var beam in _feedbackBeams)
         {
             if (view.GetPose(beam.Source) is not { } pose || Vector3.DistanceSquared(pose.Position, beam.End) < 1e-6f) continue;
+            PlaceFlares((1, beam.Source.Value, 0, beam.Born), beam.Laser, pose.Position, beam.End);
             frame.Add(beam.Laser.Draw(pose.Position, beam.End, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f, originalFrame - beam.Born));
         }
     }
@@ -786,6 +847,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
                     var end = victim.Position + new Vector3(0f, 0f, FixedConvert.ToSingle(target.Template.GeometryHeight) / 2f);
                     if (!_abilityBeams.TryGetValue(id, out var born)) _abilityBeams[id] = born = originalFrame;
                     seen.Add(id);
+                    PlaceFlares((2, id.Value, 0, 0), laser, start, end);
                     frame.Add(laser.Draw(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f, originalFrame - born));
                 }
             }
