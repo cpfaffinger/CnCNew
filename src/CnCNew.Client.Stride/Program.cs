@@ -17,6 +17,7 @@ using Stride.Graphics;
 using Stride.Rendering;
 using Stride.Rendering.Compositing;
 
+CnCNew.Client.Stride.StartupClock.Note("program entered");
 var smokeTest = args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase);
 var contentDirectory = GetArgument(args, "--content-dir");
 var modelPath = GetArgument(args, "--model-path");
@@ -493,6 +494,8 @@ internal sealed class CnCNewGame(
     public static CnCNew.Simulation.Skirmish.Original.SkirmishAiKind ShellSkirmishAi { get; set; }
 
     private ClientRuntime? _runtime;
+    private CnCNew.Client.Stride.StartupSplash? _splash;
+    private int _splashFrames;
 
     /// <summary>The capture aids of a fixed-step run: --cursor-at "x,y" (pointer in window pixels) and --waypoints "dx,dy;dx,dy;..." (with --select-own).</summary>
     private void ApplyStaging()
@@ -529,6 +532,7 @@ internal sealed class CnCNewGame(
         // For measuring what a frame costs: without the wait for the display a smoke test's wall time is its frames' cost.
         if (Environment.GetCommandLineArgs().Contains("--no-vsync", StringComparer.OrdinalIgnoreCase)) GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
         base.Initialize();
+        CnCNew.Client.Stride.StartupClock.Note("window and device ready");
         Window.Title = "CnCNew — Stride Direct3D 11 W3D Viewer";
     }
 
@@ -570,9 +574,23 @@ internal sealed class CnCNewGame(
 
         if (shellMode)
         {
-            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate, rules: Rules);
-            // The shell map brings a map.ini too: compiled here with the rest, not in the first frame of the menu.
-            if (ClientRuntime.ShellMapEnabled) data.ForMap(CnCNew.Presentation.Terrain.MapEnvironment.ShellMapPath(data.Graph));
+            // The window shows the original's loading picture from its first frame; the data loads behind it. (The sprite batch needs the engine's services, which are not up in Initialize.)
+            if (!smokeTest && Shell?.Script is null) _splash = new CnCNew.Client.Stride.StartupSplash(GraphicsDevice, contentDirectory!);
+            // The data loads on a worker thread while the frames go on drawing the start screen (a blocked thread shows nothing and Windows calls the window "not responding").
+            var splash = _splash;
+            var data = await Task.Run(() =>
+            {
+                var loaded = GameData.Load(contentDirectory!, step =>
+                {
+                    Console.WriteLine($"loading: {step}");
+                    if (splash is not null) splash.Progress = step switch { "Opening content" => 5, "Compiling definitions" => 33, "Building catalogs" => 66, _ => splash.Progress };
+                }, rate: tickRate, rules: Rules);
+                // The shell map brings a map.ini too: compiled here with the rest, not in the first frame of the menu.
+                if (ClientRuntime.ShellMapEnabled) loaded.ForMap(CnCNew.Presentation.Terrain.MapEnvironment.ShellMapPath(loaded.Graph));
+                return loaded;
+            });
+            if (splash is not null) splash.Progress = 100;
+            CnCNew.Client.Stride.StartupClock.Note("game data loaded");
             var back = GraphicsDevice.Presenter.BackBuffer;
             var shellRun = Shell;
             var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };
@@ -581,6 +599,9 @@ internal sealed class CnCNewGame(
             if (shellRun?.Script is not null) _shellWatch.Start();
             // The display mode the settings keep is the one the window opens in: applied with the first frame (a scripted or smoke run keeps the size of its command line).
             if (shellRun?.Script is null && !smokeTest) _runtime.RequestSavedDisplay();
+            CnCNew.Client.Stride.StartupClock.Note($"shell built; {_splashFrames} start-screen frames were drawn while the data loaded");
+            _splash?.Dispose();
+            _splash = null;
             Window.Title = "CnCNew";
             _runtime.Caption = caption;
             ApplyStaging();
@@ -756,6 +777,8 @@ internal sealed class CnCNewGame(
         _runtime = null;
         _w3dScene?.Dispose();
         _w3dScene = null;
+        _splash?.Dispose();
+        _splash = null;
         base.UnloadContent();
     }
 
@@ -832,7 +855,14 @@ internal sealed class CnCNewGame(
     {
         _costWatch.Restart();
         base.Draw(gameTime);
+        if (_runtime is null && _splash is not null)
+        {
+            _splash.Draw(GraphicsContext);
+            _splashFrames++;
+            CnCNew.Client.Stride.StartupClock.FrameDrawn(_splash.HasPicture ? "the start screen" : "the plain start screen");
+        }
         _runtime?.Draw(GraphicsContext, GraphicsDevice);
+        if (_runtime is not null) CnCNew.Client.Stride.StartupClock.FrameDrawn("the client");
         _runtime?.NoteFrameCost(_updateMilliseconds, _costWatch.Elapsed.TotalMilliseconds);
         CnCNew.Client.Stride.FrameReport.Frame(_updateMilliseconds, _costWatch.Elapsed.TotalMilliseconds);
         // --filmstrip DIR --every N: a PNG every N rendered frames (frame-00030.png ...), so a staged demo can be judged as a sequence without a window.
