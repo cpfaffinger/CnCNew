@@ -90,6 +90,15 @@ internal static class HotkeyBindingTests
             Press(shell, KeyCode.Escape);
             TestHarness.Assert(shell.CurrentScreen == screen && !screen.CapturesKeys && screen.BindingOf(MetaAction.Stop) is null, "Escape cancels the capture and leaves the screen open");
 
+            // Delete while a key is awaited takes the binding away without a conflict, and says so.
+            screen.SelectHotkey(MetaAction.Stop);
+            Press(shell, KeyCode.Delete);
+            TestHarness.Assert(screen.BindingOf(MetaAction.Stop) is null && screen.BindingOf(MetaAction.SelectAll) == stop && screen.HotkeyStatus.Contains("unbound", StringComparison.Ordinal)
+                && !screen.CapturesKeys, $"Delete unbinds the action and nothing else ({screen.HotkeyStatus})");
+            screen.SelectHotkey(MetaAction.Scatter);
+            Press(shell, KeyCode.Backspace);
+            TestHarness.Assert(screen.BindingOf(MetaAction.Scatter) is null && screen.HotkeyStatus.Contains("unbound", StringComparison.Ordinal), "Backspace does too");
+
             // A pair keeps its transitions and moves together: the force attack begins on a key-down and ends on the key-up of the same key.
             ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
             var begin = screen.BindingOf(MetaAction.BeginForceAttack) ?? throw new InvalidOperationException("no shipped force attack");
@@ -100,6 +109,9 @@ internal static class HotkeyBindingTests
             TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) == new KeyBinding(KeyCode.F8, KeyModifiers.Alt, KeyTransition.Down)
                 && screen.BindingOf(MetaAction.EndForceAttack) == new KeyBinding(KeyCode.F8, KeyModifiers.Alt, KeyTransition.Up),
                 $"moving the end moves the begin with it and both keep their transitions ({screen.BindingOf(MetaAction.BeginForceAttack)}, {screen.BindingOf(MetaAction.EndForceAttack)})");
+            screen.SelectHotkey(MetaAction.BeginForceAttack);
+            Press(shell, KeyCode.Delete);
+            TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) is null && screen.BindingOf(MetaAction.EndForceAttack) is null, "unbinding one half unbinds the pair");
 
             // Defaults restore the shipped keys.
             ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");

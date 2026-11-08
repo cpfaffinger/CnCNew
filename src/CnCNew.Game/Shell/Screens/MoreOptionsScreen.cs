@@ -124,7 +124,8 @@ public sealed class MoreOptionsScreen : ShellScreen
             W("HotkeysStatus").SetText($"{ActionName(action)} keeps its key");
             return;
         }
-        W("HotkeysStatus").SetText(Bind(action, key, modifiers));
+        // Delete and Backspace take the binding away without giving it to anything else; they cannot be bound themselves.
+        W("HotkeysStatus").SetText(key is KeyCode.Delete or KeyCode.Backspace ? Unbind(action) : Bind(action, key, modifiers));
         ShowHotkeys(row);
     }
 
@@ -167,6 +168,20 @@ public sealed class MoreOptionsScreen : ShellScreen
         return taken.Count == 0 ? line : $"{line} (taken from {string.Join(", ", taken)})";
     }
 
+    /// <summary>Takes the binding of <paramref name="action"/> away (and its partner's: half a pair does nothing). Returns the line the screen shows.</summary>
+    public string Unbind(MetaAction action)
+    {
+        var map = _hotkeys.Unbind(action);
+        var line = $"{ActionName(action)}: unbound";
+        if (MetaActionNames.TryGetPartner(action, out var partner))
+        {
+            map = map.Unbind(partner);
+            line += $" (and {ActionName(partner)})";
+        }
+        Commit(map);
+        return line;
+    }
+
     /// <summary>The shipped keys of <c>CommandMap.ini</c> again (not saved until Accept).</summary>
     public void RestoreHotkeyDefaults()
     {
@@ -199,7 +214,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     {
         if (ActionAt(row) is not { } action) return;
         _armed = action;
-        W("HotkeysStatus").SetText($"Press a key for {ActionName(action)} (Esc: cancel)");
+        W("HotkeysStatus").SetText($"Press a key for {ActionName(action)} (Esc: cancel, Del: unbind)");
     }
 
     /// <summary>A key as a person reads it: <c>Ctrl+Alt+F1</c>; a binding of the modifiers alone says so; a binding on the release of a key says that.</summary>
