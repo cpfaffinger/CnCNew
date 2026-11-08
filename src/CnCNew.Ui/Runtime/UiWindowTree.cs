@@ -340,18 +340,20 @@ public sealed partial class UiWindowTree
         window.Rect = window.ScreenRectOverride ?? transform.Map(rect);
         window.HitRect = Options.MinimumHitTarget > 0 && window.IsInteractive ? window.Rect.ExpandTo(Options.MinimumHitTarget) : window.Rect;
         window.Font = ResolveFont(window);
+        window.FontBaseSize = Options.TextScale == 1m ? window.Font.Size : ResolveFont(window, 1m).Size;
         foreach (var child in window.Children) Place(child, forChildren);
     }
 
     /// <summary>A known <c>HEADERTEMPLATE</c> replaces the window <c>FONT</c> (<c>parseWindow</c>, <c>getFontFromTemplate</c>).</summary>
-    private UiFont ResolveFont(UiWindow window)
+    private UiFont ResolveFont(UiWindow window, decimal? textScale = null)
     {
+        var options = textScale is { } scale ? Options with { TextScale = scale } : Options;
         var rect = window.Definition.Rect;
         if (Services.HeaderTemplates.Find(window.Definition.HeaderTemplate) is { } template)
             return new UiFont(template.FontName,
-                UiScaler.ScaleFontSize(template.Point, true, Viewport, Options, rect.CreationWidth, rect.CreationHeight), template.Bold);
+                UiScaler.ScaleFontSize(template.Point, true, Viewport, options, rect.CreationWidth, rect.CreationHeight), template.Bold);
         var font = window.Definition.Font ?? FallbackFont;
-        return new UiFont(font.Name, UiScaler.ScaleFontSize(font.Size, false, Viewport, Options, rect.CreationWidth, rect.CreationHeight), font.Bold);
+        return new UiFont(font.Name, UiScaler.ScaleFontSize(font.Size, false, Viewport, options, rect.CreationWidth, rect.CreationHeight), font.Bold);
     }
 
     /// <summary>Advances the caller-supplied clock (milliseconds); only tooltips depend on it.</summary>

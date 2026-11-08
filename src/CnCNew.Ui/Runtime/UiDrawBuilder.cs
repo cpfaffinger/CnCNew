@@ -492,15 +492,17 @@ public sealed partial class UiWindowTree
             else text = value.Value;
             var measure = tree.Services.TextMeasure;
             var wrapCentered = wrapCenteredAllowed && (window.Status & WndStatus.WrapCentered) != 0;
-            var sentence = UiSentenceLayout.Layout(text, window.Font, measure, wrapWidth, wrapCentered);
-            var lineHeight = measure.LineHeight(window.Font);
+            var fitted = UiTextFit.Fit(text, window.Font, window.FontBaseSize, measure, wrapWidth, wrapCentered, area.Width, window.Rect.Height);
+            var sentence = fitted.Sentence;
+            var font = fitted.Font;
+            var lineHeight = measure.LineHeight(font);
             var y = area.Y + area.Height / 2 - sentence.Height / 2;
             var left = alignment == UiTextAlignment.Left ? area.X : area.X + area.Width / 2 - sentence.Width / 2;
             for (var index = 0; index < sentence.Lines.Length; index++, y += lineHeight)
             {
                 var line = sentence.Lines[index];
                 if (line.Text.Length == 0) continue;
-                _commands.Add(new UiTextDraw(line.Text, key, window.Font, color, shadow, left + line.X, y, alignment, clip));
+                _commands.Add(new UiTextDraw(line.Text, key, font, color, shadow, left + line.X, y, alignment, clip));
             }
         }
 

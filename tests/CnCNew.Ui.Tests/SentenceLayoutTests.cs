@@ -36,10 +36,48 @@ public static class SentenceLayoutTests
         Test(CenteredWithoutWrapOrBreakIsTheSingleLineCase);
         Test(CenteredHeightComesFromTheNotCenteredBuilder);
         Test(TinyWrapWidthTerminates);
+        Test(ALabelStepsItsFontDownToFitButNeverBelowItsBaseSize);
+        Test(AtTheBaseSizeNothingChanges);
+        Test(ALabelThatStillDoesNotFitWrapsWhereTheWindowIsHighElseEndsInAnEllipsis);
         Test(TooltipSitsRightOfThePointerAndFlipsAtTheEdges);
         Test(TooltipTextIsRevealedOverTheFillTime);
         Console.WriteLine(_failures == 0 ? "Sentence layout tests passed." : $"Sentence layout tests: {_failures} failure(s).");
         return _failures;
+    }
+
+    /// <summary>A font that scales: a character is half the point size wide, a line is 1.2 times as high.</summary>
+    private sealed class ScalingMeasure : IUiTextMeasure
+    {
+        public int MeasureWidth(string text, UiFont font) => text.Length * font.Size / 2;
+        public int LineHeight(UiFont font) => font.Size * 6 / 5;
+    }
+
+    private static void ALabelStepsItsFontDownToFitButNeverBelowItsBaseSize()
+    {
+        // 12 characters: 15 pt is 84 px wide, 14 pt 84, 13 pt 72 (a character is whole pixels). A window 80 px wide takes 13 pt.
+        var fitted = UiTextFit.Fit("Hello, World", new UiFont("Arial", 15, false), 12, new ScalingMeasure(), 0, false, 80, 30);
+        Check(fitted.Font.Size == 13 && fitted.Sentence.Width == 72, $"stepped down to 13 pt ({fitted.Font.Size} pt, {fitted.Sentence.Width} px)");
+        fitted = UiTextFit.Fit("Hello, World", new UiFont("Arial", 15, false), 12, new ScalingMeasure(), 0, false, 200, 30);
+        Check(fitted.Font.Size == 15, "a label that fits keeps its size");
+        fitted = UiTextFit.Fit("Hello, World", new UiFont("Arial", 15, false), 12, new ScalingMeasure(), 0, false, 60, 30);
+        Check(fitted.Font.Size == 12, $"never below the base size ({fitted.Font.Size})");
+    }
+
+    private static void AtTheBaseSizeNothingChanges()
+    {
+        var font = new UiFont("Arial", 12, false);
+        var plain = UiSentenceLayout.Layout("Hello, World", font, new ScalingMeasure(), 0, false);
+        var fitted = UiTextFit.Fit("Hello, World", font, 12, new ScalingMeasure(), 0, false, 10, 5);
+        Check(fitted.Font == font && Dump(fitted.Sentence) == Dump(plain) && fitted.Sentence.Width == plain.Width, "a font at its base size is laid out as before, whatever the window");
+    }
+
+    private static void ALabelThatStillDoesNotFitWrapsWhereTheWindowIsHighElseEndsInAnEllipsis()
+    {
+        var font = new UiFont("Arial", 15, false);
+        var tall = UiTextFit.Fit("Hello, World", font, 12, new ScalingMeasure(), 0, false, 50, 40);
+        Check(tall.Font.Size == 12 && tall.Sentence.Lines.Length == 2 && tall.Sentence.Height <= 40 && tall.Sentence.Width <= 50, $"wrapped in a high window ({Dump(tall.Sentence)})");
+        var flat = UiTextFit.Fit("Hello, World", font, 12, new ScalingMeasure(), 0, false, 50, 15);
+        Check(flat.Sentence.Lines.Length == 1 && flat.Sentence.Lines[0].Text.EndsWith("...", StringComparison.Ordinal) && flat.Sentence.Width <= 50, $"cut short in a flat one ({Dump(flat.Sentence)})");
     }
 
     private static void Test(Action test)

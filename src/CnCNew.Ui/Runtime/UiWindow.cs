@@ -67,6 +67,9 @@ public sealed class UiWindow
     public UiRect HitRect { get; internal set; }
     public UiTransform Transform { get; internal set; }
     public UiFont Font { get; internal set; }
+
+    /// <summary>The point size of <see cref="Font"/> at the 100 % text size (the size a label never falls below when it steps down to fit); the font's own size when the text size is 100 %.</summary>
+    public int FontBaseSize { get; internal set; }
     public WndStatus Status { get; private set; }
     public bool IsHidden => (Status & WndStatus.Hidden) != 0;
     public bool IsEnabled => (Status & WndStatus.Enabled) != 0;

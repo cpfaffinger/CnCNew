@@ -69,7 +69,7 @@ public static class UiReadability
 
         void Check(UiWindow window, string text, int wrapWidth, int roomWidth, int roomHeight, bool wrapCentered)
         {
-            var sentence = UiSentenceLayout.Layout(text, window.Font, measure, Math.Max(0, wrapWidth), wrapCentered);
+            var sentence = UiTextFit.Fit(text, window.Font, window.FontBaseSize, measure, Math.Max(0, wrapWidth), wrapCentered, roomWidth, roomHeight).Sentence;
             if (sentence.Width > roomWidth) overflows.Add(new UiOverflow(window.Name, text, $"width {sentence.Width} > {roomWidth}", true));
             else if (sentence.Height > roomHeight) overflows.Add(new UiOverflow(window.Name, text, $"height {sentence.Height} ({sentence.Lines.Length} lines) > {roomHeight}", false));
         }
