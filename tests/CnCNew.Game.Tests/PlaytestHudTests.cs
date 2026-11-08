@@ -32,6 +32,7 @@ internal static class PlaytestHudTests
         harness.Run("A ranger with the capture upgrade shows capture over a neutral tech building and takes it by a click, attacks an enemy's and enters a civilian one", () => CaptureCursor(data));
         harness.Run("A selected unit of a control group shows the group's number at its health bar, one that is not in a group or not selected does not", () => ControlGroupNumber(data));
         harness.Run("A selected supply drop zone shows its countdown on the bar: the share of the delay, the minutes and seconds to the next plane, and a sell button", () => OclTimerWindow(data));
+        harness.Run("The clock of the particle cannon stands still while the player is short of power, on the list of superweapons and on the cameo, and runs on when a plant is there", () => BrownOutClock(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
         return harness.Failures;
     }
@@ -80,6 +81,58 @@ internal static class PlaytestHudTests
         controller.BuildDrawList(1280, 720);
         var later = controller.WindowProgress("ControlBar.wnd:OCLTimerProgressBar");
         TestHarness.Assert(later is >= 0 and < 20, $"after the plane came the delay begins again ({later} %)");
+    }
+
+    /// <summary>
+    /// The owner's playtest of 4 November 2026 (finding 15): "the particle cannon and the nuke also count down although there is no power". The simulation pauses a power whose building is
+    /// underpowered (<c>Object::pauseAllSpecialPowers</c>), but the HUD read the raw ready frame: the original's <c>getReadyFrame</c> moves it on with the pause (the clock stands) and
+    /// <c>getPercentReady</c> gives the share the pause began with.
+    /// </summary>
+    private static void BrownOutClock(GameData data)
+    {
+        var scenario = new DemoScenario("hud-brown-out", "hud-brown-out", "hud-brown-out", 30 * 60 * 3, [new ScenarioUnit("cannon", "AmericaParticleCannonUplink", 1, 0, 0, 0f)], [], 0f, 0f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Seconds(int seconds)
+        {
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * seconds; frame++)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            }
+        }
+        var text = data.LoadText("English");
+        string? Label(string label) => text.TryGet(label, out var resolved) ? resolved : null;
+        SuperweaponLine Line() => controller.Superweapons.Collect(live.World, Label).Single(line => line.Power == "SuperweaponParticleUplinkCannon");
+        float Cameo()
+        {
+            controller.BuildDrawList(1280, 720);
+            return controller.Powers.First(button => button.Button.Name.Contains("ParticleCannon", StringComparison.OrdinalIgnoreCase) || button.Button.Name.Contains("Uplink", StringComparison.OrdinalIgnoreCase)).ReadyFraction ?? -1f;
+        }
+        Seconds(2);
+        TestHarness.Assert(!live.World.HasSufficientPower(new CnCNew.Simulation.Ids.PlayerId(1)), "the cannon consumes ten units and no plant is there: the player is short of power");
+        var first = Line();
+        var fraction = Cameo();
+        Seconds(40);
+        var second = Line();
+        TestHarness.Assert(second.SecondsLeft == first.SecondsLeft, $"the list shows the same time after forty seconds without power ({first.Time}, {second.Time})");
+        TestHarness.Assert(!second.Ready && Math.Abs(Cameo() - fraction) < 0.001f, $"and so does the cameo ({fraction:F3}, {Cameo():F3})");
+
+        // Two plants: the power is back and the clock runs again.
+        var feeder = live.World;
+        for (var plant = 0; plant < 2; plant++)
+            TestHarness.Assert(live.World.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, (ulong)(900 + plant), live.World.Tick, "AmericaPowerPlant", new CnCNew.Simulation.Ids.PlayerId(1),
+                CnCNew.Simulation.Numerics.Fixed.FromInt(300), CnCNew.Simulation.Numerics.Fixed.FromInt(plant * 70), CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, "a plant is placed");
+        Seconds(2);
+        TestHarness.Assert(live.World.HasSufficientPower(new CnCNew.Simulation.Ids.PlayerId(1)), "with two plants the player has enough power");
+        var third = Line();
+        Seconds(30);
+        var fourth = Line();
+        TestHarness.Assert(third.SecondsLeft - fourth.SecondsLeft is >= 29 and <= 31, $"the clock runs down again ({third.Time}, {fourth.Time})");
     }
 
     /// <summary>

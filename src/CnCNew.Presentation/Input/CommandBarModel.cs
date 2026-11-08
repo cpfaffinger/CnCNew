@@ -652,13 +652,26 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         return fallback;
     }
 
-    /// <summary><c>SpecialPowerModule::getReadyFrame</c>: the logic frame the power is ready again - the shared frame of the player for <c>SharedSyncedTimer</c> powers, else the module's own saved one.</summary>
+    /// <summary>
+    /// <c>SpecialPowerModule::getReadyFrame</c>: the logic frame the power is ready again - the shared frame of the player for <c>SharedSyncedTimer</c> powers, else the module's own saved one,
+    /// moved on with the time of a pause that is running (the clock of a power whose building is underpowered or disabled stands still).
+    /// </summary>
     public static long ReadyFrameOf(SimulationWorld world, PlayerId player, SimModule module, Simulation.Templates.SpecialPowerInfo power)
-        => power.SharedSynced && world.TryGetSharedReadyFrame(player, power.Index, out var shared) ? shared : SimulationQueries.Describe(module).Int("availableOnFrame");
+    {
+        if (power.SharedSynced && world.TryGetSharedReadyFrame(player, power.Index, out var shared)) return shared;
+        var available = SimulationQueries.Describe(module).Int("availableOnFrame");
+        return module is SpecialPowerModuleBase { IsPaused: true } paused ? available + (world.Tick - paused.PausedOnFrame) : available;
+    }
 
     /// <summary><c>SpecialPowerModule::getPercentReady</c>: the elapsed share of the reload, from the saved ready frame (the shared frame for <c>SharedSyncedTimer</c> powers).</summary>
     private static float ReadyFraction(SimulationWorld world, PlayerId player, SimModule module, Simulation.Templates.SpecialPowerInfo power)
     {
+        // A paused power shows the share it had when the pause began (m_pausedPercent; a power that was ready then is not shown as ready).
+        if (!(power.SharedSynced && world.TryGetSharedReadyFrame(player, power.Index, out _)) && module is SpecialPowerModuleBase { IsPaused: true } paused && power.ReloadTicks > 0)
+        {
+            var available = SimulationQueries.Describe(module).Int("availableOnFrame");
+            return paused.PausedOnFrame >= available ? 0.99999f : Math.Clamp(1f - (available - paused.PausedOnFrame) / (float)power.ReloadTicks, 0f, 1f);
+        }
         var readyFrame = ReadyFrameOf(world, player, module, power);
         if (power.ReloadTicks <= 0) return world.Tick >= readyFrame ? 1f : 0f;
         return Math.Clamp(1f - (readyFrame - world.Tick) / (float)power.ReloadTicks, 0f, 1f);

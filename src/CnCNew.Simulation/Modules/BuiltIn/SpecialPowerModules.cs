@@ -69,6 +69,8 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
     public int PowerIndex => _power;
     public bool StartsAttack => baseData.StartsAttack;
     public bool IsPaused => _pausedCount > 0;
+    /// <summary><c>m_pausedOnFrame</c>: the tick the running pause began (the first of the pauses that overlap).</summary>
+    public long PausedOnFrame => _pausedOnFrame;
 
     public override void OnSpawn(IWorldServices world)
     {
