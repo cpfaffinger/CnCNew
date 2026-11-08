@@ -53,6 +53,7 @@ internal static class ShellTests
         harness.Run("Menu shell walks every screen and draws cleanly in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => WalkScreens(data, modern, updating)));
         if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         harness.Run("Options persist and reload", () => OptionsPersist(data));
+        harness.Run("The options offer the sizes of the display, not of the window, and a stored size the display lacks falls back", () => OptionsOfferTheDisplaysSizes(data));
         harness.Run("The game speed slider of the skirmish setup shows its number and speeds the match up (the owner's playtest)", () => SkirmishGameSpeed(data));
         harness.Run("The starting cash of the skirmish setup reaches 75,000 and 100,000, and a match starts with it", () => SkirmishStartingCash(data));
         harness.Run("The debug options of the skirmish setup: the button, the screen, the choices reach the match description, the world and the general's window", () => SkirmishDebugOptions(data));
@@ -1162,6 +1163,46 @@ internal static class ShellTests
             $"the computer player built units and collected supplies ({computer?.UnitsBuilt} units, {computer?.Resources} credits, {computer?.BuildingsBuilt} buildings)");
         var counted = live.Session.World.Entities.Count(entity => entity.Owner == live.Session.Players[1].Id && CnCNew.Game.Spectator.SpectatorStats.Classify(entity.Template) is CnCNew.Game.Spectator.SpectatorUnitClass.Army or CnCNew.Game.Spectator.SpectatorUnitClass.Worker && !entity.EffectivelyDead);
         TestHarness.Assert(computer!.UnitsBuilt <= counted + computer.UnitsLost + 2, $"no more units built than it has and lost, beside the ones it started with ({computer.UnitsBuilt}, {counted}, {computer.UnitsLost})");
+    }
+
+    /// <summary>The resolution box lists what the monitor can show (the desktop's size and the adapter's modes), as "W x H" in ascending order, and keeps what was stored when the display still offers it.</summary>
+    private static void OptionsOfferTheDisplaysSizes(GameData data)
+    {
+        static string[] Entries(GameShell shell)
+        {
+            Click(shell, "MainMenu.wnd:ButtonOptions");
+            var entries = shell.CurrentScreen.Tree.FindByName("OptionsMenu.wnd:ComboBoxResolution")!.ComboBox!.Entries.ToArray();
+            Click(shell, "OptionsMenu.wnd:ButtonBack");
+            return entries;
+        }
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var big = GameShell.Create(data, new FixedShellEnvironment(directory, 1920, 1200), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            var offered = Entries(big);
+            foreach (var wanted in new[] { "800 x 600", "1280 x 720", "1366 x 768", "1440 x 900", "1600 x 900", "1680 x 1050", "1920 x 1080", "1920 x 1200" })
+                TestHarness.Assert(offered.Contains(wanted), $"a 1920 x 1200 desktop offers {wanted} ({string.Join(", ", offered)})");
+            TestHarness.Assert(!offered.Contains("2560 x 1440"), "...and not 2560 x 1440");
+            var window = GameShell.Create(data, new FixedShellEnvironment(directory + "-w", 1280, 720), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            TestHarness.Assert(Entries(window).All(entry => entry is "800 x 600" or "1024 x 768" or "1280 x 720") && !Entries(window).Contains("1920 x 1080"), "a small desktop offers its own sizes only");
+            var modes = GameShell.Create(data, new FixedShellEnvironment(directory + "-m", 1920, 1080, displayModes: [(2560, 1440), (1920, 1080), (1280, 1024)]), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            var withModes = Entries(modes);
+            TestHarness.Assert(withModes.Contains("2560 x 1440") && withModes.Contains("1280 x 1024") && withModes.Contains("1920 x 1080"), $"the adapter's own modes are offered ({string.Join(", ", withModes)})");
+
+            // A size the display does not offer (the setting was made on a larger monitor) is shown as what it falls back to.
+            var store = new CnCNew.Ui.Settings.SettingsStore(directory + "-s");
+            store.Save(GameSettings.Default with { Display = GameSettings.Default.Display with { Width = 3840, Height = 2160 } });
+            var smaller = GameShell.Create(data, new FixedShellEnvironment(directory + "-s", 1920, 1080), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            Click(smaller, "MainMenu.wnd:ButtonOptions");
+            var combo = smaller.CurrentScreen.Tree.FindByName("OptionsMenu.wnd:ComboBoxResolution")!.ComboBox!;
+            TestHarness.Assert(combo.SelectedIndex >= 0 && combo.Entries[combo.SelectedIndex] == "1920 x 1080", $"3840 x 2160 on a 1920 x 1080 desktop is shown as 1920 x 1080 (showing {(combo.SelectedIndex >= 0 ? combo.Entries[combo.SelectedIndex] : "nothing")})");
+            TestHarness.Assert(!combo.Entries.Contains("3840 x 2160"), "...and is no entry of the list");
+        }
+        finally
+        {
+            foreach (var suffix in new[] { "", "-w", "-m", "-s" })
+                if (Directory.Exists(directory + suffix)) Directory.Delete(directory + suffix, recursive: true);
+        }
     }
 
     private static void OptionsPersist(GameData data)

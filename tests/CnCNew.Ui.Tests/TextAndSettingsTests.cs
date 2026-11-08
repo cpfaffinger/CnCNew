@@ -620,6 +620,34 @@ public static class TextAndSettingsTests
         Assert(Resolutions.BestFit(640, 480, 1920, 1080) is { Adjusted: true, Result: { Width: 800, Height: 600 } }, "Raised to the minimum.");
         Assert(Resolutions.BestFit(1024, 768, 640, 480) is { Adjusted: true, Result: { Width: 800, Height: 600 } } fit && fit.Reason.Contains("smaller than the minimum"), "Tiny desktop.");
         Throws<ArgumentOutOfRangeException>(() => Resolutions.BestFit(800, 600, 0, 600), "must be positive");
+
+        // What the options offer: the standard sizes up to the desktop, the display's own modes, and nothing the monitor cannot show.
+        var common = new[] { new Resolution(1366, 768), new Resolution(1440, 900), new Resolution(1600, 900), new Resolution(1680, 1050), new Resolution(1920, 1080), new Resolution(1920, 1200) };
+        var full = Resolutions.Offered(new Resolution(1920, 1200), []);
+        Assert(common.All(full.Contains) && full.Contains(new Resolution(800, 600)) && full.Contains(new Resolution(1280, 720)), "A 1920x1200 desktop offers 800x600, 1280x720, 1366x768, 1440x900, 1600x900, 1680x1050, 1920x1080 and 1920x1200.");
+        Assert(!full.Contains(new Resolution(2560, 1440)) && !full.Contains(new Resolution(3840, 2160)), "...and nothing larger than the desktop.");
+        var hd = Resolutions.Offered(new Resolution(1920, 1080), []);
+        Assert(hd.Contains(new Resolution(1920, 1080)) && !hd.Contains(new Resolution(1920, 1200)), "A 1920x1080 desktop offers 1920x1080 but not 1920x1200.");
+        var uhd = Resolutions.Offered(new Resolution(3840, 2160), []);
+        Assert(new[] { new Resolution(2560, 1440), new Resolution(2560, 1600), new Resolution(3840, 2160) }.All(uhd.Contains), "A 4K desktop offers 2560x1440, 2560x1600 and 3840x2160.");
+        Assert(full.SequenceEqual(full.OrderBy(size => size.Width).ThenBy(size => size.Height)) && full.Distinct().Count() == full.Length, "The list is ordered and has no duplicates.");
+        var withModes = Resolutions.Offered(new Resolution(1920, 1080), [new Resolution(2560, 1440), new Resolution(1280, 1024), new Resolution(640, 480), new Resolution(900, 1600)]);
+        Assert(withModes.Contains(new Resolution(2560, 1440)) && !withModes.Contains(new Resolution(640, 480)) && !withModes.Contains(new Resolution(900, 1600)) && withModes.Contains(new Resolution(1280, 1024)), "A standard mode above the desktop and a 5:4 mode are offered, a size under the minimum and a portrait mode are not.");
+        Assert(Resolutions.Offered(new Resolution(0, 0), [new Resolution(1920, 1080)]).Contains(new Resolution(1920, 1080)) && Resolutions.Offered(new Resolution(0, 0), []).Length == Resolutions.Standard.Length, "Without a desktop the modes alone, or all standard sizes, are offered.");
+
+        // What a stored size becomes on this display.
+        var desktop = new Resolution(1920, 1080);
+        Assert(Resolutions.FitToDisplay(new Resolution(1600, 900), DisplayMode.Windowed, desktop, []) == new Resolution(1600, 900), "A window that fits is kept.");
+        Assert(Resolutions.FitToDisplay(new Resolution(2560, 1440), DisplayMode.Windowed, desktop, []) == new Resolution(1920, 1080), "A window larger than the desktop becomes the largest standard size of its shape that fits.");
+        Assert(Resolutions.FitToDisplay(new Resolution(1234, 700), DisplayMode.Borderless, desktop, []) == new Resolution(1234, 700), "A custom size that fits is kept.");
+        Assert(Resolutions.FitToDisplay(new Resolution(1280, 720), DisplayMode.BorderlessFullscreen, desktop, []) == desktop, "Windowed fullscreen is the desktop's size.");
+        var modes = new[] { new Resolution(800, 600), new Resolution(1280, 720), new Resolution(1920, 1080) };
+        Assert(Resolutions.FitToDisplay(new Resolution(1280, 720), DisplayMode.Fullscreen, desktop, modes) == new Resolution(1280, 720), "A full screen the display lists is kept.");
+        Assert(Resolutions.FitToDisplay(new Resolution(1600, 900), DisplayMode.Fullscreen, desktop, modes) == new Resolution(1280, 720), "A full screen the display does not list takes the largest listed mode that is not larger.");
+        Assert(Resolutions.FitToDisplay(new Resolution(2560, 1440), DisplayMode.Fullscreen, desktop, modes) == new Resolution(1920, 1080), "...and a larger one the largest mode.");
+        Assert(Resolutions.FitToDisplay(new Resolution(1024, 768), DisplayMode.Fullscreen, desktop, [new Resolution(1280, 720), new Resolution(1920, 1080)]) == new Resolution(1280, 720), "...and a smaller one than any the smallest.");
+        Assert(Resolutions.FitToDisplay(new Resolution(2560, 1440), DisplayMode.Fullscreen, desktop, []) == new Resolution(1920, 1080), "A full screen with no known modes is fitted to the desktop.");
+        Assert(Resolutions.FitToDisplay(new Resolution(3840, 2160), DisplayMode.Windowed, new Resolution(0, 0), []) == new Resolution(3840, 2160), "Without a desktop the request stands.");
     }
 
     // ------------------------------------------------------------------------------------------------------ real data

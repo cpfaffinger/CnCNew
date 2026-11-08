@@ -70,6 +70,7 @@ if (joinServer is not null)
 // --shell-script FILE [--shell-var NAME=VALUE ...] [--shell-seconds N]: a person at the menus as a file (CnCNew.Game.Shell.ShellScript); the run ends when the script
 // is through (exit code 0), a step failed or the N seconds of real time are over (exit code 1). The device's mouse and keyboard are ignored while a script runs.
 // The intro plays at the start of the game for a person; --no-intro leaves it out, as the original's -nologo does, and a check or a scripted person sees it only with --intro.
+CnCNewGame.WindowSizeGiven = GetArgument(args, "--size") is not null;
 CnCNew.Client.Stride.ClientRuntime.PlayIntro = args.Contains("--intro", StringComparer.OrdinalIgnoreCase)
     || (!smokeTest && GetArgument(args, "--shell-script") is null && GetArgument(args, "--play-movie") is null && !args.Contains("--no-intro", StringComparer.OrdinalIgnoreCase));
 CnCNew.Client.Stride.ClientRuntime.StartMovie = GetArgument(args, "--play-movie");
@@ -593,12 +594,14 @@ internal sealed class CnCNewGame(
             CnCNew.Client.Stride.StartupClock.Note("game data loaded");
             var back = GraphicsDevice.Presenter.BackBuffer;
             var shellRun = Shell;
+            var displayFacts = DisplayFacts();
             var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };
             _runtime = ClientRuntime.ForShell(this, data, shellRun?.SettingsDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
-                ShellSkirmishAi, network, shellRun?.Script);
+                ShellSkirmishAi, network, shellRun?.Script, displayFacts.Desktop, displayFacts.Modes);
             if (shellRun?.Script is not null) _shellWatch.Start();
             // The display mode the settings keep is the one the window opens in: applied with the first frame (a scripted or smoke run keeps the size of its command line).
-            if (shellRun?.Script is null && !smokeTest) _runtime.RequestSavedDisplay();
+            if (shellRun?.Script is null && !smokeTest) _runtime.RequestSavedDisplay(new CnCNew.Ui.Settings.Resolution(displayFacts.Desktop.Width, displayFacts.Desktop.Height),
+                [.. displayFacts.Modes.Select(mode => new CnCNew.Ui.Settings.Resolution(mode.Width, mode.Height))], WindowSizeGiven);
             CnCNew.Client.Stride.StartupClock.Note($"shell built; {_splashFrames} start-screen frames were drawn while the data loaded");
             _splash?.Dispose();
             _splash = null;
@@ -790,6 +793,33 @@ internal sealed class CnCNewGame(
         _costWatch.Restart();
         UpdateFrame(gameTime);
         _updateMilliseconds = _costWatch.Elapsed.TotalMilliseconds;
+    }
+
+    /// <summary>True when <c>--size</c> was on the command line: the window opens at that size, whatever the settings keep.</summary>
+    public static bool WindowSizeGiven { get; set; }
+
+    /// <summary>
+    /// What the options need to know about the screen: the desktop's size (the display the window is on, the window's own size when no display can be asked) and the sizes the
+    /// adapter lists as display modes - the sizes of a monitor, not of the window that happens to be open.
+    /// </summary>
+    private ((int Width, int Height) Desktop, IReadOnlyList<(int Width, int Height)> Modes) DisplayFacts()
+    {
+        var back = GraphicsDevice.Presenter.BackBuffer;
+        try
+        {
+            var outputs = GraphicsDevice.Adapter.Outputs;
+            if (outputs.Length == 0) return ((back.Width, back.Height), []);
+            var bounds = DesktopUnderTheWindow() ?? outputs[0].DesktopBounds;
+            var output = outputs.FirstOrDefault(candidate => candidate.DesktopBounds == bounds) ?? outputs[0];
+            var modes = output.SupportedDisplayModes.Select(mode => (mode.Width, mode.Height)).Distinct().OrderBy(size => size.Width).ThenBy(size => size.Height).ToArray();
+            Console.WriteLine($"display: desktop {bounds.Width}x{bounds.Height}, {modes.Length} display modes of the adapter");
+            return ((bounds.Width, bounds.Height), modes);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or NullReferenceException or NotSupportedException)
+        {
+            Console.Error.WriteLine($"warning: the display's modes cannot be listed ({exception.Message}); the options offer the standard sizes up to the window's.");
+            return ((back.Width, back.Height), []);
+        }
     }
 
     /// <summary>The desktop of the display the window is on (its centre decides; the first display when none holds it): where "windowed fullscreen" puts the frameless window.</summary>
