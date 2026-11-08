@@ -247,7 +247,8 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         foreach (var riderId in Riders.ToArray())
         {
             var rider = world.FindEntity(riderId);
-            if (rider is null || rider.EffectivelyDead) Riders.Remove(riderId);
+            // OpenContain never looks at a rider's health: an inert thing (a crate: InactiveBody, effectively dead from its first moment) rides in a chute or a plane as well as a unit.
+            if (rider is null || (rider.EffectivelyDead && !rider.Modules.OfType<InactiveBody>().Any())) Riders.Remove(riderId);
         }
     }
 
