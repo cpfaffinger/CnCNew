@@ -684,6 +684,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
         world.MarkDirty(rider);
         if (LandedBadly(world, rider)) world.Kill(rider.Id);
+        else world.CollideWhereItStands(rider); // a crate that lands on a building is picked up by it (BuildingPickup)
         world.Kill(Entity.Id);
     }
 

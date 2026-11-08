@@ -72,6 +72,9 @@ public interface IWorldServices
     /// <summary><c>Object::setLayer</c>.</summary>
     void SetLayer(Entity entity, int layer);
 
+    /// <summary>What an object that was put down where it overlaps others (a crate that leaves its chute on a building) touches: <c>PartitionManager::checkForCollisions</c> of an object whose position was just set.</summary>
+    void CollideWhereItStands(Entity entity);
+
     /// <summary><c>TerrainLogic::getLayerForDestination</c>: the layer whose surface lies closest to the height.</summary>
     int LayerForDestination(Fixed x, Fixed y, Fixed z);
 

@@ -618,6 +618,12 @@ public sealed partial class SimulationWorld
         DeliverCollisions(entity);
     }
 
+    /// <inheritdoc cref="IWorldServices.CollideWhereItStands"/>
+    public void CollideWhereItStands(Entity entity)
+    {
+        if (entity.Registered && CanCollide(entity)) DeliverCollisions(entity);
+    }
+
     private static bool CanCollide(Entity entity) => !entity.DestroyRequested && !entity.ContainedBy.IsValid && !entity.HasStatus(NoCollisionsBit);
 
     /// <summary><c>Object::onCollide</c>: the entity's collide modules in module order; the loop ends the moment the object stops colliding (a module may set <c>NO_COLLISIONS</c> or destroy it).</summary>
