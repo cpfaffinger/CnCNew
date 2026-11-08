@@ -166,7 +166,16 @@ internal static class EconSurvey
                 }
                 start = -1;
             }
-            summary.Append($" | {name}: {rows.Sum(row => row.Truck)} gathered, zero windows {zeroWindows} ({zeroSeconds} s)");
+            // Phase 64 threshold: a living player with a finished supply center and no carrier at three samples in a row (90 game seconds).
+            var noCarrier = 0;
+            var run = 0;
+            foreach (var row in rows)
+            {
+                if (!row.Defeated && row.Centers > 0 && row.Carriers == 0) { run++; if (run == 3) noCarrier++; }
+                else run = 0;
+            }
+            if (noCarrier > 0) report.AppendLine($"  NO CARRIER {name}: {noCarrier} stretch(es) of 90 s or more with a finished supply center and no carrier");
+            summary.Append($" | {name}: {rows.Sum(row => row.Truck)} gathered, zero windows {zeroWindows} ({zeroSeconds} s), no-carrier stretches {noCarrier}");
         }
         return (report.ToString(), summary.ToString());
     }
