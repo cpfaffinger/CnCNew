@@ -94,19 +94,34 @@ public static class UiGadgetGeometry
 
     public static UiRect ComboEdit(UiWindow window) => UiRect.FromEdges(window.Rect.X, window.Rect.Y, ComboButton(window).X, window.Rect.Bottom);
 
-    public static int ComboVisibleRows(UiWindow window)
+    /// <summary>The rows the list shows: the box's own count, fewer when the screen has no room for all of them on either side of the box (the list then scrolls).</summary>
+    public static int ComboVisibleRows(UiWindow window) => ComboPlacement(window).Rows;
+
+    private static (int Rows, int Y, int Height) ComboPlacement(UiWindow window)
     {
         var combo = window.ComboBox!;
+        var flat = window.Definition.Flat != WndFlatRole.None;
         var max = combo.Data.MaxDisplay > 0 ? combo.Data.MaxDisplay : combo.Entries.Count;
-        return Math.Min(max, combo.Entries.Count);
+        var rows = Math.Min(max, combo.Entries.Count);
+        var rowHeight = RowHeight(window);
+        var padding = flat ? 2 : 0;
+        var height = rows * rowHeight + padding;
+        var below = window.Tree.Viewport.Height - window.Rect.Bottom;
+        var above = window.Rect.Y;
+        if (height <= below) return (rows, window.Rect.Bottom, height);
+        // Past the screen's bottom: above the box when the whole list fits there (the modern skin), else as many rows as the larger side holds.
+        if (flat && height <= above) return (rows, window.Rect.Y - height, height);
+        var room = flat && above > below ? above : below;
+        var fitting = Math.Max(1, Math.Min(rows, (room - padding) / Math.Max(1, rowHeight)));
+        if (fitting == rows) return (rows, window.Rect.Bottom, height);
+        height = fitting * rowHeight + padding;
+        return (fitting, flat && above > below ? window.Rect.Y - height : window.Rect.Bottom, height);
     }
 
-    /// <summary>The open drop-down list below the combo box; in the modern skin above it when the screen ends first.</summary>
+    /// <summary>The open drop-down list below the combo box; in the modern skin above it when the screen ends first; shorter (and scrolling) when neither side has room for it.</summary>
     public static UiRect ComboDropDown(UiWindow window)
     {
-        var flat = window.Definition.Flat != WndFlatRole.None;
-        var height = ComboVisibleRows(window) * RowHeight(window) + (flat ? 2 : 0);
-        var y = flat && window.Rect.Bottom + height > window.Tree.Viewport.Height && window.Rect.Y - height >= 0 ? window.Rect.Y - height : window.Rect.Bottom;
+        var (_, y, height) = ComboPlacement(window);
         return new UiRect(window.Rect.X, y, window.Rect.Width, height);
     }
 

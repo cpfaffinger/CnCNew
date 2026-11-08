@@ -42,6 +42,7 @@ internal static class ProductSurveyTests
         var report = ProductSurveyReport.Instance;
         harness.Run("Menus: every screen of both skins, clicked through, in four sizes and two text sizes", () => Menus(data, report));
         harness.Run("More options: the hint above the hotkey list fits its label in both skins at every size and the text sizes 100 and 125 %", () => MoreOptionsHintFits(data));
+        harness.Run("Drop-down lists stay inside the screen: the army list of the skirmish setup at 800x600 and 150 % text, in both skins", () => DropDownStaysOnScreen(data));
         harness.Run("Skirmish: a person by script through the AI, advanced and debug options, a match and the in-game menu, in both skins", () => Skirmish(data, report));
         harness.Run("Skirmish: structure groups and subgroups of a real match", () => StructureGroups(data, report));
         harness.Run("Matches: a skirmish of each tactics profile at 1x and 3x ends, builds, collects, costs little and plays again", () => Matches(data, report));
@@ -72,6 +73,34 @@ internal static class ProductSurveyTests
                     var overflow = CnCNew.Ui.Skins.UiReadability.Audit(tree, shell.BuildDrawList()).Overflows.Where(item => item.Window == label.Name && !item.Measure.Contains("(1 lines)", StringComparison.Ordinal)).ToArray();
                     TestHarness.Assert(overflow.Length == 0, $"{skin} {width}x{height} text {text} %: \"{label.Text?.Value}\" overflows its label ({string.Join("; ", overflow.Select(item => item.Measure))})");
                 }
+        Delete(root);
+    }
+
+    private static void DropDownStaysOnScreen(GameData data)
+    {
+        var root = Root("dropdown");
+        foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
+        {
+            var config = new ProductSurveyShell.Config(skin, 800, 600, 150);
+            var shell = ProductSurveyShell.NewShell(data, config, root);
+            ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSkirmish");
+            var tree = shell.CurrentScreen.Tree;
+            foreach (var name in new[] { "ComboBoxPlayerTemplate1", "ComboBoxStartingCash", "ComboBoxColor1" })
+            {
+                var combo = tree.FindByName("SkirmishGameOptionsMenu.wnd:" + name)!;
+                var button = CnCNew.Ui.Runtime.UiGadgetGeometry.ComboButton(combo);
+                ShellTestInput.ClickAt(shell, button.CenterX, button.CenterY);
+                TestHarness.Assert(tree.OpenComboBox == combo, $"{skin} {name} opens");
+                var drop = CnCNew.Ui.Runtime.UiGadgetGeometry.ComboDropDown(combo);
+                TestHarness.Assert(drop.X >= 0 && drop.Y >= 0 && drop.Right <= 800 && drop.Bottom <= 600, $"{skin} {name}: the opened list lies inside the screen ({drop})");
+                var rows = CnCNew.Ui.Runtime.UiGadgetGeometry.ComboVisibleRows(combo);
+                TestHarness.Assert(rows >= 1 && rows <= combo.ComboBox!.Entries.Count, $"{skin} {name}: {rows} of {combo.ComboBox!.Entries.Count} rows shown");
+                var rowHeight = CnCNew.Ui.Runtime.UiGadgetGeometry.RowHeight(combo);
+                ShellTestInput.ClickAt(shell, drop.CenterX, drop.Bottom - rowHeight / 2 - 1);
+                TestHarness.Assert(tree.OpenComboBox is null, $"{skin} {name}: a click on the last shown row picks it");
+            }
+        }
         Delete(root);
     }
 
