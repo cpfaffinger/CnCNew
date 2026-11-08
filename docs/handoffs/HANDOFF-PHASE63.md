@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 63
-> **Status:** current (written 7 November 2026 at the end of Phase 62)
+> **Status:** done by machine (8 November 2026; `docs/SIMULATION-CORE.md` §87; written 7 November 2026 at the end of Phase 62)
 > **Predecessor:** HANDOFF-PHASE62.md · **Results in:** `docs/SIMULATION-CORE.md` §87, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -58,3 +58,11 @@ Tier 4 at the final state; every item built or named with its reason.
 ## Final report and N+1
 
 Numbers with commit hashes, the tier that ran, what was not run, what no human has seen; the registers of `docs/plan/` brought up to date; the next brief written.
+
+## Result (8 November 2026)
+
+Done by machine, on one machine; no human has seen or heard any of it. Per item:
+
+1. **F-143:** built (§87.1): the approach of a unit inside its minimum range; the retail reference match's arrivals 11,506,890 -> 3,589, commands 884,368 -> 311,588. The 5 % test of the cost could not be made run for run (the matches differ); the search itself is 0.03 % of a run.
+2. **The open rate differences:** three causes (portable structures, topple, turrets) and the fall and the Chinook; F-149, F-151 and F-154 vanished with them (§87.2). One older difference is registered (F-164).
+3. **F-158, 4. F-157 and F-159:** built (§87.3). 5. **The AI economy's rest:** not built. 6. **F-140's rest and F-137's sounds:** not built. 7. **The check scripts as steps of `scripts/test.ps1`:** not built.

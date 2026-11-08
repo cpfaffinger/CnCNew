@@ -351,3 +351,7 @@ FX data are authored in **original frames** (1/30 s): lifetimes, delays, velocit
 Unchanged at 30 Hz: checksum of the execution pass of `fx-audit`, digest of `sync-perf --digest` (contains every effect frame), the captures and sound recordings of the client (`docs/TICKRATE-MIGRATION.md` §14.2).
 
 Time scale at 60 Hz (`tests/CnCNew.Game.Tests/TimeScaleTests.cs`, real data): after every tick the effect clock stands exactly on the original frame of the game time, and a particle system created by hand lives equally long at 30 and 60 Hz with the same maximum number of particles (numbers in `docs/TICKRATE-MIGRATION.md` §14.4). **Not verified:** what effects look like at 60 Hz; the particle picture changes 30 times per second, the objects 60 times.
+
+## Phase 63: the Patriot batteries' data stream
+
+When `AssistedTargetingUpdate` hands a target on, the simulation raises `SimEventKind.AssistFeedbackLaser` (two events: the beam from the requester to the battery has zero length and draws nothing; the beam from the assisting battery to the place the victim stood lives 600 ms). `AttachedEffects` draws the laser object's template (`PatriotBinaryDataStream`) as a band for that life, from the battery's present pose to the fixed end point, with a tile factor of 1 like the other beams. The laser's `MuzzleParticleSystem` and `TargetParticleSystem` are not wired (the Patriot's stream names none). `AttachedEffectsTests` pins it at the three rates.
