@@ -395,6 +395,9 @@ public interface IMapPickerOwner
 {
     void SetSelectedMap(string mapPath);
     void SetMapPickerOpen(bool open);
+
+    /// <summary>The map the screen has now: the picker opens with it chosen, as <c>populateMapListbox</c> does with the game info's map, so OK takes the map the setup shows.</summary>
+    string? CurrentMapPath { get; }
 }
 
 /// <summary>
@@ -732,6 +735,8 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         if (!IsHost || SettingsFor(mapPath, Settings) is not { } settings) return;
         Lobby.Configure(settings);
     }
+
+    public string? CurrentMapPath => Settings.MapPath.Length == 0 ? null : Settings.MapPath;
 
     public void SetMapPickerOpen(bool open)
     {

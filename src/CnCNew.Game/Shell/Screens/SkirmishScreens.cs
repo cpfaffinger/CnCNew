@@ -306,6 +306,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     private void RefreshMapDisplay()
         => W("TextEntryMapDisplay").SetText(_selectedMapPath is null ? string.Empty : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource));
 
+    public string? CurrentMapPath => _selectedMapPath;
+
     public void SetSelectedMap(string mapPath)
     {
         _selectedMapPath = mapPath;
@@ -493,7 +495,13 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
         // Two columns of 5 % and 95 % (COLUMNSWIDTH of the file): populateMapListbox puts the difficulty-success image in the first and the name in the second. There is no
         // success record in this build, so the first column stays empty; the name used to land in it and was cut off after two letters.
         foreach (var path in _mapPaths) list.AddListRow(new UiListRow(string.Empty, Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource)));
-        _selectedIndex = -1;
+        // The list opens with the setup's map chosen (populateMapListbox selects the game info's map), so OK takes it without a click on a row.
+        _selectedIndex = _owner.CurrentMapPath is { } current ? _mapPaths.IndexOf(current) : -1;
+        if (_selectedIndex >= 0)
+        {
+            list.SetListSelection(_selectedIndex);
+            list.SetListTop(Math.Max(0, _selectedIndex - 3));
+        }
     }
 
     private void PopulateUserMaps()

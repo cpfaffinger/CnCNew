@@ -79,6 +79,7 @@ internal static class ShellTests
         harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
         harness.Run("Escape leaves the load game screen without any gadget focus", () => LoadGameEscapeWithoutFocus(data));
         harness.Run("Challenge menu hides its biography until a general is picked, then shows the persona's text", () => ChallengeMenuBio(data));
+        harness.Run("The map picker opens with the setup's map chosen, and OK takes it without a click on a row (the product survey)", () => MapPickerOpensOnTheCurrentMap(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -971,6 +972,23 @@ internal static class ShellTests
     /// army. An opened drop-down is the last thing the screen draws and the first thing that takes a click, over everything the screen put on itself (the honors are
     /// drawn by the screen, after its window tree), at every size and in both skins.
     /// </summary>
+    private static void MapPickerOpensOnTheCurrentMap(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var setup = (SkirmishSetupScreen)shell.CurrentScreen;
+        var shown = shell.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryMapDisplay")!.Text!.Value;
+        TestHarness.Assert(setup.CurrentMapPath is not null && shown.Length > 0, "the setup has a map");
+        Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonSelectMap");
+        var picker = shell.CurrentScreen.Tree;
+        var list = picker.FindByName("SkirmishMapSelectMenu.wnd:ListboxMap")!;
+        TestHarness.Assert(list.ListBox!.SelectedIndex >= 0 && list.ListBox.Rows[list.ListBox.SelectedIndex].Cells.Any(cell => cell == shown), $"the list has the setup's map '{shown}' chosen (row {list.ListBox.SelectedIndex})");
+        Click(shell, "SkirmishMapSelectMenu.wnd:ButtonOK");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && ReferenceEquals(shell.CurrentScreen, setup), "OK without a click on a row closes the picker");
+        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryMapDisplay")!.Text!.Value == shown && setup.CurrentMapPath is not null, "and the setup keeps its map");
+    }
+
     private static void OpenedDropDownIsOnTop(GameData data)
     {
         foreach (var (width, height) in new[] { (800, 600), (1280, 720) })
