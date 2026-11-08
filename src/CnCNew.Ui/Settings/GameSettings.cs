@@ -51,7 +51,30 @@ public sealed record AudioSettings(float Master, float Music, float Effects, flo
 /// <param name="AlternateMouse">The original's "alternate mouse setup" (<c>GlobalData::m_useAlternateMouse</c>): the left button only selects, the right
 /// button orders. The original ships with it off; this client ships with it on (owner's decision, docs/PRESENTATION-INPUT.md section 2a).</param>
 /// <param name="Retaliation">The original's option "Retaliation" (<c>GlobalData::m_clientRetaliationModeEnabled</c>, on by default): the player's idle units answer an attack on a friend nearby.</param>
-public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling, bool AlternateMouse = true, bool Retaliation = true);
+/// <param name="Hotkeys">The player's own key bindings over the shipped <c>CommandMap.ini</c> (schema 7): action name (<c>SELECT_ALL</c>) to the binding in the map's spelling
+/// (<c>CTRL KEY_A DOWN</c>) or <c>UNBOUND</c>. Only what differs from the shipped map is stored; empty means the shipped keys.</param>
+public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling, bool AlternateMouse = true, bool Retaliation = true,
+    ImmutableSortedDictionary<string, string>? Hotkeys = null)
+{
+    public ImmutableSortedDictionary<string, string> Hotkeys { get; init; } = Hotkeys ?? ImmutableSortedDictionary<string, string>.Empty.WithComparers(StringComparer.Ordinal);
+
+    public bool Equals(ControlSettings? other)
+        => other is not null && ScrollSpeed.Equals(other.ScrollSpeed) && CameraRotateSpeed.Equals(other.CameraRotateSpeed) && EdgeScrolling == other.EdgeScrolling
+            && AlternateMouse == other.AlternateMouse && Retaliation == other.Retaliation
+            && Hotkeys.Count == other.Hotkeys.Count && Hotkeys.All(pair => other.Hotkeys.TryGetValue(pair.Key, out var value) && value == pair.Value);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(ScrollSpeed);
+        hash.Add(CameraRotateSpeed);
+        hash.Add(EdgeScrolling);
+        hash.Add(AlternateMouse);
+        hash.Add(Retaliation);
+        foreach (var pair in Hotkeys) { hash.Add(pair.Key, StringComparer.Ordinal); hash.Add(pair.Value, StringComparer.Ordinal); }
+        return hash.ToHashCode();
+    }
+}
 
 /// <param name="UiTextScalePercent">100, 125 or 150.</param>
 public sealed record AccessibilitySettings(bool HighContrastUi, int UiTextScalePercent, bool ColorBlindSafeTeamColors);
@@ -101,7 +124,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

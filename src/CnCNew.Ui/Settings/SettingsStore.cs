@@ -75,6 +75,11 @@ public sealed class SettingsStore
             if (root["display"] is JsonObject display) display["skin"] = SettingsJson.Name(UiSkinName.Modern);
             return root;
         }),
+        new SettingsMigration(6, "controls.hotkeys added (empty: the shipped CommandMap.ini keys, what every game used)", root =>
+        {
+            if (root["controls"] is JsonObject controls && !controls.ContainsKey("hotkeys")) controls["hotkeys"] = new JsonObject();
+            return root;
+        }),
     ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
@@ -197,6 +202,9 @@ public static class SettingsJson
             writer.WriteBoolean("edgeScrolling", settings.Controls.EdgeScrolling);
             writer.WriteBoolean("alternateMouse", settings.Controls.AlternateMouse);
             writer.WriteBoolean("retaliation", settings.Controls.Retaliation);
+            writer.WriteStartObject("hotkeys");
+            foreach (var pair in settings.Controls.Hotkeys.OrderBy(pair => pair.Key, StringComparer.Ordinal)) writer.WriteString(pair.Key, pair.Value);
+            writer.WriteEndObject();
             writer.WriteEndObject();
 
             writer.WriteStartObject("accessibility");
@@ -240,7 +248,7 @@ public static class SettingsJson
 
         var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect", "skin"]);
         var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient", "device"]);
-        var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation"]);
+        var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation", "hotkeys"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
         var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty", "tickRate"]);
         var skirmish = reader.Section(root, "skirmish", ["lastMap", "lastFactions", "lastStartMoney", "gameSpeed"]);
@@ -266,7 +274,8 @@ public static class SettingsJson
                 reader.Float(controls, "controls.cameraRotateSpeed", d.Controls.CameraRotateSpeed),
                 reader.Bool(controls, "controls.edgeScrolling", d.Controls.EdgeScrolling),
                 reader.Bool(controls, "controls.alternateMouse", d.Controls.AlternateMouse),
-                reader.Bool(controls, "controls.retaliation", d.Controls.Retaliation)),
+                reader.Bool(controls, "controls.retaliation", d.Controls.Retaliation),
+                reader.StringMap(controls, "controls.hotkeys", d.Controls.Hotkeys)),
             new AccessibilitySettings(
                 reader.Bool(accessibility, "accessibility.highContrastUi", d.Accessibility.HighContrastUi),
                 reader.Int(accessibility, "accessibility.uiTextScalePercent", d.Accessibility.UiTextScalePercent),
@@ -358,6 +367,28 @@ public static class SettingsJson
                 return fallback;
             }
             return [..array.Select(item => item!.GetValue<string>())];
+        }
+
+        public ImmutableSortedDictionary<string, string> StringMap(JsonObject? section, string path, ImmutableSortedDictionary<string, string> fallback)
+        {
+            if (section is null) return fallback;
+            if (!section.TryGetPropertyValue(Leaf(path), out var node))
+            {
+                issues.Add(new SettingsIssue(path, "missing", $"'{path}' is missing; using the default."));
+                return fallback;
+            }
+            if (node is not JsonObject map)
+            {
+                issues.Add(new SettingsIssue(path, "invalid-type", $"'{path}' is not an object of strings; using the default."));
+                return fallback;
+            }
+            var builder = ImmutableSortedDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
+            foreach (var (name, value) in map)
+            {
+                if (value is JsonValue text && text.TryGetValue<string>(out var spelled)) builder[name] = spelled;
+                else issues.Add(new SettingsIssue(Join(path, name), "invalid-type", $"'{Join(path, name)}' is not a string; it is ignored."));
+            }
+            return builder.ToImmutable();
         }
 
         private delegate bool TryConvert<T>(JsonValue value, out T result);
