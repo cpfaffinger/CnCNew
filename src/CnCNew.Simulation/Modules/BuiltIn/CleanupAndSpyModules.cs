@@ -48,7 +48,7 @@ public sealed record CleanupHazardData(long ScanTicks, Fixed ScanRange, int Slot
 /// <summary>
 /// <c>CleanupHazardUpdate.cpp</c> (the ambulance, the bio-hazard tech): every <c>ScanRate</c> it looks for the closest <c>CLEANUP_HAZARD</c> object within <c>ScanRange</c> and attacks it
 /// with its weapon until it is gone. The reference orders the AI to attack (<c>aiAttackObject</c>), which walks to weapon range and fires; here the module does both — it moves to
-/// three quarters of the weapon's range from the target and then fires every tick the weapon is ready (<see cref="IWorldServices.TryFireWeaponSlot"/>, with the slot locked temporarily as the reference does before its attack order). <see cref="SetCleanupAreaParameters"/>
+/// three quarters of the weapon's range from the target and then orders an attack on it (<see cref="IWorldServices.OrderModuleAttack"/>: the attack machine fires it on its frames, F-140, with the slot locked temporarily as the reference does before its attack order). <see cref="SetCleanupAreaParameters"/>
 /// (from <see cref="CleanupAreaPower"/>) makes it clean an <em>area</em> instead: it walks to the point, scans around the point with <c>ScanRange + move range</c>, ignores weapon range while
 /// it is hunting and goes back to the point when nothing is left, ending the mode within 25 units of it; a new order from the player or a script (not issued by the module itself) abandons it.
 /// Not modelled: the reference sets the veteran weapon-set flag on creation (no shipped cleaner has such a set), the "busy" AI state that keeps a cleaning unit from reporting idle to
@@ -168,9 +168,8 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         {
             // In range where its frame ends: the unit stops there, as it does after the whole 30 Hz step.
             if (Entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(world);
-            // CleanupHazardUpdate::update: "lock it just till the weapon is empty or the attack is done" before the attack order.
-            world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Temporary);
-            world.TryFireWeaponSlot(Entity, data.Slot, target);
+            // CleanupHazardUpdate::update: "lock it just till the weapon is empty or the attack is done" before the attack order (the order pins the slot).
+            world.OrderModuleAttack(Entity, data.Slot, target);
             return;
         }
         // Walk to three quarters of the range from the target along the line between them; re-plan only when the target moved away from the old stand-off point.

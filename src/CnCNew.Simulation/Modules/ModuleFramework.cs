@@ -618,6 +618,13 @@ public interface IWorldServices
     /// </summary>
     bool TryFireWeaponSlot(Entity source, int slot, Entity victim);
 
+    /// <summary>
+    /// An attack the object's module orders at the victim with weapon <paramref name="slot"/> (<c>aiAttackObject</c>, <c>CMD_FROM_AI</c>), at most <paramref name="shots"/> shots (0: no
+    /// limit): the object's attack machine fires it on its own frames (F-140), so a module that fires through this method keeps the original's fire cycle. Ordering again while an order
+    /// waits for its shot changes nothing. False when the object has no AI or the shot cannot be ordered now.
+    /// </summary>
+    bool OrderModuleAttack(Entity source, int slot, Entity victim, int shots = 0);
+
     /// <summary><c>Object::reloadAllAmmo(true)</c>: every clipped weapon of the active weapon set is full again and ready now (an aircraft that landed at its airfield).</summary>
     void ReloadAllAmmo(Entity entity);
 

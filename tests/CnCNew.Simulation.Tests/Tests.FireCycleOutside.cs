@@ -89,4 +89,31 @@ static partial class Tests
             Check.That(frames.SequenceEqual(first), $"{rate}: the same frame as at 30 Hz ({string.Join(",", frames)} against {string.Join(",", first)}).");
         }
     }
+
+    /// <summary>
+    /// The Medic's <c>CleanupHazardUpdate</c> (<c>fireWhenReady</c> ends in <c>aiAttackObject(target, NO_MAX_SHOTS_LIMIT, CMD_FROM_AI)</c>): its cleaning weapon is fired by the attack machine, on the
+    /// even frames, over a poison field of 5,000 hit points (50 shots, a clip's reload among them), the same at every rate.
+    /// </summary>
+    public static void RealCleanupHazardFiresOnTheMachinesFrames(string directory)
+    {
+        var data = OpenRealFireData(directory);
+        List<long>? first = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var world = NewRealFireWorld(data, rate, computer: false);
+            ulong sequence = 0;
+            var field = SpawnReal(world, ref sequence, "PoisonFieldLarge", 2, 460, 400);
+            var medic = SpawnReal(world, ref sequence, "AmericaVehicleMedic", 1, 400, 400);
+            var start = world.Tick;
+            var events = new List<SimEvent>();
+            for (var tick = 0; tick < world.Frames(160); tick++) events.AddRange(world.Step().Events);
+            var frames = ShotFrames(world, start, events, null, medic.Id);
+            System.Console.WriteLine($"       {rate}: {frames.Count} cleaning shots, first at frame {(frames.Count > 0 ? frames[0] : -1)}, gaps {string.Join(",", frames.Zip(frames.Skip(1), (a, b) => b - a).Distinct().OrderBy(gap => gap))}");
+            Check.That(frames.Count >= 20, $"{rate}: the Medic cleans the poison field ({frames.Count} shots, field health {(field.Body is { } body ? body.Health.ToDecimal() : 0)}).");
+            Check.That(frames.Count > 0 && frames[0] >= 1, $"{rate}: the module orders in its first frame and the machine fires in a later one (frame {(frames.Count > 0 ? frames[0] : -1)}; the module fired in the order's own frame before).");
+            Check.That(frames.Zip(frames.Skip(1), (a, b) => b - a).All(gap => gap >= 2 && gap % 2 == 0), $"{rate}: every gap between two shots is an even number of frames: {string.Join(",", frames.Zip(frames.Skip(1), (a, b) => b - a))}.");
+            first ??= frames;
+            Check.That(frames.SequenceEqual(first), $"{rate}: the same frames as at 30 Hz.");
+        }
+    }
 }

@@ -247,18 +247,37 @@ public sealed partial class SimulationWorld
     /// (<c>CleanupHazardUpdate</c>, <c>AssistedTargetingUpdate</c>). <paramref name="lockSlot"/> of a command button pins its weapon slot until the clip empties
     /// (<c>setWeaponLock(LOCKED_TEMPORARILY)</c> before the attack); -1 pins nothing.
     /// </summary>
-    private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter)
+    private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter, int shots = 0)
     {
         var begins = source.Acquisition is not { Ordered: true } running || running.Victim != victim.Id;
         NoteOrderedAttack(source, victim, origin);
         if (begins) RestartAttackCycles(source);
         if (lockSlot >= 0) SetWeaponLock(source, lockSlot, WeaponLockKind.Temporary);
         var attack = source.Acquisition!;
+        if (shots > 0) attack.ShotsLeft = shots;
         if (AttackCycleFires(source, ref attack.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: begins, byOrder: true))
         {
             attack.ShotPending = false;
             FireCycleShot(source, ref attack.Cycle, choice.Slot, victim, emitter);
         }
+    }
+
+    /// <summary>
+    /// An attack a module of <paramref name="source"/> orders at <paramref name="victim"/> with the weapon of <paramref name="slot"/> (<c>AIUpdateInterface::aiAttackObject</c> with
+    /// <c>CMD_FROM_AI</c>: <c>CleanupHazardUpdate::fireWhenReady</c>, <c>AssistedTargetingUpdate::assistAttack</c>), with <paramref name="shots"/> shots at most (0: no limit). The attack
+    /// machine fires it (F-140): the module orders again when the weapon is ready and no order waits for its shot, as a player's command giver does. False when the unit has no AI or no shot
+    /// can be ordered now (no weapon, not ready, out of range, a victim it cannot hit).
+    /// </summary>
+    public bool OrderModuleAttack(Entity source, int slot, Entity victim, int shots = 0)
+    {
+        if (source.DestroyRequested || source.EffectivelyDead || victim.DestroyRequested || victim.Body is null || AiOf(source) is null) return false;
+        UpdateWeaponSet(source);
+        if (!TurretsLetAttack(source)) return false;
+        if (IsShotPending(source, victim.Id)) return true;
+        var choice = ChooseWeaponInView(source, victim, FireOrigin.Ai, slot);
+        if (choice.Rejection != 0 || !GateAllowsFire(source, victim)) return false;
+        OrderFireAttack(source, victim, choice, FireOrigin.Ai, slot, source.Owner, shots);
+        return true;
     }
 
     /// <summary>The shot of an attack machine at <paramref name="victim"/>: the weapon's bookkeeping, the shot, the turret's sweep, the event, and the machine aims again.</summary>
@@ -269,6 +288,19 @@ public sealed partial class SimulationWorld
         NoteTurretShot(source, slot);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, emitter);
         AfterCycleShot(source, ref body, slot);
+        // Weapon::m_maxShotCount: AIAttackState::update fails once the weapon has no shots left to fire, and once the weapon the attack entered with is no longer the current one - the shot
+        // that empties a clip releases the temporary lock (Object::fireCurrentWeapon), which is how a limit larger than the clip ends the attack.
+        if (source.Acquisition is { ShotsLeft: > 0 } limited && (--limited.ShotsLeft == 0 || source.WeaponLock == WeaponLockKind.None))
+        {
+            limited.ClearVictim();
+            ReleaseWeaponLock(source, WeaponLockKind.Temporary);
+        }
+        else if (source.Acquisition is { ShotsLeft: > 0 } going)
+        {
+            going.ShotPending = true;
+            going.OrderedTick = _tick;
+        }
+        MarkDirty(source);
     }
 
     /// <summary>

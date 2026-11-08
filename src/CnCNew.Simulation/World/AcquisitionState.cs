@@ -83,6 +83,12 @@ internal sealed class AcquisitionState
     /// </summary>
     public bool ShotPending;
 
+    /// <summary>
+    /// <c>Weapon::m_maxShotCount</c> of an attack a module ordered with a limit (<c>aiAttackObject(victim, maxShots)</c>, e.g. <c>AssistedTargetingUpdate</c>'s clip): the shots still to fire, 0 for
+    /// no limit. Each shot orders the next one itself; the last one ends the attack.
+    /// </summary>
+    public int ShotsLeft;
+
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
     /// <summary><c>Weapon::m_leechWeaponRangeActive</c>: a leech-range weapon has fired or begun its wind-up in this attack.</summary>
@@ -102,6 +108,7 @@ internal sealed class AcquisitionState
         FireOrdered = false;
         OrderOrigin = FireOrigin.Player;
         ShotPending = false;
+        ShotsLeft = 0;
     }
 
     public void Describe(IStateWriter writer)
@@ -119,6 +126,7 @@ internal sealed class AcquisitionState
             writer.Bool("fireOrdered", true);
             writer.Int("orderOrigin", (long)OrderOrigin);
             if (ShotPending) writer.Bool("shotPending", true);
+            if (ShotsLeft > 0) writer.Int("shotsLeft", ShotsLeft);
         }
         Cycle?.Describe(writer);
         if (AttackMove)
@@ -163,6 +171,8 @@ internal sealed class AcquisitionState
             state.FireOrdered = reader.Bool("fireOrdered");
             state.OrderOrigin = (FireOrigin)checked((byte)reader.Int("orderOrigin"));
             state.ShotPending = reader.Has("shotPending") && reader.Bool("shotPending");
+            state.ShotsLeft = reader.Has("shotsLeft") ? checked((int)reader.Int("shotsLeft")) : 0;
+            if (state.ShotsLeft < 0) throw new InvalidDataException("Negative shot limit in snapshot.");
             if (!Enum.IsDefined(state.OrderOrigin)) throw new InvalidDataException("Origin of a fire order out of range in snapshot.");
         }
         if (reader.Has("fireCycle")) state.Cycle = FireCycle.Load(reader.Object("fireCycle"));
@@ -206,11 +216,11 @@ internal sealed class AcquisitionState
 
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
 internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral,
-    int ContinueOwner, Fixed ContinueX, Fixed ContinueY, FireCycleStamp Cycle, bool FireOrdered, FireOrigin OrderOrigin, bool ShotPending)
+    int ContinueOwner, Fixed ContinueX, Fixed ContinueY, FireCycleStamp Cycle, bool FireOrdered, FireOrigin OrderOrigin, bool ShotPending, int ShotsLeft)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
         => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral,
-            state.ContinueOwner, state.ContinueX, state.ContinueY, FireCycleStamp.Of(state.Cycle), state.FireOrdered, state.OrderOrigin, state.ShotPending);
+            state.ContinueOwner, state.ContinueX, state.ContinueY, FireCycleStamp.Of(state.Cycle), state.FireOrdered, state.OrderOrigin, state.ShotPending, state.ShotsLeft);
 }
 
 /// <summary>
