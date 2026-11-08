@@ -159,7 +159,7 @@ public sealed class AiOptionsScreen : ShellScreen
         else if (mode == AiEngineMode.NewOnly) lines.Add("A match on a server is played by the new AI only.");
         else if (anyClassic) lines.Add("Tactics are greyed: the Classic AI has none.");
         if (readOnly) lines.Add("The host chose these; all players play by them.");
-        else if (anyClassic && debugOn) lines.Add("Debug options are on and need the new AI.");
+        else if (anyClassic && debugOn) lines.Add("Debug or advanced options are on and need the new AI.");
         else if (anyClassic && anyNew) lines.Add("Both AIs in one match: no saving, no replay.");
         else if (anyClassic) lines.Add("A match with the Classic AI records no replay.");
         return lines.ToImmutable();

@@ -111,6 +111,27 @@ internal static class ShellTests
         }
 
         // The AI options of the setup (docs/GAME-SHELL.md): the one computer slot as the new AI, then switched to Classic with its tactics greyed.
+        // The advanced options and the debug options of the setup (the owner's decision of 8 November 2026: the returning neutral buildings are an advanced option), and the setup with both on.
+        Click(shell, AdvancedButton);
+        TestHarness.Assert(shell.CurrentScreen is AdvancedOptionsScreen, "the advanced options button opens the advanced options");
+        Capture(shell, "SkirmishAdvancedOptions", baselines, updating);
+        Choose(shell, "ComboRespawn", 1, "AdvancedOptions");
+        Capture(shell, "SkirmishAdvancedOptions-On", baselines, updating);
+        Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        Click(shell, DebugButton);
+        TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "the debug options button opens the debug options");
+        Capture(shell, "SkirmishDebugOptions", baselines, updating);
+        Choose(shell, "ComboQuickBuild", 1);
+        Click(shell, "DebugOptions.wnd:ButtonAccept");
+        Capture(shell, "SkirmishSetup-OptionsOn", baselines, updating);
+        foreach (var (file, button, combo) in new[] { ("AdvancedOptions", AdvancedButton, "ComboRespawn"), ("DebugOptions", DebugButton, "ComboQuickBuild") })
+        {
+            Click(shell, button);
+            Choose(shell, combo, 0, file);
+            Click(shell, $"{file}.wnd:ButtonAccept");
+        }
+        TestHarness.Assert(((SkirmishSetupScreen)shell.CurrentScreen).DebugOptions.IsDefault, "both switched off again");
+
         Click(shell, AiOptionsScreen.Button);
         TestHarness.Assert(shell.CurrentScreen is AiOptionsScreen, "the AI options button opens the AI options");
         Capture(shell, "SkirmishAiOptions", baselines, updating);
@@ -987,17 +1008,19 @@ internal static class ShellTests
 
     private const string DebugButton = "DebugOptionsButton.wnd:ButtonDebugOptions";
 
-    private static void Choose(GameShell shell, string combo, int entry)
+    private const string AdvancedButton = "AdvancedOptionsButton.wnd:ButtonAdvancedOptions";
+
+    private static void Choose(GameShell shell, string combo, int entry, string file = "DebugOptions")
     {
         var tree = shell.CurrentScreen.Tree;
-        tree.Post(UiEventKind.ComboSelected, tree.FindByName($"DebugOptions.wnd:{combo}")!, value: entry);
+        tree.Post(UiEventKind.ComboSelected, tree.FindByName($"{file}.wnd:{combo}")!, value: entry);
         tree.Dispatch();
     }
 
     /// <summary>
-    /// The owner's request: debug options in the setup. A button of this project (the layouts of the original are not touched) opens a screen with quick building, returning neutral
-    /// buildings and general points; Accept hands them to the setup, Back drops them; Start puts them into the match setup and the match description, the world plays them and the
-    /// general's window has the points. A setup without them starts the original game.
+    /// The owner's request: debug options in the setup. A button of this project (the layouts of the original are not touched) opens a screen with quick building and general points;
+    /// the returning neutral buildings are an advanced option with a screen of their own (the owner's decision of 8 November 2026). Accept hands them to the setup, Back drops them;
+    /// Start puts them into the match setup and the match description, the world plays them and the general's window has the points. A setup without them starts the original game.
     /// </summary>
     private static void SkirmishDebugOptions(GameData data)
     {
@@ -1006,21 +1029,27 @@ internal static class ShellTests
         Click(shell, "MainMenu.wnd:ButtonSkirmish");
         var setup = (SkirmishSetupScreen)shell.CurrentScreen;
         var button = setup.Tree.FindByName(DebugButton) ?? throw new InvalidOperationException("The setup has no debug button.");
-        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "Debug options" && setup.DebugOptions.IsDefault, $"the setup offers 'Debug options', all off ('{button.Text?.Value}')");
+        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "Debug" && setup.DebugOptions.IsDefault, $"the setup offers a Debug button, all off ('{button.Text?.Value}')");
         var start = setup.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonStart")!;
         var back = setup.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonBack")!;
         TestHarness.Assert(button.Rect.X > start.Rect.Right && button.Rect.Right < back.Rect.X && button.Rect.Y == start.Rect.Y, "the button stands between Start and Back, in no one's way");
+        var advanced = setup.Tree.FindByName(AdvancedButton) ?? throw new InvalidOperationException("The setup has no advanced button.");
+        var aiButton = setup.Tree.FindByName(AiOptionsScreen.Button)!;
+        TestHarness.Assert(advanced.IsVisible && advanced.IsEffectivelyEnabled && advanced.Text!.Value == "Advanced" && setup.DebugOptions.IsDefault, $"the setup offers an Advanced button, all off ('{advanced.Text?.Value}')");
+        TestHarness.Assert(aiButton.Rect.X > start.Rect.Right && advanced.Rect.X > aiButton.Rect.Right && button.Rect.X > advanced.Rect.Right && button.Rect.Right < back.Rect.X
+                           && aiButton.Rect.Y == start.Rect.Y && advanced.Rect.Y == start.Rect.Y && advanced.Rect.Height == start.Rect.Height,
+            "AI options, Advanced options and Debug options stand side by side between Start and Back, none over another");
 
         Click(shell, DebugButton);
         TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "the button opens the debug options");
         var tree = shell.CurrentScreen.Tree;
         string[] Entries(string combo) => [.. tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.Entries];
         int Selected(string combo) => tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
-        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 90 % less build time"]) && Entries("ComboRespawn").SequenceEqual(["Off", "On"])
-                           && Entries("ComboRespawnAfter").SequenceEqual(["30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes"])
-                           && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "1", "3", "5", "10", "20", "50"]), $"the choices: {string.Join(" | ", Entries("ComboQuickBuild").Concat(Entries("ComboRespawnAfter")).Concat(Entries("ComboGeneralPoints")))}");
-        TestHarness.Assert(Selected("ComboQuickBuild") == 0 && Selected("ComboRespawn") == 0 && Selected("ComboRespawnAfter") == 2 && Selected("ComboGeneralPoints") == 0
-                           && !tree.FindByName("DebugOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled, "everything is off; the respawn time waits at 2 minutes, greyed until the respawn is switched on");
+        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 90 % less build time"]) && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "1", "3", "5", "10", "20", "50"]),
+            $"the choices: {string.Join(" | ", Entries("ComboQuickBuild").Concat(Entries("ComboGeneralPoints")))}");
+        TestHarness.Assert(tree.FindByName("DebugOptions.wnd:ComboRespawn") is null && tree.FindByName("DebugOptions.wnd:ComboRespawnAfter") is null
+                           && !Enumerable.Range(0, 1).Any(_ => shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Respawn", StringComparison.Ordinal))), "the debug screen no longer has the returning neutral buildings");
+        TestHarness.Assert(Selected("ComboQuickBuild") == 0 && Selected("ComboGeneralPoints") == 0, "everything is off");
         TestHarness.Assert(tree.FindByName("DebugOptions.wnd:Title")!.Text!.Value == "Debug options" && !shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Entry", StringComparison.Ordinal)),
             "the screen is named and shows no placeholder");
 
@@ -1029,24 +1058,51 @@ internal static class ShellTests
         Click(shell, "DebugOptions.wnd:ButtonBack");
         TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions.IsDefault, "Back leaves the options as they were");
 
-        // Accept hands them over: quick build, respawn switched on (120 s by default), 5 general points.
+        // The advanced options: the returning neutral buildings. The Advanced button says "on" when they are, the Debug button does not.
+        Click(shell, AdvancedButton);
+        TestHarness.Assert(shell.CurrentScreen is AdvancedOptionsScreen, "the advanced button opens the advanced options");
+        tree = shell.CurrentScreen.Tree;
+        string[] AdvancedEntries(string combo) => [.. tree.FindByName($"AdvancedOptions.wnd:{combo}")!.ComboBox!.Entries];
+        int AdvancedSelected(string combo) => tree.FindByName($"AdvancedOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
+        TestHarness.Assert(AdvancedEntries("ComboRespawn").SequenceEqual(["Off", "On"]) && AdvancedEntries("ComboRespawnAfter").SequenceEqual(["30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes"]),
+            $"the choices: {string.Join(" | ", AdvancedEntries("ComboRespawn").Concat(AdvancedEntries("ComboRespawnAfter")))}");
+        TestHarness.Assert(AdvancedSelected("ComboRespawn") == 0 && AdvancedSelected("ComboRespawnAfter") == 2 && !tree.FindByName("AdvancedOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled,
+            "the respawn is off; its time waits at 2 minutes, greyed until the respawn is switched on");
+        TestHarness.Assert(tree.FindByName("AdvancedOptions.wnd:Title")!.Text!.Value == "Advanced options" && tree.FindByName("AdvancedOptions.wnd:ComboQuickBuild") is null
+                           && !shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Entry", StringComparison.Ordinal)), "the screen is named, shows no placeholder and has no debug option");
+        Choose(shell, "ComboRespawn", 1, "AdvancedOptions");
+        TestHarness.Assert(tree.FindByName("AdvancedOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled, "switching the respawn on enables its time");
+        Click(shell, "AdvancedOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions.IsDefault && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced", "Back leaves the advanced options as they were");
+        Click(shell, AdvancedButton);
+        Choose(shell, "ComboRespawn", 1, "AdvancedOptions");
+        Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == new CnCNew.Simulation.Skirmish.MatchDebugOptions(100, 120, 0)
+                           && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)" && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug",
+            $"Accept gives the setup the respawn after 2 minutes ({setup.DebugOptions}); the Advanced button says 'Advanced (on)', the Debug button does not count it ('{setup.Tree.FindByName(DebugButton)!.Text!.Value}')");
+
+        // Accept of the debug screen keeps the advanced option; the debug screen shows nothing of it. Quick build and 5 general points.
         Click(shell, DebugButton);
         Choose(shell, "ComboQuickBuild", 1);
-        Choose(shell, "ComboRespawn", 1);
-        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("DebugOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled, "switching the respawn on enables its time");
         Choose(shell, "ComboGeneralPoints", 3);
         Click(shell, "DebugOptions.wnd:ButtonAccept");
         var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 5);
-        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)", $"Accept gives the setup {chosen} and the button says so");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)" && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)",
+            $"Accept gives the setup {chosen} and both buttons say so");
         Click(shell, DebugButton);
         tree = shell.CurrentScreen.Tree;
-        TestHarness.Assert(Selected("ComboQuickBuild") == 1 && Selected("ComboRespawn") == 1 && Selected("ComboRespawnAfter") == 2 && Selected("ComboGeneralPoints") == 3, "reopened, the screen shows what was chosen");
-        Choose(shell, "ComboRespawnAfter", 4);
-        Click(shell, "DebugOptions.wnd:ButtonAccept");
-        TestHarness.Assert(setup.DebugOptions.NeutralRespawnSeconds == 600, "another time can be chosen");
-        Click(shell, DebugButton);
-        Choose(shell, "ComboRespawnAfter", 2);
-        Click(shell, "DebugOptions.wnd:ButtonAccept");
+        TestHarness.Assert(Selected("ComboQuickBuild") == 1 && Selected("ComboGeneralPoints") == 3, "reopened, the debug screen shows what was chosen");
+        Click(shell, "DebugOptions.wnd:ButtonBack");
+        Click(shell, AdvancedButton);
+        tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(AdvancedSelected("ComboRespawn") == 1 && AdvancedSelected("ComboRespawnAfter") == 2, "reopened, the advanced screen shows what was chosen");
+        Choose(shell, "ComboRespawnAfter", 4, "AdvancedOptions");
+        Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        TestHarness.Assert(setup.DebugOptions == chosen with { NeutralRespawnSeconds = 600 }, "another time can be chosen, and the debug options stay");
+        Click(shell, AdvancedButton);
+        Choose(shell, "ComboRespawnAfter", 2, "AdvancedOptions");
+        Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        TestHarness.Assert(setup.DebugOptions == chosen, "and chosen again");
 
         // Start: the setup, the description, the world and the general's window.
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");

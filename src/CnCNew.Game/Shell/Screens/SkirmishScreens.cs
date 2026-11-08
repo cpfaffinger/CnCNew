@@ -122,15 +122,17 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
         money.SetComboSelection(MoneyChoices.IndexOf(_startMoney));
 
-        // The debug options of the match (docs/GAME-SHELL.md): a button of this project between Start and Back opens their screen. The starting cash above is one of them for the tester.
-        Tree.Register("SkirmishDebugOptionsSystem", OnSystem);
-        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new WndScreenRect(DebugButtonLeft, 513, DebugButtonLeft + AiOptionsScreen.ButtonWidth, 549, 800, 600), "SkirmishDebugOptionsSystem",
-            DebugOptionsScreen.Button, "DebugOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
-        ShowDebugButton();
-        // The AI options (docs/GAME-SHELL.md): a second button of this project beside it, for the engine, tactics and strength of every computer slot.
+        // Three buttons of this project between Start and Back (docs/GAME-SHELL.md): the AI options (the engine, tactics and strength of every computer slot), the advanced options
+        // (the rules a normal player may want) and the debug options (for testing; the starting cash above is one of them for the tester).
+        var (aiRect, advancedRect, debugRect) = AdvancedOptionsScreen.SetupButtons(513, 549);
         Tree.Register("SkirmishAiOptionsSystem", OnSystem);
-        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new WndScreenRect(AiButtonLeft, 513, AiButtonLeft + AiOptionsScreen.ButtonWidth, 549, 800, 600), "SkirmishAiOptionsSystem", AiOptionsScreen.Button, "AiOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, aiRect, "SkirmishAiOptionsSystem", AiOptionsScreen.Button, "AiOptionsButton.wnd", AdvancedOptionsScreen.ButtonFontSize(Shell.Skin)));
         Tree.FindByName(AiOptionsScreen.Button)!.SetText(AiOptionsScreen.ButtonCaption);
+        Tree.Register("SkirmishAdvancedOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, advancedRect, "SkirmishAdvancedOptionsSystem", AdvancedOptionsScreen.Button, "AdvancedOptionsButton.wnd", AdvancedOptionsScreen.ButtonFontSize(Shell.Skin)));
+        Tree.Register("SkirmishDebugOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, debugRect, "SkirmishDebugOptionsSystem", DebugOptionsScreen.Button, "DebugOptionsButton.wnd", AdvancedOptionsScreen.ButtonFontSize(Shell.Skin)));
+        ShowOptionButtons();
 
         // SkirmishGameOptionsMenuInit: the speed of the preferences (FPS), 15 to 61, beside it its number (setFPSTextBox).
         _gameSpeed = Math.Clamp(Shell.Settings.Skirmish.GameSpeed, MinGameSpeed, MaxGameSpeed);
@@ -149,10 +151,6 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     }
 
     protected override string? ExitTransitionGroup => "SkirmishGameOptionsMenuFade";
-
-    /// <summary>The two buttons of this project, "AI options" and "Debug options", stand side by side in the gap between Start (to 268) and Back (from 530) of the layout's 800 x 600, in a smaller type.</summary>
-    private const int DebugButtonLeft = 402;
-    private const int AiButtonLeft = 274;
 
     /// <summary>The AI of a computer slot as the setup will start it (engine, strength, tactics; <see cref="AiOptionsScreen"/>).</summary>
     public MatchAi AiOf(int slot) => _ai[slot];
@@ -195,9 +193,13 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         });
     }
 
-    private void ShowDebugButton() => Tree.FindByName(DebugOptionsScreen.Button)!.SetText(DebugOptionsScreen.ButtonText(_debug));
+    private void ShowOptionButtons()
+    {
+        Tree.FindByName(DebugOptionsScreen.Button)!.SetText(DebugOptionsScreen.ButtonText(_debug));
+        Tree.FindByName(AdvancedOptionsScreen.Button)!.SetText(AdvancedOptionsScreen.ButtonText(_debug));
+    }
 
-    /// <summary>The debug options chosen so far (the match's, when Start is pressed).</summary>
+    /// <summary>The debug and advanced options chosen so far (the match's, when Start is pressed): one value, in the field of the match description the returning neutral buildings always travelled in.</summary>
     public CnCNew.Simulation.Skirmish.MatchDebugOptions DebugOptions => _debug;
 
     private ImmutableArray<HonorEntry> _honors = [];
@@ -346,7 +348,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         if (opponents.Count == 0) return;
         if (ai.Any(slot => slot.Kind == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original) && !_debug.IsDefault)
         {
-            Shell.ShowError("Debug options", "The debug options are not available in a match of the original skirmish AI or on a map with scripts of its own.");
+            Shell.ShowError("Options", "The debug and advanced options are not available in a match of the original skirmish AI or on a map with scripts of its own.");
             return;
         }
         // A person plays until the match is decided (D-8); a check's short match (the client's --skirmish-seconds) has its length in game time.
@@ -369,7 +371,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonStart": TryStart(); break;
             case UiEventKind.ButtonSelected when e.Source == DebugOptionsScreen.Button:
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
-                Shell.OpenDebugOptions(_debug, readOnly: false, chosen => { _debug = chosen; ShowDebugButton(); });
+                Shell.OpenDebugOptions(_debug, readOnly: false, chosen => { _debug = chosen; ShowOptionButtons(); });
+                break;
+            case UiEventKind.ButtonSelected when e.Source == AdvancedOptionsScreen.Button:
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                Shell.OpenAdvancedOptions(_debug, readOnly: false, chosen => { _debug = chosen; ShowOptionButtons(); });
                 break;
             case UiEventKind.ButtonSelected when e.Source == AiOptionsScreen.Button:
                 Shell.PlaySound(ShellUiSounds.ButtonClick);

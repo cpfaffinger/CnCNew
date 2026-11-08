@@ -69,6 +69,36 @@ internal static class SkinScenes
                 Shot("single-player");
                 Click("MainMenu.wnd:ButtonSkirmish");
                 Shot("skirmish-setup");
+                // The advanced and debug options of the setup, and its starting-cash list opened over the battle honors below it (the owner's playtest of 8 November 2026).
+                Click(AdvancedOptionsScreen.Button);
+                Shot("advanced-options");
+                Click("AdvancedOptions.wnd:ButtonBack");
+                Click(DebugOptionsScreen.Button);
+                Shot("debug-options");
+                Click("DebugOptions.wnd:ButtonBack");
+                // Both switched on, for the captions "Advanced (on)" and "Debug (on)" in their windows; then off again, so the match below is the plain one.
+                void Choose(string window, int entry)
+                {
+                    var choosing = shell.CurrentScreen.Tree;
+                    choosing.Post(UiEventKind.ComboSelected, choosing.FindByName(window)!, value: entry);
+                    choosing.Dispatch();
+                }
+                foreach (var (file, button, combo, entry) in new[] { ("AdvancedOptions", AdvancedOptionsScreen.Button, "ComboRespawn", 1), ("DebugOptions", DebugOptionsScreen.Button, "ComboQuickBuild", 1) })
+                {
+                    Click(button);
+                    Choose($"{file}.wnd:{combo}", entry);
+                    Click($"{file}.wnd:ButtonAccept");
+                }
+                Shot("skirmish-setup-options-on");
+                foreach (var (file, button, combo) in new[] { ("AdvancedOptions", AdvancedOptionsScreen.Button, "ComboRespawn"), ("DebugOptions", DebugOptionsScreen.Button, "ComboQuickBuild") })
+                {
+                    Click(button);
+                    Choose($"{file}.wnd:{combo}", 0);
+                    Click($"{file}.wnd:ButtonAccept");
+                }
+                Click("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash");
+                Shot("starting-cash-open");
+                Click("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash");
                 // The AI options of the setup (docs/GAME-SHELL.md): the second slot switched to the Classic AI, tactics greyed for it.
                 Click(AiOptionsScreen.Button);
                 shell.CurrentScreen.Tree.Post(UiEventKind.ComboSelected, shell.CurrentScreen.Tree.FindByName("AiOptions.wnd:ComboEngine0")!, value: 1);

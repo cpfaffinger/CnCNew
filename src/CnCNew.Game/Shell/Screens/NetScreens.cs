@@ -448,15 +448,16 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         // Superweapon limits are not a rule of this build's matches.
         W("CheckboxLimitSuperweapons").SetEnabled(false);
         W("ButtonEmote").SetEnabled(false);
-        // The debug options of the match: a button of this project in the gap between Start (to 251) and Back (from 542); the host changes them, everybody else sees them.
-        Tree.Register("RoomDebugOptionsSystem", OnSystem);
-        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new CnCNew.Ui.Wnd.WndScreenRect(402, 516, 402 + AiOptionsScreen.ButtonWidth, 552, 800, 600), "RoomDebugOptionsSystem",
-            DebugOptionsScreen.Button, "DebugOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
-        // The AI options of the room (docs/GAME-SHELL.md): the tactics and the strength of every computer slot, which the room's settings carry; the engine is the new AI.
+        // Three buttons of this project in the gap between Start and Back (the same places as in the skirmish setup): the AI options of the room (the tactics and the strength of every
+        // computer slot, which the room's settings carry; the engine is the new AI), the advanced options and the debug options of the match. The host changes them, everybody else sees them.
+        var (aiRect, advancedRect, debugRect) = AdvancedOptionsScreen.SetupButtons(516, 552);
         Tree.Register("RoomAiOptionsSystem", OnSystem);
-        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, new CnCNew.Ui.Wnd.WndScreenRect(266, 516, 266 + AiOptionsScreen.ButtonWidth, 552, 800, 600), "RoomAiOptionsSystem",
-            AiOptionsScreen.Button, "AiOptionsButton.wnd", AiOptionsScreen.ButtonFontSize));
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, aiRect, "RoomAiOptionsSystem", AiOptionsScreen.Button, "AiOptionsButton.wnd", AdvancedOptionsScreen.ButtonFontSize(Shell.Skin)));
         Tree.FindByName(AiOptionsScreen.Button)!.SetText(AiOptionsScreen.ButtonCaption);
+        Tree.Register("RoomAdvancedOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, advancedRect, "RoomAdvancedOptionsSystem", AdvancedOptionsScreen.Button, "AdvancedOptionsButton.wnd", AdvancedOptionsScreen.ButtonFontSize(Shell.Skin)));
+        Tree.Register("RoomDebugOptionsSystem", OnSystem);
+        Tree.AddLayout(DebugOptionsScreen.ButtonLayoutOf(W("ButtonStart").Definition, debugRect, "RoomDebugOptionsSystem", DebugOptionsScreen.Button, "DebugOptionsButton.wnd", AdvancedOptionsScreen.ButtonFontSize(Shell.Skin)));
         StartSpots.Hide(this);
         Sync();
         Transitions?.SetGroup("LanGameOptionsFade");
@@ -624,6 +625,9 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             var debugButton = Tree.FindByName(DebugOptionsScreen.Button)!;
             debugButton.SetText(DebugOptionsScreen.ButtonText(settings.Debug));
             debugButton.SetHidden(_mapPickerOpen);
+            var advancedButton = Tree.FindByName(AdvancedOptionsScreen.Button)!;
+            advancedButton.SetText(AdvancedOptionsScreen.ButtonText(settings.Debug));
+            advancedButton.SetHidden(_mapPickerOpen);
             Tree.FindByName(AiOptionsScreen.Button)!.SetHidden(_mapPickerOpen);
             W("ComboBoxStartingCash").SetEnabled(IsHost);
             W("ComboBoxStartingCash").SetComboSelection(MoneyChoices.IndexOf(settings.StartMoney));
@@ -818,6 +822,15 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         {
             Shell.PlaySound(ShellUiSounds.ButtonClick);
             Shell.OpenDebugOptions(Settings.Debug, readOnly: !IsHost, chosen =>
+            {
+                if (IsHost && Lobby.Room is not null) Lobby.Configure(Settings with { Debug = chosen });
+            });
+            return;
+        }
+        if (e.Kind == UiEventKind.ButtonSelected && e.Source == AdvancedOptionsScreen.Button)
+        {
+            Shell.PlaySound(ShellUiSounds.ButtonClick);
+            Shell.OpenAdvancedOptions(Settings.Debug, readOnly: !IsHost, chosen =>
             {
                 if (IsHost && Lobby.Room is not null) Lobby.Configure(Settings with { Debug = chosen });
             });

@@ -99,7 +99,7 @@ internal static class AiOptionsTests
         var mixed = Lines([SkirmishAiKind.Original, SkirmishAiKind.Builtin]);
         TestHarness.Assert(mixed[^1].Contains("no saving", StringComparison.Ordinal), $"both AIs: the match cannot be saved ({string.Join(" | ", mixed)})");
         var debug = Lines([SkirmishAiKind.Original], debug: true);
-        TestHarness.Assert(debug[^1].Contains("Debug options", StringComparison.Ordinal), $"debug options with Classic: said ({string.Join(" | ", debug)})");
+        TestHarness.Assert(debug[^1].Contains("Debug or advanced options", StringComparison.Ordinal), $"debug or advanced options with Classic: said ({string.Join(" | ", debug)})");
         TestHarness.Assert(Lines([SkirmishAiKind.Original], AiEngineMode.ClassicOnly)[1].Contains("scripts", StringComparison.Ordinal), "a map with scripts says so");
         TestHarness.Assert(Lines([SkirmishAiKind.Builtin], AiEngineMode.NewOnly, readOnly: true).Length == 3, "a room: the server's words and the host's");
         TestHarness.Assert(Lines([]).Length == 1 && Lines([])[0].Contains("No computer", StringComparison.Ordinal), "without a computer slot the screen says there is none");
@@ -316,7 +316,7 @@ internal static class AiOptionsTests
         OpenAi(shell);
         TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("AiOptions.wnd:Note0")!.Text!.Value.Length > 0, "the screen has its lines");
         Post(shell, "AiOptions.wnd:ComboEngine0", 1);
-        TestHarness.Assert(Enumerable.Range(0, 3).Any(note => shell.CurrentScreen.Tree.FindByName($"AiOptions.wnd:Note{note}")!.Text!.Value.Contains("Debug options", StringComparison.Ordinal)), "the screen says the debug options need the new AI");
+        TestHarness.Assert(Enumerable.Range(0, 3).Any(note => shell.CurrentScreen.Tree.FindByName($"AiOptions.wnd:Note{note}")!.Text!.Value.Contains("Debug or advanced options", StringComparison.Ordinal)), "the screen says the debug options need the new AI");
         ShellTestInput.Click(shell, "AiOptions.wnd:ButtonAccept");
         ShellTestInput.Click(shell, Setup + "ButtonStart");
         shell.BuildDrawList();
@@ -327,5 +327,24 @@ internal static class AiOptionsTests
         Post(shell, "DebugOptions.wnd:ComboQuickBuild", 1);
         ShellTestInput.Click(shell, "DebugOptions.wnd:ButtonAccept");
         TestHarness.Assert(!Start(shell).Debug.IsDefault, "and with New slots the debug options are played");
+
+        // The same for an advanced option (the returning neutral buildings): it is refused with a Classic slot as before and played with New slots.
+        shell = SetupShell(data);
+        ShellTestInput.Click(shell, AdvancedOptionsScreen.Button);
+        Post(shell, "AdvancedOptions.wnd:ComboRespawn", 1);
+        ShellTestInput.Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        OpenAi(shell);
+        Post(shell, "AiOptions.wnd:ComboEngine0", 1);
+        TestHarness.Assert(Enumerable.Range(0, 3).Any(note => shell.CurrentScreen.Tree.FindByName($"AiOptions.wnd:Note{note}")!.Text!.Value.Contains("Debug or advanced options", StringComparison.Ordinal)), "the screen says the advanced option needs the new AI as well");
+        ShellTestInput.Click(shell, "AiOptions.wnd:ButtonAccept");
+        ShellTestInput.Click(shell, Setup + "ButtonStart");
+        shell.BuildDrawList();
+        shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        TestHarness.Assert(shell.Phase != ShellPhase.MatchLoading && !shell.DrainOutputs().OfType<StartMatchOutput>().Any(), "an advanced option with a Classic slot starts no match");
+        shell = SetupShell(data);
+        ShellTestInput.Click(shell, AdvancedOptionsScreen.Button);
+        Post(shell, "AdvancedOptions.wnd:ComboRespawn", 1);
+        ShellTestInput.Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        TestHarness.Assert(Start(shell).Debug.NeutralRespawnSeconds == AdvancedOptionsScreen.DefaultRespawnSeconds, "and with New slots the returning neutral buildings are played");
     }
 }

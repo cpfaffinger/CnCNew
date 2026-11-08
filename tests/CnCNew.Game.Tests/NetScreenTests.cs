@@ -431,16 +431,19 @@ internal static class NetScreenTests
 
     private const string DebugButton = "DebugOptionsButton.wnd:ButtonDebugOptions";
 
-    private static void ChooseDebug(GameShell shell, string combo, int entry)
+    private const string AdvancedButton = "AdvancedOptionsButton.wnd:ButtonAdvancedOptions";
+
+    private static void ChooseDebug(GameShell shell, string combo, int entry, string file = "DebugOptions")
     {
         var tree = shell.CurrentScreen.Tree;
-        tree.Post(CnCNew.Ui.Runtime.UiEventKind.ComboSelected, tree.FindByName($"DebugOptions.wnd:{combo}")!, value: entry);
+        tree.Post(CnCNew.Ui.Runtime.UiEventKind.ComboSelected, tree.FindByName($"{file}.wnd:{combo}")!, value: entry);
         tree.Dispatch();
     }
 
     /// <summary>
-    /// The debug options travel with the room (protocol 9): the host opens them from the button between Start and Back, Accept asks the server to change the room, the room the server
-    /// shows says "(on)" for everybody; a member can look at them, not change them.
+    /// The debug options and the advanced options travel with the room (protocol 9; the returning neutral buildings are an advanced option in the same field of the settings): the host
+    /// opens them from the buttons between Start and Back, Accept asks the server to change the room, the room the server shows says "(on)" for everybody; a member can look at them,
+    /// not change them.
     /// </summary>
     private static void RoomDebugOptions(GameData data)
     {
@@ -458,25 +461,43 @@ internal static class NetScreenTests
         var button = room.Tree.FindByName(DebugButton) ?? throw new InvalidOperationException("The room has no debug button.");
         var start = room.Tree.FindByName("LanGameOptionsMenu.wnd:ButtonStart")!;
         var back = room.Tree.FindByName("LanGameOptionsMenu.wnd:ButtonBack")!;
-        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "Debug options" && button.Rect.X > start.Rect.Right && button.Rect.Right < back.Rect.X,
+        TestHarness.Assert(button.IsVisible && button.IsEffectivelyEnabled && button.Text!.Value == "Debug" && button.Rect.X > start.Rect.Right && button.Rect.Right < back.Rect.X,
             $"the host's room has the button between Start and Back ('{button.Text?.Value}')");
+        var advancedButton = room.Tree.FindByName(AdvancedButton) ?? throw new InvalidOperationException("The room has no advanced button.");
+        var aiButton = room.Tree.FindByName(AiButton)!;
+        TestHarness.Assert(advancedButton.IsVisible && advancedButton.IsEffectivelyEnabled && advancedButton.Text!.Value == "Advanced" && aiButton.Rect.X > start.Rect.Right && advancedButton.Rect.X > aiButton.Rect.Right
+                           && button.Rect.X > advancedButton.Rect.Right && advancedButton.Rect.Y == button.Rect.Y && aiButton.Rect.Y == button.Rect.Y,
+            $"and the advanced button between the AI options and the debug options ('{advancedButton.Text?.Value}')");
 
         // The host chooses; Accept is a request to the server, which then shows the room with the options.
         lobby.Calls.Clear();
         Click(shell, DebugButton);
         TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "the button opens the debug options");
         ChooseDebug(shell, "ComboQuickBuild", 1);
-        ChooseDebug(shell, "ComboRespawn", 1);
-        ChooseDebug(shell, "ComboRespawnAfter", 0);
         ChooseDebug(shell, "ComboGeneralPoints", 4);
         TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
         Click(shell, "DebugOptions.wnd:ButtonAccept");
-        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 10);
-        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } asked && asked.Debug == chosen && asked.MapPath == settings.MapPath && asked.Slots.SequenceEqual(settings.Slots),
+        var debugOnly = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 0, 10);
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } debugAsked && debugAsked.Debug == debugOnly && debugAsked.MapPath == settings.MapPath && debugAsked.Slots.SequenceEqual(settings.Slots),
             $"Accept asks the server to change the room, and nothing else in it changes ({string.Join("; ", lobby.Calls)})");
         lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
         Step(shell);
-        TestHarness.Assert(room.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)", "the room the server shows says the options are on");
+        TestHarness.Assert(room.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)" && room.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced", "the room the server shows says the debug options are on, and the advanced button does not");
+
+        // The advanced option: the returning neutral buildings, 30 seconds. The debug options stay.
+        lobby.Calls.Clear();
+        Click(shell, AdvancedButton);
+        TestHarness.Assert(shell.CurrentScreen is AdvancedOptionsScreen, "the advanced button opens the advanced options");
+        ChooseDebug(shell, "ComboRespawn", 1, "AdvancedOptions");
+        ChooseDebug(shell, "ComboRespawnAfter", 0, "AdvancedOptions");
+        TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
+        Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 10);
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } asked && asked.Debug == chosen && asked.MapPath == settings.MapPath && asked.Slots.SequenceEqual(settings.Slots),
+            $"Accept asks the server to change the room: the respawn is in, the debug options stay, nothing else changes ({string.Join("; ", lobby.Calls)})");
+        lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
+        Step(shell);
+        TestHarness.Assert(room.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)" && room.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)", "the room the server shows says both are on");
 
         // The money is changed after it: the options stay (the settings the screen sends are the server's, with one change).
         lobby.Calls.Clear();
@@ -495,12 +516,20 @@ internal static class NetScreenTests
         Click(shell, DebugButton);
         TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "a member can look at them");
         var tree = shell.CurrentScreen.Tree;
-        TestHarness.Assert(tree.FindByName("DebugOptions.wnd:ComboQuickBuild")!.ComboBox!.SelectedIndex == 1 && tree.FindByName("DebugOptions.wnd:ComboRespawn")!.ComboBox!.SelectedIndex == 1
-                           && tree.FindByName("DebugOptions.wnd:ComboRespawnAfter")!.ComboBox!.SelectedIndex == 0 && tree.FindByName("DebugOptions.wnd:ComboGeneralPoints")!.ComboBox!.SelectedIndex == 4,
+        TestHarness.Assert(tree.FindByName("DebugOptions.wnd:ComboQuickBuild")!.ComboBox!.SelectedIndex == 1 && tree.FindByName("DebugOptions.wnd:ComboGeneralPoints")!.ComboBox!.SelectedIndex == 4,
             "they show what the host chose");
         TestHarness.Assert(!tree.FindByName("DebugOptions.wnd:ComboQuickBuild")!.IsEffectivelyEnabled && !tree.FindByName("DebugOptions.wnd:ButtonAccept")!.IsVisible, "the boxes are shut and there is no Accept");
         ChooseDebug(shell, "ComboQuickBuild", 0);
         Click(shell, "DebugOptions.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 0 && lobby.Configured!.Debug == chosen, "and nothing reaches the server");
+        Click(shell, AdvancedButton);
+        TestHarness.Assert(shell.CurrentScreen is AdvancedOptionsScreen, "a member can look at the advanced options");
+        tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(tree.FindByName("AdvancedOptions.wnd:ComboRespawn")!.ComboBox!.SelectedIndex == 1 && tree.FindByName("AdvancedOptions.wnd:ComboRespawnAfter")!.ComboBox!.SelectedIndex == 0, "they show what the host chose");
+        TestHarness.Assert(!tree.FindByName("AdvancedOptions.wnd:ComboRespawn")!.IsEffectivelyEnabled && !tree.FindByName("AdvancedOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled
+                           && !tree.FindByName("AdvancedOptions.wnd:ButtonAccept")!.IsVisible, "the boxes are shut and there is no Accept");
+        ChooseDebug(shell, "ComboRespawn", 0, "AdvancedOptions");
+        Click(shell, "AdvancedOptions.wnd:ButtonBack");
         TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 0 && lobby.Configured!.Debug == chosen, "and nothing reaches the server");
     }
 
