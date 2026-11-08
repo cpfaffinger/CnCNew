@@ -247,6 +247,20 @@ static partial class Tests
         return -1;
     }
 
+    /// <summary>
+    /// A script's one-off fire order (<c>Object::doCommandButtonAtObject</c> ends in <c>aiAttackObject</c>, so the attack machine fires it, F-140): ordered once at the start of a logic frame of the
+    /// shooter; returns the ticks that passed before the shot (-1 when none within <paramref name="limit"/> original frames).
+    /// </summary>
+    private static int TicksUntilScriptShot(SimulationWorld world, Feeder feeder, uint shooter, uint victim, int limit = 80)
+    {
+        var unit = world.FindEntity(new EntityId(shooter))!;
+        while (!world.Time.BeginsFrameOf(unit, world.Tick)) world.Step();
+        feeder.FireWeaponSlot(1, shooter, victim, WeaponSlot.Best, FireOrigin.Script);
+        for (var waited = 0; waited < world.Frames(limit); waited++)
+            if (world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity.Value == shooter)) return waited;
+        return -1;
+    }
+
     private static Fixed Degrees(decimal degrees) => SimulationTiming.DegreesToRadians(degrees);
 
     private static bool Near(Fixed value, Fixed expected, decimal toleranceDegrees = 0.1m) => (value - expected).Abs() <= Degrees(toleranceDegrees);
@@ -342,9 +356,9 @@ static partial class Tests
 
         var (script, scriptFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var scripted = Slotted(script, "TurretTank");
-        Check.That(TicksUntilShot(script, scriptFeeder, scripted.Id.Value, IdOf(script, "TurretTarget"), origin: FireOrigin.Script) == 0, "A script's one-off fire order does not wait (it is never repeated)...");
-        script.Step();
-        Check.That(scripted.TurretOf(0)!.Value.Angle.Raw != 0, "...but the turret turns toward the victim all the same.");
+        // F-140: a script's command button is an attack order of the original (doCommandButtonAtObject -> aiAttackObject): the turret turns first and the machine fires, like a player's order.
+        Check.That(TicksUntilScriptShot(script, scriptFeeder, scripted.Id.Value, IdOf(script, "TurretTarget")) == script.Frames(15), "A script's one-off fire order waits for the turret like any attack (15 frames)...");
+        Check.That(scripted.TurretOf(0)!.Value.Angle.Raw != 0, "...and the turret turned toward the victim.");
     }
 
     public static void TurretsHoldRecentreAndRest()
@@ -359,15 +373,12 @@ static partial class Tests
         for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(Near(tank.TurretOf(0)!.Value.Angle, Degrees(90m), 1m) && !tank.TurretOf(0)!.Value.Rotating, "After the last order it still points at the living victim: the attack goes on.");
 
-        // An isolated shot that is not an attack order (a script's command button) keeps its aim for the reload plus the recentre time, then turns back.
+        // A script's command button is an attack order (F-140: doCommandButtonAtObject -> aiAttackObject): after its shot the turret keeps its aim at the living victim like any attack.
         var (shot, shotFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var shooter = Slotted(shot, "TurretTank");
-        Check.That(TicksUntilShot(shot, shotFeeder, shooter.Id.Value, IdOf(shot, "TurretTarget"), origin: FireOrigin.Script) == 0, "A script's one-off shot goes out at once.");
-        for (var i = 0; i < shot.Frames(22); i++) shot.Step();
-        Check.That(Near(shooter.TurretOf(0)!.Value.Angle, Degrees(90m), 1m), "A one-off shot holds its aim for a while...");
+        Check.That(TicksUntilScriptShot(shot, shotFeeder, shooter.Id.Value, IdOf(shot, "TurretTarget")) == shot.Frames(15), "A script's one-off shot goes out when the turret points (F-140: its machine fires it).");
         for (var i = 0; i < shot.Frames(200); i++) shot.Step();
-        Check.That(shooter.TurretOf(0)!.Value.Angle == Fixed.Zero && !Encoding.UTF8.GetString(WorldSnapshot.Write(shot)).Contains("\"turrets\""),
-            "...then it turns back at half speed and rests: a turret at rest writes nothing, the snapshot is the one of an object without turret state.");
+        Check.That(Near(shooter.TurretOf(0)!.Value.Angle, Degrees(90m), 1m) && !shooter.TurretOf(0)!.Value.Rotating, "...and the turret stays on the living victim.");
 
         // A victim that dies: the turret keeps its angle for the hold time, then recentres (TurretAI::friend_getTurretTarget clears dead targets).
         var (killing, killFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("FragileTarget", 2, 0, 100, 0m));

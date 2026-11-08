@@ -240,6 +240,27 @@ public sealed partial class SimulationWorld
         }
     }
 
+    /// <summary>
+    /// An attack order of a unit with an AI at <paramref name="victim"/> (<c>aiAttackObject</c>): the unit does not pick victims by itself while such orders keep coming, and the attack's
+    /// machine fires (F-140) - in this tick when it is in its fire state, else in a later frame of the unit, from the order stream or from the unit's own step. The order comes from a
+    /// player's command giver, a script's command button (<c>Object::doCommandButtonAtObject</c> ends in <c>aiAttackObject</c> as well) or a module of the object
+    /// (<c>CleanupHazardUpdate</c>, <c>AssistedTargetingUpdate</c>). <paramref name="lockSlot"/> of a command button pins its weapon slot until the clip empties
+    /// (<c>setWeaponLock(LOCKED_TEMPORARILY)</c> before the attack); -1 pins nothing.
+    /// </summary>
+    private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter)
+    {
+        var begins = source.Acquisition is not { Ordered: true } running || running.Victim != victim.Id;
+        NoteOrderedAttack(source, victim, origin);
+        if (begins) RestartAttackCycles(source);
+        if (lockSlot >= 0) SetWeaponLock(source, lockSlot, WeaponLockKind.Temporary);
+        var attack = source.Acquisition!;
+        if (AttackCycleFires(source, ref attack.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: begins, byOrder: true))
+        {
+            attack.ShotPending = false;
+            FireCycleShot(source, ref attack.Cycle, choice.Slot, victim, emitter);
+        }
+    }
+
     /// <summary>The shot of an attack machine at <paramref name="victim"/>: the weapon's bookkeeping, the shot, the turret's sweep, the event, and the machine aims again.</summary>
     private void FireCycleShot(Entity source, ref FireCycle? body, int slot, Entity victim, PlayerId emitter)
     {

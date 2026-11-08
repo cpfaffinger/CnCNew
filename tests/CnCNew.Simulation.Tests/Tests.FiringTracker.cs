@@ -263,13 +263,12 @@ static partial class Tests
             Check.That(world2.Step().StateHash == restored.Step().StateHash, "The restored world winds up and fires identically at step " + i + ".");
         }
 
-        // A script's one-off command fires at once.
+        // A script's one-off command is an attack order of the original (F-140: doCommandButtonAtObject -> aiAttackObject): its machine winds up and fires like a player's order, after 15 frames.
         var scripted = NewWorld(fixture);
         var scriptFeeder = new Feeder(scripted);
         scriptFeeder.Spawn(1, "WindupTank", owner: 1, x: 0, y: 0);
         scriptFeeder.Spawn(2, "TurretTarget", owner: 2, x: 0, y: 100);
         scripted.Step();
-        scriptFeeder.FireWeaponSlot(1, IdOf(scripted, "WindupTank"), IdOf(scripted, "TurretTarget"), WeaponSlot.Best, FireOrigin.Script);
-        Check.That(scripted.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired), "A script command button fires without the wind-up.");
+        Check.That(TicksUntilScriptShot(scripted, scriptFeeder, IdOf(scripted, "WindupTank"), IdOf(scripted, "TurretTarget")) == scripted.Frames(15), "A script command button winds up like any attack order and fires after 15 frames.");
     }
 }

@@ -1564,24 +1564,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 var choice = ChooseWeaponInView(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) { RecordRejection(command, choice.Rejection); break; }
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
-                if (fire.Origin != FireOrigin.Script && AiOf(source) is not null)
+                if (AiOf(source) is not null)
                 {
-                    // An attack order of the unit's command giver (aiAttackObject): the unit does not pick victims by itself while such orders keep coming, and the attack's machine
-                    // fires (F-140) - in this tick when it is in its fire state, else in a later frame of the unit, from the order stream or from the unit's own step.
-                    var begins = source.Acquisition is not { Ordered: true } running || running.Victim != fireTarget.Id;
-                    NoteOrderedAttack(source, fireTarget, fire.Origin);
-                    if (begins) RestartAttackCycles(source);
-                    // A command button's weapon slot pins the slot until its clip empties (Object::doCommandButton: setWeaponLock(LOCKED_TEMPORARILY) before the attack).
-                    if (fire.Slot >= 0) SetWeaponLock(source, fire.Slot, WeaponLockKind.Temporary);
-                    var attack = source.Acquisition!;
-                    if (AttackCycleFires(source, ref attack.Cycle, choice.Slot, fireTarget, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: begins, byOrder: true))
-                    {
-                        attack.ShotPending = false;
-                        FireCycleShot(source, ref attack.Cycle, choice.Slot, fireTarget, command.Player);
-                    }
+                    OrderFireAttack(source, fireTarget, choice, fire.Origin, fire.Slot, command.Player);
                     break;
                 }
-                // A script's one-off command button, and an object without an AI (it has no attack state): one shot when the weapon may.
+                // An object without an AI (it has no attack state; the original does nothing with such an order, but no shipped object with a weapon that a player can order lacks an AI,
+                // and the synthetic fixtures of the tests do): one shot when the weapon may.
                 // The turret of the slot turns to the victim first and the weapon waits until it points there (TurretAI). The order stays accepted — the attack goes on and the next
                 // order of the stream fires — so this is neither a rejection (no "cannot do" cue) nor a shot. A script's one-off command button fires its single shot regardless.
                 if (!AimTurretsAt(source, choice.Slot, fireTarget, fire.Origin != FireOrigin.Script ? TurretAimOrder.Attack : TurretAimOrder.Shot) && fire.Origin != FireOrigin.Script) { NoteTurretWait(); break; }

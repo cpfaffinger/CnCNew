@@ -321,13 +321,13 @@ static partial class Tests
 
     public static void TurretAttackOnlyFromAnAttackOrder()
     {
-        // A script's one-off command button is not an attack: the turret turns, holds for the usual grace time and turns back.
+        // A script's one-off command button is an attack order of the original (F-140: aiAttackObject): the turret turns, the machine fires, and the attack goes on with the victim alive.
         var (script, scriptFeeder, _) = AttackWorld(1, ("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var scripted = Slotted(script, "TurretTank");
-        TicksUntilShot(script, scriptFeeder, scripted.Id.Value, IdOf(script, "TurretTarget"), origin: FireOrigin.Script);
-        Check.That(!script.AttackTargetOf(scripted).IsValid, "A script's one-off shot does not start an attack...");
+        Check.That(TicksUntilScriptShot(script, scriptFeeder, scripted.Id.Value, IdOf(script, "TurretTarget")) == script.Frames(15), "A script's one-off shot waits for the turret like any attack order.");
+        Check.That(script.AttackTargetOf(scripted).IsValid, "It starts an attack, as the original's aiAttackObject does...");
         for (var i = 0; i < script.Frames(120); i++) script.Step();
-        Check.That(scripted.TurretOf(0)!.Value.Angle == Fixed.Zero, "...so the turret is back at its natural angle long before 120 ticks have passed.");
+        Check.That(script.AttackTargetOf(scripted).IsValid && Near(scripted.TurretOf(0)!.Value.Angle, Degrees(90m), 1m), "...and the turret stays on the living victim.");
 
         // A new fire order at another victim replaces the old one.
         var (world, feeder, _) = AttackWorld(1, ("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m), ("TurretTarget", 2, 100, 0, 0m));
