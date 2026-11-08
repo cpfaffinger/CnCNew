@@ -476,9 +476,9 @@ public sealed record AssistedTargetingData(int ClipSize, int Slot, string Laser)
 /// <c>AssistedTargetingUpdate.cpp</c> (the Patriot battery's network): when a neighbour of the same kind fires a weapon with a <c>RequestAssistRange</c> at a victim
 /// (<c>SimulationWorld.ProcessRequestAssistance</c>), every free one of these modules attacks the same victim with its assisting weapon slot for <c>AssistingClipSize</c> shots.
 /// "Free" is <c>isFreeToAssist</c>: able to attack (alive, complete, not sold) and its current weapon ready, and not already assisting. The reference locks the slot temporarily
-/// (<c>setWeaponLock(slot, LOCKED_TEMPORARILY)</c>, ended by the weapon slot model when the clip empties) and gives the AI an attack order (<c>aiAttackObject</c> with a shot limit); this module fires the
-/// slot's weapon itself (<see cref="IWorldServices.TryFireWeaponSlot"/>: the slot's own clip, reload and last-shot state), one shot per ready weapon, and gives up when the victim is gone or out of the
-/// weapon's range (the shipped users are immobile, so the AI could not approach either).
+/// (<c>setWeaponLock(slot, LOCKED_TEMPORARILY)</c>, ended by the weapon slot model when the clip empties) and gives the AI an attack order (<c>aiAttackObject</c> with a shot limit); the order
+/// goes through <see cref="IWorldServices.OrderModuleAttack"/>, so the object's attack machine fires the shots on its own frames (F-140) and counts the limit down; an attack out of the
+/// weapon's range fails (the shipped users are immobile, so the AI could not approach either).
 /// F-158, <c>makeFeedbackLaser</c>: <c>assistAttack</c> also makes two beam objects, and the simulation raises <see cref="SimEventKind.AssistFeedbackLaser"/> for each (the beam itself is
 /// drawn by the presentation). Both are made with the assisting battery as the laser's parent, which <c>LaserUpdate::initLaser</c> takes the start from, so the beam "from the requester" starts
 /// and ends at the assisting battery and has no length; the beam to the victim runs from the battery to the place the victim stood. The original's <c>update</c> also resolves the template of
@@ -487,14 +487,12 @@ public sealed record AssistedTargetingData(int ClipSize, int Slot, string Laser)
 public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimModule, IUpdateModule
 {
     private long _nextWake = SimulationTiming.SleepForever;
-    private EntityId _victim;
-    private int _shotsLeft;
 
     public override string ModuleName => "AssistedTargetingUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
-    /// <summary>Shots still to fire for the current request (0 when idle).</summary>
-    public int ShotsLeft => _shotsLeft;
+    /// <summary>Shots still to fire for the current request (0 when idle): the attack's shot limit, which the object's attack machine counts down (<c>Weapon::m_maxShotCount</c>).</summary>
+    public int ShotsLeft => Entity.Acquisition?.ShotsLeft ?? 0;
 
     /// <summary>
     /// <c>AssistedTargetingUpdate::isFreeToAssist</c> ("the reload times of my two weapons are tied together, so Ready is indicative of either"): <c>isAbleToAttack</c> and the
@@ -502,19 +500,17 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
     /// </summary>
     public bool IsFreeToAssist(IWorldServices world)
         => !Entity.EffectivelyDead && !Entity.DestroyRequested && !Entity.HasStatus(ObjectStatusBits.UnderConstruction) && !Entity.HasStatus(ObjectStatusBits.Sold)
-           && CrateModules.AiOf(Entity) is not null && SimulationWorld.WeaponIndexIn(Entity, data.Slot) >= 0 && _shotsLeft == 0
+           && CrateModules.AiOf(Entity) is not null && SimulationWorld.WeaponIndexIn(Entity, data.Slot) >= 0 && ShotsLeft == 0
            && SimulationWorld.WeaponIndexIn(Entity, Entity.CurrentWeaponSlot) >= 0 && world.Tick >= Entity.ReadyTickOf(Entity.CurrentWeaponSlot);
 
-    /// <summary><c>AssistedTargetingUpdate::assistAttack</c>: attack <paramref name="victim"/> for <c>AssistingClipSize</c> shots on behalf of <paramref name="requester"/>.</summary>
+    /// <summary>
+    /// <c>AssistedTargetingUpdate::assistAttack</c>: attack <paramref name="victim"/> for <c>AssistingClipSize</c> shots on behalf of <paramref name="requester"/>: "lock it just till the
+    /// weapon is empty or the attack is done", then <c>aiAttackObject(victim, clipSize, CMD_FROM_AI)</c> - the object's attack machine fires the shots on its own frames (F-140).
+    /// </summary>
     public void AssistAttack(IWorldServices world, Entity requester, Entity victim)
     {
         _ = requester;
-        _victim = victim.Id;
-        _shotsLeft = Math.Max(data.ClipSize, 0);
-        // assistAttack: "lock it just till the weapon is empty or the attack is done".
-        world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Temporary);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
-        world.MarkDirty(Entity);
+        world.OrderModuleAttack(Entity, data.Slot, victim, Math.Max(data.ClipSize, 0));
         if (data.Laser.Length > 0 && !Entity.Owner.IsSystem)
         {
             // makeFeedbackLaser(laser, requester, me) and makeFeedbackLaser(laser, me, victim): the parent is this object both times, the end is where the second object stands.
@@ -523,40 +519,10 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
         }
     }
 
-    public long Update(IWorldServices world)
-    {
-        if (_shotsLeft <= 0) return Stop();
-        var victim = world.FindEntity(_victim);
-        if (victim is null || victim.DestroyRequested || victim.EffectivelyDead || SimulationWorld.WeaponIndexIn(Entity, data.Slot) < 0) return Stop();
-        var ready = Entity.ReadyTickOf(data.Slot);
-        var reloadWait = world.Time.OriginalFrames(ReloadWaitFrames);
-        if (world.Tick < ready) return Math.Min(ready - world.Tick, reloadWait);
-        if (!world.TryFireWeaponSlot(Entity, data.Slot, victim)) return Stop();
-        _shotsLeft--;
-        return _shotsLeft <= 0 ? Stop() : Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, reloadWait), SimulationTiming.SleepNone);
-    }
+    /// <summary>The original's update only resolves the laser templates and sleeps for ever; the shots are the attack machine's.</summary>
+    public long Update(IWorldServices world) => SimulationTiming.SleepForever;
 
-    /// <summary>Own value: an upper bound for one sleep while the slot reloads (a weapon that reloads at an airfield never becomes ready by itself), in logic frames of the original.</summary>
-    private const long ReloadWaitFrames = 1000;
+    public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);
 
-    private long Stop()
-    {
-        _shotsLeft = 0;
-        _victim = EntityId.Invalid;
-        return SimulationTiming.SleepForever;
-    }
-
-    public override void Describe(IStateWriter writer)
-    {
-        writer.Int("nextWake", _nextWake);
-        writer.UInt("victim", _victim.Value);
-        writer.Int("shotsLeft", _shotsLeft);
-    }
-
-    public override void Load(IStateReader reader)
-    {
-        _nextWake = reader.Int("nextWake");
-        _victim = new EntityId(checked((uint)reader.UInt("victim")));
-        _shotsLeft = checked((int)reader.Int("shotsLeft"));
-    }
+    public override void Load(IStateReader reader) => _nextWake = reader.Int("nextWake");
 }

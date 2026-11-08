@@ -414,8 +414,9 @@ static partial class Tests
         Check.That(enemyTurret.Modules.OfType<AssistedTargetingUpdate>().Single().ShotsLeft == 0, "An enemy turret is never asked.");
         Check.That(!module.IsFreeToAssist(world), "A turret that assists is not free.");
         CsRun(world, 60);
-        // 10 from the requester plus three assisting shots (a clip of two, a reload of 15 ticks, one more).
-        Check.That(victim.Body!.Health == Fixed.FromInt(960), $"The victim took the requester's shot and the neighbour's three assisting shots ({victim.Body!.Health}).");
+        // 10 from the requester plus two assisting shots: the request is for three, but the clip holds two, and the shot that empties it releases the temporary lock, which ends the attack
+        // (Object::fireCurrentWeapon, AIAttackState::update: the weapon the attack entered with is no longer the current one).
+        Check.That(victim.Body!.Health == Fixed.FromInt(970), $"The victim took the requester's shot and the neighbour's two assisting shots ({victim.Body!.Health}).");
         Check.That(module.ShotsLeft == 0 && module.IsFreeToAssist(world), "The neighbour is done and free again.");
 
         // A request while the neighbour is already assisting is ignored; a snapshot mid-assist continues identically.
@@ -427,6 +428,6 @@ static partial class Tests
         CsRun(again, 6);
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(again), new SyntheticFixture(TestRate.Default, files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CleanupAndSpyFiles()).Fingerprint);
         for (var tick = 0; tick < again.Frames(80); tick++) Check.That(again.Step().StateHash == restored.Step().StateHash, $"An assist continues identically after a restore (tick {tick}).");
-        Check.That(target.Body!.Health == Fixed.FromInt(960), "The restored run ends with the same damage.");
+        Check.That(target.Body!.Health == Fixed.FromInt(970), "The restored run ends with the same damage.");
     }
 }

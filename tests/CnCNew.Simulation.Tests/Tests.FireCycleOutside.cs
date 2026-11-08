@@ -116,4 +116,44 @@ static partial class Tests
             Check.That(frames.SequenceEqual(first), $"{rate}: the same frames as at 30 Hz.");
         }
     }
+
+    /// <summary>
+    /// The Patriot battery's network (<c>AssistedTargetingUpdate::assistAttack</c> ends in <c>aiAttackObject(victim, AssistingClipSize, CMD_FROM_AI)</c>): the neighbour that is asked fires its
+    /// assisting weapon four times, on the machine's even frames, and then stops.
+    /// </summary>
+    public static void RealPatriotAssistFiresOnTheMachinesFrames(string directory)
+    {
+        var data = OpenRealFireData(directory);
+        List<long>? first = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var world = NewRealFireWorld(data, rate, computer: false);
+            ulong sequence = 0;
+            for (var plant = 0; plant < 3; plant++) SpawnReal(world, ref sequence, "AmericaPowerPlant", 1, 300, 300 + plant * 60);
+            // Both batteries begin in one tick, so their logic frames of the original begin together at every rate.
+            SpawnReal(world, ref sequence, "AmericaPatriotBattery", 1, 400, 400, step: false);
+            var two = SpawnReal(world, ref sequence, "AmericaPatriotBattery", 1, 460, 400);
+            var one = world.Entities.Where(value => value.Template.Name == "AmericaPatriotBattery" && value != two).Single();
+            var victim = SpawnReal(world, ref sequence, "AmericaVehicleDozer", 2, 430, 520);
+            var events = new List<SimEvent>();
+            BeginAtFrameOf(world, one);
+            var start = world.Tick;
+            for (var tick = 0; tick < world.Frames(120); tick++)
+            {
+                if (tick < world.Frames(2)) Check.That(world.Submit(new FireWeaponCommand(new PlayerId(1), ++sequence, world.Tick, one.Id, victim.Id)).Accepted, $"{rate}: the fire order is accepted.");
+                events.AddRange(world.Step().Events);
+            }
+            var assists = ShotFrames(world, start, events, "PatriotMissileAssistWeapon", one.Id, two.Id);
+            var own = ShotFrames(world, start, events, "PatriotMissileWeapon", one.Id, two.Id);
+            System.Console.WriteLine($"       {rate}: own shots at {string.Join(",", own)}; assisting shots at {string.Join(",", assists)}");
+            Check.That(assists.Count == 4, $"{rate}: the neighbour fires its assisting weapon for AssistingClipSize, four shots ({assists.Count}).");
+            var gaps = assists.Zip(assists.Skip(1), (a, b) => b - a).ToList();
+            // The delay of 250 ms is 7.5 frames: the machine fires on the 8th. Before F-140 the module fired on the 8th too, but from its own update, a frame or two after the order.
+            Check.That(gaps.All(gap => gap == 8), $"{rate}: the assisting shots are eight frames apart: {string.Join(",", gaps)}.");
+            Check.That(own.Count > 0 && assists[0] > own[0], $"{rate}: the neighbour's first shot comes after the request (frame {own.FirstOrDefault()}), as the machine aims first ({assists[0]}).");
+            // The neighbour's turret may still be turning when it is asked (an idle scan), which parts the rates by a tick of the turn: the gaps are what is compared.
+            first ??= gaps;
+            Check.That(first.SequenceEqual(gaps), $"{rate}: the same gaps as at 30 Hz.");
+        }
+    }
 }

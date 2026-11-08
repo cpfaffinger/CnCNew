@@ -191,7 +191,6 @@ static partial class Tests
         // -- tick arithmetic with a number
         // -- lower bounds of one tick that are not durations
         new("Modules/BuiltIn/CleanupAndSpyModules.cs", RuleOneTickMinimum, "world.Tick + Math.Max(durationTicks, SimulationTiming.SleepNone)", "a wake-up must lie in the future; the duration is a sum of catalog durations on the grid and zero is handled before"),
-        new("Modules/BuiltIn/CleanupAndSpyModules.cs", RuleOneTickMinimum, "Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, reloadWait), SimulationTiming.SleepNone)", "a difference of absolute ticks: sleep until then, at least to the next step"),
         new("Modules/BuiltIn/DockModules.cs", RuleOneTickMinimum, "_nextWake = Math.Max(_depositOnTick, world.Tick + SimulationTiming.SleepNone);", "an absolute tick, at least the next step"),
         new("Modules/BuiltIn/MineModules.cs", RuleOneTickMinimum, "return Math.Max(_nextDeathCheck - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
         new("Modules/BuiltIn/Phase5BlockerModules.cs", RuleOneTickMinimum, "return Math.Max(soonest - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
