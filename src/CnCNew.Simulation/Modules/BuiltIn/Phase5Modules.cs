@@ -3212,11 +3212,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations = 0, long DoorOpeningTicks = 0, long DoorWaitOpenTicks = 0, long DoorCloseTicks = 0, long ConstructionCompleteTicks = 0,
     ImmutableArray<ProductionQuantity> QuantityModifiers = default, DisabledMask DisabledTypesToProcess = DisabledMask.Held) : ModuleData
 {
+    /// <summary>The queue length of a producer whose data name none (<c>ProductionUpdateModuleData</c>: 9, the number of queue buttons of the control bar).</summary>
+    public const int DefaultMaxQueueEntries = 9;
+
     public static ProductionData Parse(RatedModuleConfiguration configuration)
     {
-        var max = ModuleConfigReader.Int(configuration, "MaxQueueEntries", 0);
+        // ProductionUpdateModuleData: m_maxQueueEntries starts at 9 and only the data's own key changes it; a key of 0 would leave no room at all (canQueueCreateUnit).
+        var max = ModuleConfigReader.Find(configuration, "MaxQueueEntries") is null ? DefaultMaxQueueEntries : ModuleConfigReader.Int(configuration, "MaxQueueEntries", 0);
         return new ProductionData(
-            max <= 0 ? int.MaxValue : checked((int)max),
+            checked((int)max),
             checked((int)OpaqueNumber(configuration, "NumDoorAnimations")),
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorOpeningTime")),
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorWaitOpenTime")),

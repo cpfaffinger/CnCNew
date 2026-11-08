@@ -922,6 +922,7 @@ if (contentDirectory is not null) run.Test("Real data: word descriptions of ever
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: helicopters take goals of their own at the rally point and at one ordered point", () => Tests.RealHelicoptersTakeGoalsOfTheirOwn(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a production queue holds the original's 9 entries and a refused order costs nothing", () => Tests.RealProductionQueueHasTheOriginalsLimit(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter and the fuel air bomb explode at their target and destroy what stands there", () => Tests.RealDaisyCutterAndFuelAirBomb(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
