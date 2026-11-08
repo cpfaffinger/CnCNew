@@ -930,6 +930,7 @@ if (contentDirectory is not null) run.Test("Real data (playtest): the four Strat
 if (contentDirectory is not null) run.Test("Real data: a guarding Pathfinder walks only at what it can attack (no vehicle, no wreck)", () => Tests.RealGuardIgnoresWhatItCannotHurt(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-143): a tunnel defender on its victim's point steps out of the rocket's minimum range and fires at 30, 60 and 120 Hz", () => Tests.RealTunnelDefenderOnItsVictim(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (combat math): hits, shots a second and shots to kill equal the hand calculation from the INI at 30, 60 and 120 Hz", () => Tests.RealCombatMathMatchesTheData(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (playtest): soldiers never enter a transport that is not their player's, an own one and an empty neutral building they do", () => Tests.RealSoldiersNeverEnterAnEnemyTransport(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered to garrison a building goes in at its wall", () => Tests.RealGarrisonEntryAtTheWall(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on the bridge of a skirmish map, and with the bridge down the way is gone", () => Tests.RealDataUnitsCrossABridge(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));

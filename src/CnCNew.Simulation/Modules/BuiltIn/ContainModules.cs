@@ -892,6 +892,8 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
         if (Entity.EffectivelyDead || candidate.Template.TransportSlotCount <= 0 || !PassesKindOfAndRelationship(world, candidate)) return false;
+        // TransportContain::isValidContainerFor: "only OUR OWN units can be transported" - the relationship of the data (AllowEnemiesInside) is not enough, an empty enemy Humvee is no shelter.
+        if (candidate.Owner != Entity.Owner) return false;
         return !checkCapacity || _usedSlots + candidate.Template.TransportSlotCount <= data.Slots;
     }
 
