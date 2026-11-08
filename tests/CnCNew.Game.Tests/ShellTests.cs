@@ -56,6 +56,8 @@ internal static class ShellTests
         harness.Run("The game speed slider of the skirmish setup shows its number and speeds the match up (the owner's playtest)", () => SkirmishGameSpeed(data));
         harness.Run("The starting cash of the skirmish setup reaches 75,000 and 100,000, and a match starts with it", () => SkirmishStartingCash(data));
         harness.Run("The debug options of the skirmish setup: the button, the screen, the choices reach the match description, the world and the general's window", () => SkirmishDebugOptions(data));
+        harness.Run("An opened drop-down list of the skirmish setup is drawn over every picture of the screen and takes the click (the owner's playtest)", () => OpenedDropDownIsOnTop(data));
+        harness.Run("An opened drop-down list of the skirmish setup is drawn over every picture of the screen and takes the click, in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => OpenedDropDownIsOnTop(data)));
         harness.Run("The score counters count by the owner of an object: units built, supplies collected, losses and kills", () => ScoreCountersByOwner(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
@@ -95,6 +97,18 @@ internal static class ShellTests
         Click(shell, "MainMenu.wnd:ButtonSkirmish");
         TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "skirmish button opens setup");
         Capture(shell, "SkirmishSetup", baselines, updating);
+
+        // The opened lists lie over the pictures below them (the owner's playtest of 8 November 2026): the starting cash, and a computer's army.
+        foreach (var (combo, name) in new[] { ("ComboBoxStartingCash", "SkirmishSetup-StartingCashOpen"), ("ComboBoxPlayerTemplate1", "SkirmishSetup-PlayerTemplateOpen") })
+        {
+            var window = shell.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:" + combo)!;
+            var button = UiGadgetGeometry.ComboButton(window);
+            ClickAt(shell, button.CenterX, button.CenterY);
+            TestHarness.Assert(shell.CurrentScreen.Tree.OpenComboBox == window, $"{combo} opens");
+            Capture(shell, name, baselines, updating);
+            ClickAt(shell, button.CenterX, button.CenterY);
+            TestHarness.Assert(shell.CurrentScreen.Tree.OpenComboBox is null, $"{combo} closes again");
+        }
 
         // The AI options of the setup (docs/GAME-SHELL.md): the one computer slot as the new AI, then switched to Classic with its tactics greyed.
         Click(shell, AiOptionsScreen.Button);
@@ -929,6 +943,47 @@ internal static class ShellTests
             TestHarness.Assert(again.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxStartingCash")!.ComboBox!.SelectedIndex == index, $"the next setup preselects entry {index}");
         }
     }
+
+    /// <summary>
+    /// The owner's playtest of 8 November 2026: the opened "starting cash" list of the setup lay under the battle-honor pictures below it, and so did the list of a computer's
+    /// army. An opened drop-down is the last thing the screen draws and the first thing that takes a click, over everything the screen put on itself (the honors are
+    /// drawn by the screen, after its window tree), at every size and in both skins.
+    /// </summary>
+    private static void OpenedDropDownIsOnTop(GameData data)
+    {
+        foreach (var (width, height) in new[] { (800, 600), (1280, 720) })
+        foreach (var combo in new[] { "ComboBoxStartingCash", "ComboBoxPlayerTemplate0", "ComboBoxPlayerTemplate1", "ComboBoxPlayer1", "ComboBoxColor1", "ComboBoxTeam1" })
+        {
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(width, height), skin: SkinPins.Current);
+            Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            Click(shell, "MainMenu.wnd:ButtonSkirmish");
+            var tree = shell.CurrentScreen.Tree;
+            var window = tree.FindByName($"SkirmishGameOptionsMenu.wnd:{combo}")!;
+            var button = UiGadgetGeometry.ComboButton(window);
+            ClickAt(shell, button.CenterX, button.CenterY);
+            var label = $"{combo} at {width}x{height} in the {SkinPins.Current.Name} skin";
+            TestHarness.Assert(tree.OpenComboBox == window, $"{label}: the click on the button opens the list");
+            var drop = UiGadgetGeometry.ComboDropDown(window);
+            var commands = shell.BuildDrawList().Commands;
+            var lastEntry = window.ComboBox!.Entries[UiGadgetGeometry.ComboVisibleRows(window) - 1];
+            var entryAt = -1;
+            for (var index = 0; index < commands.Length; index++)
+                if (commands[index] is UiTextDraw text && text.Text == lastEntry && drop.Contains(text.X, text.Y + 1)) entryAt = index;
+            TestHarness.Assert(entryAt >= 0, $"{label}: the list's last entry is drawn");
+            var covering = Enumerable.Range(0, commands.Length).Where(index => index > entryAt && commands[index] is UiImageDraw image && Intersects(image.Destination, drop)).ToArray();
+            TestHarness.Assert(covering.Length == 0, $"{label}: {covering.Length} picture(s) are drawn over the opened list");
+
+            // A click on a row that lies over a picture picks the row. Rows with a picture under them are tried first (the honors lie below the list's start).
+            var pictures = commands.OfType<UiImageDraw>().Where(image => Intersects(image.Destination, drop)).ToArray();
+            var row = UiGadgetGeometry.ComboVisibleRows(window) - 1;
+            var rowHeight = UiGadgetGeometry.RowHeight(window);
+            var rowY = drop.Y + (window.Definition.Flat != WndFlatRole.None ? 1 : 0) + row * rowHeight + rowHeight / 2;
+            ClickAt(shell, drop.CenterX, rowY);
+            TestHarness.Assert(tree.OpenComboBox is null && window.ComboBox.SelectedIndex == row, $"{label}: a click on the last row picks it ({window.ComboBox.SelectedIndex}, {pictures.Length} picture(s) under the list)");
+        }
+    }
+
+    private static bool Intersects(UiRect a, UiRect b) => a.X < b.Right && b.X < a.Right && a.Y < b.Bottom && b.Y < a.Bottom;
 
     private const string DebugButton = "DebugOptionsButton.wnd:ButtonDebugOptions";
 

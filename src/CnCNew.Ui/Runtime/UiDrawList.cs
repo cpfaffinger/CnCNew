@@ -96,6 +96,21 @@ public sealed record UiDrawStatistics(
 
 public sealed record UiDrawList(ImmutableArray<UiDrawCommand> Commands, UiDrawStatistics Statistics)
 {
+    /// <summary>
+    /// Where the opened drop-down of a combo box begins in <see cref="Commands"/>, or -1 when none is open. The tree draws the open list after every window, because the list is
+    /// the one thing that lies over all the rest; a screen that adds pictures of its own to the tree's list puts them <see cref="WithBeforeDropDown"/>, or they would be drawn over it.
+    /// </summary>
+    public int DropDownStart { get; init; } = -1;
+
+    /// <summary>The list with <paramref name="added"/> at its end, below the opened drop-down when there is one.</summary>
+    public UiDrawList WithBeforeDropDown(IEnumerable<UiDrawCommand> added)
+    {
+        var extra = added.ToImmutableArray();
+        if (extra.IsEmpty) return this;
+        if (DropDownStart < 0) return this with { Commands = Commands.AddRange(extra) };
+        return this with { Commands = Commands.InsertRange(DropDownStart, extra), DropDownStart = DropDownStart + extra.Length };
+    }
+
     /// <summary>One line per command; deterministic, used for golden tests.</summary>
     public string Dump()
     {

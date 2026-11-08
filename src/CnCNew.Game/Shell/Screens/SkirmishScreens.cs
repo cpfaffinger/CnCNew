@@ -426,7 +426,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             PreviewOf(_selectedMapPath, _selectedMapPath is null ? null : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource)),
             Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
         var window = W("ListboxInfo");
-        return !window.IsVisible || _honors.IsDefaultOrEmpty ? list : list with { Commands = list.Commands.AddRange(HonorCells(window).Select(cell => (UiDrawCommand)cell.Draw)) };
+        return !window.IsVisible || _honors.IsDefaultOrEmpty ? list : list.WithBeforeDropDown(HonorCells(window).Select(cell => (UiDrawCommand)cell.Draw));
     }
 }
 

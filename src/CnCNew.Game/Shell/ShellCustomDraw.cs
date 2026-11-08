@@ -119,11 +119,14 @@ public static class ShellCustomDraw
     private static UiDrawList Rebuild(UiDrawList list, Func<UiCustomDraw, ImmutableArray<UiDrawCommand>?> expand)
     {
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        foreach (var command in list.Commands)
+        var dropDownStart = -1;
+        for (var index = 0; index < list.Commands.Length; index++)
         {
+            if (index == list.DropDownStart) dropDownStart = commands.Count;
+            var command = list.Commands[index];
             if (command is UiCustomDraw custom && expand(custom) is { } replacement) commands.AddRange(replacement);
             else commands.Add(command);
         }
-        return list with { Commands = commands.ToImmutable() };
+        return list with { Commands = commands.ToImmutable(), DropDownStart = dropDownStart };
     }
 }

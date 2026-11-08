@@ -33,13 +33,15 @@ public sealed partial class UiWindowTree
         public UiDrawList Build()
         {
             foreach (var root in tree.RootsBottomToTop()) Draw(root);
+            var dropDownStart = -1;
             if (tree._openCombo is { IsVisible: true } combo)
             {
+                dropDownStart = _commands.Count;
                 if (combo.Definition.Flat != WndFlatRole.None) FlatDropDown(combo);
                 else DrawDropDown(combo);
             }
             return new UiDrawList(_commands.ToImmutable(), new UiDrawStatistics(_windows, _unresolvedLabels, _unresolvedSizes, _border,
-                _custom.ToImmutableSortedDictionary(StringComparer.Ordinal)));
+                _custom.ToImmutableSortedDictionary(StringComparer.Ordinal))) { DropDownStart = dropDownStart };
         }
 
         private void Draw(UiWindow window)
