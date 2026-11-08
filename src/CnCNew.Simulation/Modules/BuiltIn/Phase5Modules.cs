@@ -2760,7 +2760,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             if (turn != Fixed.Zero) Entity.Angle = FixedTrig.Normalize(Entity.Angle + Fixed.FromRaw(turn.Raw / left));
         }
         // The rest of the frame's step stays readable on the object (Entity.FrameEnd): who decides its own frame later in this tick sees this one where its step ends, as at 30 Hz.
-        if (covered == 0) Entity.SetAhead(world.Tick, _frameStepX, _frameStepY, Fixed.Zero);
+        // The height rest belongs to the object's other mover, if it has one (a Chinook's climb): this step publishes the ground movement and keeps it (F-165).
+        if (covered == 0) Entity.SetAhead(world.Tick, _frameStepX, _frameStepY, Entity.AheadZ);
         Entity.CoverShare(world.Tick, stepX, stepY, Fixed.Zero);
         // So does the heading the frame ends with (Entity.FrameEndAngle).
         if (Entity.Angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);

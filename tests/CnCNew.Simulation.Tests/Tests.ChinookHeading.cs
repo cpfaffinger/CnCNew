@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CnCNew.Simulation.Numerics;
@@ -70,6 +71,43 @@ static partial class Tests
             Check.That(headings.Distinct().Count() > 5, $"{rate}: the Chinook turns toward its goal ({string.Join(", ", headings.Take(10))}).");
             reference ??= headings;
             SameSeries(reference, headings, $"The heading a Chinook's frame ends with, read in its first tick, at {rate}");
+        }
+    }
+}
+
+static partial class Tests
+{
+    /// <summary>
+    /// F-165: a Chinook climbs with the second step of its object (the first is the ground movement of its AI). A move order that reaches the ground movement in the second tick of a
+    /// frame the climb has begun in published the movement's rest with a height rest of zero and took the second share of the climb with it - the Chinook stood half a step lower
+    /// than at 30 Hz from then on (Alpine Assault ChinaTank against AirForce, a supply Chinook on its way to a dock, frame 19,068).
+    /// </summary>
+    public static void AMoveOrderInTheMiddleOfAChinooksClimbKeepsTheClimb()
+    {
+        List<long>? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            for (var offset = 0; offset < factor; offset++)
+            {
+                var (world, feeder) = FlightRateWorld(rate, ChinookHeadingFiles());
+                feeder.Spawn(1, "SlowLifter", x: 500, y: 500);
+                StepFrames(world, 3);
+                var chinook = Only(world, "SlowLifter");
+                for (var tick = 0; tick < offset; tick++) world.Step();
+                feeder.SetMoveTarget(1, chinook.Id.Value, 100, 500);
+                for (var tick = offset; tick < factor; tick++) world.Step();
+                var heights = new List<long>();
+                for (var frame = 0; frame < 12; frame++)
+                {
+                    for (var tick = 0; tick < factor; tick++) world.Step();
+                    heights.Add(chinook.Z.Raw);
+                }
+                Check.That(heights.Distinct().Count() > 5, $"{rate}: the Chinook climbs ({string.Join(", ", heights.Take(8))}).");
+                reference ??= heights;
+                // The ground under the Chinook is read at slightly different places by the rates (a few raw units); the defect is half a climb step (tens of millions).
+                for (var frame = 0; frame < heights.Count; frame++)
+                    Check.That(Math.Abs(heights[frame] - reference[frame]) < 100_000, $"The height of a Chinook that gets a move order {offset} ticks into a frame, at {rate}: frame {frame} is {heights[frame]} instead of {reference[frame]}.");
+            }
         }
     }
 }
