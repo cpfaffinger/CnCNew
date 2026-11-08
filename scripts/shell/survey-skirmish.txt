@@ -1,0 +1,43 @@
+# The product survey's person at a real skirmish (scripts/check-product-survey.ps1, Game.Tests ProductSurveyTests): the AI options (engine, tactics, strength), the
+# advanced and the debug options, the match, the structure-group and menu keys, the in-game options and the way back. Game.Tests runs it without a window, the survey
+# script in the window client.
+wait screen MainMenuScreen
+click MainMenu.wnd:ButtonSinglePlayer
+click MainMenu.wnd:ButtonSkirmish
+wait screen SkirmishSetupScreen
+# The AI options: the second slot as the rush profile at hard strength, then the classic AI and back to the new one
+click AiOptionsButton.wnd:ButtonAiOptions
+wait screen AiOptionsScreen
+select AiOptions.wnd:ComboTactics0 Rush
+select AiOptions.wnd:ComboStrength0 Hard
+select AiOptions.wnd:ComboEngine0 Classic
+expect disabled AiOptions.wnd:ComboTactics0
+select AiOptions.wnd:ComboEngine0 New
+expect enabled AiOptions.wnd:ComboTactics0
+click AiOptions.wnd:ButtonAccept
+wait screen SkirmishSetupScreen
+# The advanced options and the debug options
+click AdvancedOptionsButton.wnd:ButtonAdvancedOptions
+wait screen AdvancedOptionsScreen
+select AdvancedOptions.wnd:ComboRespawn On
+click AdvancedOptions.wnd:ButtonAccept
+wait screen SkirmishSetupScreen
+click DebugOptionsButton.wnd:ButtonDebugOptions
+wait screen DebugOptionsScreen
+select DebugOptions.wnd:ComboQuickBuild On
+click DebugOptions.wnd:ButtonAccept
+wait screen SkirmishSetupScreen
+click SkirmishGameOptionsMenu.wnd:ButtonStart
+limit 240
+wait phase InMatch
+wait match tick atleast 120
+limit 30
+key Escape
+wait match menu equals open
+click QuitMenu.wnd:ButtonOptions
+wait screen OptionsScreen
+click OptionsMenu.wnd:ButtonBack
+wait match overlay equals no
+click QuitMenu.wnd:ButtonReturn
+wait match menu equals closed
+expect match paused equals no

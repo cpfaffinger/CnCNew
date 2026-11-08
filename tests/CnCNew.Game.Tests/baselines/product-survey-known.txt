@@ -1,0 +1,4 @@
+# Findings of the product survey (tests/CnCNew.Game.Tests/ProductSurveyTests.cs) that are known and explained: KEY | reason. A key written KEY<=N allows a rollup of at most N subjects.
+inert|OptionsScreen:OptionsMenu.wnd+OptionsMore.wnd|OptionsMenu.wnd:ButtonFirewallRefresh | the original's NAT probe of its online play; NAT traversal and the online services are out of scope (CLAUDE.md), so the button of the shipped layout has nothing to do
+text-tall|original|100%<=1 | the shipped layout of the skirmish setup: the label "Starting Cash" wraps to two lines in a one-line window, as in the original game
+text-wide|original|100%<=1 | the patch's options layout: "Alternate Mouse Setup" is wider than its check box label, as shipped
