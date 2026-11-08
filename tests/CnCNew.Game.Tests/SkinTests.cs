@@ -23,7 +23,9 @@ namespace CnCNew.Game.Tests;
 internal static class SkinTests
 {
     private static readonly (int Width, int Height)[] Resolutions = [(800, 600), (1024, 768), (1280, 720), (1920, 1080), (2560, 1080), (640, 960)];
+    private static readonly (int Width, int Height)[] SixteenByTen = [(1440, 900), (1680, 1050), (1920, 1200)];
     private const string BaselinePath = "tests/CnCNew.Game.Tests/baselines/skin-screens.txt";
+    private const string BaselinePath16x10 = "tests/CnCNew.Game.Tests/baselines/skin-screens-16x10.txt";
     private const int NavWidth = 1280, NavHeight = 720;
 
     public static int Run(string[] args)
@@ -41,6 +43,7 @@ internal static class SkinTests
         var updating = System.Environment.GetEnvironmentVariable("CNCNEW_UPDATE_BASELINES") == "1";
         harness.Run("R1: the original skin draws every shipped layout of the shell as it is, laid out as before skins existed", () => OriginalIsTheShippedLayouts(data));
         harness.Run("R2: the options, More options and the HUD of a match in both skins and six resolutions", () => Pinned(data, baselines, updating));
+        harness.Run("R2b: the main menu, the options and the HUD at the 16:10 sizes (1440x900, 1680x1050, 1920x1200) in both skins", () => SixteenByTenLayout(data, updating));
         harness.Run("The settings choose the skin, the run's --skin is kept until the person chooses, and More options writes what it shows", () => SettingsChooseTheSkin(data));
         harness.Run("The modern command bar fills the width at every aspect ratio; its pictures keep their proportions and the width goes to the selection plate", () => ModernBarFillsTheWidth(data));
         harness.Run("More options offers windowed fullscreen (borderless) as a display mode and hands it to the host without a resolution of its own", () => WindowedFullscreen(data));
@@ -73,9 +76,9 @@ internal static class SkinTests
 
     private static string Sha256(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
-    private static void Pin(string name, Func<int, int, UiDrawList> draw, Dictionary<string, string> baselines, bool updating)
+    private static void Pin(string name, Func<int, int, UiDrawList> draw, Dictionary<string, string> baselines, bool updating, (int Width, int Height)[]? sizes = null)
     {
-        foreach (var (width, height) in Resolutions)
+        foreach (var (width, height) in sizes ?? Resolutions)
         {
             var list = draw(width, height);
             TestHarness.Assert(list.Statistics.UnresolvedLabels == 0, $"{name}@{width}x{height}: {list.Statistics.UnresolvedLabels} unresolved label(s)");
@@ -139,6 +142,61 @@ internal static class SkinTests
         TestHarness.Assert(baselines.Count == 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
     }
 
+    /// <summary>
+    /// 16:10 (the shape of 1440x900, 1680x1050, 1920x1200, 2560x1600): the shell and the HUD lay out in both skins without an unresolved label, nothing is drawn outside the window, the
+    /// 800 x 600 menus of the original skin keep their shape in the middle and the modern skin's canvas fills the window. Pinned beside the six sizes of the other pictures, in a file of its own.
+    /// </summary>
+    private static void SixteenByTenLayout(GameData data, bool updating)
+    {
+        var baselines = SkinPins.Load(BaselinePath16x10);
+        foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
+        {
+            var directory = Directory("sixteen-" + skin.Id);
+            var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: skin);
+            UiDrawList Shell(int width, int height)
+            {
+                shell.Resize(width, height);
+                return shell.BuildDrawList();
+            }
+            foreach (var (width, height) in SixteenByTen)
+            {
+                var list = Shell(width, height);
+                var images = list.Commands.OfType<UiImageDraw>().Select(image => image.Destination).ToArray();
+                TestHarness.Assert(images.Length > 0 && images.All(rect => rect.X >= 0 && rect.Y >= 0 && rect.Right <= width && rect.Bottom <= height), $"{skin} main menu {width}x{height}: every picture lies inside the window");
+                var fills = list.Commands.OfType<UiFillRect>().Select(fill => fill.Rect).ToArray();
+                if (skin.IsModern) TestHarness.Assert(fills.Any(rect => rect.X <= 1 && rect.Y <= 1 && rect.Width >= width - 2 && rect.Height >= height - 2), $"modern main menu {width}x{height}: the canvas fills the window");
+                else
+                {
+                    // The shipped layouts are 800 x 600 and keep their shape: the content is centred, as wide as the height allows.
+                    var left = images.Min(rect => rect.X);
+                    var right = width - images.Max(rect => rect.Right);
+                    TestHarness.Assert(Math.Abs(left - right) <= 2, $"original main menu {width}x{height}: centred ({left} left, {right} right)");
+                }
+            }
+            Pin($"MainMenu-{skin.Id}", Shell, baselines, updating, SixteenByTen);
+            ShellTestInput.Click(shell, "MainMenu.wnd:ButtonOptions");
+            shell.CurrentScreen.Tree.PointerLeft();
+            Pin($"Options-{skin.Id}", Shell, baselines, updating, SixteenByTen);
+            Delete(directory);
+
+            var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+            var setup = new MatchSetup(map, "FactionAmerica", ["FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = 3 };
+            var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
+            var hud = new MatchController(live, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin.Name } });
+            for (var step = 0; step < 8; step++) live.Advance(0.25);
+            hud.Update(0.25);
+            Pin($"Hud-{skin.Id}", hud.BuildDrawList, baselines, updating, SixteenByTen);
+            foreach (var (width, height) in SixteenByTen)
+            {
+                hud.BuildDrawList(width, height);
+                var bar = hud.WindowRect("ControlBar.wnd:ControlBarParent") ?? throw new InvalidOperationException("no control bar");
+                TestHarness.Assert(bar.Bottom <= height && bar.X >= 0 && bar.Right <= width && bar.Width >= width * 0.6, $"{skin} HUD {width}x{height}: the control bar lies inside the window and is wide ({bar})");
+            }
+        }
+        TestHarness.Assert(baselines.Count == 18 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} 16:10 pictures are the same");
+        if (updating) SkinPins.Save(BaselinePath16x10, baselines);
+    }
+
     private static void ModernBarFillsTheWidth(GameData data)
     {
         var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
@@ -148,7 +206,7 @@ internal static class SkinTests
         for (var step = 0; step < 8; step++) live.Advance(0.25);
         hud.Input.Selection.Replace([live.World.Entities.First(entity => entity.Owner == live.Human && entity.Template.IsKindOf("DOZER")).Id]);
         hud.Update(0.25);
-        foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1920, 1080), (2560, 1080), (3440, 1440) })
+        foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1440, 900), (1680, 1050), (1920, 1080), (1920, 1200), (2560, 1080), (2560, 1600), (3440, 1440) })
         {
             var commands = hud.BuildDrawList(width, height).Commands;
             var band = commands.OfType<UiFillRect>().First(fill => fill.Color == ModernLayout.Palette.Canvas).Rect;
