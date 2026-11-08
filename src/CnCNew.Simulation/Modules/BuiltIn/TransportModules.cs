@@ -504,6 +504,8 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     private long _destructionTick;
     private Fixed _forwardAngle;
     private Fixed _forwardSpeed;
+    /// <summary>The physics velocity of the wreck per logic frame (<c>PhysicsBehavior::m_vel</c>), and the acceleration the last frame's motive force left for the next step.</summary>
+    private Fixed _velX, _velY, _accelX, _accelY;
     private Fixed _selfSpin;
     private bool _selfSpinTowardsMax;
     private long _lastSelfSpinUpdate;
@@ -529,7 +531,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     public override void OnDie(IWorldServices world, in DamageInfo info) => SlowDeathLottery.Run(world, Entity, info, IsApplicable(info));
 
     public (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world)
-        => _activated && _hitGroundTick == 0 ? (FixedTrig.Cos(_forwardAngle) * _forwardSpeed, FixedTrig.Sin(_forwardAngle) * _forwardSpeed, _fallSpeed) : null;
+        => _activated && _hitGroundTick == 0 ? (_velX, _velY, _fallSpeed) : null;
 
     public void BeginSlowDeath(IWorldServices world)
     {
@@ -539,6 +541,11 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _bladeFlyOff = world.LogicRandom.Range(data.MinBladeFlyOffDelay, data.MaxBladeFlyOffDelay);
         _forwardAngle = Entity.Angle;
         _forwardSpeed = data.SpiralOrbitForwardSpeed;
+        // The wreck keeps the velocity its physics had; the port's locomotors do not move through the physics module, so that is the AI's speed along its heading.
+        var flying = world.VelocityOf(Entity);
+        _velX = flying.X;
+        _velY = flying.Y;
+        _accelX = _accelY = Fixed.Zero;
         _selfSpin = data.MinSelfSpin;
         _selfSpinTowardsMax = true;
         _lastSelfSpinUpdate = 0;
@@ -590,6 +597,23 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             world.MarkDirty(Entity);
             return;
         }
+        // The physics step runs before the behaviour's update (module order): the last frame's force and the lateral friction (the wreck's heading is the one before its spin this frame:
+        // the velocity across the heading loses a share, along it nothing - a motive force is on, and in the air only the 2D friction of the helicopter locomotors acts) change the
+        // velocity, which moves the wreck.
+        var mass = Fixed.One;
+        var lateralFriction = Fixed.FromDecimal(0.15m);
+        foreach (var module in Entity.ModuleArray)
+            if (module is PhysicsBehavior physics) { mass = physics.Mass; lateralFriction = physics.LateralFrictionPerFrame; }
+        if (_velX != Fixed.Zero || _velY != Fixed.Zero)
+        {
+            var dirX = FixedTrig.Cos(Entity.Angle);
+            var dirY = FixedTrig.Sin(Entity.Angle);
+            var lateral = _velX * -dirY + _velY * dirX;
+            _accelX -= lateralFriction * lateral * -dirY;
+            _accelY -= lateralFriction * lateral * dirX;
+        }
+        _velX += _accelX;
+        _velY += _accelY;
         var spin = _selfSpin;
         Entity.Angle = FixedTrig.Normalize(Entity.Angle + spin);
         if (data.SelfSpinUpdateDelay > Fixed.Zero && Fixed.FromInt(world.Time.ToOriginalFrames(world.Tick - _lastSelfSpinUpdate)) > data.SelfSpinUpdateDelay)
@@ -607,10 +631,13 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             }
             _lastSelfSpinUpdate = world.Tick;
         }
-        var stepX = FixedTrig.Cos(_forwardAngle) * _forwardSpeed;
-        var stepY = FixedTrig.Sin(_forwardAngle) * _forwardSpeed;
+        var stepX = _velX;
+        var stepY = _velY;
         Entity.X += stepX;
         Entity.Y += stepY;
+        // The motive force: the damped forward speed turned along the orbit, divided by the mass; it moves the wreck in the next frame's physics step.
+        _accelX = FixedTrig.Cos(_forwardAngle) * _forwardSpeed / mass;
+        _accelY = FixedTrig.Sin(_forwardAngle) * _forwardSpeed / mass;
         _forwardAngle = FixedTrig.Normalize(_forwardAngle + data.SpiralOrbitTurnRate);
         _forwardSpeed *= data.SpiralOrbitForwardSpeedDamping;
         BladeCountdown(world);
@@ -670,6 +697,13 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         writer.Fixed("bladeFlyOff", _bladeFlyOff);
         writer.Int("hitGroundTick", _hitGroundTick);
         writer.Fixed("fallSpeed", _fallSpeed);
+        if (_activated)
+        {
+            writer.Fixed("velX", _velX);
+            writer.Fixed("velY", _velY);
+            writer.Fixed("accelX", _accelX);
+            writer.Fixed("accelY", _accelY);
+        }
         _spiral.Describe(writer, "spiralStep");
     }
 
@@ -687,6 +721,13 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _bladeFlyOff = reader.Fixed("bladeFlyOff");
         _hitGroundTick = reader.Int("hitGroundTick");
         _fallSpeed = reader.Fixed("fallSpeed");
+        if (_activated)
+        {
+            _velX = reader.Fixed("velX");
+            _velY = reader.Fixed("velY");
+            _accelX = reader.Fixed("accelX");
+            _accelY = reader.Fixed("accelY");
+        }
         _spiral.Load(reader, "spiralStep");
     }
 }

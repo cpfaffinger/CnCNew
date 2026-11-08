@@ -231,8 +231,11 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary>The lateral friction per logic frame of the original, as the physics step applies it (<c>getLateralFriction</c>, clamped).</summary>
+    public Fixed LateralFrictionPerFrame => Clamp(data.LateralFriction + _extraFriction, MinNonAeroFriction, MaxFriction);
+
     /// <summary>The mass the forces divide by: the module's, or the one a debris nugget set (<c>setMass</c>).</summary>
-    private Fixed Mass => _mass > Fixed.Zero ? _mass : data.Mass > Fixed.Zero ? data.Mass : Fixed.One;
+    public Fixed Mass => _mass > Fixed.Zero ? _mass : data.Mass > Fixed.Zero ? data.Mass : Fixed.One;
 
     /// <summary><c>setMass</c> of a debris nugget (0: the module's own).</summary>
     private Fixed _mass;

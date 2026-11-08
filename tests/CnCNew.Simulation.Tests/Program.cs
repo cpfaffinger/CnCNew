@@ -646,6 +646,7 @@ run.Test("Rate invariance, flight: a parachute opens, sinks, steers and lands th
 run.Test("Rate invariance, flight: a countermeasure flare slows down and sinks the same at 30, 60 and 120 Hz", Tests.RateFlightFlaresAreTheSame);
 run.Test("Rate invariance, flight: the uplink beam drives its waypoint path the same at 30, 60 and 120 Hz", Tests.RateFlightUplinkBeamPathIsTheSame);
 run.Test("Rate invariance, flight: a shot-down helicopter spins, spirals, loses its blade and falls the same at 30, 60 and 120 Hz", Tests.RateFlightHelicopterSlowDeathIsTheSame);
+run.Test("Comanche crash spiral: the motive force over the mass and the lateral friction move the wreck as the physics step does, at 30, 60 and 120 Hz", Tests.HelicopterSpiralRadiusFollowsThePhysics);
 run.Test("Rate invariance, flight: a tunnel heals its rider in the same frames at 30, 60 and 120 Hz", Tests.RateFlightTunnelHealingIsTheSame);
 run.Test("Rate invariance, flight: a Chinook climbs, lands to unload and climbs again the same at 30, 60 and 120 Hz", Tests.RateFlightChinookClimbIsTheSame);
 run.Test("Rate invariance, flight: the Spectre gunship inserts, orbits, fires and departs the same at 30, 60 and 120 Hz", Tests.RateFlightSpectreGunshipIsTheSame);
