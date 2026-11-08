@@ -230,7 +230,7 @@ public sealed class CommandModeController
         if (target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold)) return false;
         var center = SimulationQueries.HasModule(target, "SupplyCenterDockUpdate") && target.Owner == own[0].Owner;
         var warehouse = SimulationQueries.HasModule(target, "SupplyWarehouseDockUpdate");
-        return (center || warehouse) && own.All(SimulationQueries.IsSupplyCarrier);
+        return (center || warehouse) && own.All(SimulationQueries.IsAvailableForSupplying);
     }
 
     /// <summary><c>canGetRepairedAt</c>: hurt mobile objects at a finished own or allied repair dock.</summary>

@@ -42,7 +42,7 @@ public enum PlacementIssue
 /// </summary>
 public static class SimulationQueries
 {
-    private static readonly string[] SupplyCarrierModules = ["SupplyTruckAIUpdate", "WorkerAIUpdate"];
+    private static readonly string[] SupplyCarrierModules = ["SupplyTruckAIUpdate", "WorkerAIUpdate", "ChinookAIUpdate"];
 
     public static AIUpdateInterface? AiOf(Entity entity) => entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
 
@@ -56,7 +56,11 @@ public static class SimulationQueries
     /// <summary><c>SimulationWorld.BuilderOf</c>: a dozer or worker AI on a finished object.</summary>
     public static bool IsBuilder(Entity entity) => AiOf(entity) is { CanBuild: true } && !entity.HasStatus(ObjectStatusBits.UnderConstruction);
 
+    /// <summary>The objects whose AI has the supply truck's interface (<c>getSupplyTruckAIInterface</c>): trucks, workers and the Chinook (<c>ChinookAIUpdate</c> is a <c>SupplyTruckAIUpdate</c>).</summary>
     public static bool IsSupplyCarrier(Entity entity) => entity.Modules.Any(module => SupplyCarrierModules.Contains(module.ModuleName, StringComparer.Ordinal));
+
+    /// <summary><c>isAvailableForSupplying</c>: a truck always is, a Chinook only with nobody aboard (and none waiting to enter or leave).</summary>
+    public static bool IsAvailableForSupplying(Entity entity) => IsSupplyCarrier(entity) && (!HasModule(entity, "ChinookAIUpdate") || entity.Container is not { ContainCount: > 0 });
 
     public static bool HasModule(Entity entity, string moduleName) => entity.Modules.Any(module => module.ModuleName.Equals(moduleName, StringComparison.Ordinal));
 
