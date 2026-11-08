@@ -45,6 +45,21 @@ public static class MetaActionNames
 
     public static string NameOf(MetaAction action) => ByAction[action];
 
+    /// <summary>
+    /// The other half of a pair that works together on one key: <c>BEGIN_FORCEATTACK</c> on the key-down and <c>END_FORCEATTACK</c> on the key-up (also path build, force move,
+    /// waypoints, prefer selection, camera rotate and zoom). False for every other action.
+    /// </summary>
+    public static bool TryGetPartner(MetaAction action, out MetaAction partner)
+    {
+        partner = default;
+        if (!ByAction.TryGetValue(action, out var name)) return false;
+        var other = name.StartsWith("BEGIN_", StringComparison.Ordinal) ? "END_" + name[6..] : name.StartsWith("END_", StringComparison.Ordinal) ? "BEGIN_" + name[4..] : null;
+        return other is not null && ByName.TryGetValue(other, out partner);
+    }
+
+    /// <summary>True for the <c>END_</c> half of a pair (it fires on the key-up).</summary>
+    public static bool IsEndOfPair(MetaAction action) => ByAction.TryGetValue(action, out var name) && name.StartsWith("END_", StringComparison.Ordinal);
+
     public static bool IsTeamAction(MetaAction action, out TeamActionKind kind, out int group)
     {
         (kind, group) = action switch

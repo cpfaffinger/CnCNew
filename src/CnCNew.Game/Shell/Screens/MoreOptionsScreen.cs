@@ -124,27 +124,46 @@ public sealed class MoreOptionsScreen : ShellScreen
             W("HotkeysStatus").SetText($"{ActionName(action)} keeps its key");
             return;
         }
-        W("HotkeysStatus").SetText(Bind(action, new KeyBinding(key, modifiers)));
+        W("HotkeysStatus").SetText(Bind(action, key, modifiers));
         ShowHotkeys(row);
     }
 
-    /// <summary>
-    /// Binds <paramref name="action"/> to <paramref name="binding"/> and takes the key away from every other action whose contexts overlap its own - a key does one thing
-    /// at a time. Returns the line the screen shows.
-    /// </summary>
-    public string Bind(MetaAction action, KeyBinding binding)
+    private void Commit(HotkeyMap map)
     {
-        var map = _hotkeys.Rebind(action, binding);
+        _hotkeys = map;
+        _working = _working with { Controls = _working.Controls with { Hotkeys = _hotkeys.DifferencesFrom(_shipped) } };
+    }
+
+    /// <summary>
+    /// Binds <paramref name="action"/> to <paramref name="key"/> with <paramref name="modifiers"/>. Only the key and the modifiers change: the binding keeps its transition (a
+    /// key-up stays a key-up; an action that had no key gets the transition its kind fires on). The partner of a begin/end pair (<see cref="MetaActionNames.TryGetPartner"/>) moves
+    /// to the same key with its own transition, so the pair keeps working. A key another action of overlapping contexts already has is taken from that action - a key does one
+    /// thing at a time. Returns the line the screen shows.
+    /// </summary>
+    public string Bind(MetaAction action, KeyCode key, KeyModifiers modifiers)
+    {
+        var moved = new List<(MetaAction Action, KeyBinding Binding)>();
+        var members = MetaActionNames.TryGetPartner(action, out var partner) ? new[] { action, partner } : [action];
+        foreach (var member in members)
+        {
+            var transition = _hotkeys.TryGetEntry(member, out var current) ? current.Binding.Transition : MetaActionNames.IsEndOfPair(member) ? KeyTransition.Up : KeyTransition.Down;
+            moved.Add((member, new KeyBinding(key, modifiers, transition)));
+        }
+        var map = _hotkeys;
+        foreach (var (member, binding) in moved) map = map.Rebind(member, binding);
         var taken = new List<string>();
-        if (map.TryGetEntry(action, out var mine))
-            foreach (var other in map.Entries.Where(entry => entry.Action != action && entry.Binding == binding && (entry.UsableIn & mine.UsableIn) != 0).ToList())
+        foreach (var (member, binding) in moved)
+        {
+            if (!map.TryGetEntry(member, out var mine)) continue;
+            foreach (var other in map.Entries.Where(entry => moved.All(item => item.Action != entry.Action) && entry.Binding == binding && (entry.UsableIn & mine.UsableIn) != 0).ToList())
             {
                 map = map.Unbind(other.Action);
                 taken.Add(ActionName(other.Action));
             }
-        _hotkeys = map;
-        _working = _working with { Controls = _working.Controls with { Hotkeys = _hotkeys.DifferencesFrom(_shipped) } };
-        var line = $"{ActionName(action)}: {KeyText(binding)}";
+        }
+        Commit(map);
+        var line = $"{ActionName(action)}: {KeyText(moved[0].Binding)}";
+        if (members.Length > 1) line += $" (with {ActionName(partner)})";
         return taken.Count == 0 ? line : $"{line} (taken from {string.Join(", ", taken)})";
     }
 
@@ -152,8 +171,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     public void RestoreHotkeyDefaults()
     {
         _armed = null;
-        _hotkeys = _shipped;
-        _working = _working with { Controls = _working.Controls with { Hotkeys = _hotkeys.DifferencesFrom(_shipped) } };
+        Commit(_shipped);
         W("HotkeysLabel").SetText(HotkeyHint);
         W("HotkeysStatus").SetText("The shipped keys are back");
         ShowHotkeys(selected: -1);

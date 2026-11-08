@@ -35,6 +35,7 @@ internal static class HotkeyBindingTests
         foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
             harness.Run($"More options, {skin.Id} skin: a row is rebound by the next key with its modifiers, a taken key is taken over and told, Defaults restores, Accept saves the difference",
                 () => Screen(data, skin));
+        harness.Run("A rebound force attack begins on the key-down and ends on the key-up of the new key, and no longer on the old one", () => ForceAttack(data));
         harness.Run("A match uses the player's bindings over the shipped ones: select all reacts to the new key and no longer to the old one, also when the settings change while it runs",
             () => Match(data));
         return harness.Failures;
@@ -89,6 +90,17 @@ internal static class HotkeyBindingTests
             Press(shell, KeyCode.Escape);
             TestHarness.Assert(shell.CurrentScreen == screen && !screen.CapturesKeys && screen.BindingOf(MetaAction.Stop) is null, "Escape cancels the capture and leaves the screen open");
 
+            // A pair keeps its transitions and moves together: the force attack begins on a key-down and ends on the key-up of the same key.
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
+            var begin = screen.BindingOf(MetaAction.BeginForceAttack) ?? throw new InvalidOperationException("no shipped force attack");
+            var end = screen.BindingOf(MetaAction.EndForceAttack) ?? throw new InvalidOperationException("no shipped end of force attack");
+            TestHarness.Assert(begin.Transition == KeyTransition.Down && end.Transition == KeyTransition.Up, "premise: begin fires on the key-down, end on the key-up");
+            screen.SelectHotkey(MetaAction.EndForceAttack);
+            Press(shell, KeyCode.F8, KeyCode.LeftAlt);
+            TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) == new KeyBinding(KeyCode.F8, KeyModifiers.Alt, KeyTransition.Down)
+                && screen.BindingOf(MetaAction.EndForceAttack) == new KeyBinding(KeyCode.F8, KeyModifiers.Alt, KeyTransition.Up),
+                $"moving the end moves the begin with it and both keep their transitions ({screen.BindingOf(MetaAction.BeginForceAttack)}, {screen.BindingOf(MetaAction.EndForceAttack)})");
+
             // Defaults restore the shipped keys.
             ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
             TestHarness.Assert(screen.BindingOf(MetaAction.SelectAll) == shipped && screen.BindingOf(MetaAction.Stop) == stop, "Defaults bring the shipped keys back");
@@ -108,6 +120,42 @@ internal static class HotkeyBindingTests
             TestHarness.Assert(shell.Stack.All(item => item.Tree.UnregisteredCallbacks.Count == 0), "every callback is registered");
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void ForceAttack(GameData data)
+    {
+        var scenario = DemoScenarios.TankDuel;
+        var settings = GameSettings.Default with
+        {
+            Controls = GameSettings.Default.Controls with
+            {
+                Hotkeys = System.Collections.Immutable.ImmutableSortedDictionary.CreateRange(StringComparer.Ordinal,
+                    [KeyValuePair.Create("BEGIN_FORCEATTACK", "ALT KEY_F8 DOWN"), KeyValuePair.Create("END_FORCEATTACK", "ALT KEY_F8 UP")]),
+            },
+        };
+        var live = LiveScenario.Create(data, scenario with { Orders = [] }, new Vector2(Width, Height));
+        var controller = new MatchController(live, settings);
+        long time = 10_000;
+        void Key(KeyCode key, bool down) => controller.Process(new KeyEvent(time += 16, key, down));
+        void Advance() { live.Advance(CnCNew.Tests.TestTime.FrameSeconds); controller.Update(CnCNew.Tests.TestTime.FrameSeconds); }
+        Advance();
+        var commands = controller.Input.Commands;
+        TestHarness.Assert(!commands.ForceAttack, "premise: no force attack before a key");
+        Key(KeyCode.LeftAlt, true);
+        Key(KeyCode.F8, true);
+        Advance();
+        TestHarness.Assert(commands.ForceAttack, "the new key-down begins the force attack");
+        Key(KeyCode.F8, false);
+        Advance();
+        TestHarness.Assert(!commands.ForceAttack, "the new key-up ends it");
+        Key(KeyCode.LeftAlt, false);
+
+        // The shipped key (a modifier held alone) does nothing now.
+        var shipped = controller.Input.Hotkeys.Resolve(new KeyBinding(KeyCode.None, KeyModifiers.Control), HotkeyContexts.Game);
+        Key(KeyCode.LeftControl, true);
+        Advance();
+        TestHarness.Assert(!commands.ForceAttack && !shipped.Contains(MetaAction.BeginForceAttack), "the old key no longer begins it");
+        Key(KeyCode.LeftControl, false);
     }
 
     private static void Match(GameData data)
