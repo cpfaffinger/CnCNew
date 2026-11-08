@@ -70,12 +70,15 @@ static partial class Tests
                 for (var tick = 0; tick < world.Frames(40); tick++)
                     Check.That(live.Step().StateHash == again.Step().StateHash, "A tree restored inside a frame keeps falling identically (" + rate.TicksPerSecond + " Hz, step " + tick + ").");
             }
-            return (Angles: angles, DiedFrame: died < 0 ? -1 : world.Time.ToOriginalFrames(died - 1), Exact: died < 0 || died % perFrame == 0, Monotone: monotone);
+            return (Angles: angles, DiedFrame: died < 0 ? -1 : world.Time.ToOriginalFrames(died - 1), Exact: died < 0 || (died - 1) % perFrame == 0, Monotone: monotone);
         }, (reference, other, rate) =>
         {
             Check.That(reference.DiedFrame > 3, "Setup: the tree falls for several frames at 30 Hz (" + reference.DiedFrame + ").");
             Check.That(other.DiedFrame == reference.DiedFrame && other.Exact, "The tree dies in the same frame of the original at " + rate + ": " + other.DiedFrame + " instead of " + reference.DiedFrame + ".");
-            SameSeries(reference.Angles, other.Angles, "Topple angle at " + rate);
+            // The tree dies in the first tick of its last frame above 30 Hz (rule 1: the frame's conclusion is its first tick's), and what it was left covering of that last step is not
+            // observed by anyone: the angles are compared up to the frame before it.
+            SameSeries(reference.Angles.Take(reference.Angles.Count - 1).ToList(), other.Angles.Take(reference.Angles.Count - 1).ToList(), "Topple angle at " + rate);
+            Check.That(other.Angles.Count == reference.Angles.Count || other.Angles.Count == reference.Angles.Count - 1, "The tree falls for as many frames at " + rate + ": " + other.Angles.Count + " instead of " + reference.Angles.Count + ".");
             Check.That(other.Monotone, "Inside its first frame the angle advances with every tick at " + rate + ".");
         });
     }

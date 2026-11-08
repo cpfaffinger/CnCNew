@@ -87,6 +87,8 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     // covers the step of a frame tick by tick. Both fields are at rest (zero, unwritten) between two frames, which is always at 30 Hz.
     private FramePhase _framePhase;
     private Fixed _frameStep;
+    // The fall's last frame has concluded (and the tree died with it): its remaining ticks only cover the frame's step. Never set at 30 Hz, and written only while set.
+    private bool _ended;
 
     public override string ModuleName => "ToppleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -138,6 +140,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         _angularAccumulation = Fixed.Zero;
         _framePhase.Reset();
         _frameStep = Fixed.Zero;
+        _ended = false;
         _state = State.Falling;
         if (data.StumpName.Length != 0) SpawnStump(world);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
@@ -176,25 +179,41 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
             for (var ahead = TickOrder.Next; ; ahead++)
                 if (world.Time.BeginsFrameOf(Entity, world.Tick + ahead)) return ahead;
         }
-        // The step of this frame of the original is decided by its first tick, covered by all of its ticks, and concluded (bounce or acceleration) by its last.
+        // The step of this frame of the original is decided by its first tick and covered by all of its ticks. What it concludes - the bounce or the acceleration, and with the last
+        // bounce the death - falls on the first tick as well (rule 1, "an event once per frame is the first tick's"): the tree dies in the update phase of that tick, before the
+        // draws of the phases after it, as at 30 Hz, where the frame is one tick. Concluded on the last tick the death drew from the logic stream after the other objects' draws of the
+        // frame, and the streams parted (F-152, Armored Fury China against GLA).
         var subTick = _framePhase.Next(world.Time);
+        var concludes = false;
+        var finalAngle = Fixed.Zero;
         if (subTick == TickOrder.Next)
         {
             _frameStep = _angularVelocity;
             if (_angularAccumulation + _frameStep > AngularLimit) _frameStep = AngularLimit - _angularAccumulation;
+            finalAngle = _angularAccumulation + _frameStep;
+            concludes = true;
         }
         _angularAccumulation += world.Time.FrameSlice(_frameStep, subTick);
+        if (concludes) Conclude(world, finalAngle);
         if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
-        if (_angularAccumulation >= AngularLimit && _angularVelocity > Fixed.Zero)
+        if (!_ended) return SimulationTiming.SleepNone;
+        _state = State.Down;
+        _ended = false;
+        return SimulationTiming.SleepForever;
+    }
+
+    /// <summary>The recursion's end of a frame, judged on the angle the frame ends with: a bounce off the limit, the end of the fall when the bounce is too small, else the acceleration.</summary>
+    private void Conclude(IWorldServices world, Fixed finalAngle)
+    {
+        if (finalAngle >= AngularLimit && _angularVelocity > Fixed.Zero)
         {
             _angularVelocity = -(_angularVelocity * data.BounceVelocityPercent);
             if (_angularVelocity.Abs() < VelocityBounceLimitPerFrame)
             {
                 _angularVelocity = Fixed.Zero;
-                _state = State.Down;
+                _ended = true;
                 if (data.KillWhenToppled) world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, HugeDamage, DamageTypes.Unresistable, ToppledDeathType, false));
                 if (data.KillStumpWhenToppled && _stumpId.IsValid) world.Damage(_stumpId, new DamageInfo(EntityId.Invalid, HugeDamage, DamageTypes.Unresistable, ToppledDeathType, false));
-                return SimulationTiming.SleepForever;
             }
             // Bounced: still falling, next tick's acceleration is skipped exactly as in the reference (the hit already consumed this tick).
         }
@@ -202,7 +221,6 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         {
             _angularVelocity += _angularAcceleration;
         }
-        return SimulationTiming.SleepNone;
     }
 
     public override void Describe(IStateWriter writer)
@@ -217,6 +235,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         if (_framePhase.AtBoundary) return;
         _framePhase.Describe(writer, "framePhase");
         writer.Fixed("frameStep", _frameStep);
+        if (_ended) writer.Bool("ended", true);
     }
 
     public override void Load(IStateReader reader)
@@ -230,6 +249,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         _stumpId = new EntityId(checked((uint)reader.UInt("stump")));
         _framePhase.Load(reader, "framePhase");
         _frameStep = reader.Has("frameStep") ? reader.Fixed("frameStep") : Fixed.Zero;
+        _ended = reader.Has("ended") && reader.Bool("ended");
     }
 }
 
