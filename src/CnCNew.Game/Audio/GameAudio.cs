@@ -101,6 +101,7 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
         hud.ButtonClicked += OnButtonClicked;
         hud.Input.CommandHotkeyPressed += OnCommandHotkey;
         hud.Messages.BeaconPlaced += OnBeaconPlaced;
+        hud.Messages.RadarSound += OnRadarSound;
         Director.StartMatchMusic(new LiveAudioView(live).HumanSide);
     }
 
@@ -114,6 +115,7 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
             hud.ButtonClicked -= OnButtonClicked;
             hud.Input.CommandHotkeyPressed -= OnCommandHotkey;
             hud.Messages.BeaconPlaced -= OnBeaconPlaced;
+            hud.Messages.RadarSound -= OnRadarSound;
         }
         if (_live is not null) Director.StopMusic();
         // What a mission script did to the volumes, muted events and Eva ends with the game (AudioManager::reset).
@@ -192,6 +194,14 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
     {
         PlayUi("BeaconPlaced");
         if (fromAlly) Director.NotifyBeaconDetected();
+    }
+
+    /// <summary>The sounds of a radar event (<c>Radar::tryUnderAttackEvent</c>, <c>tryInfiltrationEvent</c>, <c>StealthDetectorUpdate::update</c>, <c>W3DRadar::drawEvents</c>), for the local player.</summary>
+    private void OnRadarSound(HudMessageFeed.RadarCue cue)
+    {
+        if (cue.Eva is { } eva) Director.RequestEva(eva);
+        if (cue.Hook is { } hook) PlayHook(hook);
+        if (cue.Event is { } name) PlayUi(name);
     }
 
     private void OnSelectionChanged(ImmutableArray<EntityId> selected)

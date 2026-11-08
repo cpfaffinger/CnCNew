@@ -49,7 +49,29 @@ public sealed class HudMessageFeed
     private const int MaxRadarEvents = 64;
 
     /// <summary><c>Radar::m_event</c>: the events made so far, oldest first, by type, tick and place. <c>Radar::tryEvent</c> looks at it for a recent one of its kind.</summary>
-    private readonly List<(int Type, long Tick, Vector2 Position, bool FromScript)> _radarEvents = [];
+    private readonly List<RadarEntry> _radarEvents = [];
+
+    private sealed class RadarEntry(int type, long tick, Vector2 position, bool fromScript)
+    {
+        public int Type { get; } = type;
+        public long Tick { get; } = tick;
+        public Vector2 Position { get; } = position;
+        public bool FromScript { get; } = fromScript;
+        /// <summary><c>RadarEvent::soundPlayed</c>.</summary>
+        public bool SoundPlayed { get; set; }
+    }
+
+    /// <summary>
+    /// A sound the original plays for a radar event, for the local player only: <see cref="Hook"/> a <c>MiscAudio</c> key (<c>RadarNotifyStructureUnderAttackSound</c>, <c>StealthDiscoveredSound</c>, ...),
+    /// <see cref="Eva"/> an <c>Eva.ini</c> event the announcer is asked for (<c>BaseUnderAttack</c>, <c>EnemyColonelBurtonDetected</c>, ...), <see cref="Event"/> an audio event by name (<c>RadarEvent</c>).
+    /// </summary>
+    public readonly record struct RadarCue(string? Hook = null, string? Eva = null, string? Event = null);
+
+    /// <summary>Raised where the original plays a sound for a radar event (<c>Radar::tryUnderAttackEvent</c>, <c>tryInfiltrationEvent</c>, <c>StealthDetectorUpdate::update</c>, <c>W3DRadar::drawEvents</c>).</summary>
+    public event Action<RadarCue>? RadarSound;
+
+    // StealthUpdate's EnemyDetectionEvaEvent / OwnDetectionEvaEvent by object template name.
+    private readonly Dictionary<string, (string Enemy, string Own)> _detectionEva = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// <c>Radar::getLastEventLoc</c>: where the last radar event happened (<c>Radar::createEvent</c>, everything but a beacon's pulse): a building finished (<c>RADAR_EVENT_CONSTRUCTION</c>),
@@ -67,7 +89,7 @@ public sealed class HudMessageFeed
     /// <summary><c>Radar::createEvent</c>: the event is made, whoever it is for; it becomes the last one unless it is a beacon's pulse.</summary>
     private void CreateEvent(int type, Vector2 position, long tick, bool fromScript = false)
     {
-        _radarEvents.Add((type, tick, position, fromScript));
+        _radarEvents.Add(new RadarEntry(type, tick, position, fromScript));
         if (_radarEvents.Count > MaxRadarEvents) _radarEvents.RemoveAt(0);
         if (type != EventBeaconPulse) LastRadarEvent = position;
     }
@@ -99,9 +121,17 @@ public sealed class HudMessageFeed
     public IEnumerable<(Vector2 Position, byte R, byte G, byte B)> RadarEventsToDraw(long tick, SimulationWorld world, bool phase)
     {
         var lifetime = world.Time.OriginalFrames(4 * CnCNew.Data.OriginalFrame.PerSecond);
-        foreach (var (type, created, position, fromScript) in _radarEvents.ToArray())
+        foreach (var entry in _radarEvents.ToArray())
         {
-            if (fromScript || tick - created >= lifetime || type < 0 || type >= EventColours.Length || EventColours[type].Length == 0) continue;
+            var (type, created, position, fromScript) = (entry.Type, entry.Tick, entry.Position, entry.FromScript);
+            if (tick - created >= lifetime) continue;
+            // W3DRadar::drawEvents: "if we haven't played the sound for this event, do it now that we can see it" - every drawn event but a beacon's pulse, a script's included.
+            if (!entry.SoundPlayed && type != EventFake)
+            {
+                entry.SoundPlayed = true;
+                if (type != EventBeaconPulse) RadarSound?.Invoke(new RadarCue(Event: "RadarEvent"));
+            }
+            if (fromScript || type < 0 || type >= EventColours.Length || EventColours[type].Length == 0) continue;
             var (r, g, b) = EventColours[type][phase ? 1 : 0];
             yield return (position, r, g, b);
         }
@@ -110,8 +140,15 @@ public sealed class HudMessageFeed
     private void Infiltration(Entity? victim, PlayerId human, long tick)
     {
         if (victim is null || victim.Owner != human) return;
-        CreateEvent(EventInfiltration, SimulationQueries.GroundOf(victim), tick);
+        InfiltrationFeedback(SimulationQueries.GroundOf(victim), tick);
+    }
+
+    /// <summary><c>Radar::tryInfiltrationEvent</c> after its test: the event, the line and <c>RadarNotifyInfiltrationSound</c>.</summary>
+    private void InfiltrationFeedback(Vector2 position, long tick)
+    {
+        CreateEvent(EventInfiltration, position, tick);
         Message("RADAR:Infiltration");
+        RadarSound?.Invoke(new RadarCue(Hook: "RadarNotifyInfiltrationSound"));
     }
     private readonly SortedDictionary<string, int> _withoutLine = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _orderedUpgrades = new(StringComparer.OrdinalIgnoreCase);
@@ -133,6 +170,12 @@ public sealed class HudMessageFeed
                 _ => null,
             };
             if (target is null) continue;
+            if (definition is ObjectDefinition && definition.Modules.FirstOrDefault(module => module.Name.Equals("StealthUpdate", StringComparison.OrdinalIgnoreCase)) is { } stealth)
+            {
+                string Eva(string key) => stealth.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"') ?? string.Empty;
+                var (enemy, own) = (Eva("EnemyDetectionEvaEvent"), Eva("OwnDetectionEvaEvent"));
+                if (enemy.Length > 0 || own.Length > 0) _detectionEva[definition.OriginalName] = (enemy, own);
+            }
             if (definition is ObjectDefinition && definition.Modules.FirstOrDefault(module => module.Name.Equals("BattlePlanUpdate", StringComparison.OrdinalIgnoreCase)) is { } plans)
             {
                 string Label(string key) => plans.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"') ?? string.Empty;
@@ -282,14 +325,12 @@ public sealed class HudMessageFeed
                 // ConvertToHijackedVehicleCrateCollide::executeCrateBehavior and Object::defect (a car bomb): the vehicle's old owner is told; a defection needs two real players.
                 if (new PlayerId((int)simEvent.Value) != human || world.FindEntity(simEvent.Entity) is not { } converted) return;
                 if (simEvent.Text == "CARBOMB" && !(world.IsPlayableSide(human) && world.IsPlayableSide(converted.Owner))) return;
-                CreateEvent(EventInfiltration, SimulationQueries.GroundOf(converted), simEvent.Tick);
-                Message("RADAR:Infiltration");
+                InfiltrationFeedback(SimulationQueries.GroundOf(converted), simEvent.Tick);
                 return;
             case SimEventKind.StructureCaptured:
                 // Object::defect at the end of a capture: the old owner's building, between two real players.
                 if (new PlayerId((int)simEvent.Value) != human || !world.IsPlayableSide(human) || !world.IsPlayableSide(simEvent.Player) || world.FindEntity(simEvent.Entity) is not { } captured) return;
-                CreateEvent(EventInfiltration, SimulationQueries.GroundOf(captured), simEvent.Tick);
-                Message("RADAR:Infiltration");
+                InfiltrationFeedback(SimulationQueries.GroundOf(captured), simEvent.Tick);
                 return;
             case SimEventKind.Sabotaged:
                 // The Sabotage*CrateCollide modules: tryInfiltrationEvent( other ), the sabotaged building.
@@ -317,9 +358,23 @@ public sealed class HudMessageFeed
         var position = SimulationQueries.GroundOf(victim);
         if (!TryEvent(EventUnderAttack, position, world, simEvent.Tick)) return;
         var template = victim.Template;
-        if (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE")) Message(template.IsKindOf("HARVESTER") ? "RADAR:HarvesterUnderAttack" : "RADAR:UnitUnderAttack");
-        else if (template.IsKindOf("STRUCTURE") && template.IsKindOf("MP_COUNT_FOR_VICTORY")) Message("RADAR:StructureUnderAttack");
-        else Message("RADAR:UnderAttack");
+        if (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE"))
+        {
+            var harvester = template.IsKindOf("HARVESTER");
+            Message(harvester ? "RADAR:HarvesterUnderAttack" : "RADAR:UnitUnderAttack");
+            RadarSound?.Invoke(new RadarCue(Hook: harvester ? "RadarNotifyHarvesterUnderAttackSound" : "RadarNotifyStructureUnderAttackSound"));
+        }
+        else if (template.IsKindOf("STRUCTURE") && template.IsKindOf("MP_COUNT_FOR_VICTORY"))
+        {
+            // The victim is the local player's own (Object::attemptDamage only tells the radar about the local player's objects): EVA_BaseUnderAttack, then the sound.
+            Message("RADAR:StructureUnderAttack");
+            RadarSound?.Invoke(new RadarCue(Eva: "BaseUnderAttack", Hook: "RadarNotifyStructureUnderAttackSound"));
+        }
+        else
+        {
+            Message("RADAR:UnderAttack");
+            RadarSound?.Invoke(new RadarCue(Hook: "RadarNotifyStructureUnderAttackSound"));
+        }
     }
 
     /// <summary>A <see cref="SimEventKind.RadarNotice"/>: what the simulation tells every client's radar, the local player's client choosing what is its own.</summary>
@@ -337,11 +392,18 @@ public sealed class HudMessageFeed
                     var made = true;
                     if (template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP")) made = TryEvent(EventStealthNeutralized, position, world, simEvent.Tick);
                     else CreateEvent(EventStealthNeutralized, position, simEvent.Tick);
-                    if (made) Message("MESSAGE:StealthNeutralized");
+                    if (made)
+                    {
+                        Message("MESSAGE:StealthNeutralized");
+                        RadarSound?.Invoke(new RadarCue(Hook: "StealthNeutralizedSound", Eva: _detectionEva.TryGetValue(template.Name, out var own) && own.Own.Length > 0 ? own.Own : null));
+                    }
                 }
                 // "for the player revealing the stealth unit": the detector is the local player's, the revealed one not an ally's (the detector never reveals an ally).
                 else if (world.FindEntity(simEvent.Other) is { } detector && detector.Owner == human && TryEvent(EventStealthDiscovered, position, world, simEvent.Tick))
+                {
                     Message("MESSAGE:StealthDiscovered");
+                    RadarSound?.Invoke(new RadarCue(Hook: "StealthDiscoveredSound", Eva: _detectionEva.TryGetValue(subject.Template.Name, out var enemy) && enemy.Enemy.Length > 0 ? enemy.Enemy : null));
+                }
                 return;
             case RadarNotices.Infiltration:
                 Infiltration(subject, human, simEvent.Tick);

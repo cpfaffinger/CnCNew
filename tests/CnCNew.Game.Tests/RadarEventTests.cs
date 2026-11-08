@@ -28,6 +28,8 @@ internal static class RadarEventTests
         harness.Run("A unit of the local player that is killed is a (fake) radar event, rationed, but not one lost to itself or someone else's", UnitLost);
         harness.Run("An infiltration of the local player's object (hijack, sabotage, capture start, hack) is a radar event with its line; someone else's is not", Infiltration);
         harness.Run("A stealth object found or lost, a battle plan and an overcharge that gave out are radar events", Notices);
+        harness.Run("The sounds of a radar event: under attack, infiltration, stealth found or lost, for the local player only", Sounds);
+        harness.Run("A drawn radar event plays RadarEvent once (not a beacon's pulse, not a fake one) (the suite runs at 30, 60 and 120 Hz)", DrawnEventSound);
         var index = Array.IndexOf(args, "--content-dir");
         if (index >= 0 && index + 1 < args.Length)
         {
@@ -159,6 +161,80 @@ internal static class RadarEventTests
         TestHarness.Assert(feed.LastRadarEvent == new Vector2(7, 8) && feed.Shown == shown, "somebody else's overcharge tells us nothing");
         feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, text: RadarNotices.OverchargeExhausted), world, human);
         TestHarness.Assert(feed.LastRadarEvent == SimulationQueries.GroundOf(barrel) && feed.Shown == shown + 1, "ours: a radar event and GUI:OverchargeExhausted");
+    }
+
+    private static List<HudMessageFeed.RadarCue> Cues(HudMessageFeed feed)
+    {
+        var cues = new List<HudMessageFeed.RadarCue>();
+        feed.RadarSound += cues.Add;
+        return cues;
+    }
+
+    private static void Sounds()
+    {
+        var (feed, world, tank, barrel) = Fixture();
+        var cues = Cues(feed);
+        var human = tank.Owner;
+        var other = new PlayerId(human.Value + 5);
+        var enemy = new EntityId(9999);
+
+        // Radar::tryUnderAttackEvent: the sound is the structure's in every branch but the harvester's; the base of the player is announced by Eva.
+        feed.Observe(Event(world, SimEventKind.EntityDamaged, tank.Id, enemy, value: 5), world, human);
+        var harvester = tank.Template.IsKindOf("HARVESTER");
+        var expectedHook = harvester ? "RadarNotifyHarvesterUnderAttackSound" : "RadarNotifyStructureUnderAttackSound";
+        TestHarness.Assert(cues.Count == 1 && cues[0].Hook == expectedHook && cues[0].Eva is null, $"an attacked unit plays its under attack sound ({cues.Count})");
+        feed.Observe(Event(world, SimEventKind.EntityDamaged, tank.Id, enemy, value: 5), world, human);
+        TestHarness.Assert(cues.Count == 1, "an attack within ten seconds and 250 units is rationed with its sound");
+        feed.Observe(Event(world, SimEventKind.EntityDamaged, barrel.Id, enemy, value: 5), world, other);
+        TestHarness.Assert(cues.Count == 1, "somebody else's object under attack is silent");
+        feed.Observe(Event(world, SimEventKind.EntityDamaged, barrel.Id, enemy, value: 5, tick: world.Tick + (long)world.Time.OriginalFrames(310)), world, human);
+        var base_ = barrel.Template.IsKindOf("STRUCTURE") && barrel.Template.IsKindOf("MP_COUNT_FOR_VICTORY");
+        TestHarness.Assert(cues.Count == 2 && cues[1].Hook == "RadarNotifyStructureUnderAttackSound" && cues[1].Eva == (base_ ? "BaseUnderAttack" : null),
+            $"an attacked building: the structure sound, and Eva's BaseUnderAttack only for a building that counts for victory ({base_})");
+
+        // Radar::tryInfiltrationEvent: only against the local player's own object.
+        cues.Clear();
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, enemy, RadarNotices.Infiltration), world, other);
+        TestHarness.Assert(cues.Count == 0, "an infiltration of somebody else's building is silent");
+        feed.Observe(Event(world, SimEventKind.RadarNotice, barrel.Id, enemy, RadarNotices.Infiltration), world, human);
+        feed.Observe(Event(world, SimEventKind.Sabotaged, barrel.Id, enemy, "SabotagePowerPlantCrateCollide"), world, human);
+        feed.Observe(Event(world, SimEventKind.ObjectConverted, tank.Id, enemy, "HIJACKED", human.Value), world, human);
+        TestHarness.Assert(cues.Count == 3 && cues.All(cue => cue.Hook == "RadarNotifyInfiltrationSound" && cue.Eva is null), "a hack, a sabotage and a hijack of ours play the infiltration sound");
+
+        // StealthDetectorUpdate::update.
+        cues.Clear();
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, enemy, RadarNotices.StealthRevealed), world, human);
+        TestHarness.Assert(cues.Count == 1 && cues[0].Hook == "StealthNeutralizedSound", "our stealth unit revealed: StealthNeutralizedSound");
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, barrel.Id, RadarNotices.StealthRevealed), world, other);
+        TestHarness.Assert(cues.Count == 1, "somebody else's stealth unit revealed by somebody else: nothing");
+        feed.Observe(Event(world, SimEventKind.RadarNotice, tank.Id, barrel.Id, RadarNotices.StealthRevealed), world, human);
+        // tank.Owner == human, so the unit revealed is ours again; a unit of the other side revealed by our detector is the discovered case.
+        var foreign = world.Entities.FirstOrDefault(entity => entity.Owner != human);
+        if (foreign is not null)
+        {
+            feed.Observe(Event(world, SimEventKind.RadarNotice, foreign.Id, barrel.Id, RadarNotices.StealthRevealed), world, human);
+            TestHarness.Assert(cues.Any(cue => cue.Hook == "StealthDiscoveredSound"), "a stealth unit of the enemy found by our detector: StealthDiscoveredSound");
+        }
+    }
+
+    private static void DrawnEventSound()
+    {
+        {
+            var (feed, world, _, _) = Fixture();
+            var cues = Cues(feed);
+            var perFrame = (long)world.Time.OriginalFrames(1);
+            feed.NoteRadarEvent(new Vector2(10, 20), 3, 100);
+            feed.NoteRadarEvent(new Vector2(30, 40), 5, 100);   // a beacon's pulse
+            feed.NoteRadarEvent(new Vector2(50, 60), 10, 100);  // a fake event
+            _ = feed.RadarEventsToDraw(100, world, false).ToList();
+            TestHarness.Assert(cues.Count == 1 && cues[0].Event == "RadarEvent", $"the first drawing plays RadarEvent once, a pulse and a fake event are silent ({cues.Count})");
+            _ = feed.RadarEventsToDraw(100 + perFrame, world, true).ToList();
+            TestHarness.Assert(cues.Count == 1, "and not again");
+            // An event drawn only after its four seconds is over is never seen, so never heard.
+            feed.NoteRadarEvent(new Vector2(1, 1), 4, 200);
+            _ = feed.RadarEventsToDraw(200 + (long)world.Time.OriginalFrames(4 * 30), world, false).ToList();
+            TestHarness.Assert(cues.Count == 1, "an event that is over before it is drawn is silent");
+        }
     }
 
     private static void SpaceBar(string directory)
