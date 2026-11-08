@@ -137,8 +137,10 @@ public sealed partial class SimulationWorld
     /// such attacker; the port asks it for a unit of the kind <c>ATTACK_NEEDS_LINE_OF_SIGHT</c> and for one that stands inside its weapon's minimum range): the place it moves to so that it can fire at the victim - first up to nine
     /// points half a cell apart straight toward the victim, then a search outward from the unit toward the victim over at most 2,500 cells; the first that is passable for the
     /// unit, within the weapon's range less a quarter cell (and outside its minimum range plus as much) and has a clear view is the goal. Null when the search finds none:
-    /// the unit then walks at the victim and stops where it can fire (the fallback of <c>doPathfind</c>). Not modelled: the test of <c>checkDestination</c> that no other unit
-    /// has its goal there, and the vehicles' strip-back past cells other units block.
+    /// the unit then walks at the victim and stops where it can fire (the fallback of <c>doPathfind</c>); a unit inside its minimum range then steps to a free place beside it
+    /// instead (the unstack of <c>computeAttackPath</c>), also in a world without terrain. A unit not of that kind that stands outside its minimum range is not searched for: the
+    /// walk at its victim stops where the search's goal would. Not modelled: the test of <c>checkDestination</c> that no other unit has its goal there, the vehicles' strip-back past
+    /// cells other units block, and the repath rules of <c>computePath</c> (<c>MIN_RECOMPUTE_TIME</c>, the victim in the same place), which the chase's own refresh stands in for.
     /// </summary>
     public (Fixed X, Fixed Y)? FindAttackPosition(Entity unit, Entity victim)
     {
