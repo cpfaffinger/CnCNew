@@ -209,7 +209,8 @@ public sealed class OptionsScreen : ShellScreen
         {
             Display = d.Display with { Mode = _working.Display.Mode, Aspect = _working.Display.Aspect, Skin = _working.Display.Skin },
             Audio = d.Audio with { Device = _working.Audio.Device },
-            Controls = d.Controls,
+            // The keys belong to More options, too.
+            Controls = d.Controls with { Hotkeys = _working.Controls.Hotkeys },
         };
         BuildResolutionList();
         RefreshWidgets();

@@ -759,6 +759,12 @@ static class InputTests
         var restored = map.ApplySettings(settings);
         Assert(restored.ToSettings().SequenceEqual(settings), "the settings round-trip");
         Assert(restored.TryGetEntry(MetaAction.Scatter, out var scatter) && scatter.Source == HotkeySource.User && !restored.TryGetEntry(MetaAction.CameraReset, out _), "user bindings are marked");
+        // What the player changed, and only that, is what the settings file keeps (DifferencesFrom) and what applies over the shipped map again.
+        Assert(map.DifferencesFrom(map).IsEmpty, "an unchanged map differs in nothing");
+        var changed = conflicting.Unbind(MetaAction.CameraReset);
+        var differences = changed.DifferencesFrom(map);
+        Assert(differences.Count == 2 && differences["SCATTER"] == "NONE KEY_S DOWN" && differences["CAMERA_RESET"] == HotkeyMap.Unbound, "only the rebound and the unbound action are kept");
+        Assert(map.ApplySettings(differences).ToSettings().SequenceEqual(changed.ToSettings()), "the differences over the shipped map give the changed map");
         var bad = map.ApplySettings(new Dictionary<string, string> { ["STOP"] = "CTRL KEY_BLAH DOWN", ["WARP_DRIVE"] = "NONE KEY_W DOWN" });
         Assert(bad.Issues.Select(issue => issue.Kind).Order().SequenceEqual([HotkeyIssueKind.UnknownAction, HotkeyIssueKind.BadSettingValue]) && bad.TryGetEntry(MetaAction.Stop, out var stop)
                && stop.Binding.Key == KeyCode.S, "bad settings are reported and leave the binding alone");

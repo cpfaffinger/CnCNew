@@ -121,7 +121,8 @@ public sealed partial class MatchController
         ApplySchemeImages();
 
         var buttons = CommandButtonCatalog.Build(match.Data.Graph);
-        var hotkeys = HotkeyMap.FromGraph(match.Data.Graph).WithEngineDefaults();
+        _shippedHotkeys = HotkeyMap.FromGraph(match.Data.Graph).WithEngineDefaults();
+        var hotkeys = _shippedHotkeys.ApplySettings(settings.Controls.Hotkeys);
         Input = new GameInputController(match.Human, match.Commands, hotkeys, buttons,
             label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
             new GameInputSettings(MapMouseScheme(settings), Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
@@ -596,6 +597,15 @@ public sealed partial class MatchController
             _hints.Observe(feedback, _clockMs);
             Messages.Observe(feedback);
         }
+    }
+
+    private readonly HotkeyMap _shippedHotkeys;
+
+    /// <summary>The keys the player's saved bindings (<see cref="CnCNew.Ui.Settings.ControlSettings.Hotkeys"/>) put over the shipped map; takes effect with the next key event.</summary>
+    public void ApplyHotkeys(GameSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Input.Hotkeys = _shippedHotkeys.ApplySettings(settings.Controls.Hotkeys);
     }
 
     /// <summary>The viewer's option "Retaliation" (<see cref="CnCNew.Ui.Settings.ControlSettings.Retaliation"/>); the match follows it within a second.</summary>

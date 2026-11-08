@@ -137,15 +137,37 @@ public sealed class ShellScript
                 return step.Verb == "expect" ? Fail(shell, step, "does not hold") : Outcome.Wait;
             }
             case "key":
-                if (words.Length != 2 || !Enum.TryParse<KeyCode>(words[1], true, out var key)) return Fail(shell, step, "expected 'key KEYCODE'");
+                // 'key KEYCODE' or, with modifiers held while it is pressed, 'key Control+Shift+KEYCODE'.
+                var held = new List<KeyCode>();
+                var keyCode = default(KeyCode);
+                var keyOk = words.Length == 2;
+                if (keyOk)
+                {
+                    var parts = words[1].Split('+');
+                    for (var part = 0; part < parts.Length && keyOk; part++)
+                    {
+                        var modifier = part < parts.Length - 1 ? parts[part].ToLowerInvariant() switch
+                        {
+                            "ctrl" or "control" => KeyCode.LeftControl, "alt" => KeyCode.LeftAlt, "shift" => KeyCode.LeftShift, _ => KeyCode.None,
+                        } : KeyCode.None;
+                        if (part < parts.Length - 1) { keyOk = modifier != KeyCode.None; held.Add(modifier); }
+                        else keyOk = Enum.TryParse(parts[part], true, out keyCode);
+                    }
+                }
+                if (!keyOk) return Fail(shell, step, "expected 'key KEYCODE' or 'key Control+Shift+KEYCODE'");
+                void Press(Action<InputEvent> deliver)
+                {
+                    foreach (var modifier in held) deliver(new KeyEvent(Now(), modifier, IsDown: true));
+                    deliver(new KeyEvent(Now(), keyCode, IsDown: true));
+                    deliver(new KeyEvent(Now(), keyCode, IsDown: false));
+                    for (var index = held.Count - 1; index >= 0; index--) deliver(new KeyEvent(Now(), held[index], IsDown: false));
+                }
                 if (shell.Phase == ShellPhase.InMatch && !shell.HasInGameScreens && MatchInput is { } match)
                 {
-                    match(new KeyEvent(Now(), key, IsDown: true));
-                    match(new KeyEvent(Now(), key, IsDown: false));
+                    Press(inputEvent => match(inputEvent));
                     return Outcome.DoneWithInput;
                 }
-                Send(shell, new KeyEvent(Now(), key, IsDown: true));
-                Send(shell, new KeyEvent(Now(), key, IsDown: false));
+                Press(inputEvent => Send(shell, inputEvent));
                 return Outcome.DoneWithInput;
         }
         // The remaining steps act on a window; they wait until a person could.

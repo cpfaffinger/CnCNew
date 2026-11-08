@@ -298,6 +298,20 @@ public sealed class HotkeyMap
         return builder.ToImmutable();
     }
 
+    /// <summary>The settings representation of what differs from <paramref name="shipped"/>: the bindings a player changed, and <see cref="Unbound"/> for the ones taken away. Empty for an unchanged map.</summary>
+    public ImmutableSortedDictionary<string, string> DifferencesFrom(HotkeyMap shipped)
+    {
+        ArgumentNullException.ThrowIfNull(shipped);
+        var builder = ImmutableSortedDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);
+        foreach (var action in Enum.GetValues<MetaAction>())
+        {
+            var mine = TryGetEntry(action, out var entry) ? entry.Binding.ToString() : Unbound;
+            var theirs = shipped.TryGetEntry(action, out var original) ? original.Binding.ToString() : Unbound;
+            if (mine != theirs) builder[MetaActionNames.NameOf(action)] = mine;
+        }
+        return builder.ToImmutable();
+    }
+
     /// <summary>Applies saved settings on top of this map; unknown actions and unparsable values are reported and leave the binding unchanged.</summary>
     public HotkeyMap ApplySettings(IReadOnlyDictionary<string, string> settings)
     {

@@ -167,6 +167,9 @@ public sealed class UiWindow
 
     public int AddListRow(UiListRow row) => (ListBox ?? throw NotA("list box")).Add(row);
 
+    /// <summary>Scrolls a list box so that <paramref name="row"/> is its first visible row (kept within the rows).</summary>
+    public void SetListTop(int row) { var list = ListBox ?? throw NotA("list box"); list.TopIndex = Math.Clamp(row, 0, Math.Max(0, list.Rows.Count - 1)); }
+
     public void ClearList() => (ListBox ?? throw NotA("list box")).Clear();
 
     /// <summary>Selects a list row without a message (<c>GadgetListBoxSetSelected</c> does not notify either).</summary>

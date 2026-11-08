@@ -96,6 +96,14 @@ public abstract class ShellScreen
 
     public virtual UiDrawList BuildDrawList() => Tree.BuildDrawList();
 
+    /// <summary>
+    /// While true the shell hands the screen every key press as a key and the modifiers held (<see cref="OnCapturedKey"/>) instead of to its windows; the screens that
+    /// ask a person for a key (the hotkey bindings of "More options") use it. Modifier keys alone are never delivered.
+    /// </summary>
+    public virtual bool CapturesKeys => false;
+
+    public virtual void OnCapturedKey(CnCNew.Presentation.Input.KeyCode key, CnCNew.Presentation.Input.KeyModifiers modifiers) { }
+
     /// <summary>Called once when the screen leaves the stack (popped or replaced); default does nothing.</summary>
     public virtual void OnClosed() { }
 }

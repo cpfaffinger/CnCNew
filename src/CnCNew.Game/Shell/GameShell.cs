@@ -417,6 +417,18 @@ public sealed class GameShell
             movie.Stop();
             return;
         }
+        switch (evt)
+        {
+            case KeyEvent { Key: var held } modifierKey when ModifierOf(held) is { } modifier:
+                _heldModifiers = modifierKey.IsDown ? _heldModifiers | modifier : _heldModifiers & ~modifier;
+                break;
+            case FocusLostEvent:
+                _heldModifiers = KeyModifiers.None;
+                break;
+            case KeyEvent { IsDown: true, IsRepeat: false } pressed when CurrentScreen.CapturesKeys:
+                CurrentScreen.OnCapturedKey(pressed.Key, _heldModifiers);
+                return;
+        }
         var tree = CurrentScreen.Tree;
         switch (evt)
         {
@@ -436,6 +448,16 @@ public sealed class GameShell
 
     /// <summary>A text field of the top screen has the keyboard focus: the host must deliver characters (<see cref="TextInputEvent"/>), which a window does only when asked to.</summary>
     public bool WantsTextInput => _stack.Count > 0 && CurrentScreen.Tree.Focus is { } focus && (focus.TextEntry is not null || focus.ComboBox is { Data.IsEditable: true });
+
+    private KeyModifiers _heldModifiers;
+
+    private static KeyModifiers? ModifierOf(KeyCode key) => key switch
+    {
+        KeyCode.LeftShift or KeyCode.RightShift => KeyModifiers.Shift,
+        KeyCode.LeftControl or KeyCode.RightControl => KeyModifiers.Control,
+        KeyCode.LeftAlt or KeyCode.RightAlt => KeyModifiers.Alt,
+        _ => null,
+    };
 
     private static UiKey MapKey(KeyCode key) => key switch
     {

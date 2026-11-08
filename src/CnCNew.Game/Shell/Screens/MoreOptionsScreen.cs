@@ -8,7 +8,10 @@ namespace CnCNew.Game.Shell.Screens;
 
 /// <summary>
 /// The second options screen (docs/UI-MODERN.md section 7): what the original's <c>OptionsMenu.wnd</c> does not reach - the interface skin, the display mode, the 3D view in
-/// a wide window, the text size, the sound device - and a read-only view of every hotkey of <c>CommandMap.ini</c>. It is opened from the options' "More options" button.
+/// a wide window, the text size, the sound device - and every hotkey of <c>CommandMap.ini</c>, which a person rebinds here: click a row, press the new key (with Ctrl, Alt
+/// or Shift held when it should have them). A key another action of the same contexts already has is taken away from that action and the screen says so; "Defaults" restores the shipped
+/// keys. The bindings are the working settings' <see cref="ControlSettings.Hotkeys"/> (only what differs from the shipped map) and are saved with Accept like the other choices;
+/// the installation's <c>CommandMap.ini</c> is never written. It is opened from the options' "More options" button.
 /// <para>
 /// The original has no layout for it, and none is written down here: the screen is made at run time from the shipped <c>OptionsMenu.wnd</c> - its parent, its panel, its
 /// title, its Accept and Back buttons, its line - and its rows from the shipped definitions of the options' resolution label and combo box and of the skirmish map list,
@@ -47,15 +50,23 @@ public sealed class MoreOptionsScreen : ShellScreen
 
     private GameSettings _working;
     private readonly ImmutableArray<string> _devices;
+    private readonly HotkeyMap _shipped;
+    private HotkeyMap _hotkeys;
+    private ImmutableArray<(MetaAction Action, string Name)> _rows = [];
+    private MetaAction? _armed;
+    private const string HotkeyHint = "Hotkeys (click a row, then press the new key)";
 
     public MoreOptionsScreen(GameShell shell) : base(shell, File, shell.Skin.Derive(BuildLayout(shell.Layouts.Get(ShellLayoutNames.OptionsMenu), shell.Layouts.Get(ShellLayoutNames.SkirmishMapSelectMenu)), shell.Layouts.HeaderTemplates))
     {
         _working = shell.Settings;
         _devices = [DefaultDevice, .. shell.Environment.AudioDevices];
+        _shipped = HotkeyMap.FromGraph(shell.Data.Graph).WithEngineDefaults();
+        _hotkeys = _shipped.ApplySettings(_working.Controls.Hotkeys);
         Tree.Register("MoreOptionsSystem", OnSystem);
         Tree.Register("MoreOptionsInput", OnInput);
         W("Title").SetText("More options");
-        W("HotkeysLabel").SetText("Hotkeys (read only; the keys of CommandMap.ini)");
+        W("HotkeysLabel").SetText(HotkeyHint);
+        W("HotkeysStatus").SetText("");
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("Skin", SkinChoices.Select(choice => choice.Text));
         Fill("DisplayMode", DisplayModeChoices.Select(choice => choice.Text));
@@ -74,15 +85,103 @@ public sealed class MoreOptionsScreen : ShellScreen
         foreach (var entry in entries) combo.AddComboEntry(entry);
     }
 
+    private string ActionName(MetaAction action)
+        => _rows.FirstOrDefault(row => row.Action == action).Name ?? Words(action.ToString());
+
+    /// <summary>The rows are the shipped map's actions (an action a person unbinds stays listed), by name and then by the shipped key.</summary>
     private void FillHotkeys()
     {
-        var list = W("ListHotkeys");
-        var map = HotkeyMap.FromGraph(Shell.Data.Graph).WithEngineDefaults();
-        var rows = map.Entries
+        _rows = [.._shipped.Entries
             // An action without a name in the string table is listed by its own name in words, never left out.
-            .Select(entry => (Name: entry.DisplayNameLabel.Length > 0 ? Text(entry.DisplayNameLabel) : Words(entry.Action.ToString()), Key: KeyText(entry.Binding)))
-            .OrderBy(row => row.Name, StringComparer.Ordinal).ThenBy(row => row.Key, StringComparer.Ordinal);
-        foreach (var (name, key) in rows) list.AddListRow(new UiListRow(name, key));
+            .Select(entry => (Entry: entry, Name: entry.DisplayNameLabel.Length > 0 ? Text(entry.DisplayNameLabel) : Words(entry.Action.ToString())))
+            .OrderBy(row => row.Name, StringComparer.Ordinal).ThenBy(row => KeyText(row.Entry.Binding), StringComparer.Ordinal)
+            .Select(row => (row.Entry.Action, row.Name))];
+        ShowHotkeys(selected: -1);
+    }
+
+    private void ShowHotkeys(int selected)
+    {
+        var list = W("ListHotkeys");
+        var top = list.ListBox!.TopIndex;
+        list.ClearList();
+        foreach (var (action, name) in _rows)
+            list.AddListRow(new UiListRow(name, _hotkeys.TryGetEntry(action, out var entry) ? KeyText(entry.Binding) : "Unbound"));
+        list.SetListTop(top);
+        if (selected >= 0) list.SetListSelection(selected);
+    }
+
+    public override bool CapturesKeys => _armed is not null;
+
+    /// <summary>The key a person pressed for the armed row. Escape gives up; every other key (and the modifiers held with it) becomes the binding.</summary>
+    public override void OnCapturedKey(KeyCode key, KeyModifiers modifiers)
+    {
+        if (_armed is not { } action) return;
+        var row = _rows.ToList().FindIndex(item => item.Action == action);
+        _armed = null;
+        W("HotkeysLabel").SetText(HotkeyHint);
+        if (key == KeyCode.Escape)
+        {
+            W("HotkeysStatus").SetText($"{ActionName(action)} keeps its key");
+            return;
+        }
+        W("HotkeysStatus").SetText(Bind(action, new KeyBinding(key, modifiers)));
+        ShowHotkeys(row);
+    }
+
+    /// <summary>
+    /// Binds <paramref name="action"/> to <paramref name="binding"/> and takes the key away from every other action whose contexts overlap its own - a key does one thing
+    /// at a time. Returns the line the screen shows.
+    /// </summary>
+    public string Bind(MetaAction action, KeyBinding binding)
+    {
+        var map = _hotkeys.Rebind(action, binding);
+        var taken = new List<string>();
+        if (map.TryGetEntry(action, out var mine))
+            foreach (var other in map.Entries.Where(entry => entry.Action != action && entry.Binding == binding && (entry.UsableIn & mine.UsableIn) != 0).ToList())
+            {
+                map = map.Unbind(other.Action);
+                taken.Add(ActionName(other.Action));
+            }
+        _hotkeys = map;
+        _working = _working with { Controls = _working.Controls with { Hotkeys = _hotkeys.DifferencesFrom(_shipped) } };
+        var line = $"{ActionName(action)}: {KeyText(binding)}";
+        return taken.Count == 0 ? line : $"{line} (taken from {string.Join(", ", taken)})";
+    }
+
+    /// <summary>The shipped keys of <c>CommandMap.ini</c> again (not saved until Accept).</summary>
+    public void RestoreHotkeyDefaults()
+    {
+        _armed = null;
+        _hotkeys = _shipped;
+        _working = _working with { Controls = _working.Controls with { Hotkeys = _hotkeys.DifferencesFrom(_shipped) } };
+        W("HotkeysLabel").SetText(HotkeyHint);
+        W("HotkeysStatus").SetText("The shipped keys are back");
+        ShowHotkeys(selected: -1);
+    }
+
+    /// <summary>The binding the screen shows for an action, <c>null</c> when it is unbound.</summary>
+    public KeyBinding? BindingOf(MetaAction action) => _hotkeys.TryGetEntry(action, out var entry) ? entry.Binding : null;
+
+    /// <summary>The line under the list (what the last change did).</summary>
+    public string HotkeyStatus => W("HotkeysStatus").Text?.Value ?? "";
+
+    /// <summary>The action of a row, as the list shows it.</summary>
+    public MetaAction? ActionAt(int row) => row >= 0 && row < _rows.Length ? _rows[row].Action : null;
+
+    /// <summary>Arms a row as a click on it does: the next key pressed becomes its binding.</summary>
+    public void SelectHotkey(MetaAction action)
+    {
+        var row = _rows.ToList().FindIndex(item => item.Action == action);
+        if (row < 0) throw new ArgumentException($"{action} is not a listed hotkey.", nameof(action));
+        Arm(row);
+        W("ListHotkeys").SetListSelection(row);
+    }
+
+    private void Arm(int row)
+    {
+        if (ActionAt(row) is not { } action) return;
+        _armed = action;
+        W("HotkeysStatus").SetText($"Press a key for {ActionName(action)} (Esc: cancel)");
     }
 
     /// <summary>A key as a person reads it: <c>Ctrl+Alt+F1</c>; a binding of the modifiers alone says so; a binding on the release of a key says that.</summary>
@@ -138,6 +237,8 @@ public sealed class MoreOptionsScreen : ShellScreen
         switch (e.Kind)
         {
             case UiEventKind.ButtonSelected when e.Source == Name("ButtonAccept"): Accept(); break;
+            case UiEventKind.ButtonSelected when e.Source == Name("ButtonDefaults"): Shell.PlaySound(ShellUiSounds.ButtonClick); RestoreHotkeyDefaults(); break;
+            case UiEventKind.ListSelected when e.Source == Name("ListHotkeys"): Arm(e.Value); break;
             case UiEventKind.ButtonSelected when e.Source == Name("ButtonBack"): Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.CloseTop(); break;
             case UiEventKind.ComboSelected when e.Value >= 0:
                 Choose(e.Source, e.Value);
@@ -190,6 +291,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         var label = Find(options, "OptionsMenu.wnd:ResolutionLabel");
         var combo = Find(options, "OptionsMenu.wnd:ComboBoxResolution");
         var accept = Find(options, "OptionsMenu.wnd:ButtonAccept");
+        var defaults = Find(options, "OptionsMenu.wnd:ButtonDefaults");
         var back = Find(options, "OptionsMenu.wnd:ButtonBack");
         var line = Find(options, "OptionsMenu.wnd:Line");
         var list = Find(mapSelect, "SkirmishMapSelectMenu.wnd:ListboxMap");
@@ -219,8 +321,10 @@ public sealed class MoreOptionsScreen : ShellScreen
             children.Add(Copy(combo, "Combo" + Rows[index].Row, At(380, top, 635, top + height)));
         }
         var hotkeysTop = first + Rows.Length * step + 8;
-        children.Add(Copy(label, "HotkeysLabel", At(152, hotkeysTop, 635, hotkeysTop + height)));
-        var hotkeys = Copy(list, "ListHotkeys", At(152, hotkeysTop + height + 4, 635, 516));
+        children.Add(Copy(label, "HotkeysLabel", At(152, hotkeysTop, 470, hotkeysTop + height)));
+        children.Add(Copy(defaults, "ButtonDefaults", At(480, hotkeysTop, 635, hotkeysTop + height), keepText: true));
+        children.Add(Copy(label, "HotkeysStatus", At(152, 494, 635, 516)));
+        var hotkeys = Copy(list, "ListHotkeys", At(152, hotkeysTop + height + 4, 635, 490));
         hotkeys = hotkeys with { ListBox = hotkeys.ListBox! with { Columns = 2, ColumnWidthPercentages = [68, 32], MultiSelect = false, ForceSelect = false } };
         children.Add(hotkeys);
         children.Add(Copy(accept, "ButtonAccept", accept.Rect, keepText: true));
