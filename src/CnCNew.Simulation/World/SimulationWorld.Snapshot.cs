@@ -253,6 +253,7 @@ public sealed partial class SimulationWorld
         if (reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadTick"), reader.Fixed("aheadX"), reader.Fixed("aheadY"), reader.Fixed("aheadZ"));
         if (reader.Has("pendingSink")) entity.PendingSink = reader.Fixed("pendingSink");
         if (reader.Has("destroyNotBefore")) entity.DestroyNotBefore = reader.Int("destroyNotBefore");
+        if (reader.Has("turretsStopped")) entity.TurretsStopped = reader.Bool("turretsStopped");
         if (reader.Has("speedPerFrame")) entity.SpeedPerFrame = reader.Fixed("speedPerFrame");
         if (reader.Has("aheadAngle"))
         {

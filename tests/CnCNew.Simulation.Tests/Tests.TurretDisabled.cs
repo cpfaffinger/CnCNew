@@ -41,4 +41,37 @@ static partial class Tests
             SameSeries(reference, angles, $"The angle of the disabled turret at the frame ends at {rate}");
         }
     }
+
+    /// <summary>
+    /// F-153, the other edge: a disable that ends in the middle of a frame (the power comes back in a later phase of the tick) lets the turret begin its idle scan from the next frame on.
+    /// The 30 Hz object is enabled from its next tick; above 30 Hz the turret began its scan in the frame's second half and every glance after it was half a step ahead (Death Valley
+    /// America against China, frame 39,800).
+    /// </summary>
+    public static void ATurretEnabledInTheMiddleOfAFrameStartsWithTheNext()
+    {
+        List<long>? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, TurretAttackFiles());
+            feeder.Spawn(1, "ScanTank", owner: 1, x: 0, y: 0);
+            for (var i = 0; i < factor; i++) world.Step();
+            var scanner = Slotted(world, "ScanTank");
+            // A script disables the tank from the start.
+            world.SetScriptDisable(scanner, Entity.ScriptDisabled, true);
+            var angles = new List<long>();
+            for (var frame = 0; frame < 400; frame++)
+            {
+                for (var tick = 0; tick < factor; tick++)
+                {
+                    world.Step();
+                    // The script's disable is lifted after the first tick of frame 40: a frame boundary at 30 Hz, the middle of a frame above it.
+                    if (frame == 40 && tick == 0) world.SetScriptDisable(scanner, Entity.ScriptDisabled, false);
+                }
+                angles.Add(scanner.TurretOf(0)!.Value.Angle.Raw);
+            }
+            Check.That(angles.Take(40).All(angle => angle == 0) && angles.Distinct().Count() > 10, $"{rate}: the turret stands while the script disables the tank and glances around after it.");
+            reference ??= angles;
+            SameSeries(reference, angles, $"The angle of the scanning turret that is enabled again at the frame ends at {rate}");
+        }
+    }
 }

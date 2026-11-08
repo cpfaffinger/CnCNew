@@ -383,6 +383,12 @@ public sealed class Entity
     /// next tick" at 30 Hz, which is the next logic frame of the original (docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md). Never set at 30 Hz, described only when set.
     /// </summary>
     internal long DestroyNotBefore { get; set; }
+
+    /// <summary>
+    /// Above 30 Hz only: the turrets of this object stand because a disable stopped them in the tick before. A disable that ends in the middle of a frame lets them go on from the next frame,
+    /// as the 30 Hz object, whose frame is that tick, is enabled only from the next (F-153). Never set at 30 Hz, described only when set.
+    /// </summary>
+    internal bool TurretsStopped { get; set; }
     public long SpawnTick { get; }
 
     /// <summary>Build ticks already invested while the object is <c>UNDER_CONSTRUCTION</c> (<c>Object::m_constructionPercent</c>, in ticks of its build time).</summary>
@@ -553,6 +559,7 @@ public sealed class Entity
         }
         if (PendingSink != Fixed.Zero) writer.Fixed("pendingSink", PendingSink);
         if (DestroyNotBefore != 0) writer.Int("destroyNotBefore", DestroyNotBefore);
+        if (TurretsStopped) writer.Bool("turretsStopped", true);
         if (SpeedPerFrame != Fixed.Zero) writer.Fixed("speedPerFrame", SpeedPerFrame);
         if (HasAheadAngle)
         {

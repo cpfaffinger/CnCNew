@@ -613,9 +613,16 @@ public sealed partial class SimulationWorld
             // standing while the object is paralyzed, unmanned, EMP'd, subdued or hacked - all of them disables other than DISABLED_HELD.
             // Above 30 Hz a disable that comes after the turret's decision in a frame (the power gone in a later phase of the same tick) must not stop the rest of that frame's step: the 30 Hz
             // turret has taken the whole step in the tick it decided it, and the disable holds it from the next frame on (F-153, a Gatling cannon that lost its power mid-step).
-            var disabled = (entity.DisabledFlags(tick) & ~DisabledMask.Held) != DisabledMask.None;
+            // A disable that ends in the middle of a frame lets the turret go on from the next frame (the 30 Hz object is enabled from its next tick, which is a frame): the turret that was
+            // stopped in the tick before stands until a tick that begins a frame.
+            var disabled = (entity.DisabledFlags(tick) & ~DisabledMask.Held) != DisabledMask.None || (entity.TurretsStopped && !Time.IsOriginalFrameBoundary(tick));
 
             var changed = false;
+            if (_turretFrameTicks != 1 && entity.TurretsStopped != disabled)
+            {
+                entity.TurretsStopped = disabled;
+                changed = true;
+            }
             var resting = true;
             for (var index = 0; index < states.Length; index++)
             {
