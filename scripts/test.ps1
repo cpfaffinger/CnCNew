@@ -107,12 +107,12 @@ $stepsOfArea = @{
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
-    ui           = @{ affected = 'ui';                                      gate = 'game', 'skins' }
+    ui           = @{ affected = 'ui';                                      gate = 'game', 'skins', 'product-survey' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
     video        = @{ affected = 'video';                                   gate = 'video-content', 'game' }
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
     game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins', 'check-ingame-menu' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'check-minimap', 'check-ingame-menu', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'check-minimap', 'check-ingame-menu', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins', 'product-survey' }
     scripts      = @{ affected = 'setup';                                   gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'video', 'presentation', 'sim', 'net'
@@ -240,6 +240,7 @@ $steps = @(
     New-Step 'server-package-linux' 'The linux-x64 server package under Linux (WSL) with an empty environment, clients under Windows' ((Script-Run 'check-server-package') + '-Platform' + 'linux') -Content -Environment
     New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
     New-Step 'client-package' 'The self-contained Windows package: layout, no original data, the packaged patcher and client run' (Script-Run 'check-client-package') -Content -Environment
+    New-Step 'product-survey' 'The product survey: every shell screen of both skins at four sizes and two text sizes, a skirmish by script, a match against each AI profile at 1x and 3x' (Script-Run 'check-product-survey') -Content -Environment
     New-Step 'skins'        'The two interface skins: a person by script switches to the modern skin in the window and walks the shell; the readability of both skins with the GDI font' (Script-Run 'check-skins') -Content -Environment
     New-Step 'setup'        'The setup assistant under Windows PowerShell 5.1 on an imitated empty machine: what it names as missing, the game through a Steam library' (Script-Run 'check-setup')
     New-Step 'patch-layer'  'The patched content: its compatibility baseline, a deterministic match, two clients on a server and a client of the game without the patch refused' (Script-Run 'check-patch-layer') -Content -Environment
