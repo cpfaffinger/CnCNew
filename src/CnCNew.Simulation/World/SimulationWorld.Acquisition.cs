@@ -762,13 +762,15 @@ public sealed partial class SimulationWorld
         // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
         var frameEnd = _firstFrameTicks != TickOrder.Next;
         var (ownX, ownY, _) = ShooterPosition(entity, frameEnd);
-        var search = new MoodSearch { Radius = radius, OwnRadius = CircleRadius(entity), TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd };
+        var collect = PicksByDamagePotential;
+        var search = new MoodSearch { Radius = radius, OwnRadius = CircleRadius(entity), TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd, Collect = collect };
+        if (collect) _victimCandidates.Clear();
 
         if (RelationshipOverride is not null)
         {
             // A script set a relation between teams: whether two objects are enemies is then a question per pair of objects, so every object is a candidate.
             foreach (var candidate in _entities.Values) ConsiderMoodTarget(entity, candidate, ref search);
-            return search.Best;
+            return collect ? PickByDamagePotential(entity, radius) : search.Best;
         }
 
         // Without such an override a victim must belong to a player the unit's player has as an enemy (IsAttackable -> AreEnemies), so only those players'
@@ -781,11 +783,13 @@ public sealed partial class SimulationWorld
             foreach (var candidate in EntitiesOwnedBy(player.Id).AsSpan()) ConsiderMoodTarget(entity, candidate, ref search);
         }
 
-        return search.Best;
+        return collect ? PickByDamagePotential(entity, radius) : search.Best;
     }
 
     private struct MoodSearch
     {
+        /// <summary>The rule fix <see cref="Rules.GameFix.TargetByDamagePotential"/>: the candidates are collected and ranked by value instead of kept as the closest.</summary>
+        public bool Collect;
         public Fixed Radius;
         public Fixed OwnRadius;
         public bool TurretOnly;
@@ -835,11 +839,22 @@ public sealed partial class SimulationWorld
                 foreach (var id in inside.Contained)
                     if (FindEntity(id) is { } rider && advisor.TryAttackPriority(entity, rider, out var riderPriority) && riderPriority > priority) priority = riderPriority;
             var effective = (int)Math.Max(1, priority - (gap / AttackPriorityDistanceStep).Floor());
+            if (search.Collect)
+            {
+                _victimCandidates.Add(new VictimCandidate { Entity = candidate, Gap = gap, Effective = effective, Priority = priority });
+                return;
+            }
+
             var better = effective > search.BestEffective || (effective == search.BestEffective && priority > search.BestPriority)
                          || (effective == search.BestEffective && priority == search.BestPriority && IsNearer(candidate, gap, search.Best, search.BestDistance));
             if (!better) return;
             search.BestEffective = effective;
             search.BestPriority = priority;
+        }
+        else if (search.Collect)
+        {
+            _victimCandidates.Add(new VictimCandidate { Entity = candidate, Gap = gap });
+            return;
         }
         else if (!IsNearer(candidate, gap, search.Best, search.BestDistance)) return;
 

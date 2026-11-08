@@ -88,6 +88,9 @@ public enum GameFix
 
     /// <summary>A weapon that is preferred against a victim (the Comanche's missiles against vehicles and structures) holds the choice only while its clip has rounds: with the clip empty and reloading, a ready weapon that can hit the victim - the cannon - fires meanwhile. The original keeps the preferred weapon while it merely reloads (<c>WeaponSet::chooseBestWeaponForTarget</c>) and the helicopter waits for it; the owner's decision, not the community source's.</summary>
     PreferredWeaponYieldsWhileClipEmpty = 26,
+
+    /// <summary>A unit that picks its own victim (idle, attack-move, guard, a computer player's unit) takes, among the enemies it may attack, the one it would hurt most and that is most dangerous to it - the damage its best weapon does against that victim's armour and health, plus the victim's threat to the unit - instead of the closest. The owner's decision, not the community source's; an ordered attack is never changed.</summary>
+    TargetByDamagePotential = 27,
 }
 
 /// <summary>
@@ -223,6 +226,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.PreferredWeaponYieldsWhileClipEmpty, "preferred-weapon-yields-while-clip-empty",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/WeaponSet.cpp, WeaponSet::chooseBestWeaponForTarget (the project owner's decision, not a community fix)",
             "a Comanche whose anti-tank missiles are all fired uses its cannon on vehicles and buildings while the clip reloads, instead of hovering until the missiles are back"),
+        new(GameFix.TargetByDamagePotential, "target-by-damage-potential",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate.cpp, AIUpdateInterface::getNextMoodTarget; AI.cpp, AI::findClosestEnemy (the project owner's decision, not a community fix)",
+            "a unit that chooses its own victim takes the enemy it can hurt most and that threatens it most - a Comanche the rocket troopers, a rocket trooper the tanks, a tank the tanks - instead of the closest one; the data's attack priority still comes first and an ordered attack is never changed"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

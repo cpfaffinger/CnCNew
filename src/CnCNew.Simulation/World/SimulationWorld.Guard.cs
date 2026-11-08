@@ -417,6 +417,9 @@ public sealed partial class SimulationWorld
         if (area is not null) limit = SquaredReach.Of(AreaGeometry(area).Radius);
         Entity? best = null;
         var bestDistance = Fixed.MaxValue;
+        // The rule fix collects the candidates and ranks them by what the guard can do to them and they to it, the distance from the centre last (SimulationWorld.TargetValue.cs).
+        var collect = PicksByDamagePotential;
+        if (collect) _victimCandidates.Clear();
         foreach (var player in Configuration.Players)
         {
             if (!AreEnemies(entity.Owner, player.Id)) continue;
@@ -433,14 +436,21 @@ public sealed partial class SimulationWorld
                 var dx = x - cx;
                 var dy = y - cy;
                 var distance = dx * dx + dy * dy;
-                if (!limit.Contains(distance) || distance > bestDistance || (distance == bestDistance && best is not null && candidate.Id.Value > best.Id.Value)) continue;
+                if (!limit.Contains(distance) || (!collect && (distance > bestDistance || (distance == bestDistance && best is not null && candidate.Id.Value > best.Id.Value)))) continue;
                 if (guard.Mode == GuardMode.FlyingUnitsOnly && !IsSignificantlyAboveTerrainAtFrameEnd(candidate)) continue;
                 if (area is not null && !area.Contains(x, y)) continue;
                 if (!CanAttack(entity, candidate, false, out _)) continue;
+                if (collect)
+                {
+                    _victimCandidates.Add(new VictimCandidate { Entity = candidate, Gap = Fixed.Sqrt(distance) });
+                    continue;
+                }
+
                 best = candidate;
                 bestDistance = distance;
             }
         }
+        if (collect) best = PickByDamagePotential(entity, area is not null ? AreaGeometry(area).Radius : GuardRange(entity, true));
         if (best is not null) guard.Nemesis = best.Id;
         return best;
     }
