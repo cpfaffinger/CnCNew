@@ -667,7 +667,9 @@ public sealed partial class SkirmishAi
                 bestEnough = enough;
             }
         }
-        if (best is null || Backoff(0x48000000u, SellForCarrierRetryFrames)) return;
+        const uint SellKey = 0x48000000u;
+        if (best is null || (_retryAt.TryGetValue(SellKey, out var until) && until > _tick)) return;
+        _retryAt[SellKey] = _tick + _time.OriginalFrames(SellForCarrierRetryFrames);
         Send(sequence => new SellCommand(_player, sequence, _tick, best.Id));
     }
 
