@@ -2326,6 +2326,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         return (Fixed.FromRaw(_frameStepX.Raw - _frameStepX.Raw * covered / shares), Fixed.FromRaw(_frameStepY.Raw - _frameStepY.Raw * covered / shares));
     }
 
+    /// <summary>
+    /// The heading the ground or helicopter movement ends its frame with while it is still turning toward it in shares (<see cref="AdvanceFrame"/>), after this tick's share; false when no turn
+    /// is left. Read by a derived AI whose second step publishes the rest of the frame, which clears the heading (<see cref="Entity.SetAhead"/>) - it publishes it again.
+    /// </summary>
+    protected bool GroundFrameTurnsTo(long tick, out Fixed endAngle)
+    {
+        endAngle = _frameAngle;
+        return _frameTicksLeft > 0 && _frameDue == tick + TickOrder.Next && Entity.Angle != _frameAngle;
+    }
+
     protected void DescribeWingStep(IStateWriter writer) => _wingStep.Describe(writer, "wingStep");
 
     protected void LoadWingStep(IStateReader reader) => _wingStep.Load(reader, "wingStep");

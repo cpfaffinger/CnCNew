@@ -866,6 +866,7 @@ run.Test("Phase 63 (F-156): a falling bomb dies at the height where its frame en
 run.Test("Phase 63 (F-150): the structure on a host's back faces and stands as at 30 Hz at every frame end", Tests.APortableStructureFollowsItsHostAsAt30Hz);
 run.Test("Phase 63 (F-153): a disable does not stop a turret in the middle of its frame's step", Tests.ADisableDoesNotStopATurretInTheMiddleOfItsFrame);
 run.Test("Phase 63 (F-153): a turret enabled in the middle of a frame starts with the next", Tests.ATurretEnabledInTheMiddleOfAFrameStartsWithTheNext);
+run.Test("Phase 63 (F-157): a Chinook publishes the heading its frame ends with", Tests.AChinookPublishesTheHeadingItsFrameEndsWith);
 run.Test("Phase 62 (F-146): a toppling tree begins its fall on its own next frame", Tests.ToppleBeginsOnTheTreesNextFrame);
 run.Test("Phase 62 (owner playtest): a preferred weapon yields while its clip reloads empty (rule fix)", Tests.PreferredWeaponYieldsWhileItsClipReloads);
 run.Test("Phase 47 (F-77): a creation list takes its source's heading where its frame ends", Tests.CreationListTakesTheSourceHeadingWhereItsFrameEnds);

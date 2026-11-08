@@ -326,6 +326,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         if (_climb.Continue(Entity))
         {
             _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
+            if (stride > 1 && GroundFrameTurnsTo(world.Tick, out var turningTo)) Entity.SetAheadAngle(turningTo);
             world.MarkDirty(Entity);
             return SimulationTiming.SleepNone;
         }
@@ -353,6 +354,8 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
             world.MarkDirty(Entity);
         }
         _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
+        // The publication of the rest of the frame clears the heading the movement's frame ends with; whoever reads the Chinook (a death: it spins on from the heading it died with) reads it.
+        if (stride > 1 && GroundFrameTurnsTo(world.Tick, out var headingTo)) Entity.SetAheadAngle(headingTo);
         // ... and an attacking Chinook with riders stays awake for its re-issue.
         return Entity.Z != target || forBoarders || _dropPhase != DropPhase.None || (Entity.Acquisition is { Victim.IsValid: true } && Entity.Container is { ContainCount: > 0 }) ? SimulationTiming.SleepNone : sleep;
     }
