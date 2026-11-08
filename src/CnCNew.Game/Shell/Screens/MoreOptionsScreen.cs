@@ -54,7 +54,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     private HotkeyMap _hotkeys;
     private ImmutableArray<(MetaAction Action, string Name)> _rows = [];
     private MetaAction? _armed;
-    private const string HotkeyHint = "Hotkeys (click a row, then press the new key)";
+    private const string HotkeyHint = "Hotkeys: click, press a key";
 
     public MoreOptionsScreen(GameShell shell) : base(shell, File, shell.Skin.Derive(BuildLayout(shell.Layouts.Get(ShellLayoutNames.OptionsMenu), shell.Layouts.Get(ShellLayoutNames.SkirmishMapSelectMenu)), shell.Layouts.HeaderTemplates))
     {
