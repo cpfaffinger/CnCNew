@@ -30,6 +30,7 @@ internal static class AttachedEffectsTests
         harness.Run("The Dragon tank's flame: its projectiles carry the trail of BoneFXUpdate, and what it hits burns", () => DragonFlame(data));
         harness.Run("The Black Lotus's data stream: an arc from the unit to its target while the hack runs", () => DataStream(data));
         harness.Run("F-158: a Patriot battery that joins another's attack draws its data stream to the victim for the laser object's life", () => PatriotDataStream(data));
+        harness.Run("W3DLaserDraw: the data stream is green, tiled by its width and scrolls along the beam as the data says", () => LaserLooks(data, args[index + 1]));
         harness.Run("A damaged building smokes and burns: TransitionDamageFX and the body's bones", () => DamagedBuilding(data));
         harness.Run("A building set on fire by the flame burns: the body's aflame category and the fire one size up", () => BurningBuilding(data));
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
@@ -130,6 +131,10 @@ internal static class AttachedEffectsTests
              new ScenarioUnit("p2", "AmericaPowerPlant", 2, 300f, -200f), new ScenarioUnit("dozer", "ChinaVehicleDozer", 1, -180f, 0f)],
             [new ScenarioOrder(30, "a", ScenarioOrderKind.Attack, "dozer")], 0f, 0f) { HumanFaction = "FactionChina", OpponentFaction = "FactionAmerica" }, Viewport);
         var framesWithBeam = 0;
+        long? born = null;
+        var scrolls = new SortedDictionary<long, float>();
+        var borns = new Dictionary<long, long>();
+        float Expected(long frame) { var value = spec!.ScrollRate * (frame - borns[frame]) / 30.0; return (float)(value - Math.Floor(value)); }
         var reached = false;
         var firstFrame = -1L;
         var lastFrame = -1L;
@@ -141,6 +146,9 @@ internal static class AttachedEffectsTests
             if (beam is null) return;
             framesWithBeam++;
             var frame = scene.World.Tick / scene.World.Time.TicksPerOriginalFrame;
+            if (!scrolls.ContainsKey(frame - 1)) born = frame;
+            scrolls[frame] = beam.Laser!.ScrollV;
+            borns[frame] = born!.Value;
             if (firstFrame < 0) firstFrame = frame;
             lastFrame = frame;
             var b = scene.World.FindEntity(scene.Tags["b"])!;
@@ -150,9 +158,59 @@ internal static class AttachedEffectsTests
         });
         Console.WriteLine($"       patriots: frames with the stream {framesWithBeam} ({firstFrame}..{lastFrame}); {scene.Attached.Stats}");
         TestHarness.Assert(framesWithBeam > 0, "the data stream is drawn");
+        TestHarness.Assert(scrolls.Count > 1 && scrolls.All(pair => Math.Abs(pair.Value - Expected(pair.Key)) < 1e-4f), $"its texture is where {Math.Abs(spec!.ScrollRate)} per second puts it in every frame ({scrolls.Count} frames)");
+        TestHarness.Assert(scrolls.Where(pair => borns[pair.Key] < pair.Key).All(pair => scrolls.TryGetValue(pair.Key - 1, out var before) && Math.Abs(before - pair.Value) > 1e-4f), "and moves in every frame of the original, once, at any rate");
         TestHarness.Assert(reached, "it runs from the assisting battery to the place of the victim");
         TestHarness.Assert(framesWithBeam <= 18 * 2, $"and only for the life of the laser object ({framesWithBeam} frames)");
         TestHarness.Assert(scene.Fx.Capture().ProjectileStreams.Length == scene.Attached.ProjectileStreams.Length, "the frame the renderer gets carries it");
+    }
+
+    /// <summary>
+    /// The owner saw only white outlines that did not move. <c>W3DLaserDraw</c> draws the (grey on black) texture additive in the colour of the laser - the inner colour times its alpha for a
+    /// single beam -, U across the beam and V along it, tiled so that it is not stretched (length over width times the texture's width over height times <c>TilingScalar</c>, at most 50) and
+    /// moved along by <c>ScrollRate</c> every second of the original's time. Checked on the shipped data: every laser object's keys, the Patriot's colour and tiling by the real texture
+    /// file, the scroll at the three rates by the original frame.
+    /// </summary>
+    private static void LaserLooks(GameData data, string contentDir)
+    {
+        var catalog = data.AttachedEffects;
+        TestHarness.Assert(catalog.Lasers.Count >= 10, $"the shipped lasers are read ({catalog.Lasers.Count})");
+        var colourless = catalog.Lasers.Where(pair => pair.Value.NumBeams > 0 && pair.Value.InnerColor.W <= 0f).Select(pair => pair.Key).ToArray();
+        TestHarness.Assert(colourless.Length == 0, $"every laser has an inner colour ({string.Join(", ", colourless)})");
+
+        var spec = catalog.Lasers["PatriotBinaryDataStream"];
+        TestHarness.Assert(spec.NumBeams == 1 && spec.Tile && spec.Segments == 5 && Math.Abs(spec.ScrollRate + 0.25f) < 1e-6f && Math.Abs(spec.TilingScalar - 0.66f) < 1e-6f && spec.SegmentOverlapRatio == 0f,
+            $"the keys: one beam, tiled, five segments, scroll {spec.ScrollRate}, scalar {spec.TilingScalar}");
+        TestHarness.Assert(spec.InnerColor == new Vector4(0f, 1f, 0f, 180f / 255f), $"inner colour R:0 G:255 B:0 A:180 ({spec.InnerColor})");
+        var bands = spec.Bands();
+        TestHarness.Assert(bands.Length == 1 && bands[0].Width == 5f && Vector3.Distance(bands[0].Color, new Vector3(0f, 180f / 255f, 0f)) < 1e-6f, "one band, 5 wide, green at the inner alpha (not the texture's own white)");
+
+        // A laser object with several beams: widths and colours step from the inner to the outer one, the outermost first.
+        var many = catalog.Lasers.Values.First(laser => laser.NumBeams > 2);
+        var manyBands = many.Bands();
+        TestHarness.Assert(manyBands.Length == many.NumBeams && Math.Abs(manyBands[0].Width - many.OuterWidth) < 1e-5f && Math.Abs(manyBands[^1].Width - many.Width) < 1e-5f && manyBands[0].Width >= manyBands[^1].Width,
+            $"{many.Texture}: {many.NumBeams} bands from the outer width {many.OuterWidth} to the inner {many.Width}");
+
+        // The tiling by the texture file the data names.
+        var path = CnCNew.W3D.W3dTexturePathResolver.Resolve(spec.Texture, candidate => File.Exists(Path.Combine(contentDir, candidate))).VirtualPath;
+        TestHarness.Assert(path is not null, $"{spec.Texture} resolves in the content");
+        var header = File.ReadAllBytes(Path.Combine(contentDir, path!));
+        var height = BitConverter.ToInt32(header, 12);
+        var width = BitConverter.ToInt32(header, 16);
+        TestHarness.Assert(width == 32 && height == 256, $"the texture is {width} x {height}: narrow and tall");
+        var draw = spec.Draw(new Vector3(0f, 0f, 20f), new Vector3(300f, 0f, 20f), (_, _) => 0f, 0);
+        var laser = draw.Laser!;
+        TestHarness.Assert(laser.Segments.Length == 5 && laser.Bands.Length == 1 && laser.ScrollV == 0f, "five segments, one band, no scroll on the first frame");
+        var length = Vector3.Distance(laser.Segments[2].From, laser.Segments[2].To);
+        var expected = length / 5f * (width / (float)height) * 0.66f;
+        TestHarness.Assert(Math.Abs(laser.TileFactor(length, laser.Bands[0].Width, width / (float)height) - expected) < 1e-5f && expected is > 0.5f and < 50f, $"a segment of {length:F1} units tiles {expected:F2} times, not once");
+        TestHarness.Assert(laser.TileFactor(1000000f, 5f, 1f) == LaserDraw.MaxTileFactor, "and never more than 50 times");
+        var untiled = spec with { Tile = false };
+        TestHarness.Assert(untiled.Draw(Vector3.Zero, new Vector3(300f, 0f, 0f), (_, _) => 0f, 0).Laser!.TileFactor(100f, 5f, 0.125f) == 1f, "a laser that does not tile shows its texture once per segment");
+
+        // The scroll depends on the frames of the original only: -0.25 per second is a 30th of that per frame, wrapped into [0, 1).
+        float Scroll(long frames) => spec.Draw(Vector3.Zero, new Vector3(300f, 0f, 0f), (_, _) => 0f, frames).Laser!.ScrollV;
+        TestHarness.Assert(Math.Abs(Scroll(30) - 0.75f) < 1e-6f && Math.Abs(Scroll(60) - 0.5f) < 1e-6f && Math.Abs(Scroll(120) - 0f) < 1e-6f && Math.Abs(Scroll(1) - (1f - 0.25f / 30f)) < 1e-6f, "a second moves it a quarter of the texture's length against the beam's direction");
     }
 
     private static void DragonFlame(GameData data)

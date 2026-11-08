@@ -98,9 +98,21 @@ public sealed class AttachedEffectCatalog
                     foreach (var module in obj.Modules)
                     {
                         string Key(string key) => module.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;
+                        bool Has(string key) => module.Fields.Any(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
                         float Amount(string key) => float.TryParse(Key(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number : 0f;
                         if (module.Name.Equals("DeletionUpdate", StringComparison.Ordinal)) laserLives[obj.OriginalName] = (long)MathF.Ceiling(Amount("MinLifetime") * CnCNew.Data.OriginalFrame.PerSecond / 1000f);
-                        if (module.Name.Equals("W3DLaserDraw", StringComparison.Ordinal)) lasers[obj.OriginalName] = new LaserSpec(Key("Texture"), Amount("InnerBeamWidth"), Math.Max(1, (int)Amount("Segments")), Amount("ArcHeight"));
+                        if (module.Name.Equals("W3DLaserDraw", StringComparison.Ordinal))
+                            lasers[obj.OriginalName] = new LaserSpec(Key("Texture"), Amount("InnerBeamWidth"), Math.Max(1, (int)Amount("Segments")), Amount("ArcHeight"))
+                            {
+                                NumBeams = Has("NumBeams") ? (int)Amount("NumBeams") : 1,
+                                OuterWidth = Has("OuterBeamWidth") ? Amount("OuterBeamWidth") : 1f,
+                                InnerColor = LaserSpec.ParseColor(Key("InnerColor")),
+                                OuterColor = LaserSpec.ParseColor(Key("OuterColor")),
+                                Tile = Key("Tile").Equals("Yes", StringComparison.OrdinalIgnoreCase),
+                                ScrollRate = Amount("ScrollRate"),
+                                SegmentOverlapRatio = Amount("SegmentOverlapRatio"),
+                                TilingScalar = Has("TilingScalar") ? Amount("TilingScalar") : 1f,
+                            };
                         if (module.Name.Equals("SpecialAbilityUpdate", StringComparison.Ordinal) && Key("SpecialObject").Length > 0) abilities.Add((obj.OriginalName, Key("SpecialObject"), Key("SpecialObjectAttachToBone")));
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
                     }
@@ -254,12 +266,62 @@ public sealed class AttachedEffectCatalog
     }
 }
 
-/// <summary>The keys of a <c>W3DLaserDraw</c> this draws: the texture, the width of the beam, its segments and the height of its arc.</summary>
 /// <summary>The beam of a weapon: its picture, the bone it leaves from, and how many frames of the original a shot draws it (the <c>DeletionUpdate</c> of the laser object).</summary>
 public sealed record WeaponLaser(LaserSpec Laser, string Bone, long Frames);
 
+/// <summary>
+/// The keys of a <c>W3DLaserDraw</c> (<c>W3DLaserDrawModuleData</c>): the texture, the width of the inner beam (<see cref="Width"/>) and of the outer one, the colours of both, how many
+/// overlapping beams make the laser, whether the texture tiles by the beam's width and how often, how fast it scrolls (per second of the original's 30 frames), the segments of the
+/// arc and how they overlap. The defaults are the constructor's: one beam, an outer width of 1, a tiling scalar of 1.
+/// </summary>
 public sealed record LaserSpec(string Texture, float Width, int Segments, float ArcHeight)
 {
+    /// <summary><c>NumBeams</c>: overlapping bands that make the beam; 1 draws only the inner one.</summary>
+    public int NumBeams { get; init; } = 1;
+
+    /// <summary><c>OuterBeamWidth</c>.</summary>
+    public float OuterWidth { get; init; } = 1f;
+
+    /// <summary><c>InnerColor</c> as red, green, blue and alpha in 0..1 (<c>parseColorInt</c>; absent: all zero, as the original's uninitialised field is).</summary>
+    public Vector4 InnerColor { get; init; }
+
+    /// <summary><c>OuterColor</c>, like <see cref="InnerColor"/>.</summary>
+    public Vector4 OuterColor { get; init; }
+
+    /// <summary><c>Tile</c>: the texture repeats along the beam so that it is not stretched (<see cref="LaserDraw.TileFactor"/>).</summary>
+    public bool Tile { get; init; }
+
+    /// <summary><c>ScrollRate</c>: the texture's offset along the beam moves this far each second of the original's time (a thirtieth of it per frame of the original).</summary>
+    public float ScrollRate { get; init; }
+
+    /// <summary><c>SegmentOverlapRatio</c>: segments overlap (positive) or part (negative) by this part of the line.</summary>
+    public float SegmentOverlapRatio { get; init; }
+
+    /// <summary><c>TilingScalar</c>: stretches the tiling above 1 and shrinks it below.</summary>
+    public float TilingScalar { get; init; } = 1f;
+
+    /// <summary>
+    /// <c>INI::parseColorInt</c>: <c>R:0 G:255 B:0 A:180</c> (a part that is missing is 0, alpha is 255 unless it is given) as 0..1. An empty text is the zero colour.
+    /// </summary>
+    public static Vector4 ParseColor(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0) return Vector4.Zero;
+        float red = 0f, green = 0f, blue = 0f, alpha = 255f;
+        foreach (var part in text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.Length < 3 || part[1] != ':' || !float.TryParse(part.AsSpan(2), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) continue;
+            switch (char.ToUpperInvariant(part[0]))
+            {
+                case 'R': red = value; break;
+                case 'G': green = value; break;
+                case 'B': blue = value; break;
+                case 'A': alpha = value; break;
+            }
+        }
+        return new Vector4(Math.Clamp(red, 0f, 255f) / 255f, Math.Clamp(green, 0f, 255f) / 255f, Math.Clamp(blue, 0f, 255f) / 255f, Math.Clamp(alpha, 0f, 255f) / 255f);
+    }
+
     /// <summary>
     /// The points of the beam (<c>W3DLaserDraw::doDrawModule</c>): along the straight line, raised by a part of a cosine that is <see cref="ArcHeight"/> in the middle and nothing at the
     /// ends, and "skim the ground rather than penetrate it" two units above <paramref name="ground"/>.
@@ -280,6 +342,99 @@ public sealed record LaserSpec(string Texture, float Width, int Segments, float 
         }
         return points.MoveToImmutable();
     }
+
+    /// <summary>
+    /// The bands of the laser (<c>W3DLaserDraw</c>'s constructor): from the outermost beam inwards, each with its width and its colour. A single beam is the inner width and the inner
+    /// colour times the inner alpha (the shader is additive: the colour is the strength); several lerp between inner and outer by <c>i / (n - 1)</c>, the colour as the original's
+    /// expression reads (<c>inner + scale * (outer - inner) * innerAlpha</c>: the alpha is applied to the difference only).
+    /// </summary>
+    public ImmutableArray<LaserBand> Bands()
+    {
+        if (NumBeams <= 0) return [];
+        var bands = ImmutableArray.CreateBuilder<LaserBand>(NumBeams);
+        for (var index = NumBeams - 1; index >= 0; index--)
+        {
+            if (NumBeams == 1)
+            {
+                bands.Add(new LaserBand(Width, new Vector3(InnerColor.X, InnerColor.Y, InnerColor.Z) * InnerColor.W));
+                continue;
+            }
+            var scale = index / (NumBeams - 1f);
+            bands.Add(new LaserBand(Width + scale * (OuterWidth - Width), new Vector3(
+                InnerColor.X + scale * (OuterColor.X - InnerColor.X) * InnerColor.W,
+                InnerColor.Y + scale * (OuterColor.Y - InnerColor.Y) * InnerColor.W,
+                InnerColor.Z + scale * (OuterColor.Z - InnerColor.Z) * InnerColor.W)));
+        }
+        return bands.MoveToImmutable();
+    }
+
+    /// <summary>
+    /// What <c>W3DLaserDraw::doDrawModule</c> hands to the segmented lines: every segment is a line of its own between two points - with an arc and more than one segment cut out of the
+    /// raised curve (the ends moved by <see cref="SegmentOverlapRatio"/>, all but the first and last segment), without one the whole line, once per segment. The texture's offset
+    /// along the beam is <see cref="ScrollRate"/> times the seconds the laser has lived, kept in [0, 1) (<c>SegLineRendererClass::Render</c>); the original's time is a frame of the
+    /// original each time it draws, so it advances per frame of the original at every simulation rate.
+    /// </summary>
+    public StreamInstance Draw(Vector3 start, Vector3 end, Func<float, float, float> ground, long framesAlive)
+    {
+        ArgumentNullException.ThrowIfNull(ground);
+        var segments = ImmutableArray.CreateBuilder<LaserSegment>(Segments);
+        if (ArcHeight > 0f && Segments > 1)
+        {
+            var line = end - start;
+            var middle = (start + end) * 0.5f;
+            var half = line.Length() * 0.5f;
+            Vector3 Raised(float ratio)
+            {
+                var point = start + line * ratio;
+                if (half > 0f) point.Z += MathF.Cos(Vector3.Distance(middle, point) / half * MathF.PI * 0.5f) * ArcHeight;
+                point.Z = Math.Max(point.Z, 2f + ground(point.X, point.Y));
+                return point;
+            }
+            for (var segment = 0; segment < Segments; segment++)
+            {
+                var from = segment / (float)Segments;
+                var to = (segment + 1f) / Segments;
+                if (segment > 0) from -= SegmentOverlapRatio;
+                if (segment < Segments - 1) to += SegmentOverlapRatio;
+                segments.Add(new LaserSegment(Raised(from), Raised(to)));
+            }
+        }
+        else
+        {
+            for (var segment = 0; segment < Segments; segment++) segments.Add(new LaserSegment(start, end));
+        }
+        var scroll = ScrollRate * (double)framesAlive / CnCNew.Data.OriginalFrame.PerSecond;
+        var points = ImmutableArray.CreateBuilder<Vector3>(segments.Count + 1);
+        foreach (var segment in segments) points.Add(segment.From);
+        if (segments.Count > 0) points.Add(segments[^1].To);
+        return new StreamInstance(points.MoveToImmutable(), Texture, Width, 1f)
+        {
+            Laser = new LaserDraw(segments.ToImmutable(), Bands(), Tile, TilingScalar, (float)(scroll - Math.Floor(scroll))),
+        };
+    }
+}
+
+/// <summary>One beam of a laser: its width and the colour it is drawn with (additive, so the colour is the strength).</summary>
+public readonly record struct LaserBand(float Width, Vector3 Color);
+
+/// <summary>One line of a laser: a <c>SegmentedLineClass</c> with two points.</summary>
+public readonly record struct LaserSegment(Vector3 From, Vector3 To);
+
+/// <summary>
+/// A <c>W3DLaserDraw</c> as the renderer draws it: for every segment and every band a camera-facing strip of the band's width, the texture across it (U) and along it (V), additive.
+/// With <see cref="Tile"/> the texture repeats <see cref="TileFactor"/> times along a segment, otherwise once; <see cref="ScrollV"/> moves it along the beam.
+/// </summary>
+public sealed record LaserDraw(ImmutableArray<LaserSegment> Segments, ImmutableArray<LaserBand> Bands, bool Tile, float TilingScalar, float ScrollV)
+{
+    /// <summary><c>SegLineRendererClass::Set_Texture_Tile_Factor</c> caps it so that a polygon is not tiled too often.</summary>
+    public const float MaxTileFactor = 50f;
+
+    /// <summary>
+    /// "Adjust tile factor so texture is NOT stretched but tiled equally in both width and length": length over width times the texture's aspect ratio (width over height) times the
+    /// scalar, one when the laser does not tile.
+    /// </summary>
+    public float TileFactor(float length, float width, float aspect)
+        => Tile ? Math.Clamp(width > 0f ? length / width * aspect * TilingScalar : MaxTileFactor, 0f, MaxTileFactor) : 1f;
 }
 
 /// <summary>The keys of a <c>W3DProjectileStreamDraw</c>: <c>Texture</c>, <c>Width</c>, <c>TileFactor</c>, <c>ScrollRate</c>, <c>MaxSegments</c> (0: every point).</summary>
@@ -520,7 +675,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             Flush(frame, stream.Spec, points);
         }
         foreach (var key in ended) _streams.Remove(key);
-        if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame);
+        if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         if (_beams.Count > 0) AddBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         if (_feedbackBeams.Count > 0) AddFeedbackBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         _streamFrame = frame.ToImmutable();
@@ -579,8 +734,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
                 _beamEnds[beam.Victim] = aimed.Position + (victim.Template.IsKindOf("PROJECTILE") || victim.Z > world.GroundHeightAt(victim.X, victim.Y) + Simulation.Numerics.Fixed.FromInt(9) ? Vector3.Zero : new Vector3(0f, 0f, 10f));
             if (!_beamEnds.TryGetValue(beam.Victim, out var end)) continue;
             var start = beam.Laser.Bone.Length > 0 && BonePosition(beam.Source, beam.Laser.Bone, pose) is { } found ? found : pose.Position;
-            var points = beam.Laser.Laser.Points(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f);
-            frame.Add(new StreamInstance(points, beam.Laser.Laser.Texture, beam.Laser.Laser.Width, 1f));
+            frame.Add(beam.Laser.Laser.Draw(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f, originalFrame - beam.Shot));
         }
         if (_beams.Count == 0) _beamEnds.Clear();
     }
@@ -611,14 +765,14 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         foreach (var beam in _feedbackBeams)
         {
             if (view.GetPose(beam.Source) is not { } pose || Vector3.DistanceSquared(pose.Position, beam.End) < 1e-6f) continue;
-            var points = beam.Laser.Points(pose.Position, beam.End, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f);
-            frame.Add(new StreamInstance(points, beam.Laser.Texture, beam.Laser.Width, 1f));
+            frame.Add(beam.Laser.Draw(pose.Position, beam.End, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f, originalFrame - beam.Born));
         }
     }
 
     /// <summary>The beams of the abilities at work (<c>SpecialAbilityUpdate::initLaser</c>, <c>LaserUpdate</c>): from the unit's bone, or the unit, to the centre of its target; a band like a stream. The Black Lotus's data stream is one of them.</summary>
-    private void AddLasers(SimulationWorld world, IFxWorldView view, ImmutableArray<StreamInstance>.Builder frame)
+    private void AddLasers(SimulationWorld world, IFxWorldView view, ImmutableArray<StreamInstance>.Builder frame, long originalFrame)
     {
+        var seen = new HashSet<EntityId>();
         foreach (var item in _ordered)
         {
             if (world.FindEntity(item.Entity) is not { } entity || !catalog.LaserOwners.TryGetValue(entity.Template.Name, out var bone) || view.GetPose(item.Entity) is not { } pose) continue;
@@ -630,12 +784,17 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
                     if (world.FindEntity(id) is not { } made || !catalog.Lasers.TryGetValue(made.Template.Name, out var laser)) continue;
                     var start = bone.Length > 0 && BonePosition(item.Entity, bone, pose) is { } found ? found : pose.Position;
                     var end = victim.Position + new Vector3(0f, 0f, FixedConvert.ToSingle(target.Template.GeometryHeight) / 2f);
-                    var points = laser.Points(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f);
-                    frame.Add(new StreamInstance(points, laser.Texture, laser.Width, 1f));
+                    if (!_abilityBeams.TryGetValue(id, out var born)) _abilityBeams[id] = born = originalFrame;
+                    seen.Add(id);
+                    frame.Add(laser.Draw(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f, originalFrame - born));
                 }
             }
         }
+        foreach (var id in _abilityBeams.Keys.Where(id => !seen.Contains(id)).ToList()) _abilityBeams.Remove(id);
     }
+
+    /// <summary>The frame an ability's laser object was first seen: the scroll of its texture counts from there.</summary>
+    private readonly Dictionary<EntityId, long> _abilityBeams = [];
 
     private static void Flush(ImmutableArray<StreamInstance>.Builder frame, StreamSpec spec, List<Vector3> points)
     {

@@ -556,7 +556,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         for (var index = 0; index < frame.ProjectileStreams.Length; index++)
         {
             var stream = frame.ProjectileStreams[index];
-            if (stream.Points.Length < 2 || stream.Texture.Length == 0 || stream.Width <= 0f) continue;
+            if (stream.Points.Length < 2 || stream.Texture.Length == 0 || (stream.Laser is null && stream.Width <= 0f)) continue;
             var middle = (stream.Points[0] + stream.Points[^1]) * 0.5f;
             Add(ref count, new Item { Kind = ItemKind.Stream, Material = MaterialId(new FxMaterialKey(stream.Texture, FxBlend.Additive)), A = index }, Depth(middle));
         }
@@ -795,6 +795,12 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
     /// </summary>
     private void EmitStream(StreamInstance stream)
     {
+        if (stream.Laser is { } laser)
+        {
+            EmitLaser(stream, laser);
+            return;
+        }
+
         var color = Pack(Vector3.One, 1f);
         var tiles = Math.Max(1, (int)MathF.Round(stream.TileFactor));
         for (var segment = 0; segment + 1 < stream.Points.Length; segment++)
@@ -812,6 +818,48 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
                 quad[1] = new FxVertex { Position = start + side, Color = color, Uv = new Vector2(0f, 1f) };
                 quad[2] = new FxVertex { Position = end + side, Color = color, Uv = new Vector2(1f, 1f) };
                 quad[3] = new FxVertex { Position = end - side, Color = color, Uv = new Vector2(1f, 0f) };
+            }
+        }
+    }
+
+    /// <summary>The width over the height of a texture by its name, for the tiling of a laser (<c>W3DLaserDraw</c> reads it from the texture's first level); one when it is not set.</summary>
+    public Func<string, float>? TextureAspect { get; set; }
+
+    private readonly Dictionary<string, float> _aspects = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A laser (<c>W3DLaserDraw</c>, one <c>SegmentedLineClass</c> per segment and beam with <c>TILED_TEXTURE_MAP</c>): a camera-facing strip of the beam's width per segment, U across it and V along
+    /// it, V running from the scroll offset to the offset plus the tile factor, the colour of the beam as the vertex colour (additive: the texture is tinted by it). The effect sampler
+    /// clamps, so a strip is cut at every whole V and each piece gets the fraction.
+    /// </summary>
+    private void EmitLaser(StreamInstance stream, LaserDraw laser)
+    {
+        if (!_aspects.TryGetValue(stream.Texture, out var aspect)) _aspects[stream.Texture] = aspect = TextureAspect?.Invoke(stream.Texture) ?? 1f;
+        foreach (var band in laser.Bands)
+        {
+            if (band.Width <= 0f) continue;
+            var color = Pack(band.Color, 1f);
+            foreach (var segment in laser.Segments)
+            {
+                var factor = laser.TileFactor(Vector3.Distance(segment.From, segment.To), band.Width, aspect);
+                if (factor <= 0f) continue;
+                var side = SideVector(segment.To - segment.From, (segment.From + segment.To) * 0.5f, band.Width * 0.5f);
+                var first = laser.ScrollV;
+                var last = first + factor;
+                for (var tile = MathF.Floor(first); tile < last; tile += 1f)
+                {
+                    var from = MathF.Max(first, tile);
+                    var to = MathF.Min(last, tile + 1f);
+                    if (to - from <= 1e-6f) continue;
+                    var start = Vector3.Lerp(segment.From, segment.To, (from - first) / factor);
+                    var end = Vector3.Lerp(segment.From, segment.To, (to - first) / factor);
+                    var quad = geometry.NextQuad();
+                    if (quad.IsEmpty) return;
+                    quad[0] = new FxVertex { Position = start - side, Color = color, Uv = new Vector2(0f, from - tile) };
+                    quad[1] = new FxVertex { Position = start + side, Color = color, Uv = new Vector2(1f, from - tile) };
+                    quad[2] = new FxVertex { Position = end + side, Color = color, Uv = new Vector2(1f, to - tile) };
+                    quad[3] = new FxVertex { Position = end - side, Color = color, Uv = new Vector2(0f, to - tile) };
+                }
             }
         }
     }

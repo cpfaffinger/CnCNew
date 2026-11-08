@@ -152,4 +152,11 @@ public sealed record FxFrame(
 /// One run of a projectile stream (<c>W3DProjectileStreamDraw::doDrawModule</c>, a <c>SegmentedLineClass</c>): the points of the projectiles in flight, oldest first; the
 /// texture tiled <see cref="TileFactor"/> times per segment, <see cref="Width"/> world units wide, drawn additive.
 /// </summary>
-public sealed record StreamInstance(ImmutableArray<Vector3> Points, string Texture, float Width, float TileFactor);
+public sealed record StreamInstance(ImmutableArray<Vector3> Points, string Texture, float Width, float TileFactor)
+{
+    /// <summary>
+    /// Set for a <c>W3DLaserDraw</c>: the renderer draws its segments and bands (colour, tiling along the beam, scrolling texture) instead of one white band through
+    /// <see cref="Points"/>. <see cref="Width"/> is then the inner beam's.
+    /// </summary>
+    public LaserDraw? Laser { get; init; }
+}

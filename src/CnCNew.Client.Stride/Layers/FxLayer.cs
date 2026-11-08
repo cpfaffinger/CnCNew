@@ -52,7 +52,14 @@ internal sealed class FxLayer : IWorldLayer
         _geometry = new FxGeometry(services.GraphicsDevice);
         _materials = new FxMaterials(services);
         _pool = new FxRunPool(services.Scene, _geometry, _materials);
-        _builder = new FxBuilder(_geometry, match.Heights, services.GraphicsDevice.ColorSpace == ColorSpace.Linear);
+        _builder = new FxBuilder(_geometry, match.Heights, services.GraphicsDevice.ColorSpace == ColorSpace.Linear)
+        {
+            TextureAspect = name =>
+            {
+                var texture = services.Textures.Resolve(new CnCNew.W3D.W3dTextureReference(name));
+                return texture.Height > 0 ? texture.Width / (float)texture.Height : 1f;
+            },
+        };
         _shadowDecals = services.ShadowDecals;
         if (match.Environment.Snow.Enabled && Environment.GetEnvironmentVariable("CNCNEW_WEATHER") != "0") _snow = new SnowField(match.Environment.Snow);
         _demo = FxDemo.FromEnvironment(out var bench);
