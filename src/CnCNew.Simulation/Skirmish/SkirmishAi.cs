@@ -302,6 +302,7 @@ public sealed partial class SkirmishAi
         Stats.Thinks++;
         if (_world.Navigation is { } seen) StampVisibleCells(seen);
         var workerPrice = ProduceWorkers();
+        SellForCarrier();
         BuildStructures(workerPrice);
         ManageSites();
         RepairStructures();
@@ -611,6 +612,65 @@ public sealed partial class SkirmishAi
         return true;
     }
 
+    /// <summary>A finished supply center counts toward <see cref="MaxSupplyCenters"/> only while a warehouse that is not an enemy's still holds supplies within its reach; sites always count.</summary>
+    private int CountUsefulCenters()
+    {
+        var count = 0;
+        foreach (var site in _sites) if ((RoleOf(site.Template) & Role.SupplyCenter) != 0) count++;
+        foreach (var center in _structures)
+        {
+            if ((RoleOf(center.Template) & Role.SupplyCenter) == 0) continue;
+            foreach (var entity in _world.Entities)
+            {
+                if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) continue;
+                if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) continue;
+                if (Views.EntityPresentationView.WarehouseSupplyBoxes(entity) <= 0) continue;
+                var limit = SupplyCenterCloseDistance + entity.Template.BoundingCircleRadius + center.Template.BoundingCircleRadius;
+                if (!SquaredReach.Of(limit).Contains(DistanceSquared(center.X, center.Y, entity.X, entity.Y))) continue;
+                count++;
+                break;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>Back-off after a sale made to pay for a carrier (10 s): the refund arrives when the sale ends, and one building is enough more often than not.</summary>
+    private const long SellForCarrierRetryFrames = 300;
+
+    /// <summary>
+    /// A player with a finished supply center, no carrier alive or queued and less money than the cheapest carrier has no income and none to come: it sells its least valuable building
+    /// that it can do without (never a command center, a supply center, or a producer of builders or carriers) through the same <see cref="SellCommand"/> a human gives, preferring the
+    /// cheapest whose refund pays for the carrier.
+    /// </summary>
+    private void SellForCarrier()
+    {
+        if (CountAlive(Role.SupplyCenter, false) == 0 || CountAlive(Role.Carrier, false) > 0 || InFlight(Role.Carrier) > 0) return;
+        var price = CheapestWorkerPrice(Role.Carrier);
+        var money = _world.MoneyOf(_player);
+        if (price == Fixed.Zero || money >= price) return;
+        var missing = price - money;
+        Entity? best = null;
+        var bestRefund = Fixed.Zero;
+        var bestEnough = false;
+        foreach (var structure in _structures)
+        {
+            var role = RoleOf(structure.Template);
+            if ((role & (Role.CommandCenter | Role.SupplyCenter)) != 0) continue;
+            if (ProductionOf(structure) is not null && ProducibleBy(structure.Template).Any(template => (RoleOf(template) & (Role.Carrier | Role.Builder)) != 0)) continue;
+            var refund = structure.Template.RefundValue != Fixed.Zero ? structure.Template.RefundValue : Fixed.FromInt((int)(structure.Template.BuildCost * _catalog.SellPercentage).Floor());
+            if (refund <= Fixed.Zero) continue;
+            var enough = refund >= missing;
+            if (best is null || (enough && !bestEnough) || (enough == bestEnough && (refund < bestRefund || (refund == bestRefund && structure.Id.Value < best.Id.Value))))
+            {
+                best = structure;
+                bestRefund = refund;
+                bestEnough = enough;
+            }
+        }
+        if (best is null || Backoff(0x48000000u, SellForCarrierRetryFrames)) return;
+        Send(sequence => new SellCommand(_player, sequence, _tick, best.Id));
+    }
+
     private Role[] PlanGoals()
     {
         var goals = new List<Role>();
@@ -621,7 +681,7 @@ public sealed partial class SkirmishAi
         if (supplyCenters < 1) goals.Add(Role.SupplyCenter);
         // The stock beside the existing centers is running out: the next center goes to another stocked, safe source before anything else is built, and while it cannot be paid
         // the army production keeps its price back (the reserve of BuildStructures) - once the income has stopped there is nothing left to pay it with.
-        else if (supplyCenters < MaxSupplyCenters && SupplyStockInReach() < LowSupplyStock && FindSupplySource() is { } nextSource && SupplySourceSafe(nextSource)) goals.Add(Role.SupplyCenter);
+        else if (CountUsefulCenters() < MaxSupplyCenters && SupplyStockInReach() < LowSupplyStock && FindSupplySource() is { } nextSource && SupplySourceSafe(nextSource)) goals.Add(Role.SupplyCenter);
         if (CountAlive(Role.Power, true) < 1) goals.Add(Role.Power);
         if (CountAlive(Role.Barracks, true) < 1) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 1) goals.Add(Role.Factory);

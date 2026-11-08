@@ -167,4 +167,59 @@ static partial class Tests
             }
         }
     }
+
+    /// <summary>
+    /// Phase 64, item 2 (docs/SKIRMISH-AI.md 7d, "open"): a computer player that has lost every carrier and has less than a carrier's price has no income and none to come, and used to stay
+    /// down for the rest of the match because it never sold a building. America against China on Alpine Assault (seed 1): after four game minutes every carrier of player 0 is killed and its money
+    /// set to 10 credits. Within two game minutes it must sell a building of its own (a structure takes the Sold status), never its command center or supply center, and have a carrier again.
+    /// At 30, 60 and 120 Hz. The threshold of the survey this belongs to: no player with a finished supply center and no carrier for 90 game seconds in 8 seeds of every pairing (SimTool econ-survey).
+    /// </summary>
+    public static void RealBrokeComputerPlayerSellsABuildingForACarrier(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";
+        MapData map;
+        using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: RuleProfile.Product);
+            var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+            const uint Seed = 1;
+            var session = SkirmishMatchSession.Start(SkirmishMatchOptions.StandardAt(catalog.Rate) with { AiSeed = Seed, WorldSeed = Seed ^ 0xC0FFEE06 }, catalog, fingerprint, TerrainMap.Build(map, MapPath), map.Objects,
+                [new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionAmerica")), new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"))]);
+            var world = session.World;
+            var id = session.Players[0].Id;
+            bool IsCarrier(Entity entity) => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("HARVESTER") && !entity.Template.IsKindOf("STRUCTURE");
+            bool IsCentre(Entity entity) => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE")
+                && !entity.HasStatus(ObjectStatusBits.UnderConstruction);
+            var stage = rate.TicksPerSecond * 240;
+            while (world.Tick < stage && !session.IsOver) session.Step();
+            Check.That(world.Entities.Any(IsCentre), $"{rate}: player 0 has no finished supply center after four minutes.");
+            foreach (var carrier in world.Entities.Where(IsCarrier).ToArray()) world.Kill(carrier.Id);
+            world.SetMoney(id, Fixed.FromInt(10));
+            var soldBefore = world.Entities.Count(entity => entity.Owner == id && entity.HasStatus(ObjectStatusBits.Sold));
+            var sold = false;
+            var carrierAgain = false;
+            var end = world.Tick + rate.TicksPerSecond * 120;
+            while (world.Tick < end && !session.IsOver)
+            {
+                session.Step();
+                foreach (var entity in world.Entities)
+                {
+                    if (entity.Owner != id) continue;
+                    if (entity.HasStatus(ObjectStatusBits.Sold))
+                    {
+                        sold = true;
+                        Check.That((entity.Template.IsKindOf("COMMANDCENTER") || entity.Template.IsKindOf("CASH_GENERATOR")) == false, $"{rate}: player 0 sold {entity.Template.Name}.");
+                    }
+                    if (IsCarrier(entity) || (entity.Template.IsKindOf("HARVESTER") && !entity.Template.IsKindOf("STRUCTURE") && !entity.EffectivelyDead)) carrierAgain = true;
+                }
+            }
+            Check.That(sold || soldBefore > 0, $"{rate}: the broke player sold no building in two game minutes (money {world.MoneyOf(id).Floor()}).");
+            Check.That(carrierAgain, $"{rate}: the broke player has no carrier again after two game minutes (money {world.MoneyOf(id).Floor()}).");
+        }
+    }
 }
