@@ -1338,8 +1338,49 @@ public sealed partial class MatchController
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
         }
         if (_modernBar is null && !_controlBarRoot.IsHidden && CommandBar.Group is { } group) commands.AddRange(GroupTag(group));
+        if (!_controlBarRoot.IsHidden && CommandBar.GroupQueues.Length > 1) commands.AddRange(QueueLoads(CommandBar.GroupQueues));
         AddPowerCameos(commands, cooldown);
         AddGeneralsCameos(commands);
+        return commands.ToImmutable();
+    }
+
+    /// <summary>
+    /// How full the queue of each building of a structure group is - "3/9" per building in selection order, a full one in red - on the lines above the group tag (the bar's own icons are
+    /// the lead's queue only). The original has no such display: it shows one object's queue, and a full queue only greys the build buttons.
+    /// </summary>
+    private ImmutableArray<UiDrawCommand> QueueLoads(ImmutableArray<QueueLoad> loads)
+    {
+        if (_tree.FindByName("ControlBar.wnd:RightHUD") is not { } anchor) return [];
+        var font = TextStyle.Font(InGameUiFontRole.Message, _tree.Viewport, _scaleOptions);
+        var rect = anchor.Rect;
+        var line = _textMeasure.LineHeight(font);
+        var gap = _textMeasure.MeasureWidth("  ", font);
+        var chips = loads.Select(load => (Text: string.Create(CultureInfo.InvariantCulture, $"{load.Count}/{load.Limit}"), Full: load.IsFull)).ToList();
+        // Lines of as many chips as fit over the portrait window, the first line nearest the tag, later ones above it.
+        var rows = new List<List<(string Text, bool Full, int Width)>>();
+        var row = new List<(string Text, bool Full, int Width)>();
+        var rowWidth = 0;
+        foreach (var (text, full) in chips)
+        {
+            var width = _textMeasure.MeasureWidth(text, font);
+            if (row.Count > 0 && rowWidth + gap + width > rect.Width) { rows.Add(row); row = []; rowWidth = 0; }
+            rowWidth += (row.Count > 0 ? gap : 0) + width;
+            row.Add((text, full, width));
+        }
+        rows.Add(row);
+        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        var shadow = new WndColor(0, 0, 0, 255);
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var total = rows[index].Sum(chip => chip.Width) + gap * (rows[index].Count - 1);
+            var x = rect.X + (rect.Width - total) / 2;
+            var y = rect.Y - (line + 1) * (index + 2) - 1;
+            foreach (var (text, full, width) in rows[index])
+            {
+                commands.Add(new UiTextDraw(text, null, font, full ? new WndColor(235, 70, 60, 255) : WndColor.White, shadow, x, y, UiTextAlignment.Left, new UiRect(x - 4, y - 2, width + 8, line + 4)));
+                x += width + gap;
+            }
+        }
         return commands.ToImmutable();
     }
 

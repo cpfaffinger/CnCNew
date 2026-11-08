@@ -33,6 +33,7 @@ internal static class StructureGroupTests
         harness.Run("E on a building finds the buildings of its kind on the screen, pressed again across the map, and says so; a Shift-click adds one of the same kind and refuses another", () => MatchingKey(data));
         harness.Run("Ctrl and a digit keep a structure group, the digit brings it back, Shift and a digit adds a building of its kind and empties the selection for another", () => Groups(data));
         harness.Run("The bar of three barracks shows the count; a production order goes to the shortest queue: 1/1/1, then 2/1/1, then 2/2/1 - also when the clicks come before the world has stepped", () => Distribution(data));
+        harness.Run("A queue holds the original's 9 entries: one barracks and a group stop taking orders at their limit, nothing is paid beyond it, the button greys, the full queue is said, and each building's load is shown in both skins", () => QueueLimit(data));
         harness.Run("A hot key of the bar distributes the same way, and a queue icon cancels the lead building's order", () => HotkeyAndCancel(data));
         harness.Run("A player-wide upgrade is ordered once, an object upgrade goes to one building that can still take it, to the next one when clicked again", () => Upgrades(data));
         harness.Run("The rally point and Sell reach every building of the group; a right click on the ground sets the rally point of all", () => RallyAndSell(data));
@@ -314,6 +315,90 @@ internal static class StructureGroupTests
         }
         delayed.Frame(3);
         TestHarness.Assert(delayed.Queues("b1", "b2", "b3").SequenceEqual(["2", "2", "2"]), $"six clicks, one frame apart: 2/2/2 ({string.Join("/", delayed.Queues("b1", "b2", "b3"))})");
+    }
+
+    private static void QueueLimit(GameData data)
+    {
+        var paid = (Rig rig, decimal start) => start - rig.Live.World.MoneyOf(new PlayerId(1)).ToDecimal();
+
+        // One barracks, twelve clicks: nine orders are queued and paid, the others are not even sent; the sixth to the ninth stay visible as nine icons.
+        var single = new Rig(data, "queue-limit-single", [Barracks("b1", 0)]);
+        single.Selection.Replace([single.Tag("b1")]);
+        single.Frame(2);
+        var ranger = single.SlotOfObject("AmericaInfantryRanger");
+        var cost = single.Live.World.Templates.TryGet("AmericaInfantryRanger", out var template) ? template.BuildCost.ToDecimal() : 0m;
+        var start = single.Live.World.MoneyOf(new PlayerId(1)).ToDecimal();
+        for (var click = 0; click < 12; click++)
+        {
+            single.ClickButton(ranger);
+            single.Frame(1);
+        }
+        single.Frame(3);
+        TestHarness.Assert(single.QueueOf("b1") == 9, $"one barracks holds nine ({single.QueueOf("b1")})");
+        TestHarness.Assert(paid(single, start) == 9 * cost, $"and nine are paid, not twelve ({paid(single, start)} of {9 * cost})");
+        TestHarness.Assert(single.Controller.CommandBar[ranger] is { IsEnabled: false, Reason: ButtonReason.QueueFull }, "the button is greyed with the reason 'queue full'");
+        TestHarness.Assert(single.Controller.CommandBar.Queue.Length == 9, "nine icons are shown");
+        // A greyed button takes no click (as in the original); an order that gets through to the controller anyway (a hot key, a race) is answered with the message and sends nothing.
+        var before = single.Live.World.MoneyOf(new PlayerId(1));
+        var answer = single.Controller.Input.Commands.Activate(single.Live.World, single.Controller.CommandBar[ranger]!.Button, [single.Entity("b1")]);
+        single.Frame(3);
+        TestHarness.Assert(answer == ActivationResult.Rejected && single.QueueOf("b1") == 9 && single.Live.World.MoneyOf(new PlayerId(1)) == before, $"a tenth order is refused and costs nothing ({answer})");
+        TestHarness.Assert(single.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(text => text.Text == "The unit's production queue is full"), "the message list says that the queue is full");
+
+        // Three barracks: the clicks fill them evenly to nine each and stop; the 28th click costs nothing.
+        var rig = new Rig(data, "queue-limit-group", [Barracks("b1", 0), Barracks("b2", 80), Barracks("b3", 160)]);
+        rig.Selection.Replace([rig.Tag("b1"), rig.Tag("b2"), rig.Tag("b3")]);
+        rig.Frame(2);
+        ranger = rig.SlotOfObject("AmericaInfantryRanger");
+        start = rig.Live.World.MoneyOf(new PlayerId(1)).ToDecimal();
+        for (var click = 0; click < 26; click++)
+        {
+            rig.ClickButton(ranger);
+            if (click % 3 == 2) rig.Frame(1);
+        }
+        rig.Frame(3);
+        TestHarness.Assert(rig.Queues("b1", "b2", "b3").SequenceEqual(["9", "9", "8"]), $"26 clicks, also in bursts before the world has stepped: 9/9/8 ({string.Join("/", rig.Queues("b1", "b2", "b3"))})");
+        var loads = rig.Controller.CommandBar.GroupQueues;
+        TestHarness.Assert(loads.Select(load => (load.Count, load.Limit)).SequenceEqual([(9, 9), (9, 9), (8, 9)]), $"the bar counts each building's queue ({string.Join(" ", loads.Select(load => $"{load.Count}/{load.Limit}"))})");
+        TestHarness.Assert(rig.Controller.CommandBar[ranger] is { IsEnabled: true } enabled && enabled.Sources.SequenceEqual([rig.Tag("b3")]), "the button is still enabled, for the one building with room");
+        rig.ClickButton(ranger);
+        rig.Frame(3);
+        TestHarness.Assert(rig.Queues("b1", "b2", "b3").SequenceEqual(["9", "9", "9"]), "the next click fills the last place");
+        rig.Frame();
+        TestHarness.Assert(rig.Controller.CommandBar[ranger] is { IsEnabled: false, Reason: ButtonReason.QueueFull }, "now the button is greyed for the group");
+        var money = rig.Live.World.MoneyOf(new PlayerId(1)).ToDecimal();
+        rig.ClickButton(ranger);
+        rig.ClickButton(ranger);
+        rig.Frame(3);
+        TestHarness.Assert(rig.Queues("b1", "b2", "b3").SequenceEqual(["9", "9", "9"]) && rig.Live.World.MoneyOf(new PlayerId(1)).ToDecimal() == money, $"clicks on a greyed button queue nothing and cost nothing ({string.Join("/", rig.Queues("b1", "b2", "b3"))})");
+        TestHarness.Assert(paid(rig, start) == 27 * cost, $"27 are paid for, no more ({paid(rig, start)} of {27 * cost})");
+
+        // A hot key does not get past the limit either: it is the same order.
+        var key = rig.Controller.CommandBar[ranger]!.Hotkey;
+        if (key is { } letter)
+        {
+            var code = Enum.Parse<KeyCode>(char.ToUpperInvariant(letter).ToString());
+            rig.Key(code);
+            rig.Frame(3);
+            TestHarness.Assert(rig.Queues("b1", "b2", "b3").SequenceEqual(["9", "9", "9"]) && rig.Live.World.MoneyOf(new PlayerId(1)).ToDecimal() == money, "the hot key queues nothing either");
+        }
+
+        // The display: "9/9 9/9 9/9" with the full ones marked, in the original's skin and in the modern one.
+        foreach (var skin in new[] { SkinPins.Settings, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = CnCNew.Ui.Skins.UiSkin.Modern.Name } } })
+        {
+            var shown = new Rig(data, "queue-limit-display", [Barracks("b1", 0), Barracks("b2", 80), Barracks("b3", 160)], settings: skin);
+            shown.Selection.Replace([shown.Tag("b1"), shown.Tag("b2"), shown.Tag("b3")]);
+            shown.Frame(2);
+            var slot = shown.SlotOfObject("AmericaInfantryRanger");
+            for (var click = 0; click < 4; click++) shown.ClickButton(slot);
+            shown.Frame(3);
+            // Four clicks leave 2/1/1; the counts are what is checked here.
+            string[] Chips() => [..shown.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text).Where(text => text.Length == 3 && text[1] == '/')];
+            TestHarness.Assert(Chips().SequenceEqual(["2/9", "1/9", "1/9"]), $"the load of each selected building is drawn ({string.Join(" ", Chips())})");
+            shown.Selection.Replace([shown.Tag("b1")]);
+            shown.Frame(2);
+            TestHarness.Assert(Chips().Length == 0, "one building: nothing new (its icons are its queue)");
+        }
     }
 
     private static void HotkeyAndCancel(GameData data)

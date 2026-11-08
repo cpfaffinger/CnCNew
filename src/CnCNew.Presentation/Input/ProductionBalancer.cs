@@ -31,18 +31,31 @@ internal sealed class ProductionBalancer
         return pending.Expected;
     }
 
-    /// <summary>The producer with the shortest queue; the first in the order given among equals. Null for no producer.</summary>
-    public Entity? Pick(SimulationWorld world, IEnumerable<Entity> producers, long horizonTicks)
+    /// <summary>How many entries the queue of <paramref name="producer"/> takes (<c>MaxQueueEntries</c>).</summary>
+    public static int Limit(Entity producer) => SimulationQueries.ProductionOf(producer)?.Data.MaxQueueEntries ?? 0;
+
+    /// <summary>
+    /// The producer with the shortest queue among those with room for one more entry (the orders given but not yet executed counted); the first in the order given among equals.
+    /// Null for no producer, and for producers that are all full: <paramref name="allFull"/> tells them apart, and no order is sent for a queue that cannot take it.
+    /// </summary>
+    public Entity? Pick(SimulationWorld world, IEnumerable<Entity> producers, long horizonTicks, out bool allFull)
     {
         Entity? best = null;
         var bestLength = int.MaxValue;
+        var any = false;
         foreach (var producer in producers)
         {
+            any = true;
             var length = QueueLength(world, producer, horizonTicks);
+            if (length >= Limit(producer)) continue;
             if (length < bestLength) (best, bestLength) = (producer, length);
         }
+        allFull = any && best is null;
         return best;
     }
+
+    /// <summary>The orders counted as on their way to <paramref name="producer"/> are dropped: the queue the world shows is taken as it is.</summary>
+    public void Forget(EntityId producer) => _pending.Remove(producer.Value);
 
     /// <summary>An order was given to <paramref name="producer"/> whose queue was <paramref name="lengthBefore"/> long.</summary>
     public void Ordered(SimulationWorld world, Entity producer, int lengthBefore) => _pending[producer.Id.Value] = (lengthBefore + 1, world.Tick);

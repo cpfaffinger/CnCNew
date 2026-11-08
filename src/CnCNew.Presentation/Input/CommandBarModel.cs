@@ -109,6 +109,12 @@ public enum SelectionGroupKind
 /// </summary>
 public sealed record SelectionGroup(SelectionGroupKind Kind, string Template, int Count, int Index, int Total);
 
+/// <summary>How much of its production queue a selected building uses: <see cref="Count"/> of <see cref="Limit"/> entries (<c>MaxQueueEntries</c>, 9 unless the data say otherwise).</summary>
+public readonly record struct QueueLoad(EntityId Producer, int Count, int Limit)
+{
+    public bool IsFull => Count >= Limit;
+}
+
 public sealed record CommandBarView(
     CommandBarContext Context,
     string CommandSet,
@@ -125,6 +131,8 @@ public sealed record CommandBarView(
 
     /// <summary>The countdown of <see cref="CommandBarContext.OclTimer"/>.</summary>
     public OclTimerView? Timer { get; init; }
+    /// <summary>The queue load of each building of a group that produces, in selection order. The bar shows the lead's queue as icons; the others it can only count (empty for one object).</summary>
+    public ImmutableArray<QueueLoad> GroupQueues { get; init; } = [];
 }
 
 public sealed record SpecialPowerView(string Power, EntityId Source, bool Ready, float ReadyFraction);
@@ -426,7 +434,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             slots[index] = Make(index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(owner => owner.Id)] : sources, hotkeys);
         }
         var lead = ready[0];
-        return new CommandBarView(CommandBarContext.Command, leadSet.Name, [..slots], QueueOf(world, lead, leadSet), lead.Id, UpgradesOf(world, lead), false) { Group = group };
+        var loads = ready.Select(member => SimulationQueries.ProductionOf(member) is { } production ? new QueueLoad(member.Id, production.Queue.Length, production.Data.MaxQueueEntries) : (QueueLoad?)null)
+            .OfType<QueueLoad>().ToImmutableArray();
+        return new CommandBarView(CommandBarContext.Command, leadSet.Name, [..slots], QueueOf(world, lead, leadSet), lead.Id, UpgradesOf(world, lead), false) { Group = group, GroupQueues = loads };
     }
 
     private CommandBarView BuildMulti(SimulationWorld world, PlayerId player, List<Entity> units)

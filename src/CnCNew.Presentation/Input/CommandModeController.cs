@@ -468,10 +468,11 @@ public sealed class CommandModeController
             case GuiCommandKind.UnitBuild:
             {
                 // Several producers (a structure group): the one with the shortest queue takes the order, so the queues fill evenly (ProductionBalancer).
-                var producer = ChooseProducer(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).ToList(), out var length, out var balanced);
+                var producer = ChooseProducer(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).ToList(), out var length, out var queuesFull);
+                if (queuesFull) return QueueIsFull(world, nameof(QueueProductionCommand));
                 if (producer is null) return ActivationResult.NoSource;
                 var result = Issue((sequence, tick) => new QueueProductionCommand(Player, sequence, tick, producer.Id, button.Object));
-                if (result.Accepted && balanced) _balancer.Ordered(world, producer, length);
+                if (result.Accepted) _balancer.Ordered(world, producer, length);
                 return Result(result);
             }
             case GuiCommandKind.DozerConstruct:
@@ -492,10 +493,11 @@ public sealed class CommandModeController
             case GuiCommandKind.PlayerUpgrade:
             {
                 // The building whose button was pressed researches it (MSG_QUEUE_UPGRADE goes to the selected group); of several selected buildings, the one with the shortest queue.
-                var chosen = ChooseProducer(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).ToList(), out var length, out var balanced);
+                var chosen = ChooseProducer(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).ToList(), out var length, out var queuesFull);
+                if (queuesFull) return QueueIsFull(world, nameof(PurchaseUpgradeCommand));
                 EntityId? producer = chosen is not null ? chosen.Id : sources.IsEmpty ? null : sources[0].Id;
                 var result = Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, producer));
-                if (result.Accepted && balanced && chosen is not null) _balancer.Ordered(world, chosen, length);
+                if (result.Accepted && chosen is not null) _balancer.Ordered(world, chosen, length);
                 return Result(result);
             }
             case GuiCommandKind.ObjectUpgrade:
@@ -508,7 +510,8 @@ public sealed class CommandModeController
                 if (sources.Length > 1 && sources.All(entity => entity.Template.IsKindOf("STRUCTURE")))
                 {
                     var able = _balancer.WithoutPendingUpgrade(world, sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null), button.Upgrade, Horizon(world)).ToList();
-                    var chosen = ChooseProducer(world, able, out var length, out _);
+                    var chosen = ChooseProducer(world, able, out var length, out var queuesFull);
+                    if (queuesFull) return QueueIsFull(world, nameof(PurchaseUpgradeCommand));
                     if (chosen is null) return ActivationResult.NoSource;
                     var result = Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, chosen.Id));
                     if (result.Accepted)
@@ -641,18 +644,22 @@ public sealed class CommandModeController
     private long Horizon(SimulationWorld world) => _sink.DelayTicks + world.Time.OriginalFrames(8);
 
     /// <summary>
-    /// The producer of several that takes the next order: the shortest queue, ties in the order given (<see cref="ProductionBalancer"/>). <paramref name="balanced"/> says there was a choice;
-    /// <paramref name="length"/> is the queue the chosen one had.
+    /// The producer of several that takes the next order: the shortest queue among those with room, ties in the order given (<see cref="ProductionBalancer"/>); <paramref name="length"/> is the
+    /// queue the chosen one had. <paramref name="allFull"/>: there are producers and none has room (<c>CANMAKE_QUEUE_FULL</c>) - nothing is chosen and nothing is sent.
     /// </summary>
-    private Entity? ChooseProducer(SimulationWorld world, IReadOnlyList<Entity> producers, out int length, out bool balanced)
+    private Entity? ChooseProducer(SimulationWorld world, IReadOnlyList<Entity> producers, out int length, out bool allFull)
     {
         length = 0;
-        balanced = producers.Count > 1;
-        if (producers.Count == 0) return null;
-        if (!balanced) return producers[0];
-        var chosen = _balancer.Pick(world, producers, Horizon(world));
+        var chosen = _balancer.Pick(world, producers, Horizon(world), out allFull);
         if (chosen is not null) length = _balancer.QueueLength(world, chosen, Horizon(world));
         return chosen;
+    }
+
+    /// <summary>A production order every selected building would have to refuse: the answer of the full queue (<c>GUI:ProductionQueueFull</c>) without an order on the wire.</summary>
+    private ActivationResult QueueIsFull(SimulationWorld world, string command)
+    {
+        _feedback.Add(new CommandFeedback(FeedbackKind.Rejected, Vector3.Zero, EntityId.Invalid, world.Tick, Settings.MarkerFrames, CommandRejection.QueueFull, command));
+        return ActivationResult.Rejected;
     }
 
     /// <summary>
@@ -946,7 +953,12 @@ public sealed class CommandModeController
     public bool RemoveBeacons(ImmutableArray<EntityId> beacons) => Issue((sequence, tick) => new RemoveBeaconCommand(Player, sequence, tick, beacons)).Accepted;
 
     public bool CancelProduction(EntityId producer, int index)
-        => Issue((sequence, tick) => new CancelProductionCommand(Player, sequence, tick, producer, index)).Accepted;
+    {
+        var accepted = Issue((sequence, tick) => new CancelProductionCommand(Player, sequence, tick, producer, index)).Accepted;
+        // The orders this client counted as on their way are not a count to trust once an entry was taken out: the world's queue is the truth again.
+        if (accepted) _balancer.Forget(producer);
+        return accepted;
+    }
 
     /// <summary>The cancel button of a structure under construction (<c>MSG_DOZER_CANCEL_CONSTRUCT</c>).</summary>
     public bool Sell(EntityId building) => Issue((sequence, tick) => new SellCommand(Player, sequence, tick, building)).Accepted;
