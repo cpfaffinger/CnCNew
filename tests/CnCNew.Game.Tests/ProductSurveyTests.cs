@@ -198,7 +198,7 @@ internal static class ProductSurveyTests
             while (live.Tick < seconds) { live.Advance(0.05); hud.Update(0.05); }
             var own = live.World.Entities.Where(entity => entity.Owner == live.Human).ToArray();
             var structures = own.Where(entity => entity.Template.IsKindOf("STRUCTURE")).Select(entity => entity.Id).ToArray();
-            var units = own.Where(entity => !entity.Template.IsKindOf("STRUCTURE")).Select(entity => entity.Id).ToArray();
+            var units = own.Where(entity => !entity.Template.IsKindOf("STRUCTURE") && !entity.Template.IsKindOf("PROJECTILE") && entity.Template.IsKindOf("SELECTABLE")).Select(entity => entity.Id).ToArray();
             void Look(string what, Func<bool> expect, string detail)
             {
                 try
@@ -226,7 +226,7 @@ internal static class ProductSurveyTests
             }
             hud.Input.Selection.Replace([.. structures, .. units]);
             Look("structures and units selected", () => true, string.Empty);
-            report.Note($"- groups [{skin.Id}]: {structures.Length} structures, {units.Length} units selected at tick {live.Tick}");
+            report.Note($"- groups [{skin.Id}]: {structures.Length} structures, {units.Length} units selected at tick {live.Tick}: {string.Join(", ", own.Where(entity => units.Contains(entity.Id)).GroupBy(entity => entity.Template.Name).Select(group => $"{group.Key} x{group.Count()}"))}");
         }
     }
 
