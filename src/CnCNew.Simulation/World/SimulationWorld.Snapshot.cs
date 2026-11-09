@@ -45,6 +45,7 @@ public sealed partial class SimulationWorld
         LoadSoloBonus(state);
         LoadMatchOptions(state);
         LoadWater(state);
+        LoadClearedSites(state);
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");
         Ids.Load(state);
         Streams.LoadLogic(state);

@@ -951,6 +951,7 @@ if (contentDirectory is not null) run.Test("Real data: a player starts with one 
 if (contentDirectory is not null) run.Test("Real data (playtest): a skirmish starts with the map explored", () => Tests.RealSkirmishStartsWithTheMapExplored(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-129): a skirmish of the built-in AI holds the objects of its map, the train runs", () => Tests.RealSkirmishPlacesItsMap(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (train): a train under a hill leaves what stands on the hill alone", () => Tests.ATrainUnderAHillLeavesWhatStandsOnItAlone(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (site): a building clears its trees and flattens its ground", () => Tests.ABuildingClearsItsTreesAndFlattensItsGround(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a computer player keeps the price of its first supply center and earns from it", () => Tests.RealComputerPlayersEarnFromTheirFirstCenter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): idle carriers of a computer player go to the supplies they have not seen", () => Tests.RealIdleCarriersFindSuppliesTheyHaveNotSeen(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a computer player saves for the carrier it has lost", () => Tests.RealComputerPlayersReplaceTheirLostCarriers(contentDirectory));

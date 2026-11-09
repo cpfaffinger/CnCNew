@@ -237,8 +237,9 @@ public sealed partial class SimulationWorld : IWorldServices
         // Thing::isSignificantlyAboveTerrain: a height, not a rate - 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²).
         // The same at every tick rate, so it is written with the original's frame rate and never with the rate of the world.
         _significantHeight = Fixed.FromDecimal(-9m * templates.Gravity / (SimulationRate.OriginalFramesPerSecond * SimulationRate.OriginalFramesPerSecond));
-        Terrain = terrain;
-        Navigation = terrain is null ? null : new NavigationGrid(terrain);
+        // The map is shared and never changes; the world's own terrain is a fork of it, which a building's site lowers (SimulationWorld.SiteWork.cs).
+        Terrain = terrain?.Fork();
+        Navigation = Terrain is null ? null : new NavigationGrid(Terrain);
         _templates = templates;
         _moduleFrames = new ulong[]?[templates.Templates.Length];
         Ids = new IdCounters();
@@ -2624,6 +2625,7 @@ public sealed partial class SimulationWorld : IWorldServices
         DescribeHistoricDamage(writer);
         DescribeLooks(writer);
         DescribeWater(writer);
+        DescribeClearedSites(writer);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         if (HulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", HulkLifetimeOverrideTicks);
         if (_contacts.Count > 0)

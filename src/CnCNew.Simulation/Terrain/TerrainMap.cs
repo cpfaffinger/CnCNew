@@ -36,6 +36,7 @@ public sealed class TerrainMap
     private static readonly Fixed CellSizeFixed = Fixed.FromInt(CellSize);
     private static readonly Fixed HeightScale = Fixed.FromDecimal(MapData.HeightScale);
     private readonly ImmutableArray<byte> _heights;
+    private byte[]? _own;
     private readonly int _vertexWidth;
     private readonly int _vertexHeight;
     private readonly int _border;
@@ -68,6 +69,70 @@ public sealed class TerrainMap
         BridgeSpans = FindBridgeSpans(map);
         BridgeObjects = [..map.Objects.Where(placed => !placed.IsWaypoint && !placed.IsRoadPoint && !placed.IsBridgePoint)];
         Fingerprint = ComputeFingerprint(map);
+    }
+
+    /// <summary>A fork shares everything with the terrain it came from but the heights, which it copies when it is first lowered (<see cref="Fork"/>).</summary>
+    private TerrainMap(TerrainMap source)
+    {
+        Name = source.Name;
+        _heights = source._heights;
+        _vertexWidth = source._vertexWidth;
+        _vertexHeight = source._vertexHeight;
+        _border = source._border;
+        CellsX = source.CellsX;
+        CellsY = source.CellsY;
+        _water = source._water;
+        Waypoints = source.Waypoints;
+        _waypointsById = source._waypointsById;
+        _cells = source._cells;
+        _maxHeight = source._maxHeight;
+        BridgeSpans = source.BridgeSpans;
+        BridgeObjects = source.BridgeObjects;
+        Fingerprint = source.Fingerprint;
+        IsFork = true;
+    }
+
+    /// <summary>
+    /// The terrain of one world: the shared, immutable map with room for what that world does to its heights (<see cref="LowerVertex"/>, the flattening under a building).
+    /// Nothing is copied until the first change, and the fingerprint stays the map's - it names the content the match began with.
+    /// </summary>
+    public TerrainMap Fork() => new(this);
+
+    /// <summary>True for the terrain of a world (<see cref="Fork"/>), which may be lowered; the map every world starts from never changes.</summary>
+    public bool IsFork { get; }
+
+    /// <summary>The number of vertices lowered so far: a viewer that drew the terrain at one count draws it again when the count has moved.</summary>
+    public int LoweredVertices { get; private set; }
+
+    /// <summary>Height vertices across the whole field, border included (<c>WorldHeightMap::getXExtent</c>).</summary>
+    public int VertexWidth => _vertexWidth;
+
+    /// <summary>Height vertices down the whole field, border included.</summary>
+    public int VertexHeight => _vertexHeight;
+
+    /// <summary>The border around the playable area, in vertices; world (0, 0) is vertex (border, border).</summary>
+    public int Border => _border;
+
+    private ReadOnlySpan<byte> Raw => _own is { } own ? (ReadOnlySpan<byte>)own : _heights.AsSpan();
+
+    /// <summary>The raw heights as they stand now, one byte per vertex, row after row, border included (a copy).</summary>
+    public byte[] CopyRawHeights() => Raw.ToArray();
+
+    /// <summary>
+    /// <c>W3DTerrainVisual::setRawMapHeight</c>: the vertex at the playable position (<paramref name="gridX"/>, <paramref name="gridY"/>) is set to <paramref name="raw"/> when that is
+    /// lower than it stands now ("will only lower, not raise"); a position outside the field is left alone. True when the vertex was lowered.
+    /// </summary>
+    public bool LowerVertex(int gridX, int gridY, int raw)
+    {
+        if (!IsFork) throw new InvalidOperationException("Only the terrain of a world can be lowered.");
+        var (x, y) = (gridX + _border, gridY + _border);
+        if ((uint)x >= (uint)_vertexWidth || (uint)y >= (uint)_vertexHeight) return false;
+        var index = y * _vertexWidth + x;
+        if (Raw[index] <= raw) return false;
+        _own ??= _heights.AsSpan().ToArray();
+        _own[index] = (byte)Math.Max(0, raw);
+        LoweredVertices++;
+        return true;
     }
 
     public string Name { get; }
@@ -255,15 +320,16 @@ public sealed class TerrainMap
         var iy = (int)Math.Min(gy.Floor(), _vertexHeight - 2);
         var fx = gx - Fixed.FromInt(ix);
         var fy = gy - Fixed.FromInt(iy);
-        Fixed P(int px, int py) => Fixed.FromInt(_heights[py * _vertexWidth + px]);
-        var p0 = P(ix, iy);
-        var p1 = P(ix + 1, iy);
-        var p2 = P(ix + 1, iy + 1);
-        var p3 = P(ix, iy + 1);
-        var raw = fy > fx
+        var raw = Raw;
+        var width = _vertexWidth;
+        var p0 = Fixed.FromInt(raw[iy * width + ix]);
+        var p1 = Fixed.FromInt(raw[iy * width + ix + 1]);
+        var p2 = Fixed.FromInt(raw[(iy + 1) * width + ix + 1]);
+        var p3 = Fixed.FromInt(raw[(iy + 1) * width + ix]);
+        var height = fy > fx
             ? p3 + (Fixed.One - fy) * (p0 - p3) + fx * (p2 - p3)
             : p1 + fy * (p2 - p1) + (Fixed.One - fx) * (p0 - p1);
-        return raw * HeightScale;
+        return height * HeightScale;
     }
 
     /// <summary><c>TerrainLogic::getWaterHandle</c> restricted to polygon water: the highest level among the areas containing the point (rounded to a whole coordinate first).</summary>
@@ -319,12 +385,13 @@ public sealed class TerrainMap
         if (steps == 0) return true;
         var numerator = denominator / 2;
         var z = z0;
+        var heights = Raw;
         var climb = (z1 - z0) / Fixed.FromInt(steps);
         for (var step = 0; step < steps; step++)
         {
             if (x < 0 || y < 0 || x >= _vertexWidth - 1 || y >= _vertexHeight - 1) break;
             var index = y * _vertexWidth + x;
-            var corners = Math.Max(Math.Max(_heights[index], _heights[index + 1]), Math.Max(_heights[index + _vertexWidth], _heights[index + _vertexWidth + 1]));
+            var corners = Math.Max(Math.Max(heights[index], heights[index + 1]), Math.Max(heights[index + _vertexWidth], heights[index + _vertexWidth + 1]));
             if (Fixed.FromInt(corners) * HeightScale > z + LineOfSightFudge) return false;
             if (z >= _maxHeight && climb > Fixed.Zero) break;
             z += climb;

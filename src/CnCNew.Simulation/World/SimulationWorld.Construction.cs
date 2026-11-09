@@ -194,6 +194,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     public Entity Reconstruct(Entity hole, Entity worker, int templateIndex)
     {
+        ClearAndFlatten(_templates[templateIndex], hole.X, hole.Y, hole.Angle);
         var site = SpawnEntity(new PendingSpawn(Ids.AllocateEntity(), templateIndex, worker.Owner, hole.X, hole.Y, Fixed.Zero, hole.Angle), worker.Id);
         site.Status |= 1UL << ObjectStatusBits.Reconstructing;
         MarkDirty(site);
@@ -208,6 +209,8 @@ public sealed partial class SimulationWorld
         if (!ClearSite(builder.Owner, template, construct.X, construct.Y, construct.Angle) && !_players[builder.Owner.Value].IsComputer) return;
         var constructionCost = ProductionCostOf(_players[builder.Owner.Value], template);
         _players[builder.Owner.Value].Money -= constructionCost;
+        // DozerAIUpdate::construct: the terrain under the structure is flattened, then the structure is put on the ground as it is now.
+        ClearAndFlatten(template, construct.X, construct.Y, construct.Angle);
         var site = SpawnEntity(new PendingSpawn(Ids.AllocateEntity(), template.Index, builder.Owner, construct.X, construct.Y, Fixed.Zero, construct.Angle), builder.Id);
         Emit(SimEventKind.ConstructionStarted, site.Id, builder.Id, template.Name, constructionCost.Raw, builder.Owner);
         BuilderOf(builder)!.OrderConstruct(this, site);
