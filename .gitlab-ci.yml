@@ -1,0 +1,136 @@
+# CnCNew release pipeline (GitLab). Documentation: docs/RELEASING.md.
+#
+# A release is a tag vMAJOR.MINOR.PATCH made by `scripts/release.ps1` and pushed. This file then
+#   build   : builds every asset with scripts/release-build.ps1 (client package, launcher, dedicated servers, SHA-256 files, separation check)
+#   package : uploads the assets to the project's generic package registry (they outlive job artifacts)
+#   release : creates the GitLab release page with the notes of CHANGELOG.md and links to the uploaded assets (release-cli)
+#
+# Nothing here runs for ordinary commits. A manual job builds the same assets from a branch without releasing anything (build:dry-run).
+#
+# What this pipeline cannot do and the person who tags must do before pushing the tag (docs/RELEASING.md):
+#   - scripts/audit-publish.ps1 (needs the game data, which no runner has),
+#   - tier 4 of scripts/test.ps1 (needs the game data and a display).
+#
+# RUNNER REQUIREMENTS
+#   build and package jobs: a Windows runner tagged `windows` (shell executor) with PowerShell 7 (`pwsh`), Git and the .NET 10 SDK (global.json: 10.0.401 or a newer
+#   feature band) installed, and internet access to nuget.org and github.com (the NuGet restore; the client is self-contained, the runner needs no game).
+#   The script lines below are PowerShell: the runner's shell must be `pwsh` or `powershell`.
+#   release job: any Linux runner with Docker that can run the image below (tag `docker`, adjust to your runner).
+#
+# scripts/package-launcher.ps1 (project tools/CnCNew.Launcher) is written by a separate piece of work; scripts/release-build.ps1 calls it by that name and
+# fails the release when it is missing.
+
+stages:
+  - build
+  - package
+  - release
+
+variables:
+  GIT_DEPTH: "0"          # the release notes and the build identity read the history and tags
+  GIT_STRATEGY: fetch
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/cncnew"
+
+.windows: &windows
+  tags: [windows]
+  before_script:
+    - $ErrorActionPreference = 'Stop'
+    - dotnet --version
+    - pwsh -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+.release-tag: &release-tag
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+
+build:release:
+  <<: [*windows, *release-tag]
+  stage: build
+  script:
+    - $VERSION = $CI_COMMIT_TAG.Substring(1)
+    - pwsh -NoLogo -NoProfile -File scripts/release-build.ps1 -Version $VERSION
+    - if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - Set-Content -Path release.env -Value "VERSION=$VERSION"
+  artifacts:
+    paths:
+      - artifacts/release/
+    reports:
+      dotenv: release.env
+    expire_in: 30 days
+
+# A build of the same assets from a branch or a merge request, started by hand: it proves the pipeline works, it publishes nothing.
+build:dry-run:
+  <<: *windows
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_BRANCH'
+      when: manual
+      allow_failure: true
+  script:
+    - $VERSION = (Get-Content version.txt -Raw).Trim()
+    - pwsh -NoLogo -NoProfile -File scripts/release-build.ps1 -Version $VERSION -OutDir artifacts/dry-run
+    - if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  artifacts:
+    paths:
+      - artifacts/dry-run/
+    expire_in: 3 days
+
+package:upload:
+  <<: [*windows, *release-tag]
+  stage: package
+  needs: ["build:release"]
+  script:
+    - |
+      foreach ($file in Get-ChildItem artifacts/release -File) {
+        if ($file.Name -eq 'release-notes.md') { continue }
+        Write-Host "Uploading $($file.Name)"
+        Invoke-RestMethod -Method Put -Headers @{ 'JOB-TOKEN' = $CI_JOB_TOKEN } -InFile $file.FullName -Uri "$PACKAGE_REGISTRY_URL/$VERSION/$($file.Name)" | Out-Null
+      }
+
+release:publish:
+  <<: *release-tag
+  stage: release
+  tags: [docker]
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build:release
+      artifacts: true
+    - job: package:upload
+      artifacts: false
+  script:
+    - echo "Releasing $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: 'CnCNew $VERSION'
+    description: 'artifacts/release/release-notes.md'
+    assets:
+      links:
+        - name: 'CnCNew-Launcher-${VERSION}.exe'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Launcher-${VERSION}.exe'
+          link_type: package
+        - name: 'CnCNew-Launcher-${VERSION}.exe.sha256'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Launcher-${VERSION}.exe.sha256'
+          link_type: other
+        - name: 'CnCNew-Client-${VERSION}-win-x64.zip'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Client-${VERSION}-win-x64.zip'
+          link_type: package
+        - name: 'CnCNew-Client-${VERSION}-win-x64.zip.sha256'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Client-${VERSION}-win-x64.zip.sha256'
+          link_type: other
+        - name: 'CnCNew-Server-${VERSION}-win-x64.zip'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Server-${VERSION}-win-x64.zip'
+          link_type: package
+        - name: 'CnCNew-Server-${VERSION}-win-x64.zip.sha256'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Server-${VERSION}-win-x64.zip.sha256'
+          link_type: other
+        - name: 'CnCNew-Server-${VERSION}-linux-x64.zip'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Server-${VERSION}-linux-x64.zip'
+          link_type: package
+        - name: 'CnCNew-Server-${VERSION}-linux-x64.zip.sha256'
+          url: '${PACKAGE_REGISTRY_URL}/${VERSION}/CnCNew-Server-${VERSION}-linux-x64.zip.sha256'
+          link_type: other

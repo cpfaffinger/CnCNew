@@ -1,0 +1,74 @@
+# CnCNew release workflow (GitHub). Documentation: docs/RELEASING.md.
+#
+# A release is a tag vMAJOR.MINOR.PATCH made by `scripts/release.ps1` and pushed. This workflow builds every asset with scripts/release-build.ps1
+# (client package, launcher, dedicated servers, SHA-256 files, separation check) on a Windows runner and publishes them on the GitHub release of the tag. The
+# launcher reads these releases, so this is the workflow that matters for players; .gitlab-ci.yml does the same on GitLab.
+#
+# "Run workflow" (workflow_dispatch) builds the same assets from a branch and keeps them as a workflow artifact; it publishes nothing.
+#
+# Not done here, to be done by the person who tags (docs/RELEASING.md): scripts/audit-publish.ps1 and tier 4 of scripts/test.ps1 - both need the game data.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest   # PowerShell 7 and Git come with the image; setup-dotnet installs the SDK that global.json names
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # the release notes and the build identity read the history and tags
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content version.txt -Raw).Trim()
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $fromTag = '${{ github.ref_name }}'.Substring(1)
+            if ($fromTag -ne $version) { throw "The tag says $fromTag, version.txt says $version." }
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build the release assets
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File scripts/release-build.ps1 -Version '${{ steps.version.outputs.version }}'
+
+      - name: Keep the assets (manual run only)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          path: artifacts/release/*
+          retention-days: 3
+
+      - name: Publish the GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: CnCNew ${{ steps.version.outputs.version }}
+          body_path: artifacts/release/release-notes.md
+          files: |
+            artifacts/release/CnCNew-Launcher-${{ steps.version.outputs.version }}.exe
+            artifacts/release/CnCNew-Launcher-${{ steps.version.outputs.version }}.exe.sha256
+            artifacts/release/CnCNew-Client-${{ steps.version.outputs.version }}-win-x64.zip
+            artifacts/release/CnCNew-Client-${{ steps.version.outputs.version }}-win-x64.zip.sha256
+            artifacts/release/CnCNew-Server-${{ steps.version.outputs.version }}-win-x64.zip
+            artifacts/release/CnCNew-Server-${{ steps.version.outputs.version }}-win-x64.zip.sha256
+            artifacts/release/CnCNew-Server-${{ steps.version.outputs.version }}-linux-x64.zip
+            artifacts/release/CnCNew-Server-${{ steps.version.outputs.version }}-linux-x64.zip.sha256
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
