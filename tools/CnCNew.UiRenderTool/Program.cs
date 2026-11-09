@@ -18,6 +18,7 @@ Directory.CreateDirectory(outputDirectory);
 var fontAudit = args.Contains("--font-audit", StringComparer.OrdinalIgnoreCase);
 // --skins: only the scenes of both interface skins and their readability check (docs/UI-MODERN.md section 9, R3); exit code 1 when the modern skin misses a threshold.
 var skins = args.Contains("--skins", StringComparer.OrdinalIgnoreCase);
+var hudOnly = args.Contains("--hud", StringComparer.OrdinalIgnoreCase);
 var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() switch
 {
     "gdi" => UiFontBackend.Gdi,
@@ -29,7 +30,7 @@ var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() 
 var rate = GetArgument(args, "--tick-rate") is { } rateText
     ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, CultureInfo.InvariantCulture))
     : GameData.DefaultSessionRate;
-using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate) { SkinsOnly = skins };
+using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate) { SkinsOnly = skins, HudOnly = hudOnly };
 game.Run();
 return game.Failures == 0 ? 0 : 1;
 
@@ -59,6 +60,8 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
     public int Failures { get; private set; }
 
     public bool SkinsOnly { get; init; }
+
+    public bool HudOnly { get; init; }
 
     protected override void Initialize()
     {
@@ -92,6 +95,11 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         try
         {
             if (fontAudit) FontAudit.Run(_data!, _text!.Text, _templates, outputDirectory);
+            else if (HudOnly)
+            {
+                var manifest = new List<string>();
+                HudSelectionScenes.Capture(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
+            }
             else if (SkinsOnly)
             {
                 var manifest = new List<string>();

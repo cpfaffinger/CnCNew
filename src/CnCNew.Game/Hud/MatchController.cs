@@ -1361,7 +1361,7 @@ public sealed partial class MatchController
             if (!_controlBarRoot.IsHidden)
             {
                 commands.AddRange(modern.Power(Hud.EnergyProduction, Hud.EnergyConsumption, _textMeasure, _scaleOptions.TextScale));
-                commands.AddRange(modern.Selection(SelectionForPlate(), _textMeasure, _scaleOptions.TextScale));
+                commands.AddRange(modern.Selection(SelectionForPlate(), _textMeasure, _scaleOptions.TextScale, CommandBar.GroupQueues));
                 if (Generals is { } general) commands.AddRange(modern.General(_assets.Text.Get("SCIENCE:Rank" + general.RankLevel.ToString(CultureInfo.InvariantCulture)), general.ProgressPercent, StarBlinks && _starFlash, _textMeasure, _scaleOptions.TextScale));
             }
         }
@@ -1373,50 +1373,42 @@ public sealed partial class MatchController
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
         }
         if (_modernBar is null && !_controlBarRoot.IsHidden && CommandBar.Group is { } group) commands.AddRange(GroupTag(group));
-        if (!_controlBarRoot.IsHidden && CommandBar.GroupQueues.Length > 1) commands.AddRange(QueueLoads(CommandBar.GroupQueues));
+        _trayCells = [];
+        if (!_controlBarRoot.IsHidden && CommandBar.GroupQueues.Length > 1 && _modernBar is not { HasPlate: true }) commands.AddRange(QueueLoads(CommandBar.GroupQueues));
         AddPowerCameos(commands, cooldown);
         AddGeneralsCameos(commands);
         return commands.ToImmutable();
     }
 
+    /// <summary>Where the cells of the queue loads stood in the last drawn frame (the tray's or the modern plate's); empty when none were drawn. Tests check that they overlap nothing.</summary>
+    public ImmutableArray<UiRect> QueueLoadCells => _modernBar is { HasPlate: true } plate && !plate.QueueCells.IsEmpty ? plate.QueueCells : _trayCells;
+
+    private ImmutableArray<UiRect> _trayCells = [];
+
     /// <summary>
-    /// How full the queue of each building of a structure group is - "3/9" per building in selection order, a full one in red - on the lines above the group tag (the bar's own icons are
-    /// the lead's queue only). The original has no such display: it shows one object's queue, and a full queue only greys the build buttons.
+    /// How full the queue of each building of a structure group is, as a tray over the bar's top edge at the right end (<see cref="QueueLoadStrip"/>): in the original skin and in a
+    /// window without a selection plate. The modern bar with a plate shows the same cells in the plate. The original has no such display: it shows one object's queue, and a full
+    /// queue only greys the build buttons.
     /// </summary>
     private ImmutableArray<UiDrawCommand> QueueLoads(ImmutableArray<QueueLoad> loads)
     {
+        _trayCells = [];
         if (_tree.FindByName("ControlBar.wnd:RightHUD") is not { } anchor) return [];
         var font = TextStyle.Font(InGameUiFontRole.Message, _tree.Viewport, _scaleOptions);
-        var rect = anchor.Rect;
-        var line = _textMeasure.LineHeight(font);
-        var gap = _textMeasure.MeasureWidth("  ", font);
-        var chips = loads.Select(load => (Text: string.Create(CultureInfo.InvariantCulture, $"{load.Count}/{load.Limit}"), Full: load.IsFull)).ToList();
-        // Lines of as many chips as fit over the portrait window, the first line nearest the tag, later ones above it.
-        var rows = new List<List<(string Text, bool Full, int Width)>>();
-        var row = new List<(string Text, bool Full, int Width)>();
-        var rowWidth = 0;
-        foreach (var (text, full) in chips)
-        {
-            var width = _textMeasure.MeasureWidth(text, font);
-            if (row.Count > 0 && rowWidth + gap + width > rect.Width) { rows.Add(row); row = []; rowWidth = 0; }
-            rowWidth += (row.Count > 0 ? gap : 0) + width;
-            row.Add((text, full, width));
-        }
-        rows.Add(row);
-        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        var shadow = new WndColor(0, 0, 0, 255);
-        for (var index = 0; index < rows.Count; index++)
-        {
-            var total = rows[index].Sum(chip => chip.Width) + gap * (rows[index].Count - 1);
-            var x = rect.X + (rect.Width - total) / 2;
-            var y = rect.Y - (line + 1) * (index + 2) - 1;
-            foreach (var (text, full, width) in rows[index])
-            {
-                commands.Add(new UiTextDraw(text, null, font, full ? new WndColor(235, 70, 60, 255) : WndColor.White, shadow, x, y, UiTextAlignment.Left, new UiRect(x - 4, y - 2, width + 8, line + 4)));
-                x += width + gap;
-            }
-        }
-        return commands.ToImmutable();
+        var (numerator, denominator) = UiScaler.UniformScale(_tree.Viewport, UiScaler.DefaultDisplayWidth, UiScaler.DefaultDisplayHeight);
+        int Scaled(int units) => Math.Max(1, (int)(units * numerator / denominator));
+        var pad = Math.Max(2, Scaled(3));
+        var rowHeight = QueueLoadStrip.RowHeight(_textMeasure.LineHeight(font), Math.Max(3, Scaled(5)), pad);
+        // Up to three rows, the first nearest the bar, over the bar's top edge and the right end of its portrait window.
+        var bottom = _controlBarRoot.Rect.Y - Scaled(3);
+        var area = new UiRect(anchor.Rect.X, bottom - (rowHeight + pad) * 3, anchor.Rect.Width, (rowHeight + pad) * 3);
+        var layout = QueueLoadStrip.Place(loads, area, true, Math.Max(2, Scaled(3)), Math.Max(1, Scaled(1)), Math.Max(3, Scaled(5)), pad, _textMeasure.LineHeight(font), text => _textMeasure.MeasureWidth(text, font));
+        var palette = Skin.IsModern ? Skin.Style.Palette : null;
+        var colours = palette is null
+            ? new QueueLoadStrip.Colours(new WndColor(0, 0, 0, 170), new WndColor(120, 130, 140, 255), new WndColor(60, 64, 70, 230), new WndColor(235, 235, 235, 255), new WndColor(235, 70, 60, 255), WndColor.White, new WndColor(0, 0, 0, 255))
+            : new QueueLoadStrip.Colours(palette.Control, palette.Border, palette.Canvas, palette.Good, palette.Bad, palette.Text, WndColor.Undefined);
+        _trayCells = [.. layout.Cells.Select(cell => cell.Rect)];
+        return QueueLoadStrip.Draw(layout, colours, font, new UiRect(0, 0, _tree.Viewport.Width, _tree.Viewport.Height));
     }
 
     /// <summary>

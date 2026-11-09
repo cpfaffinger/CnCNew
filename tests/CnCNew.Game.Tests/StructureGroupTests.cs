@@ -7,6 +7,7 @@ using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.World;
+using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Settings;
 
@@ -34,6 +35,7 @@ internal static class StructureGroupTests
         harness.Run("Ctrl and a digit keep a structure group, the digit brings it back, Shift and a digit adds a building of its kind and empties the selection for another", () => Groups(data));
         harness.Run("The bar of three barracks shows the count; a production order goes to the shortest queue: 1/1/1, then 2/1/1, then 2/2/1 - also when the clicks come before the world has stepped", () => Distribution(data));
         harness.Run("A queue holds the original's 9 entries: one barracks and a group stop taking orders at their limit, nothing is paid beyond it, the button greys, the full queue is said, and each building's load is shown in both skins", () => QueueLimit(data));
+        harness.Run("The queue-load cells of a structure group stay inside their area and clear of the bar's buttons, in both skins at four window sizes", () => QueueLoadCellsStayClear(data));
         harness.Run("A hot key of the bar distributes the same way, and a queue icon cancels the lead building's order", () => HotkeyAndCancel(data));
         harness.Run("A player-wide upgrade is ordered once, an object upgrade goes to one building that can still take it, to the next one when clicked again", () => Upgrades(data));
         harness.Run("The rally point and Sell reach every building of the group; a right click on the ground sets the rally point of all", () => RallyAndSell(data));
@@ -399,6 +401,45 @@ internal static class StructureGroupTests
             shown.Frame(2);
             TestHarness.Assert(Chips().Length == 0, "one building: nothing new (its icons are its queue)");
         }
+    }
+
+    /// <summary>The queue-load cells (the owner's playtest of 8 November 2026: "n/9" floated over the bar): in both skins and at four window sizes they stand in their area, overlap nothing of the bar and each other, and say the counts.</summary>
+    private static void QueueLoadCellsStayClear(GameData data)
+    {
+        var modern = GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = CnCNew.Ui.Skins.UiSkin.Modern.Name } };
+        foreach (var (skinName, settings) in new[] { ("original", SkinPins.Settings), ("modern", modern) })
+            foreach (var buildings in new[] { 3, 12 })
+            {
+                var units = Enumerable.Range(0, buildings).Select(index => Barracks($"b{index}", index * 40f)).ToArray();
+                var rig = new Rig(data, "queue-load-cells", units, money: 60000, settings: settings);
+                rig.Selection.Replace([.. Enumerable.Range(0, buildings).Select(index => rig.Tag($"b{index}"))]);
+                rig.Frame(2);
+                var ranger = rig.SlotOfObject("AmericaInfantryRanger");
+                for (var click = 0; click < buildings * 3; click++) rig.ClickButton(ranger);
+                rig.Frame(3);
+                foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1920, 1080), (1920, 1200) })
+                {
+                    var list = rig.Controller.BuildDrawList(width, height);
+                    var cells = rig.Controller.QueueLoadCells;
+                    var what = $"{skinName}, {buildings} buildings, {width}x{height}";
+                    TestHarness.Assert(cells.Length > 1, $"the loads are drawn as cells ({what}: {cells.Length})");
+                    var screen = new UiRect(0, 0, width, height);
+                    TestHarness.Assert(cells.All(cell => cell.IsInside(screen)), $"every cell is on the screen ({what})");
+                    for (var first = 0; first < cells.Length; first++)
+                        for (var second = first + 1; second < cells.Length; second++)
+                            TestHarness.Assert(!cells[first].Intersects(cells[second]), $"cells {first} and {second} do not overlap ({what}: {cells[first]} {cells[second]})");
+                    var barNames = new List<string> { "RightHUD", "ButtonGeneral", "ButtonOptions", "ButtonIdleWorker", "ButtonPlaceBeacon", "PopupCommunicator", "MoneyDisplay", "LeftHUD" };
+                    barNames.AddRange(Enumerable.Range(1, CommandBarModel.GridSlots).Select(slot => $"ButtonCommand{slot:00}"));
+                    barNames.AddRange(Enumerable.Range(1, CommandBarModel.MaxQueueButtons).Select(slot => $"ButtonQueue{slot:00}"));
+                    foreach (var name in barNames)
+                        if (rig.Controller.WindowRect("ControlBar.wnd:" + name) is { } window && window.Width > 0)
+                            TestHarness.Assert(cells.All(cell => !cell.Intersects(window)), $"no cell covers {name} ({what})");
+                    var texts = list.Commands.OfType<UiTextDraw>().Select(text => text.Text).Where(text => text.Length == 3 && text[1] == '/').ToArray();
+                    TestHarness.Assert(texts.Length == cells.Length || texts.Length == cells.Length - 1, $"each cell says its count ({what}: {texts.Length} texts, {cells.Length} cells)");
+                    // At most one cell is the "+n" that stands for the buildings that found no room.
+                    TestHarness.Assert(list.Commands.OfType<UiTextDraw>().Count(text => text.Text.Length > 1 && text.Text[0] == '+' && char.IsDigit(text.Text[1])) <= 1, $"one '+n' cell at most ({what})");
+                }
+            }
     }
 
     private static void HotkeyAndCancel(GameData data)

@@ -86,7 +86,13 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     }
 
     /// <summary>Whether the window leaves room for the selection plate (at 4:3 it does not).</summary>
-    private bool HasPlate => _plate.Width >= Scale(80);
+    internal bool HasPlate => _plate.Width >= Scale(80);
+
+    /// <summary>The places of the queue-load cells drawn by the last <see cref="Selection"/> (empty when none were).</summary>
+    internal ImmutableArray<UiRect> QueueCells { get; private set; } = [];
+
+    /// <summary>The top edge of the band: what the tray of the queue loads stands on when the window has no plate.</summary>
+    internal int BandTop => _band.Y;
 
     /// <summary>The band and its wells, under the bar's windows.</summary>
     public ImmutableArray<UiDrawCommand> Chrome()
@@ -150,8 +156,9 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     }
 
     /// <summary>The selection plate: what the extra width of the window shows. One object: its name and its health; several: their kinds with a count each.</summary>
-    public ImmutableArray<UiDrawCommand> Selection(ModernSelection? selection, IUiTextMeasure measure, decimal textScale)
+    public ImmutableArray<UiDrawCommand> Selection(ModernSelection? selection, IUiTextMeasure measure, decimal textScale, ImmutableArray<CnCNew.Presentation.Input.QueueLoad> queues = default)
     {
+        QueueCells = [];
         if (!HasPlate || selection is null) return [];
         var palette = skin.Style.Palette;
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
@@ -170,8 +177,16 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
         }
         else
         {
-            var height = Math.Max(1, Math.Min(Scale(40), inner.Bottom - y));
+            // The queue loads of a group of buildings take the row under the kinds; the kinds' cells give up height for it when the plate is low.
+            var pad = Math.Max(2, Scale(3));
+            var pipHeight = Math.Max(3, Scale(5));
+            var rowHeight = QueueLoadStrip.RowHeight(measure.LineHeight(caption), pipHeight, pad);
+            var withLoads = !queues.IsDefaultOrEmpty && queues.Length > 1;
+            var reserved = withLoads ? rowHeight + Scale(4) : 0;
+            var height = Math.Max(1, Math.Min(Scale(40), inner.Bottom - y - reserved));
+            if (withLoads && height < Scale(16)) height = Math.Max(1, Math.Min(Scale(16), inner.Bottom - y));
             var width = height * 4 / 3;
+            var kindsTop = y;
             var x = inner.X;
             var kindIndex = -1;
             foreach (var (image, count) in selection.Kinds)
@@ -191,6 +206,13 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
                 commands.Add(new UiFillRect(new UiRect(cell.Right - labelWidth - Scale(4), cell.Bottom - measure.LineHeight(caption), labelWidth + Scale(4), measure.LineHeight(caption)), palette.Canvas));
                 commands.Add(new UiTextDraw(label, null, caption, palette.Text, WndColor.Undefined, cell.Right - labelWidth - Scale(2), cell.Bottom - measure.LineHeight(caption), UiTextAlignment.Left, cell));
                 x += width + Scale(4);
+            }
+            if (withLoads)
+            {
+                var area = UiRect.FromEdges(inner.X, kindsTop + height + Scale(4), inner.Right, inner.Bottom);
+                var layout = QueueLoadStrip.Place(queues, area, false, Math.Max(2, Scale(3)), Math.Max(1, Scale(1)), pipHeight, pad, measure.LineHeight(caption), text => measure.MeasureWidth(text, caption));
+                QueueCells = [.. layout.Cells.Select(cell => cell.Rect)];
+                commands.AddRange(QueueLoadStrip.Draw(layout, new QueueLoadStrip.Colours(palette.Control, palette.Border, palette.Canvas, palette.Good, palette.Bad, palette.Text, WndColor.Undefined), caption, _plate));
             }
         }
         commands.Add(new UiPopClip());
