@@ -1858,9 +1858,13 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             _currentUpdate = node;
             observer?.UpdateStarted(node.Module);
+            var hadMoveTarget = entity.HasMoveTarget;
             var sleep = node.Update.Update(this);
             observer?.UpdateEnded(node.Module);
             _currentUpdate = null;
+            // An AI module of the object that runs before the one that has just set a move target has had its turn in this tick: at 30 Hz it sees the target in the next tick, which is
+            // the next frame, and above 30 Hz it waits for the object's next frame instead of the next tick, the middle of this one (F-166).
+            if (!hadMoveTarget && entity.HasMoveTarget && _firstFrameTicks != TickOrder.Next && node.Module is Modules.BuiltIn.AIUpdateInterface setter) setter.HoldEarlierMoversToTheNextFrame(this);
             if (sleep < SimulationTiming.SleepNone) sleep = SimulationTiming.SleepNone;
             var wake = Math.Min(tick + sleep, SimulationTiming.SleepForever);
             node.Update.NextWake = wake;

@@ -1682,6 +1682,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (world.Time.TicksPerOriginalFrame > TickOrder.Next && _frameTicksLeft == 0) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
     }
 
+    /// <summary>
+    /// The AI modules of the object that run before this one in a tick have had their turn when this module's update sets a move target (<c>SimulationWorld.RunUpdates</c> calls this): at 30 Hz they see it in the next tick, which is the
+    /// next frame. Above 30 Hz they wait for the object's next frame (<see cref="BeginMoveWithNextFrame"/>) instead of seeing it in the next tick, in the middle of the frame.
+    /// </summary>
+    internal void HoldEarlierMoversToTheNextFrame(IWorldServices world)
+    {
+        foreach (var module in Entity.Modules)
+            if (module is AIUpdateInterface other && !ReferenceEquals(other, this) && other.Index < Index) other.BeginMoveWithNextFrame(world);
+    }
+
     // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
     private long _moveHoldUntil;
 
