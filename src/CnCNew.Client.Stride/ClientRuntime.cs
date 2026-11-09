@@ -111,11 +111,11 @@ internal sealed class ClientRuntime : IDisposable
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
     public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true, bool? alternateMouse = null,
         CnCNew.Simulation.Skirmish.Original.SkirmishAiKind skirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, IShellNetwork? network = null, ShellScript? shellScript = null,
-        (int Width, int Height)? desktop = null, IReadOnlyList<(int Width, int Height)>? displayModes = null)
+        (int Width, int Height)? desktop = null, IReadOnlyList<(int Width, int Height)>? displayModes = null, (int Width, int Height)? virtualDesktop = null)
     {
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
-            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, desktop?.Width ?? width, desktop?.Height ?? height, audioDevices: audio.DeviceFree || audio.CaptureDirectory is not null ? [] : AudioOutput.DeviceNames(), displayModes: displayModes),
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, desktop?.Width ?? width, desktop?.Height ?? height, audioDevices: audio.DeviceFree || audio.CaptureDirectory is not null ? [] : AudioOutput.DeviceNames(), displayModes: displayModes, virtualDesktopWidth: virtualDesktop?.Width ?? 0, virtualDesktopHeight: virtualDesktop?.Height ?? 0),
                 "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions, network, Skin is { } skin ? CnCNew.Ui.Skins.UiSkin.For(skin) : null), audio) { _alternateMouse = alternateMouse, _shellScript = shellScript };
         if (shellScript is not null)
         {
@@ -603,13 +603,13 @@ internal sealed class ClientRuntime : IDisposable
     /// <summary>
     /// A start of the game in the display mode and size the settings keep: the host applies it with the first frame. A window of a size given on the command line (<c>--size</c>) needs no request.
     /// </summary>
-    public void RequestSavedDisplay(CnCNew.Ui.Settings.Resolution desktop, IReadOnlyCollection<CnCNew.Ui.Settings.Resolution> displayModes, bool windowSizeGiven)
+    public void RequestSavedDisplay(CnCNew.Ui.Settings.Resolution desktop, IReadOnlyCollection<CnCNew.Ui.Settings.Resolution> displayModes, bool windowSizeGiven, CnCNew.Ui.Settings.Resolution virtualDesktop = default)
     {
         if (_shell?.Settings.Display is not { } display) return;
         // A window opens at the size of the command line; one that was not given is the size the settings keep, so a chosen window size lasts from one start to the next.
         if (display.Mode == CnCNew.Ui.Settings.DisplayMode.Windowed && windowSizeGiven) return;
         // What the display no longer offers (another monitor, a smaller desktop) falls back to the nearest it does.
-        var fit = CnCNew.Ui.Settings.Resolutions.FitToDisplay(new CnCNew.Ui.Settings.Resolution(display.Width, display.Height), display.Mode, desktop, displayModes);
+        var fit = CnCNew.Ui.Settings.Resolutions.FitToDisplay(new CnCNew.Ui.Settings.Resolution(display.Width, display.Height), display.Mode, desktop, displayModes, virtualDesktop);
         PendingResolution = (fit.Width, fit.Height, display.Mode);
     }
 

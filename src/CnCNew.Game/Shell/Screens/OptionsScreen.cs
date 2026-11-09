@@ -73,13 +73,15 @@ public sealed class OptionsScreen : ShellScreen
     private void BuildResolutionList()
     {
         var desktop = new Resolution(Shell.Environment.DesktopWidth, Shell.Environment.DesktopHeight);
-        var offered = Resolutions.Offered(desktop, Shell.Environment.DisplayModes.Select(mode => new Resolution(mode.Width, mode.Height)));
+        var virtualDesktop = new Resolution(Shell.Environment.VirtualDesktopWidth, Shell.Environment.VirtualDesktopHeight);
+        // A size wider or taller than the screen is not offered: a window may reach over all monitors, a full screen only over its own display.
+        var offered = Resolutions.Offered(Resolutions.ScreenFor(_working.Display.Mode, desktop, virtualDesktop), Shell.Environment.DisplayModes.Select(mode => new Resolution(mode.Width, mode.Height)));
         var candidates = offered.Select(size => (size.Width, size.Height)).ToList();
         var current = (_working.Display.Width, _working.Display.Height);
         // A stored size the display no longer offers (another monitor, a smaller desktop) is shown as what it falls back to, not as an entry that cannot be had.
         if (!candidates.Contains(current))
         {
-            var fallback = Resolutions.FitToDisplay(new Resolution(current.Item1, current.Item2), _working.Display.Mode, desktop, [.. offered]);
+            var fallback = Resolutions.FitToDisplay(new Resolution(current.Item1, current.Item2), _working.Display.Mode, desktop, [.. offered], virtualDesktop);
             current = (fallback.Width, fallback.Height);
             if (!candidates.Contains(current)) candidates.Insert(0, current);
             _working = _working with { Display = _working.Display with { Width = current.Item1, Height = current.Item2 } };

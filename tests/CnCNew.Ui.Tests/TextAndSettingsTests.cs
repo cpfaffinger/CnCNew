@@ -675,7 +675,15 @@ public static class TextAndSettingsTests
         Assert(new[] { new Resolution(2560, 1440), new Resolution(2560, 1600), new Resolution(3840, 2160) }.All(uhd.Contains), "A 4K desktop offers 2560x1440, 2560x1600 and 3840x2160.");
         Assert(full.SequenceEqual(full.OrderBy(size => size.Width).ThenBy(size => size.Height)) && full.Distinct().Count() == full.Length, "The list is ordered and has no duplicates.");
         var withModes = Resolutions.Offered(new Resolution(1920, 1080), [new Resolution(2560, 1440), new Resolution(1280, 1024), new Resolution(640, 480), new Resolution(900, 1600)]);
-        Assert(withModes.Contains(new Resolution(2560, 1440)) && !withModes.Contains(new Resolution(640, 480)) && !withModes.Contains(new Resolution(900, 1600)) && withModes.Contains(new Resolution(1280, 1024)), "A standard mode above the desktop and a 5:4 mode are offered, a size under the minimum and a portrait mode are not.");
+        Assert(!withModes.Contains(new Resolution(2560, 1440)) && !withModes.Contains(new Resolution(640, 480)) && !withModes.Contains(new Resolution(900, 1600)) && withModes.Contains(new Resolution(1280, 1024)), "A 5:4 mode is offered; a mode above the screen, a size under the minimum and a portrait mode are not.");
+        // A size larger than the screen in width OR in height is never offered, in the list of standard sizes or among the display's modes (the owner's playtest of 8 November 2026).
+        var tooWide = Resolutions.Offered(new Resolution(1920, 1080), [new Resolution(2560, 1080), new Resolution(1920, 1200), new Resolution(1600, 1000), new Resolution(1280, 1024)]);
+        Assert(tooWide.All(size => size.Width <= 1920 && size.Height <= 1080), "Nothing wider or taller than a 1920x1080 screen is offered.");
+        Assert(tooWide.Contains(new Resolution(1600, 1000)) && tooWide.Contains(new Resolution(1280, 1024)), "...and the modes that fit are.");
+        var wide = Resolutions.ScreenFor(DisplayMode.Windowed, new Resolution(1920, 1080), new Resolution(3840, 1080));
+        Assert(wide == new Resolution(3840, 1080) && Resolutions.Offered(wide, []).Contains(new Resolution(3840, 1080)) && !Resolutions.Offered(wide, []).Contains(new Resolution(3840, 1600)), "Two monitors side by side bound a window by both together: 3840x1080 is offered, 3840x1600 is not.");
+        Assert(Resolutions.ScreenFor(DisplayMode.Fullscreen, new Resolution(1920, 1080), new Resolution(3840, 1080)) == new Resolution(1920, 1080) && Resolutions.ScreenFor(DisplayMode.BorderlessFullscreen, new Resolution(1920, 1080), new Resolution(3840, 1080)) == new Resolution(1920, 1080), "A full screen stays on its own display.");
+        Assert(Resolutions.ScreenFor(DisplayMode.Windowed, new Resolution(1920, 1080), default) == new Resolution(1920, 1080), "Without a virtual desktop the display's is the bound.");
         Assert(Resolutions.Offered(new Resolution(0, 0), [new Resolution(1920, 1080)]).Contains(new Resolution(1920, 1080)) && Resolutions.Offered(new Resolution(0, 0), []).Length == Resolutions.Standard.Length, "Without a desktop the modes alone, or all standard sizes, are offered.");
 
         // What a stored size becomes on this display.
@@ -691,6 +699,8 @@ public static class TextAndSettingsTests
         Assert(Resolutions.FitToDisplay(new Resolution(1024, 768), DisplayMode.Fullscreen, desktop, [new Resolution(1280, 720), new Resolution(1920, 1080)]) == new Resolution(1280, 720), "...and a smaller one than any the smallest.");
         Assert(Resolutions.FitToDisplay(new Resolution(2560, 1440), DisplayMode.Fullscreen, desktop, []) == new Resolution(1920, 1080), "A full screen with no known modes is fitted to the desktop.");
         Assert(Resolutions.FitToDisplay(new Resolution(3840, 2160), DisplayMode.Windowed, new Resolution(0, 0), []) == new Resolution(3840, 2160), "Without a desktop the request stands.");
+        Assert(Resolutions.FitToDisplay(new Resolution(3840, 1080), DisplayMode.Windowed, desktop, [], new Resolution(3840, 1080)) == new Resolution(3840, 1080), "A window over two monitors is kept when both together hold it.");
+        Assert(Resolutions.FitToDisplay(new Resolution(3840, 1080), DisplayMode.Windowed, desktop, []) == new Resolution(1920, 1080), "...and brought to the display's size when only one monitor is known.");
     }
 
     // ------------------------------------------------------------------------------------------------------ real data

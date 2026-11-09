@@ -88,29 +88,33 @@ public static class Resolutions
     }
 
     /// <summary>
-    /// The sizes the options offer: every standard resolution up to the desktop's size (a window of that size fits on the screen), every standard resolution the display's own modes
-    /// list (a mode above the desktop, as a downscaling driver offers), and every other landscape mode of the display that reaches the minimum (5:4 and the like). Ascending by width, then height.
+    /// The sizes the options offer: every standard resolution up to the screen's size, and every other landscape mode of the display that reaches the minimum (5:4 and the like) and
+    /// is not larger than the screen in width or in height - a size the screen cannot show is never offered, whatever a downscaling driver lists. Ascending by width, then height.
     /// </summary>
-    /// <param name="desktop">The desktop's size; an unknown desktop (zero) offers the modes alone, or the standard sizes when there are none either.</param>
+    /// <param name="screen">The bound: the whole virtual desktop for a window (all monitors together), the display's own desktop for a full screen; an unknown screen (zero) offers the modes alone, or the standard sizes when there are none either.</param>
     /// <param name="modes">The display modes of the adapter (sizes only; empty when the host cannot enumerate them).</param>
-    public static ImmutableArray<Resolution> Offered(Resolution desktop, IEnumerable<Resolution> modes)
+    public static ImmutableArray<Resolution> Offered(Resolution screen, IEnumerable<Resolution> modes)
     {
-        var supported = new HashSet<Resolution>(modes.Where(mode => mode.Width >= Minimum.Width && mode.Height >= Minimum.Height));
-        var knownDesktop = desktop.Width > 0 && desktop.Height > 0;
+        var knownScreen = screen.Width > 0 && screen.Height > 0;
+        var supported = new HashSet<Resolution>(modes.Where(mode => mode.Width >= Minimum.Width && mode.Height >= Minimum.Height && (!knownScreen || Fits(mode, screen))));
         var offered = new HashSet<Resolution>();
         foreach (var size in Standard)
-            if ((knownDesktop && Fits(size, desktop)) || supported.Contains(size) || (!knownDesktop && supported.Count == 0)) offered.Add(size);
+            if ((knownScreen && Fits(size, screen)) || (!knownScreen && (supported.Contains(size) || supported.Count == 0))) offered.Add(size);
         foreach (var mode in supported)
             if (mode.Width >= mode.Height) offered.Add(mode);
         return [.. offered.OrderBy(size => size.Width).ThenBy(size => size.Height)];
     }
+
+    /// <summary>The bound of the sizes the options offer and a stored size is kept to: a window may reach over all monitors, a full screen stays on the display it is on.</summary>
+    public static Resolution ScreenFor(DisplayMode mode, Resolution desktop, Resolution virtualDesktop) =>
+        mode is DisplayMode.Windowed or DisplayMode.Borderless && virtualDesktop.Width > 0 && virtualDesktop.Height > 0 ? new Resolution(Math.Max(desktop.Width, virtualDesktop.Width), Math.Max(desktop.Height, virtualDesktop.Height)) : desktop;
 
     /// <summary>
     /// What a stored size and display mode become on this display: a window or a frameless window of a size that no longer fits the desktop is brought to the largest standard size that does
     /// (<see cref="BestFit"/>); a full screen of a size the display's modes do not list takes the largest listed mode that is not larger, or the smallest listed one, or the desktop's size
     /// when no modes are known. A request the display offers is kept as it is.
     /// </summary>
-    public static Resolution FitToDisplay(Resolution requested, DisplayMode mode, Resolution desktop, IReadOnlyCollection<Resolution> modes)
+    public static Resolution FitToDisplay(Resolution requested, DisplayMode mode, Resolution desktop, IReadOnlyCollection<Resolution> modes, Resolution virtualDesktop = default)
     {
         if (mode == DisplayMode.BorderlessFullscreen && desktop.Width > 0 && desktop.Height > 0) return desktop;
         if (mode == DisplayMode.Fullscreen)
@@ -123,7 +127,8 @@ public static class Resolutions
                 return below.Length > 0 ? below[0] : listed.OrderBy(size => size.Pixels).First();
             }
         }
-        return desktop.Width > 0 && desktop.Height > 0 ? BestFit(requested.Width, requested.Height, desktop.Width, desktop.Height).Result : requested;
+        var bound = ScreenFor(mode, desktop, virtualDesktop);
+        return bound.Width > 0 && bound.Height > 0 ? BestFit(requested.Width, requested.Height, bound.Width, bound.Height).Result : requested;
     }
 
     private static bool Fits(Resolution value, Resolution desktop) => value.Width <= desktop.Width && value.Height <= desktop.Height;

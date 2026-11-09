@@ -349,7 +349,8 @@ public sealed class GameShell
     {
         var display = settings?.Display ?? GameSettings.Default.Display;
         if (environment.DesktopWidth <= 0 || environment.DesktopHeight <= 0) return new UiViewport(display.Width, display.Height);
-        var fit = Resolutions.BestFit(display.Width, display.Height, environment.DesktopWidth, environment.DesktopHeight);
+        var screen = Resolutions.ScreenFor(display.Mode, new Resolution(environment.DesktopWidth, environment.DesktopHeight), new Resolution(environment.VirtualDesktopWidth, environment.VirtualDesktopHeight));
+        var fit = Resolutions.BestFit(display.Width, display.Height, screen.Width, screen.Height);
         return new UiViewport(fit.Result.Width, fit.Result.Height);
     }
 

@@ -16,6 +16,10 @@ public interface IShellEnvironment
     int DesktopWidth { get; }
     int DesktopHeight { get; }
 
+    /// <summary>The size of the whole virtual desktop, all monitors together (the bound of a window's size); the display's own desktop by default.</summary>
+    int VirtualDesktopWidth => DesktopWidth;
+    int VirtualDesktopHeight => DesktopHeight;
+
     /// <summary>Where <see cref="CnCNew.Game.Save.SaveGameStore"/> keeps <c>.cncsave</c> files. Defaults to a <c>Saves</c>
     /// subdirectory of <see cref="SettingsDirectory"/> so a host that only configures settings still gets a working store.</summary>
     string SaveDirectory => Path.Combine(SettingsDirectory, "Saves");
@@ -23,7 +27,7 @@ public interface IShellEnvironment
     /// <summary>Where <see cref="CnCNew.Game.Replays.ReplayStore"/> keeps the <c>.cncreplay</c> files the client records: a <c>Replays</c> subdirectory beside the savegames.</summary>
     string ReplayDirectory => Path.Combine(SettingsDirectory, "Replays");
 
-    /// <summary>The sizes the display's adapter lists as modes (<c>Resolutions.Offered</c> adds them to what fits the desktop); none by default, when only the desktop's size is known.</summary>
+    /// <summary>The sizes the display's adapter lists as modes (<c>Resolutions.Offered</c> adds those that fit the screen); none by default, when only the desktop's size is known.</summary>
     IReadOnlyList<(int Width, int Height)> DisplayModes => [];
 
     /// <summary>The names of the machine's sound output devices the options offer beside the system's default (docs/UI-MODERN.md section 7); none by default.</summary>
@@ -31,13 +35,15 @@ public interface IShellEnvironment
 }
 
 /// <summary>A fixed-size desktop backed by a caller-chosen directory (used by tests and by any host that already knows its screen size).</summary>
-public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null, IReadOnlyList<string>? audioDevices = null, IReadOnlyList<(int Width, int Height)>? displayModes = null) : IShellEnvironment
+public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null, IReadOnlyList<string>? audioDevices = null, IReadOnlyList<(int Width, int Height)>? displayModes = null, int virtualDesktopWidth = 0, int virtualDesktopHeight = 0) : IShellEnvironment
 {
     public IReadOnlyList<(int Width, int Height)> DisplayModes { get; } = displayModes ?? [];
     public IReadOnlyList<string> AudioDevices { get; } = audioDevices ?? [];
     public string SettingsDirectory { get; } = settingsDirectory;
     public int DesktopWidth { get; } = desktopWidth;
     public int DesktopHeight { get; } = desktopHeight;
+    public int VirtualDesktopWidth { get; } = virtualDesktopWidth > 0 ? virtualDesktopWidth : desktopWidth;
+    public int VirtualDesktopHeight { get; } = virtualDesktopHeight > 0 ? virtualDesktopHeight : desktopHeight;
     public string SaveDirectory { get; } = saveDirectory ?? Path.Combine(settingsDirectory, "Saves");
     public string ReplayDirectory { get; } = Path.Combine(settingsDirectory, "Replays");
 }

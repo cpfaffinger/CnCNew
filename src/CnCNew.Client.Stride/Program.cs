@@ -597,11 +597,11 @@ internal sealed class CnCNewGame(
             var displayFacts = DisplayFacts();
             var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };
             _runtime = ClientRuntime.ForShell(this, data, shellRun?.SettingsDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
-                ShellSkirmishAi, network, shellRun?.Script, displayFacts.Desktop, displayFacts.Modes);
+                ShellSkirmishAi, network, shellRun?.Script, displayFacts.Desktop, displayFacts.Modes, displayFacts.VirtualDesktop);
             if (shellRun?.Script is not null) _shellWatch.Start();
             // The display mode the settings keep is the one the window opens in: applied with the first frame (a scripted or smoke run keeps the size of its command line).
             if (shellRun?.Script is null && !smokeTest) _runtime.RequestSavedDisplay(new CnCNew.Ui.Settings.Resolution(displayFacts.Desktop.Width, displayFacts.Desktop.Height),
-                [.. displayFacts.Modes.Select(mode => new CnCNew.Ui.Settings.Resolution(mode.Width, mode.Height))], WindowSizeGiven);
+                [.. displayFacts.Modes.Select(mode => new CnCNew.Ui.Settings.Resolution(mode.Width, mode.Height))], WindowSizeGiven, new CnCNew.Ui.Settings.Resolution(displayFacts.VirtualDesktop.Width, displayFacts.VirtualDesktop.Height));
             CnCNew.Client.Stride.StartupClock.Note($"shell built; {_splashFrames} start-screen frames were drawn while the data loaded");
             _splash?.Dispose();
             _splash = null;
@@ -802,23 +802,28 @@ internal sealed class CnCNewGame(
     /// What the options need to know about the screen: the desktop's size (the display the window is on, the window's own size when no display can be asked) and the sizes the
     /// adapter lists as display modes - the sizes of a monitor, not of the window that happens to be open.
     /// </summary>
-    private ((int Width, int Height) Desktop, IReadOnlyList<(int Width, int Height)> Modes) DisplayFacts()
+    private ((int Width, int Height) Desktop, IReadOnlyList<(int Width, int Height)> Modes, (int Width, int Height) VirtualDesktop) DisplayFacts()
     {
         var back = GraphicsDevice.Presenter.BackBuffer;
         try
         {
             var outputs = GraphicsDevice.Adapter.Outputs;
-            if (outputs.Length == 0) return ((back.Width, back.Height), []);
+            if (outputs.Length == 0) return ((back.Width, back.Height), [], (back.Width, back.Height));
             var bounds = DesktopUnderTheWindow() ?? outputs[0].DesktopBounds;
             var output = outputs.FirstOrDefault(candidate => candidate.DesktopBounds == bounds) ?? outputs[0];
             var modes = output.SupportedDisplayModes.Select(mode => (mode.Width, mode.Height)).Distinct().OrderBy(size => size.Width).ThenBy(size => size.Height).ToArray();
-            Console.WriteLine($"display: desktop {bounds.Width}x{bounds.Height}, {modes.Length} display modes of the adapter");
-            return ((bounds.Width, bounds.Height), modes);
+            // The bound of a window's size: the box around every monitor of the adapter (side by side, 2 x 1920x1080 is 3840x1080).
+            var left = outputs.Min(candidate => candidate.DesktopBounds.Left);
+            var top = outputs.Min(candidate => candidate.DesktopBounds.Top);
+            var right = outputs.Max(candidate => candidate.DesktopBounds.Right);
+            var bottom = outputs.Max(candidate => candidate.DesktopBounds.Bottom);
+            Console.WriteLine($"display: desktop {bounds.Width}x{bounds.Height}, all monitors {right - left}x{bottom - top}, {modes.Length} display modes of the adapter");
+            return ((bounds.Width, bounds.Height), modes, (right - left, bottom - top));
         }
         catch (Exception exception) when (exception is InvalidOperationException or NullReferenceException or NotSupportedException)
         {
             Console.Error.WriteLine($"warning: the display's modes cannot be listed ({exception.Message}); the options offer the standard sizes up to the window's.");
-            return ((back.Width, back.Height), []);
+            return ((back.Width, back.Height), [], (back.Width, back.Height));
         }
     }
 

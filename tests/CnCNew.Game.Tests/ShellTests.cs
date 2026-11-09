@@ -1227,7 +1227,12 @@ internal static class ShellTests
             TestHarness.Assert(Entries(window).All(entry => entry is "800 x 600" or "1024 x 768" or "1280 x 720") && !Entries(window).Contains("1920 x 1080"), "a small desktop offers its own sizes only");
             var modes = GameShell.Create(data, new FixedShellEnvironment(directory + "-m", 1920, 1080, displayModes: [(2560, 1440), (1920, 1080), (1280, 1024)]), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
             var withModes = Entries(modes);
-            TestHarness.Assert(withModes.Contains("2560 x 1440") && withModes.Contains("1280 x 1024") && withModes.Contains("1920 x 1080"), $"the adapter's own modes are offered ({string.Join(", ", withModes)})");
+            TestHarness.Assert(!withModes.Contains("2560 x 1440") && withModes.Contains("1280 x 1024") && withModes.Contains("1920 x 1080"), $"the adapter's own modes that fit the screen are offered, a larger one (a downscaling driver's) is not ({string.Join(", ", withModes)})");
+            TestHarness.Assert(withModes.All(entry => { var parts = entry.Split(" x "); return int.Parse(parts[0]) <= 1920 && int.Parse(parts[1]) <= 1080; }), "no size is wider or taller than the 1920 x 1080 screen");
+            // Two monitors side by side: a window may be as large as both together; a full screen only as large as its own display.
+            var twin = GameShell.Create(data, new FixedShellEnvironment(directory + "-t", 1920, 1080, virtualDesktopWidth: 3840, virtualDesktopHeight: 1080), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            var twinEntries = Entries(twin);
+            TestHarness.Assert(twinEntries.Contains("3840 x 1080") && twinEntries.Contains("2560 x 1080") && !twinEntries.Contains("3840 x 1600") && !twinEntries.Contains("3840 x 2160"), $"two 1920 x 1080 monitors offer 3840 x 1080 for a window and nothing taller ({string.Join(", ", twinEntries)})");
 
             // A size the display does not offer (the setting was made on a larger monitor) is shown as what it falls back to.
             var store = new CnCNew.Ui.Settings.SettingsStore(directory + "-s");
@@ -1240,7 +1245,7 @@ internal static class ShellTests
         }
         finally
         {
-            foreach (var suffix in new[] { "", "-w", "-m", "-s" })
+            foreach (var suffix in new[] { "", "-w", "-m", "-s", "-t" })
                 if (Directory.Exists(directory + suffix)) Directory.Delete(directory + suffix, recursive: true);
         }
     }
