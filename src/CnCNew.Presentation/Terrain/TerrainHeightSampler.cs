@@ -15,7 +15,7 @@ public sealed class TerrainHeightSampler
     public const float CellSize = 10f;
     public const float HeightScale = 0.625f;
 
-    private readonly ImmutableArray<byte> _heights;
+    private readonly byte[] _heights;
 
     public TerrainHeightSampler(MapHeightField field)
     {
@@ -23,7 +23,7 @@ public sealed class TerrainHeightSampler
         if (field.Width < 2 || field.Height < 2) throw new InvalidDataException("A map needs at least 2x2 height vertices.");
         if (field.Heights.Length != field.Width * field.Height) throw new InvalidDataException("Height field size does not match its dimensions.");
         if (field.Boundaries.IsDefaultOrEmpty) throw new InvalidDataException("The map has no boundary.");
-        _heights = field.Heights;
+        _heights = [..field.Heights];
         VertexWidth = field.Width;
         VertexHeight = field.Height;
         Border = field.Border;
@@ -62,7 +62,8 @@ public sealed class TerrainHeightSampler
     /// <summary><c>W3DTerrainLogic::getExtent</c>: the extent of one boundary (the active one is 0 unless a script switches it).</summary>
     public Vector2 BoundaryMax(int index) => Boundaries[index];
 
-    public float MinHeight { get; }
+    /// <summary>The lowest height of the field now; it goes down when a building flattens its site (<see cref="ReplaceHeights"/>).</summary>
+    public float MinHeight { get; private set; }
     public float MaxHeight { get; }
 
     /// <summary>World rectangle of the whole height field, border included.</summary>
@@ -71,6 +72,19 @@ public sealed class TerrainHeightSampler
 
     /// <summary>World rectangle of the playable area: (0, 0) to the logical extent.</summary>
     public Vector2 PlayableMax => new(PlayableCellsX * CellSize, PlayableCellsY * CellSize);
+
+    /// <summary>
+    /// The heights the simulation's terrain has now (<c>TerrainMap.CopyRawHeights</c>): a building lowers the ground under it, and the camera, the objects and the minimap stand on the same
+    /// ground as the simulation. The field keeps its size.
+    /// </summary>
+    public void ReplaceHeights(ReadOnlySpan<byte> raw)
+    {
+        if (raw.Length != _heights.Length) throw new ArgumentException("The heights do not fit the field.", nameof(raw));
+        raw.CopyTo(_heights);
+        var min = byte.MaxValue;
+        foreach (var height in _heights) min = Math.Min(min, height);
+        MinHeight = min * HeightScale;
+    }
 
     public byte RawHeight(int vertexX, int vertexY) => _heights[vertexY * VertexWidth + vertexX];
 

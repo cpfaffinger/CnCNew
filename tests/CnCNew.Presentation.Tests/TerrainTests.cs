@@ -29,6 +29,7 @@ internal static class TerrainTests
         t.Run("standing water and river meshes", Water);
         t.Run("atlas mip chain", MipChain);
         t.Run("builds are deterministic", Deterministic);
+        t.Run("reshaping after a building flattens its site", ReshapeAfterFlattening);
         return t.Failures;
     }
 
@@ -268,6 +269,47 @@ internal static class TerrainTests
         var solid = new TerrainAtlas(2, 2, [10, 20, 30, 255, 30, 40, 50, 255, 50, 60, 70, 255, 70, 80, 90, 255]);
         Assert(solid.BuildMipChain()[1].Rgba.SequenceEqual(new byte[] { 40, 50, 60, 255 }), "box filter");
     }
+
+    /// <summary>
+    /// A building lowers the ground under it. The model made again from the lowered heights equals the model built from them in the first place - in every chunk - and keeps
+    /// the chunks the change does not reach as they were.
+    /// </summary>
+    private static void ReshapeAfterFlattening()
+    {
+        const int Width = 70, Height = 70, Border = 2;
+        byte Hill(int x, int y) => (byte)(60 + (x * 7 + y * 3) % 40);
+        var options = SyntheticTerrain.Options() with { ChunkCells = 16 };
+        var tiles = Enumerable.Range(0, Width * Height).Select(index => (short)((index % 5) * 4 + (index % 3))).ToArray();
+        var map = SyntheticTerrain.Map(Width, Height, Border, Hill, tiles: tiles);
+        var model = TerrainRenderModel.Build(map, SyntheticTerrain.Lookup(), options);
+
+        // A 6 x 5 block around vertex (40, 20) is levelled to the lowest height in it; one chunk edge (x 32) lies near it.
+        var lowered = map.HeightField.Heights.ToArray();
+        for (var y = 18; y <= 22; y++)
+            for (var x = 37; x <= 42; x++) lowered[y * Width + x] = 62;
+        var reshaped = model.Reshape(lowered, out var changed);
+        var expected = TerrainRenderModel.Build(map with { HeightField = map.HeightField with { Heights = [..lowered] } }, SyntheticTerrain.Lookup(), options);
+
+        Assert(changed.Length > 0 && changed.Length < model.Chunks.Length, $"only the chunks near the block are made again ({changed.Length} of {model.Chunks.Length})");
+        for (var i = 0; i < expected.Chunks.Length; i++)
+        {
+            var (a, b) = (reshaped.Chunks[i], expected.Chunks[i]);
+            Assert(SameMesh(a.Base, b.Base) && a.Bounds == b.Bounds && (a.Blend is null) == (b.Blend is null) && (a.Blend is null || SameMesh(a.Blend, b.Blend!))
+                && (a.ExtraBlend is null) == (b.ExtraBlend is null) && (a.ExtraBlend is null || SameMesh(a.ExtraBlend, b.ExtraBlend!)), $"chunk {i} equals the model built on the lowered ground");
+            Assert(changed.Contains(i) || ReferenceEquals(a, model.Chunks[i]), $"chunk {i} that the change does not reach is the one it was");
+        }
+        Assert(!SameMesh(reshaped.Chunks[changed[0]].Base, model.Chunks[changed[0]].Base), "a chunk that was made again looks different");
+        Assert(ReferenceEquals(reshaped.Atlas, model.Atlas), "the atlas is shared");
+        // A second change goes on from the first.
+        for (var x = 10; x <= 12; x++) lowered[40 * Width + x] = 55;
+        var again = reshaped.Reshape(lowered, out _);
+        var expectedAgain = TerrainRenderModel.Build(map with { HeightField = map.HeightField with { Heights = [..lowered] } }, SyntheticTerrain.Lookup(), options);
+        Assert(again.Chunks.Zip(expectedAgain.Chunks).All(pair => SameMesh(pair.First.Base, pair.Second.Base)), "a second change goes on from the first");
+        Assert(model.Reshape(map.HeightField.Heights.ToArray(), out var none).Chunks.SequenceEqual(model.Chunks) && none.IsEmpty, "heights that did not change change nothing");
+    }
+
+    private static bool SameMesh(TerrainMesh a, TerrainMesh b)
+        => a.Positions.SequenceEqual(b.Positions) && a.Normals.SequenceEqual(b.Normals) && a.Colors.SequenceEqual(b.Colors) && a.Uv.SequenceEqual(b.Uv) && a.Indices.SequenceEqual(b.Indices);
 
     private static void Deterministic()
     {

@@ -116,6 +116,9 @@ public sealed record TerrainRenderModel(
     ImmutableArray<TerrainTextureIssue> TextureIssues,
     TerrainRenderStats Stats)
 {
+    // What made the model: the atlas places, the blend tiles and the heights it stands on. A building lowers the ground; Reshape makes the chunks it touches again from it.
+    private Builder? _source;
+
     public int CellsX => VertexWidth - 1;
     public int CellsY => VertexHeight - 1;
 
@@ -123,6 +126,22 @@ public sealed record TerrainRenderModel(
 
     /// <summary>Average base-tile colour of height cell (x, y) (<c>WorldHeightMap::getTerrainColorAt</c>); height cells include the border.</summary>
     public Rgba32 CellColor(int cellX, int cellY) => CellColors[cellY * CellsX + cellX];
+
+    /// <summary>
+    /// The model on other heights: a building lowers the ground under it, and <paramref name="heights"/> (one byte per vertex of the field, as the simulation's terrain holds them)
+    /// differ from the ones this model stands on in a few vertices. The chunks those vertices touch are made again - with the geometry, the normals and the static lighting of the new
+    /// ground - and the others are the same objects; <paramref name="changed"/> names the indices of the new ones. The atlas is shared. The result is what <see cref="Build"/> would
+    /// make of the map with these heights, chunk for chunk.
+    /// </summary>
+    public TerrainRenderModel Reshape(byte[] heights, out ImmutableArray<int> changed)
+    {
+        ArgumentNullException.ThrowIfNull(heights);
+        var source = _source ?? throw new InvalidOperationException("This model was not built by Build and cannot be reshaped.");
+        if (heights.Length != VertexWidth * VertexHeight) throw new ArgumentException("The heights do not fit the field.", nameof(heights));
+        var (next, chunks) = source.Reshape(heights, ChunkCells, ChunksX, Chunks, out var made);
+        changed = chunks;
+        return this with { Chunks = made, _source = next };
+    }
 
     public static TerrainRenderModel Build(MapData map, TerrainTextureLookup textures, TerrainRenderOptions options, string name = "")
     {
@@ -153,6 +172,7 @@ public sealed record TerrainRenderModel(
         private TerrainAtlasRegion?[] _classRegions = [];
         private TerrainAtlas _atlas = null!;
         private int _stretched, _cliffMapped, _missingCells, _invalidTiles, _mirrored, _idField;
+        private int _blendCells, _extraCells, _customEdge, _cliffCells, _flipped;
 
         public Builder(MapData map, TerrainTextureLookup textures, TerrainRenderOptions options)
         {
@@ -169,18 +189,61 @@ public sealed record TerrainRenderModel(
                 throw new InvalidDataException("Blend tile arrays do not match the height field.");
         }
 
-        public TerrainRenderModel Run(string name)
+        /// <summary>The same map on other heights: the atlas and its places are those of <paramref name="source"/>, nothing of it is made again.</summary>
+        private Builder(Builder source, byte[] heights)
+            : this(source._map with { HeightField = source._field with { Heights = [..heights] } }, source._textures, source._options)
         {
-            BuildAtlas();
-            var normals = new Vector3[_width * _height];
-            var colors = new Rgba32[_width * _height];
+            _atlas = source._atlas;
+            _classRegions = source._classRegions;
+        }
+
+        public byte[] HeightsCopy() => _field.Heights.ToArray();
+
+        /// <summary>The model with the chunks that the change from <see cref="_field"/>'s heights to <paramref name="heights"/> touches made again, and their indices.</summary>
+        public (Builder Next, ImmutableArray<int> Chunks) Reshape(byte[] heights, int chunkCells, int chunksX, ImmutableArray<TerrainChunk> old, out ImmutableArray<TerrainChunk> chunks)
+        {
+            var next = new Builder(this, heights);
+            // A vertex that moved changes the cells around it, and the normals of its neighbours (central differences) change the lighting of the cells around those: two cells each way.
+            var touched = new SortedSet<int>();
             for (var y = 0; y < _height; y++)
                 for (var x = 0; x < _width; x++)
+                {
+                    if (_field.Heights[y * _width + x] == heights[y * _width + x]) continue;
+                    for (var cy = Math.Max(0, y - 2); cy <= Math.Min(_height - 2, y + 1); cy++)
+                        for (var cx = Math.Max(0, x - 2); cx <= Math.Min(_width - 2, x + 1); cx++)
+                            touched.Add(cy / chunkCells * chunksX + cx / chunkCells);
+                }
+            var normals = new Vector3[_width * _height];
+            var colors = new Rgba32[_width * _height];
+            var result = old.ToBuilder();
+            foreach (var index in touched)
+            {
+                var (chunkX, chunkY) = (index % chunksX, index / chunksX);
+                next.ShadeVertices(normals, colors, chunkX * chunkCells - 1, chunkY * chunkCells - 1, (chunkX + 1) * chunkCells + 1, (chunkY + 1) * chunkCells + 1);
+                result[index] = next.BuildChunk(chunkX, chunkY, chunkCells, normals, colors);
+            }
+            chunks = result.ToImmutable();
+            return (next, [..touched]);
+        }
+
+        /// <summary>The normals and the static lighting of the vertices in a rectangle of the field (inclusive, cut to the field).</summary>
+        private void ShadeVertices(Vector3[] normals, Rgba32[] colors, int firstX, int firstY, int lastX, int lastY)
+        {
+            for (var y = Math.Max(0, firstY); y <= Math.Min(_height - 1, lastY); y++)
+                for (var x = Math.Max(0, firstX); x <= Math.Min(_width - 1, lastX); x++)
                 {
                     var normal = VertexNormal(x, y);
                     normals[y * _width + x] = normal;
                     colors[y * _width + x] = Rgba32.FromUnit(_options.Lighting.Shade(normal), 255);
                 }
+        }
+
+        public TerrainRenderModel Run(string name)
+        {
+            BuildAtlas();
+            var normals = new Vector3[_width * _height];
+            var colors = new Rgba32[_width * _height];
+            ShadeVertices(normals, colors, 0, 0, _width - 1, _height - 1);
 
             var cellsX = _width - 1;
             var cellsY = _height - 1;
@@ -188,47 +251,9 @@ public sealed record TerrainRenderModel(
             var chunksX = (cellsX + chunkCells - 1) / chunkCells;
             var chunksY = (cellsY + chunkCells - 1) / chunkCells;
             var chunks = ImmutableArray.CreateBuilder<TerrainChunk>(chunksX * chunksY);
-            int blendCells = 0, extraCells = 0, customEdge = 0, cliffCells = 0, flipped = 0;
-            Span<float> u = stackalloc float[4];
-            Span<float> v = stackalloc float[4];
-            Span<float> blendU = stackalloc float[4];
-            Span<float> blendV = stackalloc float[4];
-            Span<byte> alpha = stackalloc byte[4];
             for (var chunkY = 0; chunkY < chunksY; chunkY++)
                 for (var chunkX = 0; chunkX < chunksX; chunkX++)
-                {
-                    var firstX = chunkX * chunkCells;
-                    var firstY = chunkY * chunkCells;
-                    var countX = Math.Min(chunkCells, cellsX - firstX);
-                    var countY = Math.Min(chunkCells, cellsY - firstY);
-                    var basePass = new MeshBuilder();
-                    var blendPass = new MeshBuilder();
-                    var extraPass = new MeshBuilder();
-                    for (var y = firstY; y < firstY + countY; y++)
-                        for (var x = firstX; x < firstX + countX; x++)
-                        {
-                            var ndx = y * _width + x;
-                            if (_blend.IsCliff(x, y)) cliffCells++;
-                            var baseStretched = UvForTile(ndx, _blend.Tiles[ndx], true, u, v);
-                            var flip = AlphaUvData(ndx, baseStretched, blendU, blendV, alpha, out var blendKind);
-                            if (flip) flipped++;
-                            if (blendKind == BlendKind.CustomEdge) customEdge++;
-                            basePass.AddCell(this, x, y, u, v, [255, 255, 255, 255], flip, normals, colors);
-                            if (blendKind == BlendKind.Alpha)
-                            {
-                                blendCells++;
-                                blendPass.AddCell(this, x, y, blendU, blendV, alpha, flip, normals, colors);
-                            }
-                            if (_options.Use3WayBlends && ExtraAlphaUvData(ndx, x, y, blendU, blendV, alpha, out var extraFlip))
-                            {
-                                extraCells++;
-                                extraPass.AddCell(this, x, y, blendU, blendV, alpha, extraFlip, normals, colors);
-                            }
-                        }
-                    var baseMesh = basePass.ToMesh();
-                    chunks.Add(new TerrainChunk(chunkX, chunkY, firstX, firstY, countX, countY, Aabb.FromPoints(baseMesh.Positions.AsSpan()),
-                        baseMesh, blendPass.IsEmpty ? null : blendPass.ToMesh(), extraPass.IsEmpty ? null : extraPass.ToMesh()));
-                }
+                    chunks.Add(BuildChunk(chunkX, chunkY, chunkCells, normals, colors));
 
             var water = _options.Water is { } appearance ? WaterSurfaceBuilder.Build(_map, appearance) : [];
             var chunkList = chunks.MoveToImmutable();
@@ -237,17 +262,17 @@ public sealed record TerrainRenderModel(
                 cellsX * cellsY,
                 chunkList.Sum(chunk => chunk.Base.VertexCount),
                 chunkList.Sum(chunk => chunk.Base.TriangleCount),
-                blendCells,
+                _blendCells,
                 chunkList.Sum(chunk => chunk.Blend?.VertexCount ?? 0),
                 chunkList.Sum(chunk => chunk.Blend?.TriangleCount ?? 0),
-                extraCells,
+                _extraCells,
                 chunkList.Sum(chunk => chunk.ExtraBlend?.VertexCount ?? 0),
                 chunkList.Sum(chunk => chunk.ExtraBlend?.TriangleCount ?? 0),
-                customEdge,
-                cliffCells,
+                _customEdge,
+                _cliffCells,
                 _cliffMapped,
                 _stretched,
-                flipped,
+                _flipped,
                 _missingCells,
                 _invalidTiles,
                 _blend.TextureClasses.Length,
@@ -261,7 +286,51 @@ public sealed record TerrainRenderModel(
 
             return new TerrainRenderModel(name, _width, _height, _field.Border, chunkCells, chunksX, chunksY, _atlas,
                 [.._classRegions.Where(region => region is not null).Select(region => region!)],
-                chunkList, water, CellColorsFromAtlas(), [.._issues], stats);
+                chunkList, water, CellColorsFromAtlas(), [.._issues], stats)
+            { _source = this };
+        }
+
+        /// <summary>One chunk of 32 x 32 cells at most: the base pass, the blend pass and the 3-way pass of its cells (<c>updateVB</c>).</summary>
+        private TerrainChunk BuildChunk(int chunkX, int chunkY, int chunkCells, Vector3[] normals, Rgba32[] colors)
+        {
+            var cellsX = _width - 1;
+            var cellsY = _height - 1;
+            Span<float> u = stackalloc float[4];
+            Span<float> v = stackalloc float[4];
+            Span<float> blendU = stackalloc float[4];
+            Span<float> blendV = stackalloc float[4];
+            Span<byte> alpha = stackalloc byte[4];
+            var firstX = chunkX * chunkCells;
+            var firstY = chunkY * chunkCells;
+            var countX = Math.Min(chunkCells, cellsX - firstX);
+            var countY = Math.Min(chunkCells, cellsY - firstY);
+            var basePass = new MeshBuilder();
+            var blendPass = new MeshBuilder();
+            var extraPass = new MeshBuilder();
+            for (var y = firstY; y < firstY + countY; y++)
+                for (var x = firstX; x < firstX + countX; x++)
+                {
+                    var ndx = y * _width + x;
+                    if (_blend.IsCliff(x, y)) _cliffCells++;
+                    var baseStretched = UvForTile(ndx, _blend.Tiles[ndx], true, u, v);
+                    var flip = AlphaUvData(ndx, baseStretched, blendU, blendV, alpha, out var blendKind);
+                    if (flip) _flipped++;
+                    if (blendKind == BlendKind.CustomEdge) _customEdge++;
+                    basePass.AddCell(this, x, y, u, v, [255, 255, 255, 255], flip, normals, colors);
+                    if (blendKind == BlendKind.Alpha)
+                    {
+                        _blendCells++;
+                        blendPass.AddCell(this, x, y, blendU, blendV, alpha, flip, normals, colors);
+                    }
+                    if (_options.Use3WayBlends && ExtraAlphaUvData(ndx, x, y, blendU, blendV, alpha, out var extraFlip))
+                    {
+                        _extraCells++;
+                        extraPass.AddCell(this, x, y, blendU, blendV, alpha, extraFlip, normals, colors);
+                    }
+                }
+            var baseMesh = basePass.ToMesh();
+            return new TerrainChunk(chunkX, chunkY, firstX, firstY, countX, countY, Aabb.FromPoints(baseMesh.Positions.AsSpan()),
+                baseMesh, blendPass.IsEmpty ? null : blendPass.ToMesh(), extraPass.IsEmpty ? null : extraPass.ToMesh());
         }
 
         // ------------------------------------------------------------------ atlas
