@@ -997,6 +997,7 @@ internal sealed class ClientRuntime : IDisposable
                 {
                     running.Hud.Retaliation = changed.Settings.Controls.Retaliation;
                     running.Hud.ApplyHotkeys(changed.Settings);
+                    running.Hud.ApplyDisplayOptions(changed.Settings);
                 }
                 _audio.Game.ApplySettings(changed.Settings.Audio);
                 _audio.SwitchDevice(changed.Settings.Audio.Device);

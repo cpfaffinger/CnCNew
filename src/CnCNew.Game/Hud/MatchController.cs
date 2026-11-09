@@ -13,6 +13,7 @@ using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Settings;
 using CnCNew.Ui.Wnd;
 using UiScaleMode = CnCNew.Ui.Layout.UiScaleMode;
 using SettingsScaleMode = CnCNew.Ui.Settings.UiScaleMode;
@@ -92,6 +93,7 @@ public sealed partial class MatchController
             TextScale = settings.Accessibility.UiTextScalePercent / 100m,
         });
         match.Camera.KeepVerticalView = settings.Display.Aspect == AspectHandling.KeepVertical;
+        ApplyDisplayOptions(settings);
         var viewport = new UiViewport(Math.Max(1, (int)match.Camera.ViewportSize.X), Math.Max(1, (int)match.Camera.ViewportSize.Y));
         _tree = new UiWindowTree(viewport, _scaleOptions, services);
         _tree.TooltipOverride = CommandButtonTooltip;
@@ -99,7 +101,7 @@ public sealed partial class MatchController
         // The modern skin keeps the bar's pictures (cameos, portraits, the small buttons) and changes their type; the band around them is its own (ModernControlBar). The in-game menu is drawn like the shell's dialogs.
         var controlBarRoots = _tree.AddLayout(Skin.Derive(_assets.ControlBar, _assets.HeaderTemplates, keepArt: true));
         _controlBarRoot = controlBarRoots.Single(window => window.Name == "ControlBar.wnd:ControlBarParent");
-        _modernBar = Skin.IsModern ? new ModernControlBar(_tree, _controlBarRoot, Skin) : null;
+        _modernBar = Skin.IsModern ? new ModernControlBar(_tree, _controlBarRoot, Skin) { OpacityPercent = _barOpacityPercent } : null;
         if (_modernBar is not null) _tree.FindByName("ControlBar.wnd:ButtonGeneral")?.SetEnabledImage0(null);
         _leftHud = _tree.FindByName("ControlBar.wnd:LeftHUD") ?? throw new InvalidOperationException("ControlBar.wnd has no LeftHUD window.");
         // The retail file leaves the observer panels visible; this HUD is for the human player only.
@@ -632,6 +634,29 @@ public sealed partial class MatchController
         ArgumentNullException.ThrowIfNull(settings);
         Input.Hotkeys = _shippedHotkeys.ApplySettings(settings.Controls.Hotkeys);
     }
+
+    /// <summary>
+    /// The options of <c>display</c> that change how the HUD is drawn and take effect with the next frame: the opacity of the modern bar (<see cref="DisplaySettings.BarOpacityPercent"/>), the style
+    /// of the selection markers and which objects show a health bar and how thick (docs/GAME-HUD.md "Phase 65"). The skin itself is chosen when the controller is made.
+    /// </summary>
+    public void ApplyDisplayOptions(GameSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        BarOpacityPercent = settings.Display.BarOpacityPercent;
+        MarkerStyle = settings.Display.MarkerStyle;
+        HealthBars = settings.Display.HealthBars;
+        HealthBarThickness = settings.Display.HealthBarThickness;
+    }
+
+    public int BarOpacityPercent { get => _modernBar?.OpacityPercent ?? _barOpacityPercent; private set { _barOpacityPercent = value; if (_modernBar is not null) _modernBar.OpacityPercent = value; } }
+
+    private int _barOpacityPercent = DisplaySettings.DefaultBarOpacityPercent;
+
+    public SelectionMarkerStyle MarkerStyle { get; private set; }
+
+    public HealthBarMode HealthBars { get; private set; }
+
+    public HealthBarHeight HealthBarThickness { get; private set; }
 
     /// <summary>The viewer's option "Retaliation" (<see cref="CnCNew.Ui.Settings.ControlSettings.Retaliation"/>); the match follows it within a second.</summary>
     public bool Retaliation { get; set; }

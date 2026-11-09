@@ -26,8 +26,25 @@ public sealed class MoreOptionsScreen : ShellScreen
     /// <summary>The rows of choices in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
     public static readonly ImmutableArray<(string Row, string Label)> Rows =
     [
-        ("Skin", "Interface skin"), ("DisplayMode", "Display mode"), ("Aspect", "Wide-screen view"), ("TextScale", "Text size"), ("AudioDevice", "Sound device"), ("TickRate", "Simulation rate"),
+        ("Skin", "Interface skin"), ("BarOpacity", "Control bar opacity"), ("DisplayMode", "Display mode"), ("Aspect", "Wide-screen view"), ("TextScale", "Text size"),
+        ("MarkerStyle", "Selection markers"), ("HealthBarMode", "Health bars"), ("HealthBarHeight", "Health bar height"), ("AudioDevice", "Sound device"), ("TickRate", "Simulation rate"),
     ];
+
+    /// <summary>The rows whose control is a slider instead of a combo box (<c>Slider</c> + row name), with the value written beside it (<c>Value</c> + row name).</summary>
+    public static readonly ImmutableArray<string> SliderRows = ["BarOpacity"];
+
+    /// <summary>The opacity slider's range in percent (<see cref="DisplaySettings.MinimumBarOpacityPercent"/> to 100).</summary>
+    public const int OpacityMinimum = DisplaySettings.MinimumBarOpacityPercent, OpacityMaximum = 100;
+
+    /// <summary>Which markers the world shows for a selection: what the original draws, what this port drew before (the default), a flat modern one.</summary>
+    public static readonly ImmutableArray<(SelectionMarkerStyle Value, string Text)> MarkerStyleChoices =
+        [(SelectionMarkerStyle.Original, "As the original (health box)"), (SelectionMarkerStyle.Extended, "Extended (ring, brackets)"), (SelectionMarkerStyle.Modern, "Modern (flat, thin)")];
+
+    public static readonly ImmutableArray<(HealthBarMode Value, string Text)> HealthBarModeChoices =
+        [(HealthBarMode.AlwaysAuto, "Always shown"), (HealthBarMode.AlwaysBelowFull, "Always, when not at full health"), (HealthBarMode.SelectedOnly, "Only when selected")];
+
+    public static readonly ImmutableArray<(HealthBarHeight Value, string Text)> HealthBarHeightChoices =
+        [(HealthBarHeight.Narrow, "Narrow"), (HealthBarHeight.Normal, "Normal"), (HealthBarHeight.Wide, "Wide")];
 
     public static readonly ImmutableArray<(UiSkinName Value, string Text)> SkinChoices = [(UiSkinName.Original, "Original"), (UiSkinName.Modern, "Modern")];
 
@@ -74,6 +91,9 @@ public sealed class MoreOptionsScreen : ShellScreen
         Fill("TextScale", SettingsValidator.TextScales.Select(percent => $"{percent} %"));
         Fill("AudioDevice", _devices);
         Fill("TickRate", TickRateChoices.Select(choice => choice.Text));
+        Fill("MarkerStyle", MarkerStyleChoices.Select(choice => choice.Text));
+        Fill("HealthBarMode", HealthBarModeChoices.Select(choice => choice.Text));
+        Fill("HealthBarHeight", HealthBarHeightChoices.Select(choice => choice.Text));
         FillHotkeys();
         Refresh();
     }
@@ -263,7 +283,15 @@ public sealed class MoreOptionsScreen : ShellScreen
         // A device of the settings that is not there any more is shown as the default, which is what plays.
         W("ComboAudioDevice").SetComboSelection(Math.Max(0, _devices.IndexOf(_working.Audio.Device)));
         W("ComboTickRate").SetComboSelection(Math.Max(0, TickRateChoices.Select(choice => choice.Value).ToList().IndexOf(_working.General.TickRate)));
+        W("ComboMarkerStyle").SetComboSelection(MarkerStyleChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Display.MarkerStyle));
+        W("ComboHealthBarMode").SetComboSelection(HealthBarModeChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Display.HealthBars));
+        W("ComboHealthBarHeight").SetComboSelection(HealthBarHeightChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Display.HealthBarThickness));
+        W("SliderBarOpacity").SetSliderValue(_working.Display.BarOpacityPercent);
+        ShowOpacity();
     }
+
+    /// <summary>The opacity as the slider stands, in percent, written beside it.</summary>
+    private void ShowOpacity() => W("ValueBarOpacity").SetText($"{_working.Display.BarOpacityPercent} %");
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
@@ -272,6 +300,10 @@ public sealed class MoreOptionsScreen : ShellScreen
             case UiEventKind.ButtonSelected when e.Source == Name("ButtonAccept"): Accept(); break;
             case UiEventKind.ButtonSelected when e.Source == Name("ButtonDefaults"): Shell.PlaySound(ShellUiSounds.ButtonClick); RestoreHotkeyDefaults(); break;
             case UiEventKind.ListSelected when e.Source == Name("ListHotkeys"): Arm(e.Value); break;
+            case UiEventKind.SliderTrack or UiEventKind.SliderDone when e.Source == Name("SliderBarOpacity"):
+                _working = _working with { Display = _working.Display with { BarOpacityPercent = Math.Clamp(e.Value, OpacityMinimum, OpacityMaximum) } };
+                ShowOpacity();
+                break;
             case UiEventKind.ButtonSelected when e.Source == Name("ButtonBack"): Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.CloseTop(); break;
             case UiEventKind.ComboSelected when e.Value >= 0:
                 Choose(e.Source, e.Value);
@@ -287,6 +319,9 @@ public sealed class MoreOptionsScreen : ShellScreen
         else if (source == Name("ComboAspect") && index < AspectChoices.Length) _working = _working with { Display = _working.Display with { Aspect = AspectChoices[index].Value } };
         else if (source == Name("ComboTextScale") && index < SettingsValidator.TextScales.Length)
             _working = _working with { Accessibility = _working.Accessibility with { UiTextScalePercent = SettingsValidator.TextScales[index] } };
+        else if (source == Name("ComboMarkerStyle") && index < MarkerStyleChoices.Length) _working = _working with { Display = _working.Display with { MarkerStyle = MarkerStyleChoices[index].Value } };
+        else if (source == Name("ComboHealthBarMode") && index < HealthBarModeChoices.Length) _working = _working with { Display = _working.Display with { HealthBars = HealthBarModeChoices[index].Value } };
+        else if (source == Name("ComboHealthBarHeight") && index < HealthBarHeightChoices.Length) _working = _working with { Display = _working.Display with { HealthBarThickness = HealthBarHeightChoices[index].Value } };
         else if (source == Name("ComboTickRate") && index < TickRateChoices.Length) _working = _working with { General = _working.General with { TickRate = TickRateChoices[index].Value } };
         else if (source == Name("ComboAudioDevice") && index < _devices.Length) _working = _working with { Audio = _working.Audio with { Device = index == 0 ? "" : _devices[index] } };
     }
@@ -328,6 +363,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         var back = Find(options, "OptionsMenu.wnd:ButtonBack");
         var line = Find(options, "OptionsMenu.wnd:Line");
         var list = Find(mapSelect, "SkirmishMapSelectMenu.wnd:ListboxMap");
+        var slider = Find(options, "OptionsMenu.wnd:SliderMusicVolume");
         // The options' title is a static text without a name of its own at the panel's top left.
         var title = panel.Children.FirstOrDefault(child => child.Type == WndWindowType.StaticText && child.Rect.Left == 152 && child.Rect.Top == 21)
             ?? throw new InvalidDataException("OptionsMenu.wnd has no title static text at 152, 21.");
@@ -346,16 +382,22 @@ public sealed class MoreOptionsScreen : ShellScreen
         var children = ImmutableArray.CreateBuilder<WndWindow>();
         children.Add(Copy(title, "Title", title.Rect));
         children.Add(Copy(line, "Line", line.Rect));
-        const int first = 72, step = 34, height = 24;
+        const int first = 70, step = 28, height = 22;
         for (var index = 0; index < Rows.Length; index++)
         {
             var top = first + index * step;
             children.Add(Copy(label, "Label" + Rows[index].Row, At(152, top, 372, top + height)));
-            children.Add(Copy(combo, "Combo" + Rows[index].Row, At(380, top, 635, top + height)));
+            if (SliderRows.Contains(Rows[index].Row))
+            {
+                // The opacity: a slider of the options' own kind (a copy of the music volume's) with its value beside it.
+                children.Add(Copy(slider, "Slider" + Rows[index].Row, At(380, top, 560, top + height)) with { Slider = new WndSliderData(OpacityMinimum, OpacityMaximum) });
+                children.Add(Copy(label, "Value" + Rows[index].Row, At(570, top, 635, top + height)));
+            }
+            else children.Add(Copy(combo, "Combo" + Rows[index].Row, At(380, top, 635, top + height)));
         }
-        var hotkeysTop = first + Rows.Length * step + 8;
+        var hotkeysTop = first + Rows.Length * step + 6;
         children.Add(Copy(label, "HotkeysLabel", At(152, hotkeysTop, 470, hotkeysTop + height)));
-        children.Add(Copy(defaults, "ButtonDefaults", At(480, hotkeysTop, 635, hotkeysTop + height), keepText: true));
+        children.Add(Copy(defaults, "ButtonDefaults", At(480, hotkeysTop - 1, 635, hotkeysTop + height + 1), keepText: true));
         children.Add(Copy(label, "HotkeysStatus", At(152, 494, 635, 516)));
         var hotkeys = Copy(list, "ListHotkeys", At(152, hotkeysTop + height + 4, 635, 490));
         hotkeys = hotkeys with { ListBox = hotkeys.ListBox! with { Columns = 2, ColumnWidthPercentages = [68, 32], MultiSelect = false, ForceSelect = false } };

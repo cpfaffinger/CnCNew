@@ -50,6 +50,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(StructureGroupTests), StructureGroupTests.Run),
     (nameof(SiteWorkTests), SiteWorkTests.Run),
     (nameof(DozerOrdersTests), DozerOrdersTests.Run),
+    (nameof(HudDisplayOptionsTests), HudDisplayOptionsTests.Run),
     (nameof(ProductSurveyTests), ProductSurveyTests.Run),
     (nameof(FuelAirBombTests), FuelAirBombTests.Run),
 ];

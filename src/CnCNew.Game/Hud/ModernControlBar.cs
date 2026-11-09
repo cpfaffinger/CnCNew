@@ -39,6 +39,14 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     private static readonly ImmutableHashSet<string> LeftSide =
         [Prefix + "LeftHUD", Prefix + "ButtonOptions", Prefix + "ButtonIdleWorker", Prefix + "ButtonPlaceBeacon", Prefix + "PopupCommunicator", Prefix + "WinUAttack", Prefix + "MoneyDisplay"];
 
+    /// <summary>
+    /// How opaque the band and the wells behind the bar's buttons are, in percent (<c>display.barOpacity</c>, 20 to 100): the world shows through the rest. The buttons, cameos, the radar
+    /// and the text are never translucent.
+    /// </summary>
+    public int OpacityPercent { get; set; } = CnCNew.Ui.Settings.DisplaySettings.DefaultBarOpacityPercent;
+
+    private WndColor Faded(WndColor color) => color with { A = (byte)Math.Clamp((color.A * Math.Clamp(OpacityPercent, 0, 100) + 50) / 100, 0, 255) };
+
     private UiViewport _placed;
     private UiRect _band, _radarWell, _rightWell, _grid, _plate, _power;
 
@@ -100,16 +108,16 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
         var palette = skin.Style.Palette;
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         var well = ModernLayout.Well;
-        commands.Add(new UiFillRect(_band, palette.Canvas));
+        commands.Add(new UiFillRect(_band, Faded(palette.Canvas)));
         commands.Add(new UiFillRect(new UiRect(0, _band.Y, _band.Width, 1), palette.Border));
         commands.Add(new UiFillRect(new UiRect(0, _band.Y + 1, _band.Width, Math.Max(1, Scale(2))), palette.Panel));
-        foreach (var rect in new[] { _radarWell, _rightWell }) AddWell(commands, rect, well, palette.Border);
+        foreach (var rect in new[] { _radarWell, _rightWell }) AddWell(commands, rect, Faded(well), palette.Border);
         commands.Add(new UiFillRect(tree.FindByName(Prefix + "LeftHUD")!.Rect, new WndColor(0, 0, 0, 255)));
         for (var slot = 1; slot <= CnCNew.Presentation.Input.CommandBarModel.GridSlots; slot++)
-            if (tree.FindByName($"{Prefix}ButtonCommand{slot:00}") is { } button) AddWell(commands, button.Rect.Inset(-1), well, palette.Border);
+            if (tree.FindByName($"{Prefix}ButtonCommand{slot:00}") is { } button) AddWell(commands, button.Rect.Inset(-1), Faded(well), palette.Border);
         foreach (var name in new[] { "ButtonOptions", "ButtonIdleWorker", "ButtonPlaceBeacon", "PopupCommunicator" })
             if (tree.FindByName(Prefix + name) is { IsHidden: false } button) AddWell(commands, button.Rect, palette.Control, palette.Border);
-        if (HasPlate) AddWell(commands, _plate, well, palette.Border);
+        if (HasPlate) AddWell(commands, _plate, Faded(well), palette.Border);
         return commands.ToImmutable();
     }
 

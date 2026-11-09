@@ -209,7 +209,7 @@ internal static class SkinTests
         foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1440, 900), (1680, 1050), (1920, 1080), (1920, 1200), (2560, 1080), (2560, 1600), (3440, 1440) })
         {
             var commands = hud.BuildDrawList(width, height).Commands;
-            var band = commands.OfType<UiFillRect>().First(fill => fill.Color == ModernLayout.Palette.Canvas).Rect;
+            var band = commands.OfType<UiFillRect>().First(fill => fill.Color.R == ModernLayout.Palette.Canvas.R && fill.Color.G == ModernLayout.Palette.Canvas.G && fill.Color.B == ModernLayout.Palette.Canvas.B && fill.Rect.Width == width).Rect;
             TestHarness.Assert(band.X == 0 && band.Width == width && band.Bottom == height, $"{width}x{height}: the band spans the window ({band})");
             TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(image => image.Destination.Width > height), $"{width}x{height}: no picture is stretched along the band");
             var scale = Math.Min(width / 800.0, height / 600.0);
@@ -292,10 +292,20 @@ internal static class SkinTests
         shell = GameShell.Create(data, new FixedShellEnvironment(directory, audioDevices: ["Speakers (Test)", "Headphones (Test)"]), viewport: new UiViewport(NavWidth, NavHeight));
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonOptions");
         ShellTestInput.Click(shell, OptionsScreen.MoreOptionsButton);
+        // The bar's opacity is a slider of 20 to 100 percent that says its value beside it; the default is 80 %.
+        var moreTree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(moreTree.FindByName("MoreOptions.wnd:SliderBarOpacity")!.Slider is { Minimum: 20, Maximum: 100, Value: 80 } && moreTree.FindByName("MoreOptions.wnd:ValueBarOpacity")!.Text?.Value == "80 %", "the opacity slider starts at 80 %");
+        moreTree.Post(UiEventKind.SliderTrack, moreTree.FindByName("MoreOptions.wnd:SliderBarOpacity")!, value: 55);
         var script = ShellScript.Parse(
         [
             "wait screen MoreOptionsScreen",
             "expect combo MoreOptions.wnd:ComboSkin shows Modern",
+            "expect combo MoreOptions.wnd:ComboMarkerStyle shows Extended (ring, brackets)",
+            "expect combo MoreOptions.wnd:ComboHealthBarMode shows Only when selected",
+            "expect combo MoreOptions.wnd:ComboHealthBarHeight shows Normal",
+            "select MoreOptions.wnd:ComboMarkerStyle Modern (flat, thin)",
+            "select MoreOptions.wnd:ComboHealthBarMode Always, when not at full health",
+            "select MoreOptions.wnd:ComboHealthBarHeight Wide",
             "expect combo MoreOptions.wnd:ComboAudioDevice shows System default",
             "select MoreOptions.wnd:ComboSkin Original",
             "select MoreOptions.wnd:ComboDisplayMode Window without frame",
@@ -320,6 +330,8 @@ internal static class SkinTests
         var saved = new SettingsStore(directory).Load().Settings;
         TestHarness.Assert(saved.Display.Skin == UiSkinName.Original && saved.Display.Mode == DisplayMode.Borderless && saved.Display.Aspect == AspectHandling.KeepVertical
             && saved.Accessibility.UiTextScalePercent == 125 && saved.Audio.Device == "Headphones (Test)", $"More options saved what it showed ({saved.Display}, {saved.Accessibility}, {saved.Audio.Device})");
+        TestHarness.Assert(saved.Display.BarOpacityPercent == 55 && saved.Display.MarkerStyle == SelectionMarkerStyle.Modern && saved.Display.HealthBars == HealthBarMode.AlwaysBelowFull && saved.Display.HealthBarThickness == HealthBarHeight.Wide,
+            $"the bar opacity, the marker style and the health bars are saved ({saved.Display.BarOpacityPercent} %, {saved.Display.MarkerStyle}, {saved.Display.HealthBars}, {saved.Display.HealthBarThickness})");
         TestHarness.Assert(shell.ScaleOptions.TextScale == 1.25m && shell.CurrentScreen.Tree.Options.TextScale == 1.25m, "the text scale reaches the screens built again");
         TestHarness.Assert(shell.DrainOutputs().OfType<ApplyResolutionOutput>().Any(output => output.Mode == DisplayMode.Borderless), "the display mode goes to the host");
         Delete(directory);
