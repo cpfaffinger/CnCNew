@@ -5,6 +5,7 @@ namespace CnCNew.Launcher;
 
 public static partial class Hashing
 {
+    private const int BufferSize = 64 * 1024;
     /// <summary>The SHA-256 a checksum file states for <paramref name="fileName"/>: the usual <c>hash  name</c> lines, or a file holding only the hash. Null when it states none.</summary>
     public static string? ParseExpected(string checksumText, string fileName)
     {
@@ -24,7 +25,7 @@ public static partial class Hashing
 
     public static async Task<string> Sha256FileAsync(string path, CancellationToken cancellation = default)
     {
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
         return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellation).ConfigureAwait(false)).ToLowerInvariant();
     }
 

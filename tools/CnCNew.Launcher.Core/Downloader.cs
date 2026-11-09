@@ -10,6 +10,7 @@ public sealed class DownloadException(string message, Exception? inner = null) :
 /// <summary>Downloads a file to disk with progress. The file appears under its name only when it is complete; a broken transfer leaves nothing behind.</summary>
 public sealed class Downloader(HttpClient http)
 {
+    private const int BufferSize = 64 * 1024;
     public async Task DownloadAsync(string url, string destination, IProgress<TransferProgress>? progress, CancellationToken cancellation)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destination))!);
@@ -20,7 +21,7 @@ public sealed class Downloader(HttpClient http)
             if (!response.IsSuccessStatusCode) throw new DownloadException($"The download was refused ({(int)response.StatusCode}).");
             var total = response.Content.Headers.ContentLength;
             await using (var source = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false))
-            await using (var target = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, FileOptions.Asynchronous))
+            await using (var target = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous))
             {
                 var buffer = new byte[1 << 17];
                 long done = 0;
