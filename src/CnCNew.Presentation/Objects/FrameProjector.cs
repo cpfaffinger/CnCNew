@@ -141,6 +141,12 @@ public sealed class FrameProjector
 
     public int ClaimedScenery => _claimed.Count(value => value);
 
+    /// <summary>
+    /// Takes a scenery item off the map for good, as <c>W3DTreeBuffer::removeTreesForConstruction</c> takes a tree a building stands on: the same as an object of its own claiming it,
+    /// and it is not drawn, tested for exploration or counted again.
+    /// </summary>
+    public void RemoveScenery(int index) => _claimed[index] = true;
+
     /// <summary>Feeds the events of the tick that was just simulated (deaths, crushes, ...; the turrets need none, the simulation owns them); call before <see cref="Advance"/>.</summary>
     public void Observe(IEnumerable<SimEvent> events, SimulationWorld world)
     {

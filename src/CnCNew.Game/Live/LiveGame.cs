@@ -11,6 +11,7 @@ using CnCNew.Presentation.Objects;
 using CnCNew.Presentation.Terrain;
 using CnCNew.Presentation.Vision;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
@@ -99,7 +100,7 @@ public abstract class LiveGame
         var water = renderOptions.Water?.RadarColor ?? new Rgba32(100, 120, 140, 255);
         Minimap = MinimapImage.Build(TerrainModel, Heights, terrain, water, 256, bridges: WorkingBridges(world));
         Colors = TeamColors.Resolve(players, graph);
-        var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
+        var scenery = _scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         FogViewer = human;
         _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
@@ -161,7 +162,8 @@ public abstract class LiveGame
 
     /// <summary>Snow and rain are shown if the map has them (<c>SHOW_WEATHER</c>, <c>SnowManager::setVisible</c>).</summary>
     public virtual bool WeatherShown => true;
-    public TerrainRenderModel TerrainModel { get; }
+    /// <summary>The terrain as drawn; a building that flattens its site makes new chunks of it (<see cref="TakeChangedTerrainChunks"/>).</summary>
+    public TerrainRenderModel TerrainModel { get; private set; }
     public TerrainHeightSampler Heights { get; }
     public RtsCamera Camera { get; }
     public FogOfWarGrid Fog { get; }
@@ -482,5 +484,59 @@ public abstract class LiveGame
         observer?.PhaseStarted(PresentationPhase.FogUpdate);
         if (FogViewer is { } fogViewer && World.Tick % World.VisionInterval == 0) Fog.Update(World.Vision!, World.VisionSlotOf(fogViewer));
         observer?.PhaseEnded(PresentationPhase.FogUpdate);
+        SyncSites();
+    }
+
+    private readonly SortedSet<int> _changedChunks = [];
+    private ImmutableArray<SceneryItem> _scenery = [];
+    private int _sitesSeen;
+
+    /// <summary>
+    /// Buildings begun since the last tick (<see cref="SimulationWorld.ClearedSites"/>): the trees, props and fluff their ground plan touches leave the map
+    /// (<c>BuildAssistant::clearRemovableForConstruction</c>), and the ground that was levelled under them is drawn, seen by the camera and stood on by the objects as the simulation has it.
+    /// </summary>
+    private void SyncSites()
+    {
+        var sites = World.ClearedSites;
+        if (sites.Count == _sitesSeen) return;
+        for (var index = _sitesSeen; index < sites.Count; index++)
+            foreach (var item in _scenery)
+            {
+                if (!ClearedByBuilding(item, out var radius)) continue;
+                if (sites[index].Touches(FixedConvert.FromSingle(item.Position.X), FixedConvert.FromSingle(item.Position.Y), radius)) _projector.RemoveScenery(item.Index);
+            }
+        _sitesSeen = sites.Count;
+        if (World.Terrain is not { } terrain) return;
+        var heights = terrain.CopyRawHeights();
+        Heights.ReplaceHeights(heights);
+        TerrainModel = TerrainModel.Reshape(heights, out var changed);
+        foreach (var chunk in changed) _changedChunks.Add(chunk);
+    }
+
+    /// <summary>
+    /// Whether a scenery item is what <c>removeTreesAndPropsForConstruction</c> takes off the map, and the radius of the upright cylinder it counts as: a tree of the tree buffer is twice
+    /// the buffer's tree radius of 7 wide (<c>W3DTreeBuffer::removeTreesForConstruction</c>), a prop twice the radius of its model (<c>W3DPropBuffer::removePropsForConstruction</c>; the template's
+    /// bounding circle stands in for the model's sphere, which the simulation does not have).
+    /// </summary>
+    private bool ClearedByBuilding(SceneryItem item, out Fixed radius)
+    {
+        radius = Fixed.Zero;
+        if (item.Visual.IsKindOf("OPTIMIZED_TREE"))
+        {
+            radius = Fixed.FromInt(14);
+            return true;
+        }
+        if (!item.Visual.IsKindOf("PROP") && !item.Visual.IsKindOf("CLEARED_BY_BUILD")) return false;
+        if (!World.Templates.TryGet(item.Visual.TemplateName, out var template)) return false;
+        radius = template.BoundingCircleRadius * Fixed.FromInt(2);
+        return true;
+    }
+
+    /// <summary>The chunks of <see cref="TerrainModel"/> that were made again since the last call, in ascending order; a layer that holds them as buffers replaces those.</summary>
+    public ImmutableArray<int> TakeChangedTerrainChunks()
+    {
+        var chunks = _changedChunks.ToImmutableArray();
+        _changedChunks.Clear();
+        return chunks;
     }
 }
