@@ -1115,6 +1115,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
+        _donutSince = 0;
         InvalidatePath();
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
@@ -1637,6 +1638,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
+        _donutSince = 0;
         InvalidatePath();
         return true;
     }
@@ -2035,6 +2037,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // frame and covers the step in shares, at 30 Hz the frame is the tick and these are the locomotor's own constants.
         FrameConstants(locomotor, out var topSpeed, out var acceleration, out var braking, out var turnRate, out var minSpeed);
         var arrivalRadius = Fixed.Max(CloseEnough(locomotor, air), topSpeed);
+        var donutBraking = false;
         while (true)
         {
             if (!air && world.Bridges.Count != 0) FollowPathLayer(world);
@@ -2064,6 +2067,21 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             return;
         }
 
+        if (locomotor.IsWheeled && !air && DonutBrakes(world, _path[^1].X - Entity.X, _path[^1].Y - Entity.Y))
+        {
+            // The donut: a wheeled unit that has circled its goal for 2.5 seconds brakes, and at rest beside it the move is over.
+            if (FrameSpeed() == Fixed.Zero)
+            {
+                var finished = _pathComplete;
+                Entity.HasMoveTarget = false;
+                Entity.Speed = Fixed.Zero;
+                ClearFrameSpeed();
+                InvalidatePath();
+                if (finished) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+                return;
+            }
+            donutBraking = true;
+        }
         var target = _path[_pathIndex];
         var dx = target.X - Entity.X;
         var dy = target.Y - Entity.Y;
@@ -2096,7 +2114,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
         var cruise = CappedFrameSpeed(topSpeed);
         var held = !air && HeldBehindAMover(world, ref cruise);
-        var goalSpeed = remaining <= brakingDistance ? minSpeed : cruise;
+        var goalSpeed = donutBraking ? Fixed.Zero : remaining <= brakingDistance ? minSpeed : cruise;
         if (wheels)
         {
             // "See if we are turning. If so, use the min turn speed."
@@ -2195,6 +2213,41 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             if (!Clear(Entity.X + aheadX / Fixed.FromInt(2), Entity.Y + aheadY / Fixed.FromInt(2)) || !Clear(Entity.X + aheadX, Entity.Y + aheadY)) return turnRate;
         }
         return Fixed.Min(speed.Abs() / turnSpeed, Fixed.One) * turnRate;
+    }
+
+    /// <summary><c>DONUT_DISTANCE</c> of <c>Locomotor.cpp</c>: four cells.</summary>
+    private static readonly Fixed DonutDistance = Fixed.FromInt(4 * TerrainMap.CellSize);
+
+    /// <summary><c>DONUT_TIME_DELAY_SECONDS</c>: 2.5 seconds, in logic frames of the original.</summary>
+    private const long DonutFrames = 75;
+
+    /// <summary>The tick (plus one) of the first decision of this move within <see cref="DonutDistance"/> of its goal; 0 while the unit is farther or has not decided; written only while set.</summary>
+    private long _donutSince;
+
+    /// <summary>
+    /// <c>Locomotor::moveTowardsPositionWheels</c>, <c>m_donutTimer</c>: the timer is pushed 2.5 seconds ahead whenever the wheeled unit is more than four cells from its goal (and when a move
+    /// begins); once it has run out inside that distance the unit is braking. Here the timer starts with the first decision inside the distance, which is a frame's difference at most.
+    /// The original brakes only where the way left is shorter than the braking distance - which a unit beside the goal has, the path distance being measured along the last segment - and so it
+    /// ends at rest beside the goal instead of circling it.
+    /// </summary>
+    private bool DonutBrakes(IWorldServices world, Fixed toGoalX, Fixed toGoalY)
+    {
+        if (!SquaredReach.Of(DonutDistance).Contains(toGoalX * toGoalX + toGoalY * toGoalY))
+        {
+            if (_donutSince != 0)
+            {
+                _donutSince = 0;
+                world.MarkDirty(Entity);
+            }
+            return false;
+        }
+        if (_donutSince == 0)
+        {
+            _donutSince = world.Tick + TickOrder.Next;
+            world.MarkDirty(Entity);
+            return false;
+        }
+        return world.Tick + TickOrder.Next - _donutSince >= world.Time.OriginalFrames(DonutFrames);
     }
 
     /// <summary><c>Locomotor::m_flags</c> <c>MOVING_BACKWARDS</c>; written only while set.</summary>
@@ -3073,6 +3126,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             writer.Fixed("rappelDestZ", _rappelDestZ);
         }
         if (_movingBackwards) writer.Bool("movingBackwards", true);
+        if (_donutSince != 0 && Entity.HasMoveTarget) writer.Int("donutSince", _donutSince);
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
         if (_exitAfterEvacuate || _returning)
@@ -3170,6 +3224,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             _rappelDestZ = reader.Fixed("rappelDestZ");
         }
         _movingBackwards = reader.Has("movingBackwards");
+        _donutSince = reader.Has("donutSince") ? reader.Int("donutSince") : 0;
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
