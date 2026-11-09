@@ -108,9 +108,11 @@ $map = [ordered]@{
     'hud-units'               = 'hud-units'
     'score'                   = 'score'
 }
+$extras = @("skirmish-setup-options", "ai-options", "hud-units", "score")
 foreach ($name in $map.Keys) {
     $source = Join-Path $renderOut ("skin-modern-{0}-{1}x{2}.png" -f $map[$name], $sizeWidth, $sizeHeight)
     if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $OutDir "$name.png") -Force }
+    elseif ($extras -contains $name) { Write-Host ("  note: no $name.png (an extra; this render tool build does not draw it)") }
     else { $failed.Add("no $name.png (the render tool made no $(Split-Path -Leaf $source); sizes it draws: 800x600, 1280x720, 1920x1080)") }
 }
 

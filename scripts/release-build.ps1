@@ -84,6 +84,6 @@ Run 'Release notes' { pwsh -NoLogo -NoProfile -File scripts/release-notes.ps1 -V
 
 Remove-Item -Recurse -Force -LiteralPath $work
 Write-Host ''
-Write-Host "Release $Version is in $OutDir:"
+Write-Host "Release $Version is in ${OutDir}:"
 Get-ChildItem -LiteralPath $OutDir -File | ForEach-Object { Write-Host ("  {0}" -f $_.Name) }
 exit 0
