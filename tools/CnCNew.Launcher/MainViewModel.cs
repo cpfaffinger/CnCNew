@@ -209,7 +209,7 @@ public sealed class MainViewModel : ObservableObject
         Phase = Phase.Welcome;
         Headline = _layout.Inspect() == InstallState.ClientOnly ? "Finish the installation" : "Install CnCNew";
         Lead = "CnCNew needs your own copy of the game from Steam. The launcher makes a separate, patched copy in the folder below; your Steam copy is only read, never changed.";
-        StatusLine = results.All(result => result.Status == CheckStatus.Ok) ? "Everything looks fine." : "";
+        StatusLine = CanInstall && results.All(result => result.Status == CheckStatus.Ok) ? "Everything looks fine." : "";
     }
 
     private void EnterReady()
