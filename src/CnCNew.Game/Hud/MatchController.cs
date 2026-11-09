@@ -10,6 +10,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Views;
 using CnCNew.Simulation.World;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
@@ -688,6 +689,22 @@ public sealed partial class MatchController
 
     // ------------------------------------------------------------------------------------------------------------ overlay
 
+    /// <summary><c>Drawable::drawHealthBar</c>: under construction, or disabled other than by being held, the bar runs from blue to cyan.</summary>
+    private bool BarIsBlue(Entity entity)
+    {
+        var disabled = entity.DisabledFlags(Match.World.Tick);
+        return entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction) || (disabled != 0 && (disabled & CnCNew.Simulation.World.DisabledMask.Held) == 0);
+    }
+
+    /// <summary>
+    /// Which objects the always-shown bars of <see cref="HealthBars"/> are for: what a player can select and shoot at and that is alive - not a prop, a mine, a crate, a projectile or
+    /// anything the original keeps out of the interface (<c>IGNORED_IN_GUI</c>, and <c>FORCEATTACKABLE</c> for which <c>Drawable::drawHealthBar</c> returns); an object with no health has no bar.
+    /// </summary>
+    private static bool ShowsAmbientBar(Entity unit)
+        => !unit.EffectivelyDead && unit.Body is { } body && body.MaxHealth.Raw != 0 && body.Health.Raw != 0
+           && unit.Template.IsKindOf("SELECTABLE") && !unit.Template.IsKindOf("NO_SELECT") && !unit.Template.IsKindOf("IGNORED_IN_GUI") && !unit.Template.IsKindOf("FORCEATTACKABLE")
+           && !unit.Template.IsKindOf("MINE") && !unit.Template.IsKindOf("PROJECTILE") && !unit.Template.IsKindOf("CRATE");
+
     private HudOverlay ComputeOverlay()
     {
         var world = Match.World;
@@ -717,6 +734,8 @@ public sealed partial class MatchController
                     GroupNumber = mine ? Input.Selection.GroupOf(entity.Id) : -1,
                     GroupText = mine && Input.Selection.GroupOf(entity.Id) is >= 0 and var group ? _assets.Text.Get("NUMBER:" + group.ToString(CultureInfo.InvariantCulture)) : string.Empty,
                     ActiveKind = activeKind is not null && entity.Template.Name.Equals(activeKind, StringComparison.Ordinal),
+                    Damage = entity.DamageState(),
+                    Blue = BarIsBlue(entity),
                 });
             }
             if (SimulationQueries.ProductionOf(entity) is { } production)
@@ -742,7 +761,27 @@ public sealed partial class MatchController
                 Hovered = true,
                 Ammo = mine ? world.AmmoPips(over) : null,
                 Seats = seats,
+                Damage = over.DamageState(),
+                Blue = BarIsBlue(over),
             });
+        }
+        // display.healthBarMode: every object in view, or every damaged one, shows its bar beside what is selected or under the pointer.
+        if (HealthBars != HealthBarMode.SelectedOnly && IconUiEnabled)
+        {
+            var marked = new HashSet<EntityId>(selected.Select(marker => marker.Entity));
+            foreach (var drawable in Match.Frame.Drawables)
+            {
+                if (!drawable.Entity.IsValid || marked.Contains(drawable.Entity) || world.FindEntity(drawable.Entity) is not { } unit || !ShowsAmbientBar(unit)) continue;
+                if (!HealthBarRule.Shows(HealthBars, false, unit.Body is { } damaged && damaged.Health < damaged.MaxHealth)) continue;
+                if (!Input.Selection.Picker.TryProject(view, unit, out var around)) continue;
+                var health = unit.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
+                selected.Add(new UnitMarker(unit.Id, around.Center, around.Radius, health, unit.Owner == Match.Human, world.AreEnemies(Match.Human, unit.Owner), unit.Template.IsKindOf("STRUCTURE"))
+                {
+                    BarOnly = true,
+                    Damage = unit.DamageState(),
+                    Blue = BarIsBlue(unit),
+                });
+            }
         }
 
         // Standing attack, attack-move and guard orders of the selected own units: a line to the goal (the original draws none; kept as an aid, for the selection only).
@@ -942,7 +981,7 @@ public sealed partial class MatchController
         // The scheme art is drawn by two marker windows of the control bar (W3DCommandBarBackgroundDraw, W3DCommandBarForegroundDraw): the background under the windows that
         // follow the marker, the foreground over those before it. The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons)
         // lies between the 3D scene and the control bar chrome.
-        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BarChrome()).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
+        var commands = HudOverlayRenderer.Build(Overlay, _clockMs, new HudMarkerOptions(MarkerStyle, HealthBarThickness)).AddRange(BarChrome()).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
             .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         // InGameUI::postDraw: the message lines lie over the windows.
         if (OwnsMessageList && !Messages.Log.IsEmpty) commands = commands.AddRange(MissionTextOverlay.Messages(Messages.Log, TextStyle, _scaleOptions, _textMeasure, width, height));

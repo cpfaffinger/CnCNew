@@ -32,6 +32,18 @@ public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, f
 
     /// <summary>Tab chose this object's kind among the kinds of a mixed selection: it is drawn with a second, white ring (the original has no subgroups).</summary>
     public bool ActiveKind { get; init; }
+
+    /// <summary>
+    /// Neither selected nor under the pointer: only the health bar is drawn, because the viewer's option shows the bars of every object in view (<c>display.healthBarMode</c>). No ring, no
+    /// bracket, no pips.
+    /// </summary>
+    public bool BarOnly { get; init; }
+
+    /// <summary>The body's damage state, 0 pristine, 1 damaged, 2 really damaged: the original's bar takes its colour from the model conditions (<c>Drawable::drawHealthBar</c>).</summary>
+    public int Damage { get; init; }
+
+    /// <summary>Under construction, or disabled other than by being held (<c>isDisabled() and not isDisabledByType(DISABLED_HELD)</c>): the original's bar runs from blue to cyan instead of red to green.</summary>
+    public bool Blue { get; init; }
 }
 
 /// <summary>An animated icon over an object (<c>Drawable::drawDisabled</c>, <c>drawEnthusiastic</c>): the frame of this moment and its place on the screen.</summary>

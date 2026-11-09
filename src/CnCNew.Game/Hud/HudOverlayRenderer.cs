@@ -3,6 +3,7 @@ using System.Numerics;
 using CnCNew.Presentation.Input;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Settings;
 using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Hud;
@@ -37,9 +38,10 @@ public static class HudOverlayRenderer
     private const int WrenchFrames = 10;
     private const int CrossFrames = 16;
 
-    public static ImmutableArray<UiDrawCommand> Build(HudOverlay overlay, long clockMilliseconds)
+    public static ImmutableArray<UiDrawCommand> Build(HudOverlay overlay, long clockMilliseconds, HudMarkerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(overlay);
+        options ??= HudMarkerOptions.Default;
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
 
         if (overlay.SelectionBox.Active)
@@ -72,13 +74,8 @@ public static class HudOverlayRenderer
         foreach (var marker in overlay.Selected)
         {
             var color = marker.IsOwn ? Own : marker.IsEnemy ? Enemy : Neutral;
-            // A structure is marked by corner brackets round its screen footprint (the selection radius of a building is its bounding circle, far too large for a ring).
-            if (marker.Hovered) { }
-            else if (marker.IsStructure) Brackets(commands, StructureCenter(marker), StructureHalf(marker), color);
-            else Ring(commands, marker.Center, MathF.Max(marker.Radius, 6f), 2f, color, RingSegments);
-            // The kind Tab chose in a mixed selection: a second ring outside the first, in white.
-            if (marker.ActiveKind && !marker.Hovered) Ring(commands, marker.IsStructure ? StructureCenter(marker) : marker.Center, MathF.Max(marker.IsStructure ? StructureHalf(marker) : marker.Radius, 6f) + 4f, 2f, ActiveKindColor, RingSegments);
-            HealthBar(commands, marker);
+            if (!marker.BarOnly) SelectionMark(commands, marker, options.Style, color);
+            HealthBar(commands, marker, options);
         }
 
         if (overlay.Placement.Active && overlay.Placement.FootprintScreen.Length >= 3)
@@ -181,25 +178,132 @@ public static class HudOverlayRenderer
         commands.Add(new UiLineDraw(hint.Screen.X, hint.Screen.Y - 4f, hint.Screen.X, hint.Screen.Y + 4f, 2f, color));
     }
 
+    /// <summary>
+    /// What marks a selected object in the world, by <see cref="SelectionMarkerStyle"/>. <see cref="SelectionMarkerStyle.Extended"/> is what this port drew from the start (a ring under a unit, corner
+    /// brackets round a building); <see cref="SelectionMarkerStyle.Original"/> draws nothing - the original marks a selection by its health box alone; <see cref="SelectionMarkerStyle.Modern"/> a thin,
+    /// translucent ring and short brackets. The kind Tab chose keeps its second ring in every style (the original has no subgroups). An object only under the pointer is marked by its bar alone.
+    /// </summary>
+    private static void SelectionMark(ImmutableArray<UiDrawCommand>.Builder commands, UnitMarker marker, SelectionMarkerStyle style, WndColor color)
+    {
+        var center = marker.IsStructure ? StructureCenter(marker) : marker.Center;
+        var half = MathF.Max(marker.IsStructure ? StructureHalf(marker) : marker.Radius, 6f);
+        if (!marker.Hovered)
+        {
+            switch (style)
+            {
+                case SelectionMarkerStyle.Extended:
+                    // A structure is marked by corner brackets round its screen footprint (the selection radius of a building is its bounding circle, far too large for a ring).
+                    if (marker.IsStructure) Brackets(commands, center, StructureHalf(marker), color);
+                    else Ring(commands, marker.Center, MathF.Max(marker.Radius, 6f), 2f, color, RingSegments);
+                    break;
+                case SelectionMarkerStyle.Modern:
+                    var soft = color with { A = 210 };
+                    if (marker.IsStructure) Brackets(commands, center, StructureHalf(marker), soft, thickness: 1.5f, legScale: 0.55f);
+                    else
+                    {
+                        Ring(commands, marker.Center, half, 1.5f, soft, RingSegments);
+                        Ring(commands, marker.Center, half + 2.5f, 1f, color with { A = 70 }, RingSegments);
+                    }
+                    break;
+            }
+        }
+        // The kind Tab chose in a mixed selection: a second ring outside the first, in white.
+        if (marker.ActiveKind && !marker.Hovered) Ring(commands, center, half + 4f, style == SelectionMarkerStyle.Modern ? 1.5f : 2f, ActiveKindColor, RingSegments);
+    }
+
+    /// <summary>The pixels of a health bar's fill for a style and the viewer's choice: 3, 5 or 8 (docs/GAME-HUD.md "Phase 65"); the modern style's bar is thinner: 3, 4 or 6.</summary>
+    public static int BarFillHeight(SelectionMarkerStyle style, HealthBarHeight height) => (style, height) switch
+    {
+        (SelectionMarkerStyle.Modern, HealthBarHeight.Narrow) => 3,
+        (SelectionMarkerStyle.Modern, HealthBarHeight.Normal) => 4,
+        (SelectionMarkerStyle.Modern, HealthBarHeight.Wide) => 6,
+        (_, HealthBarHeight.Narrow) => 3,
+        (_, HealthBarHeight.Wide) => 8,
+        _ => 5,
+    };
+
+    /// <summary>The height of a bar with its outline: the fill and one pixel above and below in the extended style; the original's box is as high as the choice says (3 pixels is its own); the modern bar has no outline.</summary>
+    public static int BarOuterHeight(SelectionMarkerStyle style, HealthBarHeight height) => style switch
+    {
+        SelectionMarkerStyle.Extended => BarFillHeight(style, height) + 2,
+        _ => BarFillHeight(style, height),
+    };
+
+    /// <summary>
+    /// <c>Drawable::drawHealthBar</c>'s colours: green through yellow to red by the health ratio, blue to cyan for an object under construction or disabled, each averaged with red for a
+    /// really damaged body and with green for a pristine one; the outline is the same colour at half. Returns (fill, outline).
+    /// </summary>
+    public static (WndColor Fill, WndColor Outline) OriginalHealthColors(float health, int damage, bool blue)
+    {
+        health = Math.Clamp(health, 0f, 1f);
+        if (blue) return (new WndColor(0, (byte)(health * 255f), 255, 255), new WndColor(0, (byte)(health * 128f), 128, 255));
+        float red, green;
+        if (health >= 0.5f) { red = 1f - (health - 0.5f) / 0.5f; green = 1f; }
+        else { red = 1f; green = 1f - (0.5f - health) / 0.5f; }
+        var (outRed, outGreen) = (red * 0.5f, green * 0.5f);
+        if (damage >= 2) { red = (1f + red) * 0.5f; green *= 0.5f; }
+        else if (damage < 1) { green = (1f + green) * 0.5f; red *= 0.5f; }
+        return (new WndColor((byte)(255f * red), (byte)(255f * green), 0, 255), new WndColor((byte)(255f * outRed), (byte)(255f * outGreen), 0, 255));
+    }
+
+    /// <summary>The modern bar's fill: the skin's green above half, amber above a quarter, red below (the same thresholds as the selection plate of the bar).</summary>
+    public static WndColor ModernHealthColor(float health)
+    {
+        var palette = CnCNew.Ui.Skins.UiSkin.Modern.Style.Palette;
+        return health > 0.5f ? palette.Good : health > 0.25f ? palette.Accent : palette.Bad;
+    }
+
     /// <summary>The ring is a closed polyline; the bar sits above it: a dark plate, the health in a green-to-red ramp (blue-cyan is for objects under construction in the original; not tracked here).</summary>
-    private static void HealthBar(ImmutableArray<UiDrawCommand>.Builder commands, UnitMarker marker)
+    private static void HealthBar(ImmutableArray<UiDrawCommand>.Builder commands, UnitMarker marker, HudMarkerOptions options)
     {
         var width = MathF.Max(26f, marker.Radius * (marker.IsStructure ? 1.1f : 1.7f));
         var left = marker.Center.X - width / 2f;
         var top = (marker.IsStructure ? StructureCenter(marker).Y - StructureHalf(marker) * 0.7f : marker.Center.Y - MathF.Max(marker.Radius, 6f)) - 11f;
-        var plate = new UiRect((int)MathF.Floor(left) - 1, (int)MathF.Floor(top) - 1, (int)MathF.Ceiling(width) + 2, 7);
-        commands.Add(new UiFillRect(plate, BarBack));
-        commands.Add(new UiBorderRect(plate, BarOutline));
         var health = Math.Clamp(marker.HealthFraction, 0f, 1f);
-        var filled = (int)MathF.Round(width * health);
-        if (filled > 0) commands.Add(new UiFillRect(new UiRect((int)MathF.Floor(left), (int)MathF.Floor(top), filled, 5), HealthColor(health)));
+        var fill = BarFillHeight(options.Style, options.Height);
+        var outer = BarOuterHeight(options.Style, options.Height);
+        switch (options.Style)
+        {
+            case SelectionMarkerStyle.Original:
+            {
+                // Drawable::drawHealthBar: an object without health has no box; the box is an outline in the dark colour and the fill inside it, no plate behind the empty part.
+                if (health <= 0f) { if (marker.BarOnly) return; break; }
+                var (color, outline) = OriginalHealthColors(health, marker.Damage, marker.Blue);
+                var box = new UiRect((int)MathF.Floor(left), (int)MathF.Floor(top), (int)MathF.Ceiling(width), outer);
+                commands.Add(new UiBorderRect(box, outline));
+                var inside = (int)MathF.Round((box.Width - 2) * health);
+                if (inside > 0 && outer > 2) commands.Add(new UiFillRect(new UiRect(box.X + 1, box.Y + 1, inside, outer - 2), color));
+                break;
+            }
+            case SelectionMarkerStyle.Modern:
+            {
+                if (health <= 0f) { if (marker.BarOnly) return; break; }
+                var track = new UiRect((int)MathF.Floor(left), (int)MathF.Floor(top), (int)MathF.Ceiling(width), outer);
+                var palette = CnCNew.Ui.Skins.UiSkin.Modern.Style.Palette;
+                // A flat bar with the corners cut off by a pixel: the track in the skin's canvas, the fill in its health colour.
+                Rounded(commands, track, palette.Canvas with { A = 190 });
+                var inside = (int)MathF.Round(track.Width * health);
+                if (inside > 0) Rounded(commands, new UiRect(track.X, track.Y, inside, track.Height), ModernHealthColor(health));
+                break;
+            }
+            default:
+            {
+                var plate = new UiRect((int)MathF.Floor(left) - 1, (int)MathF.Floor(top) - 1, (int)MathF.Ceiling(width) + 2, outer);
+                commands.Add(new UiFillRect(plate, BarBack));
+                commands.Add(new UiBorderRect(plate, BarOutline));
+                var filled = (int)MathF.Round(width * health);
+                if (filled > 0) commands.Add(new UiFillRect(new UiRect((int)MathF.Floor(left), (int)MathF.Floor(top), filled, fill), HealthColor(health)));
+                break;
+            }
+        }
+        if (marker.BarOnly) return;
         // Drawable::drawUIText, with the values of DrawGroupInfo.ini: the number of the control group at the left end of the bar, a fifth of its width to the left of it and ten pixels above it.
         if (marker.GroupNumber >= 0 && marker.GroupText.Length > 0)
         {
             var (x, y) = ((int)MathF.Floor(left + width * GroupOffsetX), (int)MathF.Floor(top) + GroupOffsetY);
             commands.Add(new UiTextDraw(marker.GroupText, null, GroupFont, WndColor.White, BarOutline, x, y, UiTextAlignment.Left, new UiRect(x - 4, y - 4, GroupClipWidth, GroupClipHeight)));
         }
-        var row = (int)MathF.Floor(top) + 7;
+        var row = (int)MathF.Floor(top) + outer;
         if (marker.Ammo is { } ammo)
         {
             for (var pip = 0; pip < ammo.Total; pip++)
@@ -269,16 +373,24 @@ public static class HudOverlayRenderer
         return position < count ? position : cycle - position;
     }
 
-    private static void Brackets(ImmutableArray<UiDrawCommand>.Builder commands, Vector2 center, float half, WndColor color)
+    /// <summary>A bar of <paramref name="color"/> whose four corner pixels are left out (a height of three or more): the nearest a flat rectangle gets to a rounded end.</summary>
+    private static void Rounded(ImmutableArray<UiDrawCommand>.Builder commands, UiRect rect, WndColor color)
+    {
+        if (rect.Height < 3 || rect.Width < 3) { commands.Add(new UiFillRect(rect, color)); return; }
+        commands.Add(new UiFillRect(new UiRect(rect.X + 1, rect.Y, rect.Width - 2, rect.Height), color));
+        commands.Add(new UiFillRect(new UiRect(rect.X, rect.Y + 1, rect.Width, rect.Height - 2), color));
+    }
+
+    private static void Brackets(ImmutableArray<UiDrawCommand>.Builder commands, Vector2 center, float half, WndColor color, float thickness = 2.5f, float legScale = 1f)
     {
         half = MathF.Max(half, 12f);
-        var leg = MathF.Min(18f, half * 0.6f);
+        var leg = MathF.Min(18f, half * 0.6f) * legScale;
         foreach (var (sx, sy) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f) })
         {
             var cx = center.X + sx * half;
             var cy = center.Y + sy * half * 0.7f;
-            commands.Add(new UiLineDraw(cx, cy, cx - sx * leg, cy, 2.5f, color));
-            commands.Add(new UiLineDraw(cx, cy - sy * 1.2f, cx, cy - sy * (leg * 0.7f), 2.5f, color));
+            commands.Add(new UiLineDraw(cx, cy, cx - sx * leg, cy, thickness, color));
+            commands.Add(new UiLineDraw(cx, cy - sy * 1.2f, cx, cy - sy * (leg * 0.7f), thickness, color));
         }
     }
 
@@ -302,4 +414,25 @@ public static class HudOverlayRenderer
         var bottom = (int)MathF.Round(MathF.Max(a.Y, b.Y));
         return new UiRect(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
     }
+}
+
+/// <summary>How the world-space markers are drawn (<c>display.markerStyle</c> and <c>display.healthBarHeight</c>); the default is what this port drew before the options existed.</summary>
+public sealed record HudMarkerOptions(CnCNew.Ui.Settings.SelectionMarkerStyle Style = CnCNew.Ui.Settings.SelectionMarkerStyle.Extended, CnCNew.Ui.Settings.HealthBarHeight Height = CnCNew.Ui.Settings.HealthBarHeight.Normal)
+{
+    public static HudMarkerOptions Default { get; } = new();
+}
+
+/// <summary>Which objects get a health bar (<c>display.healthBarMode</c>).</summary>
+public static class HealthBarRule
+{
+    /// <summary>
+    /// Whether the bar of an object shows: what is selected or under the pointer always does (the original's rule, and the selection's only sign in the original style); every other object only when
+    /// the viewer asked for every object (<see cref="CnCNew.Ui.Settings.HealthBarMode.AlwaysAuto"/>) or for the damaged ones (<see cref="CnCNew.Ui.Settings.HealthBarMode.AlwaysBelowFull"/>, health below its maximum).
+    /// </summary>
+    public static bool Shows(CnCNew.Ui.Settings.HealthBarMode mode, bool selectedOrHovered, bool belowFullHealth) => selectedOrHovered || mode switch
+    {
+        CnCNew.Ui.Settings.HealthBarMode.AlwaysAuto => true,
+        CnCNew.Ui.Settings.HealthBarMode.AlwaysBelowFull => belowFullHealth,
+        _ => false,
+    };
 }
