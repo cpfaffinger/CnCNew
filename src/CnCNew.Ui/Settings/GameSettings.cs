@@ -41,7 +41,30 @@ public enum UiSkinName { Original, Modern }
 /// <summary>Skirmish AI difficulty of the original (<c>GameDifficulty</c>: easy, normal, hard).</summary>
 public enum AiDifficulty { Easy, Medium, Hard }
 
-public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bool VSync, UiScaleMode UiScale, AspectHandling Aspect, UiSkinName Skin = UiSkinName.Modern);
+/// <summary>
+/// How a selected object is marked in the world (schema 8, "More options"): <see cref="Original"/> as the original draws it - no ring or bracket, only the health box over the object;
+/// <see cref="Extended"/> what this port drew before and still draws by default - a ring under a unit, corner brackets round a building, with the health bar above;
+/// <see cref="Modern"/> thin flat health bars with a soft ring or short brackets in the modern palette.
+/// </summary>
+public enum SelectionMarkerStyle { Original, Extended, Modern }
+
+/// <summary>
+/// Which objects show a health bar (schema 8): <see cref="AlwaysAuto"/> every object in view, <see cref="AlwaysBelowFull"/> every object in view that is not at full health (and a
+/// selected one, whatever its health), <see cref="SelectedOnly"/> what is selected or under the pointer (the original's rule, <c>Drawable::drawHealthBar</c>, and what this port always did).
+/// </summary>
+public enum HealthBarMode { AlwaysAuto, AlwaysBelowFull, SelectedOnly }
+
+/// <summary>The thickness of a health bar (schema 8): <see cref="Narrow"/> 3 pixels like the original's, <see cref="Normal"/> 5 (what this port drew), <see cref="Wide"/> 8.</summary>
+public enum HealthBarHeight { Narrow, Normal, Wide }
+
+/// <param name="BarOpacityPercent">The opacity of the modern skin's control bar background, 20 to 100 percent (schema 8); the buttons, cameos and text stay opaque.</param>
+public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bool VSync, UiScaleMode UiScale, AspectHandling Aspect, UiSkinName Skin = UiSkinName.Modern,
+    int BarOpacityPercent = DisplaySettings.DefaultBarOpacityPercent, SelectionMarkerStyle MarkerStyle = SelectionMarkerStyle.Extended, HealthBarMode HealthBars = HealthBarMode.SelectedOnly,
+    HealthBarHeight HealthBarThickness = HealthBarHeight.Normal)
+{
+    public const int DefaultBarOpacityPercent = 80;
+    public const int MinimumBarOpacityPercent = 20;
+}
 
 /// <summary>Linear volumes from 0 (silent) to 1 (full).</summary>
 /// <param name="Device">The name of the sound device to play on, as the system lists it; empty is the system's default device.</param>
@@ -124,7 +147,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

@@ -34,6 +34,10 @@ public static class SettingsValidator
             UiScale = Enum(issues, "display.uiScale", display.UiScale, defaults.Display.UiScale),
             Aspect = Enum(issues, "display.aspect", display.Aspect, defaults.Display.Aspect),
             Skin = Enum(issues, "display.skin", display.Skin, defaults.Display.Skin),
+            BarOpacityPercent = Clamp(issues, "display.barOpacity", display.BarOpacityPercent, DisplaySettings.MinimumBarOpacityPercent, 100),
+            MarkerStyle = Enum(issues, "display.markerStyle", display.MarkerStyle, defaults.Display.MarkerStyle),
+            HealthBars = Enum(issues, "display.healthBarMode", display.HealthBars, defaults.Display.HealthBars),
+            HealthBarThickness = Enum(issues, "display.healthBarHeight", display.HealthBarThickness, defaults.Display.HealthBarThickness),
         };
 
         var audio = settings.Audio ?? Replace(issues, "audio", defaults.Audio);

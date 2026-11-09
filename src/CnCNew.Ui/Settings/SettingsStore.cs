@@ -43,7 +43,7 @@ public sealed class SettingsStore
 
     /// <summary>
     /// Schema steps shipped with this build: version 2 (Phase 38) adds the interface skin and the sound device, each at the value version 1 meant, and replaces the three
-    /// aspect values of version 1, which no client applied, by the one the camera drew (<c>keepHorizontal</c>). Version 6 (7 November 2026) makes the modern skin the
+    /// aspect values of version 1, which no client applied, by the one the camera drew (<c>keepHorizontal</c>). Version 8 (9 November 2026) adds the bar opacity, the selection marker style and the health bar mode and height. Version 6 (7 November 2026) makes the modern skin the
     /// skin of every file written before it, whatever it held; a file written at version 6 keeps the skin its owner chose.
     /// </summary>
     public static ImmutableArray<SettingsMigration> Migrations { get; } =
@@ -78,6 +78,17 @@ public sealed class SettingsStore
         new SettingsMigration(6, "controls.hotkeys added (empty: the shipped CommandMap.ini keys, what every game used)", root =>
         {
             if (root["controls"] is JsonObject controls && !controls.ContainsKey("hotkeys")) controls["hotkeys"] = new JsonObject();
+            return root;
+        }),
+        new SettingsMigration(7, "display.barOpacity (80 %), display.markerStyle (extended, what every game drew), display.healthBarMode (selectedOnly) and display.healthBarHeight (normal) added", root =>
+        {
+            if (root["display"] is JsonObject display)
+            {
+                if (!display.ContainsKey("barOpacity")) display["barOpacity"] = DisplaySettings.DefaultBarOpacityPercent;
+                if (!display.ContainsKey("markerStyle")) display["markerStyle"] = SettingsJson.Name(SelectionMarkerStyle.Extended);
+                if (!display.ContainsKey("healthBarMode")) display["healthBarMode"] = SettingsJson.Name(HealthBarMode.SelectedOnly);
+                if (!display.ContainsKey("healthBarHeight")) display["healthBarHeight"] = SettingsJson.Name(HealthBarHeight.Normal);
+            }
             return root;
         }),
     ];
@@ -185,6 +196,10 @@ public static class SettingsJson
             writer.WriteString("uiScale", Name(settings.Display.UiScale));
             writer.WriteString("aspect", Name(settings.Display.Aspect));
             writer.WriteString("skin", Name(settings.Display.Skin));
+            writer.WriteNumber("barOpacity", settings.Display.BarOpacityPercent);
+            writer.WriteString("markerStyle", Name(settings.Display.MarkerStyle));
+            writer.WriteString("healthBarMode", Name(settings.Display.HealthBars));
+            writer.WriteString("healthBarHeight", Name(settings.Display.HealthBarThickness));
             writer.WriteEndObject();
 
             writer.WriteStartObject("audio");
@@ -246,7 +261,7 @@ public static class SettingsJson
         var reader = new Reader(issues);
         reader.Unknown(root, "", ["version", "display", "audio", "controls", "accessibility", "general", "skirmish"]);
 
-        var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect", "skin"]);
+        var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect", "skin", "barOpacity", "markerStyle", "healthBarMode", "healthBarHeight"]);
         var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient", "device"]);
         var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation", "hotkeys"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
@@ -261,7 +276,11 @@ public static class SettingsJson
                 reader.Bool(display, "display.vsync", d.Display.VSync),
                 reader.Enum(display, "display.uiScale", d.Display.UiScale),
                 reader.Enum(display, "display.aspect", d.Display.Aspect),
-                reader.Enum(display, "display.skin", d.Display.Skin)),
+                reader.Enum(display, "display.skin", d.Display.Skin),
+                reader.Int(display, "display.barOpacity", d.Display.BarOpacityPercent),
+                reader.Enum(display, "display.markerStyle", d.Display.MarkerStyle),
+                reader.Enum(display, "display.healthBarMode", d.Display.HealthBars),
+                reader.Enum(display, "display.healthBarHeight", d.Display.HealthBarThickness)),
             new AudioSettings(
                 reader.Float(audio, "audio.master", d.Audio.Master),
                 reader.Float(audio, "audio.music", d.Audio.Music),
