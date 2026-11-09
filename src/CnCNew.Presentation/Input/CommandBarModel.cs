@@ -537,7 +537,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (button.Kind == GuiCommandKind.DozerConstruct)
                 {
                     if (!SimulationQueries.IsBuilder(entity)) return State(ButtonAvailability.Restricted, ButtonReason.NotABuilder, null, cost, ticks);
-                    if (SimulationQueries.AiOf(entity) is { IsBuilding: true }) return State(ButtonAvailability.Restricted, ButtonReason.BuilderBusy, null, cost, ticks);
+                    if (SimulationQueries.AiOf(entity) is { IsConstructing: true }) return State(ButtonAvailability.Restricted, ButtonReason.BuilderBusy, null, cost, ticks);
                     if (!SimulationQueries.CanBuildTemplate(world, player, entity, template)) return State(ButtonAvailability.Restricted, ButtonReason.NotBuildable, null, cost, ticks);
                 }
                 else

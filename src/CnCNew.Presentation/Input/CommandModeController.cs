@@ -477,7 +477,7 @@ public sealed class CommandModeController
             }
             case GuiCommandKind.DozerConstruct:
             {
-                var builder = sources.FirstOrDefault(entity => SimulationQueries.IsBuilder(entity) && SimulationQueries.AiOf(entity) is { IsBuilding: false });
+                var builder = sources.FirstOrDefault(entity => SimulationQueries.IsBuilder(entity) && SimulationQueries.AiOf(entity) is { IsConstructing: false });
                 if (builder is null) return ActivationResult.NoSource;
                 Cancel();
                 Mode = CommandModeKind.Placement;
