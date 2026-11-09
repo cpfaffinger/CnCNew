@@ -303,6 +303,7 @@ public sealed partial class SkirmishAi
         if (_world.Navigation is { } seen) StampVisibleCells(seen);
         var workerPrice = ProduceWorkers();
         SellForCarrier();
+        SellForCenter();
         BuildStructures(workerPrice);
         ManageSites();
         RepairStructures();
@@ -645,7 +646,31 @@ public sealed partial class SkirmishAi
     private void SellForCarrier()
     {
         if (CountAlive(Role.SupplyCenter, false) == 0 || CountAlive(Role.Carrier, false) > 0 || InFlight(Role.Carrier) > 0) return;
-        var price = CheapestWorkerPrice(Role.Carrier);
+        SellToCover(CheapestWorkerPrice(Role.Carrier));
+    }
+
+    /// <summary>Game time (in frames of the original) a base must have stood before a missing supply center is paid for by a sale: a player that has not yet built its first one is saving for it.</summary>
+    private const long SellForCenterAfterFrames = 3600;
+
+    /// <summary>
+    /// The owner's playtest of 9 November 2026: a United States player whose supply center fell, with less money than a new one costs, never earned again - its Chinooks (the center
+    /// makes the first one) and the income they bring start at that center, and the sale for a carrier only begins once a center stands. A player that has had its base for two game minutes,
+    /// has no supply center standing or on its way, and cannot pay for one sells what <see cref="SellToCover"/> picks, the same way.
+    /// </summary>
+    private void SellForCenter()
+    {
+        if (_tick < _time.OriginalFrames(SellForCenterAfterFrames) || CountAlive(Role.SupplyCenter, true) > 0 || CountAlive(Role.Builder, false) == 0) return;
+        NextStructure(Role.SupplyCenter, out var center);
+        if (center is null) return;
+        SellToCover(center.BuildCost);
+    }
+
+    /// <summary>
+    /// Sells the least valuable building that the player can do without (never a command center, a supply center, or a producer of builders or carriers) through the same
+    /// <see cref="SellCommand"/> a human gives, preferring the cheapest whose refund pays what <paramref name="price"/> exceeds the player's money by; one sale per <see cref="SellForCarrierRetryFrames"/>.
+    /// </summary>
+    private void SellToCover(Fixed price)
+    {
         var money = _world.MoneyOf(_player);
         if (price == Fixed.Zero || money >= price) return;
         var missing = price - money;
