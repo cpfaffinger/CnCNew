@@ -930,6 +930,7 @@ if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Coma
 if (contentDirectory is not null) run.Test("Real data: helicopters take goals of their own at the rally point and at one ordered point", () => Tests.RealHelicoptersTakeGoalsOfTheirOwn(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a production queue holds the original's 9 entries and a refused order costs nothing", () => Tests.RealProductionQueueHasTheOriginalsLimit(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter and the fuel air bomb explode at their target and destroy what stands there", () => Tests.RealDaisyCutterAndFuelAirBomb(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter dropped on a building still blows up (its gas is immobile and meets no building)", () => Tests.RealDaisyCutterOnABuilding(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a wheeled unit ordered onto a goal inside its turning circle does not circle it for ever", () => Tests.RealWheeledUnitDoesNotCircleItsGoalForEver(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): five Dozers sent to one place settle around it", () => Tests.RealDozersSentToOnePlaceSettleAroundIt(contentDirectory));

@@ -18,6 +18,9 @@ public sealed partial class SimulationWorld
     /// </remarks>
     public FlightContact MeetWhatStands(Entity flyer, Fixed x, Fixed y, Fixed z, string buildingWeapon, string otherWeapon)
     {
+        // PartitionManager::update: "if (collideEm && !dirty->getObject()->isKindOf(KINDOF_IMMOBILE)) addPossibleCollisions" - an immobile object never looks for contacts, however it moves. The Daisy Cutter's
+        // gas and the fuel air bomb's are IMMOBILE and fall (setAllowToFall) over the building they were dropped on: met against it, they were destroyed with no death and no blast.
+        if (flyer.Template.IsKindOf("IMMOBILE")) return default;
         if (flyer.DestroyRequested || !CanCollide(flyer) || (AiOf(flyer) is not null && !flyer.EffectivelyDead)) return default;
         var above = z > LayerHeightAt(x, y, flyer.Layer);
         var usRadius = above ? flyer.Template.BoundingSphereRadius : CircleRadius(flyer);

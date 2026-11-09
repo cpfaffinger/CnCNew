@@ -75,4 +75,57 @@ static partial class Tests
         System.Console.WriteLine("       " + Bomb(false));
         System.Console.WriteLine("       " + Bomb(true));
     }
+
+    /// <summary>
+    /// The owner's playtest of 8 November 2026: "the fuel bomb still does not work". A Daisy Cutter dropped on an enemy base lands on its buildings: its gas (<c>IMMOBILE</c>, made in the
+    /// air and falling) was met against the command center under it by <c>MeetWhatStands</c> and destroyed ("fall into a building") with no death, no flame and no blast. The original's
+    /// <c>PartitionManager::update</c> adds no collisions for an immobile object at all. The gas dies and detonates, the command center under it is hurt and the tank beside it is gone.
+    /// </summary>
+    public static void RealDaisyCutterOnABuilding(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
+        var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(400, 400, 1, (_, _) => 0), "real-bomb-on-building");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-bomb-on-building", fingerprint, terrain.Fingerprint), catalog, terrain);
+        ulong sequence = 0;
+        SubmitResult Send(System.Func<ulong, SimCommand> make) => world.Submit(make(++sequence));
+        void Spawn(string template, int owner, int x, int y)
+            => Check.That(Send(next => new SpawnCommand(new PlayerId(owner), next, world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template} spawns.");
+        Spawn("AmericaCommandCenter", 1, 500, 500);
+        Spawn("AmericaCommandCenter", 2, 2500, 2500);
+        Spawn("AmericaTankCrusader", 2, 2560, 2500);
+        world.Step();
+        Check.That(world.GrantScience(new PlayerId(1), "SCIENCE_DaisyCutter"), "The science of the power is granted.");
+        var center = world.Entities.First(value => value.Template.Name == "AmericaCommandCenter" && value.Owner == new PlayerId(1));
+        var target = world.Entities.First(value => value.Template.Name == "AmericaCommandCenter" && value.Owner == new PlayerId(2));
+        var tank = world.Entities.First(value => value.Template.Name == "AmericaTankCrusader");
+        var maxHealth = target.Body!.MaxHealth;
+        while (world.Tick % world.Time.OriginalFrames(1) != 0) world.Step();
+        // The bomb falls straight onto the middle of the building, the way the plane's run over a base sets it down.
+        Check.That(Send(next => new UseSpecialPowerCommand(new PlayerId(1), next, world.Tick, center.Id, "SuperweaponDaisyCutter", SpecialPowerTargetKind.Location, EntityId.Invalid, target.X, target.Y)).Accepted, "The power is used.");
+        var seen = new HashSet<string>();
+        var gasDiedAt = -1L;
+        var gasGoneAt = -1L;
+        var blast = false;
+        for (var tick = 0; tick < world.Frames(30 * 90) && !(blast && (tank.EffectivelyDead || !world.Entities.Contains(tank))); tick++)
+        {
+            var result = world.Step();
+            foreach (var e in result.Events)
+            {
+                if (e.Kind == SimEventKind.EntitySpawned) seen.Add(e.Text);
+                if (e.Kind == SimEventKind.FxRequested && e.Text == "FX_DaisyCutterFinalExplosion") blast = true;
+                if (e.Kind == SimEventKind.EntityDied && world.FindEntity(e.Entity) is { Template.Name: "DaisyCutterGas" }) gasDiedAt = world.Tick;
+                if (e.Kind == SimEventKind.EntityDestroyed && e.Text == "DaisyCutterGas") gasGoneAt = world.Tick;
+            }
+        }
+        Check.That(seen.Contains("DaisyCutterBomb") && seen.Contains("DaisyCutterGas"), "The bomb makes its gas.");
+        Check.That(gasDiedAt >= 0 && gasGoneAt - gasDiedAt >= world.Frames(30) - world.Frames(1), $"The gas dies and lives out its slow death of a second ({gasDiedAt} -> {gasGoneAt}), it is not removed the moment it meets the building.");
+        Check.That(blast, "The slow death's last phase detonates.");
+        Check.That(tank.EffectivelyDead || !world.Entities.Contains(tank), "The tank beside the command center is destroyed.");
+        Check.That(target.Body!.Health < maxHealth, $"The command center is hurt ({target.Body.Health} of {maxHealth}).");
+    }
 }
