@@ -274,6 +274,8 @@ public sealed partial class SimulationWorld
         if ((mover.MoveTargetX - x).Abs() < GoalIgnoresBlockers && (mover.MoveTargetY - y).Abs() < GoalIgnoresBlockers) return false;
         if (CanRunOver(mover, other)) return false;
         if (other.Template.Locomotor is { } locomotor && (locomotor.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0) return false;
+        // "don't collide": a unit that reverses is held up by nobody, whatever lies in front of it (blockedBy, after the check of the other's ground movement).
+        if (AiOf(mover) is { IsMovingBackwards: true }) return false;
         var (ourX, ourY) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
         var (hisX, hisY) = (FixedTrig.Cos(otherAngle), FixedTrig.Sin(otherAngle));
         var sameWay = ourX * hisX + ourY * hisY;

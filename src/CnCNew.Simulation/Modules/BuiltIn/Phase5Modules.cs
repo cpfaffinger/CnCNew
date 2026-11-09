@@ -2200,6 +2200,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary><c>Locomotor::m_flags</c> <c>MOVING_BACKWARDS</c>; written only while set.</summary>
     private bool _movingBackwards;
 
+    /// <summary><c>Locomotor::isMovingBackwards</c>: the unit is reversing (a wheeled unit at rest whose goal lies behind it).</summary>
+    internal bool IsMovingBackwards => _movingBackwards;
+
     /// <summary>
     /// <c>Locomotor::moveTowardsPositionWheels</c>: a wheeled unit at rest whose goal lies behind it reverses. If the rest of its way is no longer than five of its radii it goes all the
     /// way backwards; over a longer way it makes a three-point turn (<c>DOING_THREE_POINT_TURN</c>): it reverses with its front swinging to the goal until the goal is ahead of it.
