@@ -136,7 +136,7 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
 
 For a machine that never saw this project: clone it (or download it) and double-click **`CnCNew-Launcher.cmd`**. It needs nothing but Windows and your Steam library: it checks
 what the game needs, installs what is missing, makes the game in a folder you choose (default: `CnCNew` in your home; Steam is only read), starts it once and then leads to the acceptance, to the game and to new versions.
-For now it builds from source; later a launcher will download finished binaries. Details: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+That way builds from source. Players use the public launcher instead (`tools/CnCNew.Launcher`, one self-contained exe that downloads the release, verifies it and makes the game from their Steam copy). Details: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 The same by hand:
 
