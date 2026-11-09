@@ -212,7 +212,11 @@ public sealed partial class SimulationWorld
             if (unit.Template.Locomotor is null || unit.Template.IsKindOf("IMMOBILE") || unit.Template.IsKindOf("PROJECTILE")) continue;
             ai.OrderIdle(this, true);
             var (x, y) = guarded is not null ? (guarded.X, guarded.Y) : area is not null ? (areaX, areaY) : (order.X, order.Y);
-            unit.Guard = new GuardState { X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode, Area = area?.Name ?? string.Empty };
+            unit.Guard = new GuardState
+            {
+                X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode, Area = area?.Name ?? string.Empty,
+                OnTheWay = _templates.Rules.Has(Rules.GameFix.GuardEngagesOnTheWay) && !unit.Template.EnterGuard,
+            };
             if (guarded is not null) (unit.Guard.GuardeeX, unit.Guard.GuardeeY) = (guarded.X, guarded.Y);
             _acquirers.Add(unit.Id.Value);
             if (!GuardWaitsForAircraft(ai, unit.Guard)) EnterGuardReturn(unit, ai, unit.Guard, _tick, ordered: true);
@@ -350,15 +354,28 @@ public sealed partial class SimulationWorld
                 }
                 if (tick >= guard.NextScanTick)
                 {
-                    guard.NextScanTick = tick + Time.OriginalFrames(GuardReturnScanFrames);
+                    // On its first walk to the post (rule fix guard-engages-on-the-way) the unit looks as often as an attack-move does, not only every GuardEnemyReturnScanRate.
+                    guard.NextScanTick = tick + (guard.OnTheWay ? ai.MoodCheckTicks : Time.OriginalFrames(GuardReturnScanFrames));
                     if (LookForGuardTarget(entity, guard) is not null)
                     {
                         ai.StopInternalMoveAtFrameEnd(this);
                         EnterGuardInner(entity, ai, guard, tick);
                         return;
                     }
+                    if (guard.OnTheWay && LookForTargetOnTheWay(entity, ai) is { } met)
+                    {
+                        ai.StopInternalMoveAtFrameEnd(this);
+                        if (StartWayAttack(entity, ai, guard, tick, met)) return;
+                        EnterGuardReturn(entity, ai, guard, tick);
+                        return;
+                    }
                 }
                 if (!entity.HasMoveTarget) EnterGuardIdle(entity, guard, tick);
+                return;
+            case GuardPhase.Way:
+                if (WayAttackGoesOn(entity, ai, guard, tick)) return;
+                EndGuardAttack(entity, ai);
+                EnterGuardReturn(entity, ai, guard, tick);
                 return;
             case GuardPhase.Idle:
                 if (AttackedAndCanAnswer(entity, guard))
@@ -570,8 +587,41 @@ public sealed partial class SimulationWorld
     private void EnterGuardIdle(Entity entity, GuardState guard, long tick)
     {
         guard.Phase = GuardPhase.Idle;
+        guard.OnTheWay = false;
         guard.NextScanTick = tick + GuardScanOffset(entity, tick, GuardScanFrames, 2);
         _ = entity;
+    }
+
+    /// <summary>
+    /// Rule fix <see cref="Rules.GameFix.GuardEngagesOnTheWay"/>: the enemy an attack-move would pick now, from where the unit stands (<see cref="FindMoodTarget"/>, the unit's own vision), for a unit
+    /// that may fight.
+    /// </summary>
+    private Entity? LookForTargetOnTheWay(Entity entity, AIUpdateInterface ai)
+    {
+        if (!MayAct(entity, _tick) || !TurretsLetAttack(entity) || ActiveWeaponSet(entity) is null) return null;
+        UpdateWeaponSet(entity);
+        return FindMoodTarget(entity, ai, AcquireMode.AttackMove) is { } found && IsGuardVictim(entity, found) ? found : null;
+    }
+
+    /// <summary>The fight on the way to the post: the victim is attacked and chased for at most <c>GuardChaseUnitsDuration</c>, wherever it is; afterwards the walk goes on.</summary>
+    private bool StartWayAttack(Entity entity, AIUpdateInterface ai, GuardState guard, long tick, Entity victim)
+    {
+        guard.Phase = GuardPhase.Way;
+        guard.Nemesis = victim.Id;
+        guard.GiveUpTick = tick + Time.OriginalFrames(GuardChaseFrames);
+        var state = entity.Acquisition ??= new AcquisitionState();
+        state.Victim = victim.Id;
+        AimTurretsForAttack(entity, victim, TurretAimOrder.Attack);
+        if (GuardEngage(entity, ai, state, victim, tick)) return true;
+        guard.GiveUpTick = 0;
+        EndGuardAttack(entity, ai);
+        return false;
+    }
+
+    private bool WayAttackGoesOn(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
+    {
+        if (entity.Acquisition is not { Victim.IsValid: true } state || FindEntity(state.Victim) is not { } victim || !IsGuardVictim(entity, victim)) return false;
+        return tick < guard.GiveUpTick && GuardEngage(entity, ai, state, victim, tick);
     }
 
     /// <summary>The attack of INNER, OUTER and ATTACK_AGGRESSOR (<c>AIAttackState</c> on the nemesis): false when there is no nemesis to attack.</summary>

@@ -298,6 +298,7 @@ run.Test("A guard attacks only what it can hurt: a sniper does not walk at a veh
 run.Test("Phase 41 (F-58, step 1): a guard answers an attacker beyond its inner range", Tests.GuardAnswersAnAttacker);
 run.Test("Phase 41 (F-58, step 6): a human player's idle units answer an attack on a friend nearby", Tests.GuardRetaliation);
 run.Test("Rule fix guard-answers-only-when-idle: a returning guard walks on to its post before it answers", Tests.GameFixGuardAnswersOnlyWhenIdle);
+run.Test("Rule fix guard-engages-on-the-way: a unit ordered to guard a far place fights the enemies it meets on the way", Tests.GameFixGuardEngagesOnTheWay);
 run.Test("Phase 42 (F-58, step 7): a deploying unit on guard sets up at its post and packs before it chases", Tests.GuardDeployStyleDeploysAndPacks);
 run.Test("Phase 42 (F-58, step 7): a parked jet takes off for its guard, reloads and guards on", Tests.GuardJetTakesOffAndResumesAfterReload);
 run.Test("Phase 42 (F-58, step 7): a parked jet takes off to answer an attack on its airfield", Tests.GuardRetaliationJetTakesOff);
@@ -947,6 +948,7 @@ if (contentDirectory is not null) run.Test("Real data (F-143): a tunnel defender
 if (contentDirectory is not null) run.Test("Real data (combat math): hits, shots a second and shots to kill equal the hand calculation from the INI at 30, 60 and 120 Hz", () => Tests.RealCombatMathMatchesTheData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): soldiers never enter a transport that is not their player's, an own one and an empty neutral building they do", () => Tests.RealSoldiersNeverEnterAnEnemyTransport(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a human player's Chinook gathers - made by the supply center and ordered to a pile - at every rate", () => Tests.RealHumanChinookGathers(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (owner decision): a Ranger ordered to guard a far place fights the enemy beside its path on the way (rule fix guard-engages-on-the-way)", () => Tests.RealGuardEngagesOnTheWay(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): units pick the victim they hurt most and that threatens them most (rule fix target-by-damage-potential)", () => Tests.RealTargetValueChoosesWhatItHurtsMost(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value leaves ordered attacks and lone victims alone", () => Tests.RealTargetValueLeavesOrdersAndLoneVictimsAlone(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value numbers follow the armour table and the threat", () => Tests.RealTargetValueNumbersFollowTheRule(contentDirectory));

@@ -6,7 +6,7 @@ using CnCNew.Simulation.State;
 namespace CnCNew.Simulation.World;
 
 /// <summary>The states of <c>AIGuardMachine</c> (<c>AIGuard.h</c>); <c>GET_CRATE</c> never holds (its crate is never found) and is passed through.</summary>
-internal enum GuardPhase : byte { Inner = 1, Outer = 2, Return = 3, Idle = 4, Aggressor = 5 }
+internal enum GuardPhase : byte { Inner = 1, Outer = 2, Return = 3, Idle = 4, Aggressor = 5, Way = 6 }
 
 /// <summary>
 /// A unit's guard (<c>AI_GUARD</c> with its <c>AIGuardMachine</c>, docs/GUARD-STATE.md, F-58): what it guards - a position or an object -, in which mode, which state of the machine it is
@@ -41,6 +41,12 @@ internal sealed class GuardState
     /// </summary>
     public bool Held;
 
+    /// <summary>
+    /// The unit is still on its first walk to the post after the order (rule fix guard-engages-on-the-way): RETURN looks around the unit itself every mood check, and a victim it
+    /// finds is fought in <see cref="GuardPhase.Way"/>. Cleared when the unit has arrived.
+    /// </summary>
+    public bool OnTheWay;
+
     /// <summary><c>AIGuardMachine::m_nemesisID</c>: the enemy the attacking states attack.</summary>
     public EntityId Nemesis;
 
@@ -72,6 +78,7 @@ internal sealed class GuardState
         if (Retaliate) writer.Bool("retaliate", true);
         if (Starting) writer.Bool("starting", true);
         if (Held) writer.Bool("held", true);
+        if (OnTheWay) writer.Bool("onTheWay", true);
         if (Nemesis.IsValid) writer.UInt("nemesis", Nemesis.Value);
         if (GiveUpTick != 0) writer.Int("giveUpTick", GiveUpTick);
         writer.Int("nextScanTick", NextScanTick);
@@ -97,6 +104,7 @@ internal sealed class GuardState
             Retaliate = reader.Has("retaliate") && reader.Bool("retaliate"),
             Starting = reader.Has("starting") && reader.Bool("starting"),
             Held = reader.Has("held") && reader.Bool("held"),
+            OnTheWay = reader.Has("onTheWay") && reader.Bool("onTheWay"),
             Nemesis = reader.Has("nemesis") ? new EntityId(checked((uint)reader.UInt("nemesis"))) : EntityId.Invalid,
             GiveUpTick = reader.Has("giveUpTick") ? reader.Int("giveUpTick") : 0,
             NextScanTick = reader.Int("nextScanTick"),
@@ -114,8 +122,8 @@ internal sealed class GuardState
 }
 
 /// <summary>Every mutable field of a <see cref="GuardState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
-internal readonly record struct GuardStamp(bool Present, GuardPhase Phase, EntityId Nemesis, long GiveUpTick, long NextScanTick, Fixed GuardeeX, Fixed GuardeeY, long ClearedDamageTick, bool Starting, bool Held)
+internal readonly record struct GuardStamp(bool Present, GuardPhase Phase, EntityId Nemesis, long GiveUpTick, long NextScanTick, Fixed GuardeeX, Fixed GuardeeY, long ClearedDamageTick, bool Starting, bool Held, bool OnTheWay)
 {
     public static GuardStamp Of(GuardState? state)
-        => state is null ? default : new(true, state.Phase, state.Nemesis, state.GiveUpTick, state.NextScanTick, state.GuardeeX, state.GuardeeY, state.ClearedDamageTick, state.Starting, state.Held);
+        => state is null ? default : new(true, state.Phase, state.Nemesis, state.GiveUpTick, state.NextScanTick, state.GuardeeX, state.GuardeeY, state.ClearedDamageTick, state.Starting, state.Held, state.OnTheWay);
 }

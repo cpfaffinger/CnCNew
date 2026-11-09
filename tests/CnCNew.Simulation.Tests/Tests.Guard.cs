@@ -321,6 +321,71 @@ static partial class Tests
     }
 
     /// <summary>
+    /// The rule fix <c>guard-engages-on-the-way</c> (the owner's wish): a rifleman (vision 150, guard ranges 270 / 330) ordered to guard a point 500 away passes a dummy that stands
+    /// 60 beside its path (inside its rifle range of 100) and 355 from the point - beyond every guard range of the point (330). Under the original rules the walk (RETURN) looks only around the point and the dummy lives;
+    /// with the fix the rifleman turns to it as an attack-move would, kills it far from the point, and walks on to guard the point. At 30, 60 and 120 Hz, a save in the middle of the
+    /// fight continues identically, and a move order during the fight ends it.
+    /// </summary>
+    public static void GameFixGuardEngagesOnTheWay()
+    {
+        (bool Killed, Fixed FarthestFromPost, long KilledFrame, Fixed EndDistance, bool Idle) Run(SimulationRate rate, CnCNew.Simulation.Rules.RuleProfile rules, bool save = false)
+        {
+            var (world, feeder, fixture) = GuardWorld(rate, rules: rules);
+            var guardian = GdSpawn(world, feeder, "FcRifleman", 1, 0, 0);
+            var dummy = GdSpawn(world, feeder, "GdDummy", 2, 150, 60);
+            Check.That(feeder.Guard(1, [guardian.Id.Value], 500, 0).Accepted, $"{rate}: the guard order is accepted.");
+            long killedFrame = -1;
+            var farthest = Fixed.Zero;
+            for (var step = 0; step < world.Frames(900); step++)
+            {
+                world.Step();
+                if (killedFrame < 0 && (dummy.EffectivelyDead || !world.Entities.Contains(dummy)))
+                {
+                    killedFrame = world.Time.ToOriginalFrames(world.Tick);
+                    farthest = GdDistance(guardian, 500, 0);
+                }
+                if (save && step == world.Frames(75))
+                {
+                    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                    Check.That(restored.StateHash == world.StateHash, $"{rate}: a world in the middle of the fight on the way restores to the same hash.");
+                    for (var next = 0; next < world.Frames(60); next++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"{rate}: step {next} after the restore agrees.");
+                }
+            }
+            return (killedFrame >= 0, farthest, killedFrame, GdDistance(guardian, 500, 0), !guardian.HasMoveTarget);
+        }
+
+        var original = CnCNew.Simulation.Rules.RuleProfile.Original;
+        var withFix = CnCNew.Simulation.Rules.RuleProfile.Parse("guard-engages-on-the-way");
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var without = Run(rate, original);
+            Check.That(!without.Killed, $"{rate}: under the original rules the guard walks past the dummy and never fights it.");
+            Check.That(without.EndDistance < Fixed.FromInt(20) && without.Idle, $"{rate}: and it stands at its post ({without.EndDistance}).");
+        }
+
+        var at60 = Run(SimulationRate.Hz60, withFix);
+        Run(SimulationRate.Hz60, withFix, save: true);
+        Check.That(at60.Killed, "With the fix the guard fights the dummy on its way.");
+        Check.That(at60.FarthestFromPost > Fixed.FromInt(300), $"It killed it far from the post ({at60.FarthestFromPost} away), which no guard range of the post reaches (355).");
+        Check.That(at60.EndDistance < Fixed.FromInt(20) && at60.Idle, $"and then it walked on and guards the post ({at60.EndDistance}).");
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz120 })
+        {
+            var other = Run(rate, withFix);
+            Check.That(other.Killed && Math.Abs(other.KilledFrame - at60.KilledFrame) <= 2 && other.EndDistance < Fixed.FromInt(20), $"{rate}: the same fight ({other.KilledFrame} against {at60.KilledFrame}).");
+        }
+
+        // A move order given during the fight ends the guard: the rifleman does not come back to the post by itself.
+        var (world, feeder, _) = GuardWorld(TestRate.Default, rules: withFix);
+        var mover = GdSpawn(world, feeder, "FcRifleman", 1, 0, 0);
+        GdSpawn(world, feeder, "GdDummy", 2, 150, 60);
+        feeder.Guard(1, [mover.Id.Value], 500, 0);
+        for (var step = 0; step < world.Frames(75); step++) world.Step();
+        feeder.SetMoveTarget(1, mover.Id.Value, 0, 300);
+        for (var step = 0; step < world.Frames(300); step++) world.Step();
+        Check.That(!world.IsGuarding(mover) && GdDistance(mover, 0, 300) < Fixed.FromInt(20), "A move order in the middle of the fight ends the guard and is obeyed.");
+    }
+
+    /// <summary>
     /// F-58 step 7, <c>DeployStyleAIUpdate::update</c>: a deploying unit on guard sets itself up at its post while it is idle there ("idle guarders deploy for fastest response");
     /// when the guard then chases an enemy beyond its weapon it packs first and only then drives (the guard's move waits, it is not lost), and deploys again to fire. At 30, 60
     /// and 120 Hz.

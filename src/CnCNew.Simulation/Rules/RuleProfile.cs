@@ -91,6 +91,9 @@ public enum GameFix
 
     /// <summary>A unit that picks its own victim (idle, attack-move, guard, a computer player's unit) takes, among the enemies it may attack, the one it would hurt most and that is most dangerous to it - the damage its best weapon does against that victim's armour and health, plus the victim's threat to the unit - instead of the closest. The owner's decision, not the community source's; an ordered attack is never changed.</summary>
     TargetByDamagePotential = 27,
+
+    /// <summary>A unit sent to guard a place engages the enemies it meets on its way there as an attack-move does, and walks on to the place afterwards. In the original the walk to the post (RETURN) looks only for enemies within the guard range of the post itself and answers an attacker only in INNER and RETURN (not at all with <see cref="GuardAnswersOnlyWhenIdle"/>); the owner's wish, not the community source's.</summary>
+    GuardEngagesOnTheWay = 28,
 }
 
 /// <summary>
@@ -229,6 +232,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.TargetByDamagePotential, "target-by-damage-potential",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate.cpp, AIUpdateInterface::getNextMoodTarget; AI.cpp, AI::findClosestEnemy (the project owner's decision, not a community fix)",
             "a unit that chooses its own victim takes the enemy it can hurt most and that threatens it most - a Comanche the rocket troopers, a rocket trooper the tanks, a tank the tanks - instead of the closest one; the data's attack priority still comes first and an ordered attack is never changed"),
+        new(GameFix.GuardEngagesOnTheWay, "guard-engages-on-the-way",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGuard.cpp, AIGuardReturnState (compare AIAttackMoveToState::update; the project owner's decision, not a community fix)",
+            "a unit ordered to guard a place that is far away fights the enemies it meets on the way - as it would on an attack-move - and goes on to the place when they are gone, instead of walking past them and looking only around the place"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

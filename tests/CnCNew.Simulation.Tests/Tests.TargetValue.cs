@@ -30,6 +30,18 @@ static partial class Tests
             (_fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(_graph);
         }
 
+        /// <summary>A world on flat ground with two players under the given rules (the catalogs are built once per rate and profile).</summary>
+        public SimulationWorld WorldWith(SimulationRate rate, RuleProfile rules)
+        {
+            if (!_byRules.TryGetValue((rate, rules.Name), out var catalog))
+                _byRules[(rate, rules.Name)] = catalog = TemplateCatalog.Build(_graph, ModuleBindingTable.Default, rate, rules: rules);
+            var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(160, 160, 1, (_, _) => 0), "rules-world");
+            return new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, players, "real-rules-world", _fingerprint, terrain.Fingerprint), catalog, terrain);
+        }
+
+        private readonly Dictionary<(SimulationRate, string), TemplateCatalog> _byRules = [];
+
         /// <summary>A world on flat ground with two players; <paramref name="withFix"/> false is the product rules without this one fix.</summary>
         public SimulationWorld World(SimulationRate rate, bool withFix, bool computer = false)
         {
