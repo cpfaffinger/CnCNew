@@ -1069,6 +1069,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary><c>getLastCommandSource() == CMD_FROM_PLAYER</c>.</summary>
     public bool LastCommandFromPlayer => _lastCommandFromPlayer;
 
+    /// <summary>The machine that owns the object's idle work takes over from the player's last order (the supply machine's own regrouping, which the original orders with <c>CMD_FROM_AI</c>).</summary>
+    public void TakeOverFromPlayer(IWorldServices world)
+    {
+        if (!_lastCommandFromPlayer) return;
+        _lastCommandFromPlayer = false;
+        world.MarkDirty(Entity);
+    }
+
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
     /// <summary>

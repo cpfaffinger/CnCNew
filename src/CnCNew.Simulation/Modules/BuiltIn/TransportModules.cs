@@ -128,6 +128,9 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     public override bool HidesIdle => Entity.Container is TransportContain { HasRidersWaitingToExit: true };
     public override long UpgradedSupplyBoost(IWorldServices world) => BoostIfUpgraded(world, "Upgrade_AmericaSupplyLines");
 
+    /// <summary>The owner's decision (rule fix <c>chinook-keeps-gathering</c>): a Chinook gathers for good.</summary>
+    public override bool GathersForGood(IWorldServices world) => world.Templates.Rules.Has(Rules.GameFix.ChinookKeepsGathering);
+
     /// <summary>"Flying, even if we start on the ground" (<c>m_flightStatus = CHINOOK_FLYING</c>): a fresh Chinook climbs to its height at once.</summary>
     public override void OnSpawn(IWorldServices world)
     {

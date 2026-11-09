@@ -347,6 +347,7 @@ internal sealed class SupplyCenterDockUpdate(SupplyCenterDockData data) : DockUp
         if (value <= 0) return false;
         world.AddMoney(Entity.Owner, Fixed.FromInt(value));
         world.Emit(SimEventKind.SupplyDeposited, docker.Id, Entity.Id, string.Empty, value);
+        carrier.NoteDelivery(world, Entity);
         world.MarkDirty(docker);
         if (data.GrantStealthTicks > 0) StealthUpdate.GrantFrom(world, Entity, docker, data.GrantStealthTicks);
         return false;

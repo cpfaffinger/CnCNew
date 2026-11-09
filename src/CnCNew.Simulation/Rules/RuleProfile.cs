@@ -94,6 +94,8 @@ public enum GameFix
 
     /// <summary>A unit sent to guard a place engages the enemies it meets on its way there as an attack-move does, and walks on to the place afterwards. In the original the walk to the post (RETURN) looks only for enemies within the guard range of the post itself and answers an attacker only in INNER and RETURN (not at all with <see cref="GuardAnswersOnlyWhenIdle"/>); the owner's wish, not the community source's.</summary>
     GuardEngagesOnTheWay = 28,
+    /// <summary>A Chinook gathers for good: when no stocked warehouse is within its scan distance it takes the nearest one the player has seen, however far; a player's click on a supply center sets its home base (the center it delivered to last) without erasing the warehouse it was told to work; and a Chinook whose last order was the player's no longer stops for good where it found nothing. The owner's decision, not the community source's.</summary>
+    ChinookKeepsGathering = 29,
 }
 
 /// <summary>
@@ -235,6 +237,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.GuardEngagesOnTheWay, "guard-engages-on-the-way",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGuard.cpp, AIGuardReturnState (compare AIAttackMoveToState::update; the project owner's decision, not a community fix)",
             "a unit ordered to guard a place that is far away fights the enemies it meets on the way - as it would on an attack-move - and goes on to the place when they are gone, instead of walking past them and looking only around the place"),
+        new(GameFix.ChinookKeepsGathering, "chinook-keeps-gathering",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/SupplyTruckAIUpdate.cpp, SupplyTruckWantsToPickUpOrDeliverBoxesState::update, RegroupingState; Common/RTS/ResourceGatheringManager.cpp, findBestSupplyWarehouse (the project owner's decision, not a community fix)",
+            "a Chinook gathers for good: with no stocked warehouse within its scan distance it takes the nearest one its player has seen, however far; it delivers to the center it delivered to last, and a click on a supply center makes that center its home base without erasing the warehouse it was told to work; and it no longer stops for good when its last order was the player's and it found nothing"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

@@ -45,6 +45,9 @@ internal interface ISupplyCarrier
     /// <summary><c>getMaxBoxes</c>.</summary>
     int MaxBoxes { get; }
 
+    /// <summary>The center a delivery just went to: a gatherer that keeps a home base remembers it (<c>chinook-keeps-gathering</c>).</summary>
+    void NoteDelivery(IWorldServices world, Entity center);
+
     /// <summary><c>getActionDelayForDock</c>.</summary>
     long ActionDelayFor(IDockModule dock);
 
@@ -373,6 +376,13 @@ internal sealed class SupplyMachine
         {
             case SupplyState.Wanting:
                 var dock = ai.Boxes > 0 ? SupplyNetwork.FindBestCenter(world, ai) : SupplyNetwork.FindBestWarehouse(world, ai);
+                if (dock is null && ai.GathersForGood(world))
+                {
+                    // chinook-keeps-gathering: nothing within the scan distance, so the nearest stocked warehouse the player has seen; and the regrouping that follows a failure is the
+                    // machine's own order (the original's aiMoveToPosition(CMD_FROM_AI)), not the player's last one, which would end it at once and leave the Chinook standing.
+                    if (ai.Boxes == 0) dock = SupplyNetwork.FindSeenWarehouse(world, ai);
+                    if (dock is null) ai.TakeOverFromPlayer(world);
+                }
                 if (dock is null) return DockStatus.Failure;
                 ai.OrderDock(world, dock, false);
                 return DockStatus.Success;
@@ -441,8 +451,22 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
     private readonly SupplyMachine _machine = new();
     private int _boxes;
     private EntityId _preferredDock;
+    private EntityId _homeCenter;
 
     public int Boxes => _boxes;
+
+    /// <summary>Gathers for good (<c>chinook-keeps-gathering</c>): a far warehouse the player has seen, a home base, no stranding after a player's order.</summary>
+    public virtual bool GathersForGood(IWorldServices world) => false;
+
+    /// <summary>The center this carrier delivers to first: the one it delivered to last, or a click named (invalid without the rule or before a delivery).</summary>
+    public EntityId HomeCenter => _homeCenter;
+
+    public void NoteDelivery(IWorldServices world, Entity center)
+    {
+        if (!GathersForGood(world) || _homeCenter == center.Id) return;
+        _homeCenter = center.Id;
+        world.MarkDirty(Entity);
+    }
 
     /// <summary>The supply machine is idle (<c>SupplyTruckAIUpdate::isIdle</c>'s half of the question).</summary>
     protected bool SupplyIdle => _machine.Sleeps;
@@ -512,7 +536,9 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
 
     public override void OrderDock(IWorldServices world, Entity dock, bool fromPlayer)
     {
-        if (fromPlayer) _preferredDock = dock.Id;
+        // chinook-keeps-gathering: the click on a center sets the home base and leaves the warehouse it was told to work (the original has one memory for both).
+        if (fromPlayer && GathersForGood(world) && DockModules.DockOf(dock) is SupplyCenterDockUpdate) _homeCenter = dock.Id;
+        else if (fromPlayer) _preferredDock = dock.Id;
         base.OrderDock(world, dock, fromPlayer);
     }
 
@@ -537,6 +563,7 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
         base.Describe(writer);
         writer.Int("boxes", _boxes);
         writer.UInt("preferredDock", _preferredDock.Value);
+        if (_homeCenter.IsValid) writer.UInt("homeCenter", _homeCenter.Value);
         _machine.Describe(writer);
     }
 
@@ -545,6 +572,7 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
         base.Load(reader);
         _boxes = checked((int)reader.Int("boxes"));
         _preferredDock = new EntityId(checked((uint)reader.UInt("preferredDock")));
+        _homeCenter = reader.Has("homeCenter") ? new EntityId(checked((uint)reader.UInt("homeCenter"))) : EntityId.Invalid;
         _machine.Load(reader);
     }
 }
@@ -704,10 +732,32 @@ internal static class SupplyNetwork
         return best;
     }
 
+    /// <summary>
+    /// <c>chinook-keeps-gathering</c>: the nearest warehouse the carrier may use that its player has seen at least once, at any distance - what a gatherer takes when nothing stocked is within
+    /// its scan distance. A warehouse nobody has seen is not a target.
+    /// </summary>
+    public static Entity? FindSeenWarehouse(IWorldServices world, SupplyCarrierAI truck)
+    {
+        var self = truck.Entity;
+        Entity? best = null;
+        var bestCost = Fixed.MaxValue;
+        foreach (var candidate in world.EntitiesWithModule<IDockModule>().AsSpan())
+        {
+            if (Cost(self, truck, world, candidate, true) is not { } cost || !world.IsPositionExploredBy(self.Owner, candidate.X, candidate.Y)) continue;
+            if (best is null || cost < bestCost || (cost == bestCost && candidate.Id.Value < best.Id.Value))
+            {
+                best = candidate;
+                bestCost = cost;
+            }
+        }
+        return best;
+    }
+
     /// <summary><c>findBestSupplyCenter</c>: the remembered dock when it is a centre, else the closest one (no distance limit).</summary>
     public static Entity? FindBestCenter(IWorldServices world, SupplyCarrierAI truck)
     {
         var self = truck.Entity;
+        if (truck.HomeCenter.IsValid && world.FindEntity(truck.HomeCenter) is { } home && Cost(self, truck, world, home, false) is not null) return home;
         if (truck.PreferredDock.IsValid && world.FindEntity(truck.PreferredDock) is { } preferred && Cost(self, truck, world, preferred, false) is not null) return preferred;
         Entity? best = null;
         Fixed bestCost = Fixed.MaxValue;

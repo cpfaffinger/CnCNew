@@ -456,6 +456,9 @@ public interface IWorldServices
     /// <summary><see cref="RelationshipOf"/> == enemies.</summary>
     bool AreEnemies(PlayerId a, PlayerId b);
 
+    /// <summary>Has the player ever seen the cell under the point (the shroud's explored bit)? Always true without a terrain.</summary>
+    bool IsPositionExploredBy(PlayerId player, Fixed x, Fixed y);
+
     /// <summary><c>findMine</c> (F-69): the closest mine within <paramref name="range"/> of the builder that it may clear - an enemy's or a neutral one, seen, and one its active weapons can attack.</summary>
     Entity? FindMineToClear(Entity builder, Fixed range) => null;
 
