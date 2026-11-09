@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../build/Launcher.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../tools/CnCNew.Launcher.Core/CnCNew.Launcher.Core.csproj" />
+  </ItemGroup>
+</Project>

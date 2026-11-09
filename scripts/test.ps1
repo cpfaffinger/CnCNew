@@ -80,6 +80,7 @@ $areaOfPath = @(
     @('src/CnCNew.Game/', 'game'), @('tests/CnCNew.Game.Tests/', 'game'), @('tools/CnCNew.CampaignTool/', 'game'),
     @('src/CnCNew.Client.Stride/', 'client'),
     @('scripts/shell/', 'game'),
+    @('tools/CnCNew.Launcher/', 'launcher'), @('tools/CnCNew.Launcher.Core/', 'launcher'), @('tests/CnCNew.Launcher.Tests/', 'launcher'), @('scripts/package-launcher.ps1', 'launcher'),
     @('scripts/', 'scripts'),
     @('CnCNew-Launcher.cmd', 'scripts'),
     @('Start-Acceptance.cmd', 'scripts'),
@@ -113,6 +114,7 @@ $stepsOfArea = @{
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
     game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins', 'check-ingame-menu' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'check-minimap', 'check-ingame-menu', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins', 'product-survey' }
+    launcher     = @{ affected = 'launcher';                                gate = @() }
     scripts      = @{ affected = 'setup';                                   gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'video', 'presentation', 'sim', 'net'
@@ -193,6 +195,7 @@ $steps = @(
     New-Step 'ui'           'Ui.Tests'                                        (Test-Program 'Ui')
     New-Step 'audio'        'Audio.Tests'                                     (Test-Program 'Audio')
     New-Step 'video'        'Video.Tests'                                     (Test-Program 'Video')
+    New-Step 'launcher'     'Launcher.Tests (the public launcher)'            (Test-Program 'Launcher')
     New-Step 'presentation' 'Presentation.Tests'                              (Test-Program 'Presentation')
     New-Step 'data'         'Data.Tests'                                      (Test-Program 'Data')
     New-Step 'compat'       'Compatibility baseline'                          @('dotnet', 'run', '--no-build', '--project', 'tools/CnCNew.IniTool', '--', 'compat-check', $ContentDir, 'baselines/compatibility.json') -Content

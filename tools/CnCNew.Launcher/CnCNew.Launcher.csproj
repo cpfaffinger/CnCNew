@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../build/Launcher.props" />
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>CnCNew.Launcher.Shell</RootNamespace>
+    <AssemblyName>CnCNew-Launcher</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/launcher.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Layer rule (docs/INSTALLATION.md, "The public launcher"): the window references the launcher's core and nothing else of the repository, and no package.
+         tests/CnCNew.Launcher.Tests enforces it. -->
+  </PropertyGroup>
+  <!-- scripts/package-launcher.ps1 publishes one self-contained, compressed single-file exe: nothing to install, nothing beside it. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The WPF SDK leaves these out of the implicit usings (their names clash with WPF types in some files). -->
+    <Using Include="System.IO"/>
+    <Using Include="System.Net.Http"/>
+    <Using Include="System.Threading"/>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CnCNew.Launcher.Core/CnCNew.Launcher.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets/launcher.ico" />
+  </ItemGroup>
+</Project>

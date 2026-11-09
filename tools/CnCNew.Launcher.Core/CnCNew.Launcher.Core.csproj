@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../build/Launcher.props" />
+  <PropertyGroup>
+    <RootNamespace>CnCNew.Launcher</RootNamespace>
+    <AssemblyName>CnCNew.Launcher.Core</AssemblyName>
+    <!-- Layer rule (docs/INSTALLATION.md, "The public launcher"): this project and the launcher window reference no other project of the repository and no package.
+         It starts the packaged patcher as a process; it does not link the importer. tests/CnCNew.Launcher.Tests enforces it. -->
+  </PropertyGroup>
+</Project>

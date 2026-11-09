@@ -1,0 +1,14 @@
+<Project>
+  <!-- The public launcher's projects (tools/CnCNew.Launcher*, tests/CnCNew.Launcher.Tests) take their version from version.txt at the repository root: one line MAJOR.MINOR.PATCH,
+       the same file the release uses. Nothing else in the repository imports this file, so the build identity of the game assemblies is untouched. -->
+  <PropertyGroup>
+    <LauncherVersionFile>$(MSBuildThisFileDirectory)../version.txt</LauncherVersionFile>
+    <Version Condition="Exists('$(LauncherVersionFile)')">$([System.IO.File]::ReadAllText('$(LauncherVersionFile)').Trim())</Version>
+    <Version Condition="'$(Version)' == ''">0.0.0</Version>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <Product>CnCNew Launcher</Product>
+    <Company>CnCNew contributors</Company>
+    <Copyright>GPL-3.0-or-later</Copyright>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

@@ -29,6 +29,8 @@
     <Project Path="tools/CnCNew.DedicatedServer/CnCNew.DedicatedServer.csproj" />
     <Project Path="tools/CnCNew.PresentationTool/CnCNew.PresentationTool.csproj" />
     <Project Path="tools/CnCNew.W3dTool/CnCNew.W3dTool.csproj" />
+    <Project Path="tools/CnCNew.Launcher.Core/CnCNew.Launcher.Core.csproj" />
+    <Project Path="tools/CnCNew.Launcher/CnCNew.Launcher.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CnCNew.Archives.Tests/CnCNew.Archives.Tests.csproj" />
@@ -46,6 +48,7 @@
     <Project Path="tests/CnCNew.Video.Tests/CnCNew.Video.Tests.csproj" />
     <Project Path="tests/CnCNew.Net.Tests/CnCNew.Net.Tests.csproj" />
     <Project Path="tests/CnCNew.Game.Tests/CnCNew.Game.Tests.csproj" />
+    <Project Path="tests/CnCNew.Launcher.Tests/CnCNew.Launcher.Tests.csproj" />
   </Folder>
 </Solution>
 

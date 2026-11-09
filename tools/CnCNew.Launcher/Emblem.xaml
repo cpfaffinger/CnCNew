@@ -1,0 +1,32 @@
+<UserControl x:Class="CnCNew.Launcher.Shell.Emblem"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="100" Height="100" SnapsToDevicePixels="False" UseLayoutRounding="False">
+    <!-- This project's own emblem: a hexagonal badge, an amber "C" opened to the right, a crosshair and a contact dot. Drawn from primitives; nothing of the game. -->
+    <Viewbox Stretch="Uniform">
+        <Canvas Width="100" Height="100">
+            <Canvas.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="3" Opacity="0.55"/>
+            </Canvas.Effect>
+            <Polygon Points="50,4 90,27 90,73 50,96 10,73 10,27" StrokeLineJoin="Round" StrokeThickness="4">
+                <Polygon.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#2F4058" Offset="0"/>
+                        <GradientStop Color="#18202A" Offset="0.55"/>
+                        <GradientStop Color="#0F141B" Offset="1"/>
+                    </LinearGradientBrush>
+                </Polygon.Fill>
+                <Polygon.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FFD278" Offset="0"/>
+                        <GradientStop Color="#D68C1E" Offset="1"/>
+                    </LinearGradientBrush>
+                </Polygon.Stroke>
+            </Polygon>
+            <Polygon Points="50,12 83,31 83,69 50,88 17,69 17,31" Stroke="#6E3C4A5E" StrokeThickness="1.5" StrokeLineJoin="Round"/>
+            <Path Stroke="#F2B33D" StrokeThickness="9" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 65.3,62.9 A 20,20 0 1 1 65.3,37.1"/>
+            <Path Stroke="#96A9B4C2" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 50,19 L 50,27 M 50,73 L 50,81 M 21,50 L 29,50"/>
+            <Ellipse Canvas.Left="68" Canvas.Top="46" Width="8" Height="8" Fill="#F2B33D"/>
+        </Canvas>
+    </Viewbox>
+</UserControl>
