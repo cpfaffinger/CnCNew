@@ -1,161 +1,208 @@
 # CnCNew
 
-## What this is – and what it is not
+**A new engine for *Command & Conquer™ Generals – Zero Hour*.** CnCNew is a clean, from-scratch reimplementation of the game's runtime in C#/.NET 10 with a
+Direct3D 11 client (Stride). It plays the game you already own – with a modern user interface, a replay browser, an observer mode, a match analysis, stronger and
+selectable computer opponents, and multiplayer skirmishes through dedicated servers. The community patch *GeneralsGamePatch* is part of the game it runs.
 
-CnCNew is an independent reimplementation, in C#/.NET 10, of the SAGE engine runtime needed for
-*Command & Conquer™ Generals – Zero Hour*: data model, deterministic simulation, presentation and a Windows client on
-Stride 4.3 / Direct3D 11. It includes a patcher that builds a new local game directory from an existing installation
-of the game – a copy of the game **you already own** – in which every file lies open (plain files, no `.big` archives)
-and which runs with this engine. The user's installation is only read in the process, never modified. The repository
-contains **no game data**.
+> **You need your own copy of the game.** CnCNew contains **no game data** – no models, textures, sounds, maps, movies or text of the original. It builds a new,
+> local game folder from *your* copy of the English Steam version of *Command & Conquer Generals – Zero Hour*; your Steam installation is only read, never changed.
+> Without that copy there is nothing to play. See [Legal matters](#legal-matters).
 
-It is **not a finished game**, not a mod of the original program, not a substitute for buying the game and not a
-download of game data. Scope of the first product: single player (skirmish and campaign) and – planned, not built –
-multiplayer skirmishes with up to eight players through a dedicated server (`docs/MULTIPLAYER-PLAN.md`). Not in scope:
-networked campaign, matchmaking/ladder, NAT traversal, GameSpy compatibility, anti-cheat, binary
-compatibility with old mods and savegames.
+<!--
+SCREENSHOTS (not enabled: the pictures show the original game's art and so must not be committed - the owner decides whether and where they are published).
+To enable them: make the pictures with `pwsh scripts/capture-readme-screenshots.ps1` (it writes outside the repository), copy them to docs/screenshots/ (git-ignored),
+check them, publish them on a host of your choice, and replace the comment markers around the block below with real image links.
 
-In short: the simulation is deterministic at 60 Hz and checked against a reference manifest; skirmish and campaign run
-headless; a Windows client renders and plays sound – but **no human has accepted its look, sound or playability**.
-Multiplayer is planned, not built. Licence: GPL-3.0-or-later; not affiliated with or endorsed by Electronic Arts (see
-`NOTICE.md`).
+## Screenshots
 
-## Status (9 October 2026)
+| | |
+|---|---|
+| ![The main menu in the modern skin](docs/screenshots/main-menu.png) | ![The skirmish setup](docs/screenshots/skirmish-setup.png) |
+| ![In a match: world and command bar in the modern skin](docs/screenshots/match-hud.png) | ![The observer: ticker, player views and research tab](docs/screenshots/observer.png) |
+| ![Options and More options](docs/screenshots/options.png) | ![The replay browser](docs/screenshots/replay-browser.png) |
+| ![The analysis of a match](docs/screenshots/match-analysis.png) | |
+-->
 
-Measured is what tools and tests can verify without a human; details and numbers are in the linked
-documents, the yardstick for results is `baselines/reference-manifest.json`.
+## Contents
 
-- **Data:** the game data is loaded strictly typed; unknown keys, modules or references never fall back
-  silently to default values, every compatibility case is counted and secured against `baselines/compatibility.json`
-  (`docs/TYPED-DEFINITIONS.md`, `docs/PHASE3-COMPATIBILITY.md`).
-- **Simulation:** fixed point (Q39.24), deterministic, 60 Hz by default (30 and 120 Hz are checked by a
-  rate-equivalence suite against 30 Hz as the definition). All 183 simulation modules of the catalogue are
-  implemented (open: the 22 presentation modules), all 2,115 objects of the retail data can be instantiated. A
-  reference manifest with 50 runs (reference match, stress test, AI matches, missions) is checked at the end of every
-  phase under Windows (`docs/SIMULATION-CORE.md`, `docs/DETERMINISM.md`, `docs/TICKRATE-MIGRATION.md` §15).
-- **Skirmish and campaign, headless:** AI-versus-AI matches run deterministically (14 of 16 reference runs end with
-  a winner). The script VM executes the map scripts; a checking tool reaches victory and defeat on all 24 unique
-  campaign maps through the map's own scripts – in doing so it replaces player actions by
-  interventions in the world and verifies the script chain, **not the playability**. An agent that only issues commands wins three
-  of these maps (`docs/SCRIPT-ENGINE.md`, `docs/CAMPAIGN-AND-SAVEGAMES.md`).
-- **Client:** draws terrain, objects, effects, HUD and the menus from the original layouts, outputs sound and accepts
-  input; skirmish, mission, shell and a spectator mode start. **No human has accepted look, sound or
-  playability**, and at 60 Hz nobody has yet seen or heard the game; the viewings so far
-  found defects (`docs/DEMO-FINDINGS.md`). Smoke tests and checksums verify reproducibility, not correctness.
-- **Multiplayer:** planned only. Built is the preparatory work (measurement basis, performance, tick rate as a value of the world, fixed point,
-  60 Hz) and, since Phase 24, the session core: the computer players are part of the hashed and saved session state, a running skirmish can be saved and
-  continued, a match is started from one description, orders pass a two-stage command path and a tick driver releases the ticks
-  (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13). Since Phase 25 there is a protocol, a relay server as a library and a lockstep client
-  (`docs/NETWORK-PROTOCOL.md`), and **the local skirmish already runs through them**: an embedded server, a connection inside the process, one client. Several
-  clients with a world each stay hash-identical in one process. Since Phase 26 there is a UDP transport of its own, clock synchronisation with an adaptive playback
-  delay, a rule for clients that fall behind, and a **dedicated server** as a program (`docs/DEDICATED-SERVER.md`): eight client processes without a window play whole
-  matches through it and a UDP proxy with identical hashes on every line of a matrix of delay, jitter and loss (`docs/NETWORK-PROTOCOL.md` §16). Since Phase 27 a
-  match survives what goes wrong (`docs/NETWORK-PROTOCOL.md` §18, `docs/NETWORK-DIAGNOSTICS.md`): a player whose connection is lost keeps its seat and comes back
-  with the state of another member, somebody can watch on a delay or join a running match, the server writes every match as a replay file, a desync is named down
-  to tick, object and field, and the window client can join a server (`--join`, no lobby screen yet). Since Phase 28 the server can stand on an open port
-  (`docs/NETWORK-PROTOCOL.md` §20, `docs/DEDICATED-SERVER.md` §9 to §13): the connection is authenticated by the server's permanent key and encrypted, what a
-  stranger or a member may cost is bounded and counted, a room can have a password, a player a key of its own, an operator a ban list, and the server is a
-  self-contained package for Windows and Linux (`scripts/package-server.ps1`). All of it on one machine: no second computer has taken part - only a second
-  operating system on the same one (Linux under WSL plays in one match with Windows, and runs the packaged server) -, nothing has crossed a cable, and no
-  hostile load came from outside. Since Phase 29 the menus lead there (`docs/GAME-SHELL.md` §15, `docs/GAME-HUD.md` §21, `docs/MULTIPLAYER-FINDINGS.md`):
-  Multiplayer > Network takes an address, asks about a server never met with its key, shows its rooms and a room with seats, map, chat and start, the shared
-  load screen and - after the match - the way back into the room; "Host" runs the same server inside the game; in the match the HUD says how the connection
-  is, whom the match waits for and until when, who paused, and carries the chat. What a click costs on a line with delay is measured (the marker in the frame
-  of the click, the order twice the delay and a tick or two later). **No human has seen or played any of it:** the acceptance was done by programs that stand
-  in for a person - scripted clicks through the real client, pinned pictures of every state, a latency measurement.
-- **One product (Phase 52, 31 October 2026):** the game is the patched variant - the community patch GeneralsGamePatch above the Steam installation, every adopted fix
-  of GeneralsGameCode and the budgeted movement. The installer fetches the patch at a recorded commit and checks every file (`docs/PATCH-LAYER.md`); the manifests measure this
-  variant. The paragraphs below that call the original "the default and the yardstick" are the history; the original stays as a switch (`--rules original`, `game/original/content`).
-- **Shippable completion (Phase 30, by machine, on one machine):** a self-contained Windows package of the game (`scripts/package-client.ps1`: client and
-  patcher, `Install-CnCNew.cmd` finds the Steam installation by itself), the server packages, a proof that no package holds original data
-  (`scripts/check-separation.ps1`), the list of third-party licences (`docs/THIRD-PARTY.md`), crash reports, run logs and support bundles that never leave the
-  machine by themselves (`docs/TROUBLESHOOTING.md`), a clean-room build from empty caches (`scripts/clean-room.ps1`), the version rule as a proposal for the
-  owner (`docs/COMPATIBILITY.md`), and every acceptance item with what a program checked and what only a human can judge (`docs/ACCEPTANCE-MACHINE.md`).
-  Fixes of the community source GeneralsGameCode are adopted as options of a rule profile (`--rules fixes`; the original stays the default and the yardstick,
-  `docs/GGC-FIXES.md`); GeneralsGamePatch imports as a layer of its own (`docs/PATCH-LAYER.md`).
-- **The patch layer plays, the fixes are reviewed (Phase 32, by machine):** the community patch's definitions compile with a counted compatibility baseline of
-  their own (`baselines/compatibility-patch.json`), two engine modules the original data never used are implemented, and a match on the layer is deterministic;
-  on a server a client without the layer is refused. Every CRC-gated fix of GeneralsGameCode has a review entry; eleven are adopted as options of the rule
-  profile (`--rules fixes`), the original stays the default and the yardstick.
-- **The built-in AI gets profiles and strengths (Phase 33, by machine):** every computer slot names a tactics profile (balanced, rush, turtle, eco) and a strength
-  (easy, medium, hard - what the AI may know and how fast it decides, never a rule bonus); a new rule makes the default AI attack instead of standing still, so all
-  16 AI pairings of the reference manifest are decided. A survey of 768 matches shows each profile and strength apart by thresholds fixed beforehand (12 of 13 met).
-  Every CRC-gated fix of GeneralsGameCode is decided: sixteen adopted behind the rule profile, none open (`docs/SKIRMISH-AI.md`, `docs/GGC-FIXES.md`).
-- **A movement profile (Phase 34, by machine):** `--rules movement-budget` gives ground units a path queue with a cell budget per frame and one search per group
-  order - an option, not the default. In the 60 Hz gate the mean falls by 15 % and the longest tick from 123 ms to 14 ms; the target of 8 ms is missed and what is
-  left is named (`docs/PERF-MOVEMENT.md` §10). Three fidelity corrections of the original (a heal pad's door, boarding a hovering transport, the combat bike's
-  levels) and the three community fixes they blocked (`docs/GGC-FIXES.md` 3.1d).
-- **A replay browser (Phase 35, by machine):** every skirmish the client plays - locally or on a server - is recorded beside the savegames; main menu > Load/Replay >
-  Replay lists the files with the state of each against this game (and why one does not play), plays one back with pause, speed, seeking to checkpoints and the view of
-  one player or everything, to the recorded result. Every build plays only its own replays (`docs/REPLAY-BROWSER.md`).
-- **Flames, smoke and burning (Phase 35, the project owner's finding):** the effects objects carry continuously were missing altogether - the Dragon tank's flame,
-  the fire and smoke of damaged and burning objects, missile exhaust, projectile streams, vehicle dust. They are built after the original's mechanisms
-  (`docs/PRESENTATION-FX.md`, "Attached effects"); not yet seen by a human.
-- **The analysis of a match (Phase 36, by machine):** money, income, spending, army value and composition, losses and kills, buildings, upgrades, sciences, superweapons,
-  commands per minute, the regions held and heat maps of movement and fights - after a match from the score screen's "Analysis" and for every replay from the list,
-  computed from the replay with the same numbers on every run; `SimTool match-analysis` writes it as JSON, TSV and an HTML report (`docs/MATCH-ANALYSIS.md`). The score
-  screen's counters, which showed 0 units and 0 resources for everybody, count by the owner of an object since then.
-- **The observer (Phase 37, by machine):** an event ticker - the first blood, buildings lost, superweapons, captures, defeats - with the camera at the place of a line,
-  the view of every player or of everything, a research tab; for a match of computer players and for every replay, the same lines however a replay is sought and at every
-  rate (`docs/SPECTATOR-MODE.md` §14). The score screen now counts as the original does (only the `SCORE` kinds, a loss with a causer).
-- **A modern skin beside the original's (Phase 38, by machine):** the menus, the HUD, the lobby, the replay list, the analysis and the observer drawn from the original's
-  layouts derived at run time - Segoe UI on a type scale, flat chrome, the command bar in proportion at 16:9 - chosen in the options' new "More options" (also display
-  mode, wide-screen view, text size, sound device, the hotkey list) or with `--skin modern`; the original skin stays the default and its pictures stay as they were
-  (`docs/UI-MODERN.md`). Whether the modern skin is better to read and use is a human's judgement, not yet made.
-- **Fidelity package B (Phase 39, by machine):** one Red Guard order makes two soldiers (`QuantityModifier`), a unit comes out when its factory's door stands open,
-  an upgrade is researched in its building's queue for its build time (the observer's research tab shows it), a factory that dies refunds its queue, an airfield
-  refuses an aircraft it has no space for, a decoyed missile takes the newest flare, a toppling building crushes across its footprint, `<This Team>` in a mission's
-  team scripts - each read in the original's source and changed with its own manifest commit (`docs/SIMULATION-CORE.md` §53); the retail reference match now runs to its
-  limit without a winner. Zero Hour Reforged is read as a second source of fixes (`docs/REFORGED-FIXES.md`); its first reading found ten more places where this port
-  differs from the original (F-48 to F-57), the work of Phase 40.
-- **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
-  tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
-  with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,
-  engine, changes, multiplayer) with milestones, what is done, and what only a human can still accept.
+- [Status – read this first](#status--read-this-first)
+- [What you get](#what-you-get)
+- [Requirements](#requirements)
+- [Install in three clicks](#install-in-three-clicks)
+- [First start](#first-start)
+- [Features](#features)
+- [Controls](#controls)
+- [Settings and where things are kept](#settings-and-where-things-are-kept)
+- [Hosting a server](#hosting-a-server)
+- [Limits](#limits)
+- [Legal matters](#legal-matters)
+- [For developers](#for-developers)
+- [Contributing, licence, credits](#contributing-licence-credits)
 
-## Legal matters in brief
+## Status – read this first
 
-- **Your own copy is required.** The repository contains no game data and nothing exported from it – only checksums,
-  sizes, names and counts for checking (`baselines/`). The rights to the game data lie with Electronic Arts Inc.
-- **Licence:** `GPL-3.0-or-later` ([LICENSE.md](LICENSE.md)). The code was written with reference to the source code
-  published by Electronic Arts under GPL v3 (with additional terms); it is a newly written implementation, marked as
-  such, and not the original program. Details, the additional terms and the
-  licences of the third-party components are in [NOTICE.md](NOTICE.md).
-- **Trademarks:** "Command & Conquer", "Generals" and "Zero Hour" are trademarks of Electronic Arts Inc. This project is
-  not affiliated with Electronic Arts and is neither supported nor endorsed by Electronic Arts.
+CnCNew is **young software in test, not a finished product.** Single player (skirmish and the campaign missions) and multiplayer skirmishes run and have been
+checked extensively by programs – a deterministic reference suite, thousands of automated tests, scripted clicks through the real client, and long runs of dedicated
+servers. They have been played and judged by the project owner in several rounds of playtests, and every finding of those rounds was fixed or written down. They have **not**
+been played by a wider public, **not** on a second physical machine over a real network, and **not** by anyone for hundreds of hours. Expect bugs, rough edges and
+behaviour that differs from the original in places; the known differences are written down in the repository (see [Limits](#limits)).
 
-## Prerequisites
+What this is **not**: not a mod of the original program, not a download of the game, not a substitute for buying it, and not affiliated with or endorsed by
+Electronic Arts.
 
-- Windows (the only target platform; Linux comes into consideration later only for the dedicated server)
-- .NET SDK 10.0.401 or a newer feature band of the same major version (`global.json`), PowerShell 7 (`pwsh`);
-  for development also Git and Python 3 – the full list with install commands is in [BUILDING.md](BUILDING.md)
-- a fresh **English Steam installation** of *Command & Conquer Generals – Zero Hour* – the one supported
-  source version; it is described in `baselines/steam-master.json` by paths, sizes and SHA-256
+## What you get
 
-## Quick start for users
+- the game's **skirmish** mode against computer opponents and the **campaign** missions (including the Generals' Challenge), running on the original's own data and
+  map scripts;
+- a **modern user interface** (default) drawn from the original's layouts, with the original skin one setting away;
+- a **60 Hz deterministic simulation** (30 and 120 Hz also supported) that lets replays, saved games and multiplayer agree to the last bit;
+- **multiplayer skirmishes** for up to eight players with computer slots, through dedicated servers (lockstep, encrypted connections), with watchers and rejoin;
+- a **replay browser**, an **observer** with an event ticker, and a **match analysis** with charts and an HTML report;
+- **tactics profiles and strengths** for the built-in computer players, and the original skirmish AI as an alternative;
+- the community patch **GeneralsGamePatch** and a set of reviewed fixes applied, so the game plays as the patched game does.
 
-For a machine that never saw this project: clone it (or download it) and double-click **`CnCNew-Launcher.cmd`**. It needs nothing but Windows and your Steam library: it checks
-what the game needs, installs what is missing, makes the game in a folder you choose (default: `CnCNew` in your home; Steam is only read), starts it once and then leads to the acceptance, to the game and to new versions.
-That way builds from source. Players use the public launcher instead (`tools/CnCNew.Launcher`, one self-contained exe that downloads the release, verifies it and makes the game from their Steam copy). Details: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+## Requirements
 
-The same by hand:
+- **Windows 10 or 11, 64-bit.** Windows is the only supported platform for the game. (The dedicated server also runs on Linux.)
+- A graphics card and driver with **Direct3D 11**.
+- **Your own copy of *Command & Conquer Generals – Zero Hour*, the English Steam version** (Steam app 2732960), installed. Other versions, languages and editions
+  (disc, Origin/EA app, other Steam languages, modified installations) are refused with a plain message: the installation is checked file by file against the one
+  version this project knows.
+- About 3 GB of free disk space for the game folder, and an internet connection once, to fetch the community patch (roughly 100 MB, every file checked
+  against a recorded hash).
+- You do **not** need to install .NET: the release client is self-contained.
 
-```powershell
-pwsh scripts/install.ps1                 # optional: -GameDir <Steam installation> -Target <target directory>
-pwsh scripts/uninstall.ps1               # removes the created game directory again
-```
+## Install in three clicks
 
-`install.ps1` reads the installation without modifying it, fetches the community patch once (110 MB, every file checked against its recorded hash) and creates the new game directory (default
-`%LOCALAPPDATA%\CnCNew\Game`). What is checked in the process, how the game is started, options and failure patterns
-are described in [docs/INSTALLATION.md](docs/INSTALLATION.md).
+1. **Download** `CnCNew-Launcher-<version>.exe` from the [Releases page](https://github.com/cpfaffinger/CnCNew/releases) (each release lists a `.sha256` file beside every
+   download).
+2. **Run** it. It finds your Steam installation, checks it, and offers to install CnCNew into a folder you choose (the default is `CnCNew` in your user folder). It
+   downloads the client, fetches the community patch and makes the game folder from your copy of the game.
+3. **Play.** The launcher starts the game, and starts it again next time; when a new release exists it offers to update.
 
-Acceptance by a human is driven by `pwsh scripts/acceptance.ps1` (documented in [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)).
+The launcher never writes into your Steam folder and never sends anything anywhere. If it stops, the window says why in plain words; see
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+*Until the first release is published*, or if you prefer to see what is installed, clone this repository and run `CnCNew-Launcher.cmd` in it: that launcher checks
+the machine, installs what is missing (with your click), builds the client from source and makes the game folder. You can also work by hand:
+[docs/INSTALLATION.md](docs/INSTALLATION.md) describes every step, the patcher, and what it checks.
+
+## First start
+
+The first start takes a little longer than later ones: the client prepares its shaders and reads the game's data. The intro movies play (they can be skipped, or turned
+off with `--no-intro`), and the main menu opens in the modern skin. From there:
+
+- **Solo Play** for the campaign and the **Skirmish** setup (map, factions, colours, teams, starting cash, the computer opponents' engine, tactics and strength);
+- **Multiplayer > Network** to join, host or watch a game on a server;
+- **Load** for saved games and the replay browser (replays);
+- **Options** for graphics and sound, and **More options** for the skin, display mode (windowed, borderless or full screen), wide-screen view, text size, sound
+  device and hotkeys.
+
+Maps you made or downloaded in your own Zero Hour maps folder (`Documents\Command and Conquer Generals Zero Hour Data\Maps`) are found and played as well.
+
+## Features
+
+**Modern interface.** Menus, the in-game bar, the lobby, the replay list and the analysis are drawn in a clean, flat style with readable text at any resolution,
+from the layouts the original game ships (the original's art – cameos, portraits, map previews – stays). The original skin is selectable in *More options* (or
+`--skin original`). Details: [docs/UI-MODERN.md](docs/UI-MODERN.md).
+
+**Replay browser.** Every skirmish you play – locally or on a server – is recorded when it ends. *Load > Replay* lists the files with their state against your
+build (and says why one does not play), and plays one back with pause, speed control, seeking and the view of one player or everything. Replays are exact: the match
+is simulated again and checked against recorded hashes. Replays play only in the build that made them.
+[docs/REPLAY-BROWSER.md](docs/REPLAY-BROWSER.md).
+
+**Observer.** Watch computer players (or any replay) with an event ticker – first blood, buildings lost, superweapons, captures, defeats – a click on a line takes
+the camera there; switch between the view of every player or of everything; a research tab shows what each player has bought.
+[docs/SPECTATOR-MODE.md](docs/SPECTATOR-MODE.md).
+
+**Match analysis.** After a match (from the score screen's *Analysis* button) or for any replay: money, income, spending, army value and composition, units and buildings
+built and lost, kills, upgrades and sciences, superweapons, orders per minute, the regions each player held, and heat maps of movement and fights. It can also be
+exported as JSON, TSV and a self-contained HTML report. [docs/MATCH-ANALYSIS.md](docs/MATCH-ANALYSIS.md).
+
+**Computer opponents.** Each computer slot has a *tactics profile* (balanced, rush, turtle, economy) and a *strength* (easy, medium, hard – how well the AI sees and how
+fast it decides; never a cheat on resources). The original skirmish AI is available too, with the original's three difficulty levels. Computer opponents do not get a
+rule advantage; balance has been measured but not judged by many players. [docs/SKIRMISH-AI.md](docs/SKIRMISH-AI.md).
+
+**Multiplayer.** Up to eight players and computer slots in one skirmish, lockstep over UDP through a dedicated server (or "Host" from the game's menu), authenticated and
+encrypted, with a lobby, chat, team chat, pause, votes, a player who loses the connection keeping the seat and coming back, and watchers on a delay. The same match is simulated on every
+machine and every tick is checked by hash; a mismatch is named down to the object and field. No matchmaking or ladder: you name the server and the room.
+[docs/NETWORK-PROTOCOL.md](docs/NETWORK-PROTOCOL.md), [docs/MULTIPLAYER-FINDINGS.md](docs/MULTIPLAYER-FINDINGS.md).
+
+**Saved games.** A running skirmish can be saved and continued, including the computer players' state.
+
+**Fidelity and fixes.** The simulation follows the original's behaviour, read from the original's source and checked against it case by case; a long list of such
+cases was ported (docs/SIMULATION-CORE.md, docs/plan/STAGE-1-PORT.md). On top of that sit the community patch and a reviewed set of fixes
+([docs/PATCH-LAYER.md](docs/PATCH-LAYER.md), [docs/GGC-FIXES.md](docs/GGC-FIXES.md)). The original, unpatched rules remain selectable (`--rules original`) for comparison.
+
+## Controls
+
+The game keeps the original's controls; the hotkeys are the original's (`CommandMap.ini`) and **can be rebound** in *Options > More options*.
+
+| | |
+|---|---|
+| Select | left click; drag a box; double click selects all of the kind in view; **Ctrl+number** makes a control group, the number recalls it |
+| Order | right click to move, attack, capture, enter or garrison, depending on what is under the pointer; **Ctrl+click** on the ground attacks the place |
+| Camera | arrow keys or the screen edge scroll; hold the right mouse button and move to scroll; hold the middle button to rotate; click the middle button to reset the view; wheel zooms |
+| Jump | **Space** to the place of the last event (radar notice); the idle-worker button on the bar |
+| Mixed selection | **Tab** walks through the kinds in the selection, and the command bar follows |
+| Build / train | click the cameo, or press its underlined key |
+| Multiplayer | **Enter** chats to everyone, **Backspace** to your allies; `/kick`, `/end`, `/speed`, `/yes`, `/no` for votes |
+| Replay / observer | Home, PageUp, PageDown on the replay line; **F4** shows everything, **F5–F12** the view of players 1–8; **T** ticker, **G** go to the event, **R** research tab |
+
+The exact bindings of your build are listed (and changeable) in *More options*; the source of the behaviour is [docs/PRESENTATION-INPUT.md](docs/PRESENTATION-INPUT.md).
+
+## Settings and where things are kept
+
+| What | Where |
+|---|---|
+| The game folder (content, client) | the folder you chose in the launcher (default `%USERPROFILE%\CnCNew`) |
+| Settings and saved games, replays | `%APPDATA%\CnCNew` |
+| Logs, crash reports, keys | `%LOCALAPPDATA%\CnCNew` |
+
+Nothing is sent anywhere. When something goes wrong, the client can write a *support bundle* (logs and crash reports, never a key or a saved game) that you attach to
+a bug report: `CnCNew.Client.Stride.exe --support-bundle bundle.zip`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). Useful start options: `--skin
+original|modern`, `--rules original`, `--no-intro`, `--no-shell-map`, `--user-maps DIR`, `--tick-rate 30|60|120`.
+
+## Hosting a server
+
+*Host game* in the multiplayer menu runs a server inside your game. For a machine that stays up, the **dedicated server** is a separate self-contained package (Windows
+and Linux) in each release: `CnCNew-Server-<version>-win-x64.zip` or `-linux-x64.zip`. Unpack it (the Linux package needs OpenSSL), copy `server.sample.json` to `server.json`, and start it; it listens on
+one UDP port (27960 by default), makes its own key on the first start (players check its fingerprint the first time they connect) and can protect rooms with a password,
+require player keys and keep a ban list. Configuration, limits, logging and the threat model: [docs/DEDICATED-SERVER.md](docs/DEDICATED-SERVER.md) and the `START.md`
+in the package. Everyone in a match must run the **same build** – the client and the server refuse each other otherwise.
+
+## Limits
+
+Honestly stated:
+
+- **Windows only** for the game; **English Steam installation only** (no other language, no disc or EA-app copy). The interface texts are English.
+- **Single player and skirmish**, plus **dedicated-server multiplayer skirmishes**. Not built and not planned: networked campaign, matchmaking and ladders, NAT traversal,
+  GameSpy, anti-cheat, compatibility with old mods and old saved games or replays (every build plays only its own replays).
+- **Little real-world testing.** Multiplayer has been exercised on one machine – many processes, loopback and simulated bad lines, a Linux server in WSL – but not yet over the
+  internet between several PCs.
+- **It is not the original, bit for bit.** The simulation was ported case by case from the original's source and the patched game's data, and the differences found so far are fixed
+  or listed (`docs/plan/STAGE-1-PORT.md`, "fidelity register"). Computer opponents differ from the original's; balance is measured but not judged.
+- Performance is fine on current hardware for what was measured (an eight-player match uses a small part of one core for the simulation), but an occasional long frame
+  on very large battles is a known item (`docs/PERFORMANCE.md`).
+- Shadows, effects and many details are reconstructed from the original's mechanisms; some will look different from what you remember. Tell us.
+
+If you find a difference or a bug, an issue with the support bundle and the steps is the most useful thing you can send.
+
+## Legal matters
+
+- **Your own copy is required.** The repository and the releases contain no game data and nothing exported from it – only code, and checksums, sizes, names and counts for
+  checking (`baselines/`). The rights to the game data lie with Electronic Arts Inc.; the release packages are checked by a script (`scripts/check-separation.ps1`) to hold no game file.
+- **Licence:** `GPL-3.0-or-later` ([LICENSE.md](LICENSE.md)). The code was written with reference to the source code Electronic Arts published under GPL v3 (with additional
+  terms) and to community projects; it is a newly written implementation, marked as such, not the original program. Details, the additional terms and the licences
+  of third-party components are in [NOTICE.md](NOTICE.md) and [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
+- **Trademarks:** "Command & Conquer", "Generals" and "Zero Hour" are trademarks of Electronic Arts Inc. This project is not affiliated with Electronic Arts and is neither
+  supported nor endorsed by Electronic Arts.
+- The community patch *GeneralsGamePatch* is fetched from its own repository at a recorded commit (every file checked by hash) and is the work of its authors.
 
 ## For developers
 
-Restoring the whole developer state on another machine takes a clone and one script. It checks the prerequisites, clones the
-reference sources into `references/` at the recorded commits, exports `game/content` from your Steam installation, builds and
-checks against the baselines (each step can be skipped; running it again repairs):
+Restoring the whole developer state on another machine takes a clone and one script. It checks the prerequisites, clones the reference sources into `references/` at the
+recorded commits, exports `game/content` from your Steam installation, builds and checks against the baselines (each step can be skipped; running it again repairs):
 
 ```powershell
 git clone https://github.com/cpfaffinger/CnCNew.git
@@ -165,63 +212,40 @@ pwsh CnCNew/scripts/setup-dev.ps1        # options: -ShallowReferences -GameDir 
 The single steps:
 
 ```powershell
-pwsh scripts/get-references.ps1          # the four upstream repositories to <repo>\references (git-ignored); -Shallow, -Only <name>
+pwsh scripts/get-references.ps1          # the upstream repositories to <repo>\references (git-ignored); -Shallow, -Only <name>
 pwsh scripts/dev-content.ps1             # developer installation to <repo>\game (git-ignored): game\content
 dotnet build CnCNew.slnx                 # clean build: 0 warnings (TreatWarningsAsErrors)
 dotnet run --project tests/CnCNew.Simulation.Tests
 dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir game/content
-dotnet run --project tests/CnCNew.Data.Tests -- --content-dir game/content
 dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
 ```
 
-Which checks a change needs is fixed in [docs/TESTING.md](docs/TESTING.md): `pwsh scripts/test.ps1` runs the test programs
-of the touched areas before a commit, `-Tier gate` before a push of code, `-Tier full` at the completion of a phase.
+Full requirements (Git, .NET SDK per `global.json`, PowerShell 7, Python 3) and the pitfalls of a fresh machine are in [BUILDING.md](BUILDING.md). Which checks a change needs
+is fixed in [docs/TESTING.md](docs/TESTING.md): `pwsh scripts/test.ps1` before a commit, `-Tier gate` before a push of code, `-Tier full` at the triggers named there. Tests are
+standalone console programs (no xUnit/NUnit); the complete list of programs, audits and tools is in [CLAUDE.md](CLAUDE.md), section "Build, tests, audits".
 
-Tests are standalone console programs (non-zero exit code on failure), no xUnit/NUnit. The complete list
-of test programs, audits, manifest checks and tool commands is in [CLAUDE.md](CLAUDE.md), section "Build,
-tests, audits". Tech demos in a window (they build the client and need `game/content`):
-
-```powershell
-.\scripts\demo-skirmish.ps1              # skirmish against the AI
-.\scripts\demo-mission.ps1               # campaign mission
-.\scripts\demo-shell.ps1                 # main menu
-.\scripts\demo-spectator.ps1             # AI against AI to watch
-```
-
-## Layout of the repository
+How it is built: layers import → runtime content → data models → simulation → presentation, with hard dependency rules ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)). The
+simulation is deterministic (fixed point, no wall clock, no ambient randomness) and measured against a reference manifest (`baselines/reference-manifest.json`,
+[docs/DETERMINISM.md](docs/DETERMINISM.md)). Releases are made by tag, see [docs/RELEASING.md](docs/RELEASING.md).
 
 | Directory | Content |
 |---|---|
-| `src/` | the libraries and the client: `CnCNew.Archives`, `.IO`, `.Import` (import side), `.Content` (runtime file system), `.Formats`, `.Images`, `.W3D`, `.Audio` (formats), `.Data` (typed definitions), `.Simulation` (deterministic core), `.Presentation`, `.Ui`, `.Game` (game layer, shell, HUD), `.Client.Stride` (Windows client) |
-| `tools/` | console tools: `AssetTool` (import, installation), `IniTool`, `MapTool`, `ImageTool`, `W3dTool`, `SimTool` (reference runs, manifests, performance), `CampaignTool`, `PresentationTool`, `UiRenderTool` |
+| `src/` | the libraries and the client: `CnCNew.Archives`, `.IO`, `.Import` (import side), `.Content` (runtime file system), `.Formats`, `.Images`, `.W3D`, `.Audio`, `.Video` (formats), `.Data` (typed definitions), `.Simulation` (deterministic core), `.Net`, `.Server` (multiplayer), `.Presentation`, `.Ui`, `.Game` (game layer, shell, HUD), `.Client.Stride` (Windows client) |
+| `tools/` | console tools: `AssetTool` (import, installation), `IniTool`, `MapTool`, `ImageTool`, `W3dTool`, `SimTool` (reference runs, manifests, performance), `CampaignTool`, `PresentationTool`, `NetTool`, `DedicatedServer`, `UiRenderTool` |
 | `tests/` | one test program per project, synthetic fixtures |
-| `scripts/` | PowerShell scripts: installation, developer content, demos, captures, audits, performance profile |
-| `baselines/` | checked-in yardsticks: compatibility baseline, input and reference manifest, description of the source version (only paths, sizes, checksums) |
-| `build/` | MSBuild building blocks (Stride tooling packages, asset compiler target) |
+| `scripts/` | PowerShell scripts: installation, developer content, demos, captures, audits, packages, release |
+| `baselines/` | checked-in yardsticks: compatibility baseline, input and reference manifests, descriptions of the supported game and patch versions (only paths, sizes, checksums) |
 | `docs/` | documentation; entry point is [docs/README.md](docs/README.md) |
 
-Layers and dependency rules (import → runtime content → data models → simulation → presentation) are in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Not in the repository and ignored by Git: `game/` (developer installation),
-`.local/` (local working data), `references/` (foreign source code for reading), `bin/`, `obj/`.
+Not in the repository and ignored by Git: `game/` (developer installation), `.local/` (local working data), `references/` (foreign source code for reading), `docs/screenshots/`,
+`bin/`, `obj/`. The plan and the history of the work: [docs/plan/PROGRAMME.md](docs/plan/PROGRAMME.md) (four stages: port, engine, changes, multiplayer). The code is written
+predominantly by coding agents under the direction of the project owner; [CLAUDE.md](CLAUDE.md) (with the pointer [AGENTS.md](AGENTS.md)) is their binding working instruction and
+the most precise record of the measured state.
 
-## Documentation
+## Contributing, licence, credits
 
-The overview of all documents, ordered by topic, is in [docs/README.md](docs/README.md). First points of call:
-[docs/plan/PROGRAMME.md](docs/plan/PROGRAMME.md) (the plan in four stages), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/SIMULATION-CORE.md](docs/SIMULATION-CORE.md),
-[docs/DEMO-FINDINGS.md](docs/DEMO-FINDINGS.md).
-
-## How the project is made
-
-The work proceeds in four stages (port, engine, changes, multiplayer; `docs/plan/PROGRAMME.md`) and in phases: every
-phase has a self-contained brief (`docs/handoffs/`, indexed by stage in `docs/handoffs/README.md`), begins with the
-reproduced starting state and ends with measurements, updated documentation and the brief of the next
-phase. The code is written predominantly by coding agents under the guidance of the project owner;
-[CLAUDE.md](CLAUDE.md) (with the pointer [AGENTS.md](AGENTS.md)) is their binding working instruction and at the same time
-the most precise description of the rules and of the measured state. What only a human can judge counts as open
-until it has taken place.
-
-## Contributing
-
-There is no CI yet: whoever contributes something runs the test programs of the touched projects themselves
-([CONTRIBUTING.md](CONTRIBUTING.md)). Game data or anything exported from it is never committed.
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports with the support bundle are welcome. Game data or anything exported from it is never committed.
+- **Licence:** GPL-3.0-or-later, [LICENSE.md](LICENSE.md); [NOTICE.md](NOTICE.md) explains the additional terms and what this project is and is not.
+- **Credits:** Electronic Arts / Westwood Studios, for the game and for the source code released under GPL v3; the authors of *GeneralsGameCode*, *GeneralsGamePatch*
+  and *Zero Hour Reforged* (read as references, never copied); the [Stride](https://www.stride3d.net/) engine; and the .NET team. Third-party packages and their licences:
+  [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
