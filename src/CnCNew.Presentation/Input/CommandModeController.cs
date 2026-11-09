@@ -173,8 +173,9 @@ public sealed class CommandModeController
             return target is null ? Hint(ContextAction.None, CursorKind.Normal) : Hint(ContextAction.Select, CursorKind.Select);
         if (target is not null && target.Owner == Player && PreferSelection) return Hint(ContextAction.Select, CursorKind.Select);
 
-        // canSelectedObjectsOverrideSpecialPowerDestination: while a beam of the selection runs, a click on the ground drives it.
-        if (target is null && ground is not null && Steerable(own).Any()) return Hint(ContextAction.SteerPower, CursorKind.Target);
+        // canSelectedObjectsOverrideSpecialPowerDestination: while a beam or a gunship of the selection runs, a click anywhere - the point under the pointer, whatever stands on it - drives it, and the
+        // pointer says so (MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION_HINT sets Mouse::PARTICLE_UPLINK_CANNON).
+        if (ground is not null && Steerable(own).Any()) return Hint(ContextAction.SteerPower, CursorKind.ParticleUplinkCannon);
 
         var movers = own.Where(SimulationQueries.CanMove).ToList();
         if (WaypointMode && ground is not null && movers.Count > 0) return Hint(ContextAction.AddWaypoint, CursorKind.Waypoint);

@@ -439,6 +439,31 @@ public sealed class SelectionModel
         return _idleWorkers.Count;
     }
 
+    private readonly HashSet<uint> _knownGunships = [];
+    private readonly Dictionary<int, bool> _gunshipTemplates = [];
+    private bool _gunshipsSeen;
+
+    /// <summary>
+    /// <c>SpectreGunshipDeploymentUpdate::initiateIntentToDoSpecialPower</c> ends with <c>selectObject(newGunship, TRUE, playerMask, TRUE)</c>: the gunship the player's power has just created
+    /// replaces the player's selection, so that the next click on the map moves its reticle (<c>canSelectedObjectsOverrideSpecialPowerDestination</c>). Called once per frame: a gunship of the
+    /// local player that has appeared since the last call and is on its way in is selected alone. The gunships that already exist at the first call (a restored match, a replay's start)
+    /// are not new. Returns the gunship selected, or null.
+    /// </summary>
+    public EntityId? SelectNewGunships(SimulationWorld world)
+    {
+        EntityId? selected = null;
+        foreach (var entity in world.EntitiesOwnedBy(LocalPlayer).AsSpan())
+        {
+            if (!_gunshipTemplates.TryGetValue(entity.Template.Index, out var isGunship)) _gunshipTemplates[entity.Template.Index] = isGunship = entity.Template.Modules.Any(module => module.Data is SpectreData);
+            if (!isGunship || entity.Modules.OfType<SpectreGunshipUpdate>().FirstOrDefault() is not { } gunship) continue;
+            if (!_knownGunships.Add(entity.Id.Value) || !_gunshipsSeen || gunship.Status != SpectreGunshipUpdate.GunshipStatus.Inserting || entity.EffectivelyDead) continue;
+            selected = entity.Id;
+        }
+        _gunshipsSeen = true;
+        if (selected is { } id) Replace([id]);
+        return selected;
+    }
+
     private bool IsIdleWorker(SimulationWorld world, Entity entity)
         => entity.Owner == LocalPlayer && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Modules.Any(module => module is AIUpdateInterface) && world.IsAiIdle(entity);
 

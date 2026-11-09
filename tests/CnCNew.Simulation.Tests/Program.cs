@@ -653,6 +653,7 @@ run.Test("Comanche crash spiral: the motive force over the mass and the lateral 
 run.Test("Rate invariance, flight: a tunnel heals its rider in the same frames at 30, 60 and 120 Hz", Tests.RateFlightTunnelHealingIsTheSame);
 run.Test("Rate invariance, flight: a Chinook climbs, lands to unload and climbs again the same at 30, 60 and 120 Hz", Tests.RateFlightChinookClimbIsTheSame);
 run.Test("Rate invariance, flight: the Spectre gunship inserts, orbits, fires and departs the same at 30, 60 and 120 Hz", Tests.RateFlightSpectreGunshipIsTheSame);
+run.Test("Rate invariance, flight: a click while the Spectre gunship is up moves its reticle at once and its aim point along the ground the same at 30, 60 and 120 Hz", Tests.RateFlightSpectreGunshipFollowsAClick);
 run.Test("Rate invariance, flight: a jet takes off from, flies around and lands at its airfield in the same states at 30, 60 and 120 Hz", Tests.RateFlightJetAirfieldLifecycleIsTheSame);
 run.Test("Rate invariance, flight: the step of a frame in flight survives a snapshot at 60 and 120 Hz and is absent at 30 Hz", Tests.RateFlightFrameStepsSurviveSnapshots);
 run.Test("Rate invariance, flight round 3: a jet sortie (production, taxi, take-off, flight, turn, attack, return, landing, taxi, reload) is the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateFlightJetSortieIsBitIdentical);

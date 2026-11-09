@@ -686,6 +686,59 @@ static partial class Tests
         FlightVerdict();
     }
 
+    /// <summary>
+    /// A click while the Spectre gunship is up (<c>SteerPowerCommand</c>, the original's <c>MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION</c> to <c>setSpecialPowerOverridableDestination</c>): the
+    /// reticle moves to the new place at once, and the gattling's aim point does not jump after it - at the next look of the howitzer's rhythm it winds toward the new place, one
+    /// <c>StrafingIncrement</c> (20 units) a logic frame of the original, until the rest is less than an increment. The aim point is at the same place at the end of every frame at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void RateFlightSpectreGunshipFollowsAClick()
+    {
+        var aim = new List<FlightPose>[FlightRates.Length];
+        var reticle = new Fixed[FlightRates.Length];
+        var arrival = new long[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], AirWeaponFixtureFiles, terrain: false);
+            feeder.Spawn(1, "AirGunship", owner: 1, x: 0, y: 0);
+            StepFrames(world, 125); // the power recharges for 4 seconds after the gunship appeared
+            var ship = Only(world, "AirGunship");
+            var spectre = ship.Modules.OfType<SpectreGunshipUpdate>().Single();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+            Check.That(feeder.UseSpecialPower(1, ship.Id.Value, "AirGunshipPower", CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, x: 400, y: 0).Accepted, "The power is used on a location.");
+            world.Step();
+            for (var frame = 0; frame < 400 && spectre.Status != SpectreGunshipUpdate.GunshipStatus.Orbiting; frame++) StepFrames(world, 1);
+            Check.That(spectre.Status == SpectreGunshipUpdate.GunshipStatus.Orbiting, "The gunship orbits.");
+            StepFrames(world, 30); // the gattling has been firing at the first place for a while
+            Check.That((spectre.GattlingTarget.X - Fixed.FromInt(400)).Abs() < Fixed.One, $"Setup: the aim point is on the first place ({spectre.GattlingTarget.X}).");
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+            var click = world.Submit(new CnCNew.Simulation.Commands.SteerPowerCommand(new PlayerId(1), 9000, world.Tick, [ship.Id], Fixed.FromInt(440), Fixed.Zero));
+            Check.That(click.Accepted, "The click is accepted.");
+            world.Step();
+            reticle[index] = spectre.OverrideTarget.X;
+            var reticleAtOnce = spectre.OverrideTarget.X;
+            var track = new List<FlightPose>();
+            arrival[index] = -1;
+            var start = world.Tick;
+            for (var frame = 0; frame < 24; frame++)
+            {
+                for (var tick = 0; tick < world.Time.TicksPerOriginalFrame; tick++) world.Step();
+                var point = spectre.GattlingTarget;
+                track.Add(new FlightPose(point.X, point.Y, spectre.OverrideTarget.X, Fixed.Zero));
+                if (arrival[index] < 0 && (point.X - Fixed.FromInt(440)).Abs() < Fixed.FromDecimal(0.01m)) arrival[index] = frame * 4;
+            }
+            aim[index] = track;
+            Check.That(reticleAtOnce == Fixed.FromInt(440), $"{FlightRates[index]}: the reticle is at the clicked place at once ({reticleAtOnce}).");
+            var steps = track.Zip(track.Skip(1), (before, after) => (after.X - before.X).Abs()).ToArray();
+            Check.That(steps.All(value => value <= Fixed.FromDecimal(20.01m)), $"{FlightRates[index]}: the aim point never moved more than the increment in a frame (largest {Units(steps.Max())}).");
+            Check.That(track.Count(pose => pose.X > Fixed.FromInt(405) && pose.X < Fixed.FromInt(435)) >= 1, $"{FlightRates[index]}: the aim point was seen on its way, not only at its ends.");
+            Check.That(arrival[index] >= 0, $"{FlightRates[index]}: the aim point reached the new place ({track.Last().X}).");
+        }
+        SameFrames("Spectre gunship: the aim point reaches the clicked place", arrival);
+        SameValues("Spectre gunship: the reticle after the click", reticle, 0m);
+        SameTracks("Spectre gunship: the aim point after a click", aim, 0.001m, 0.001m);
+        FlightVerdict();
+    }
+
     /// <summary>A parked jet of the airfield fixture, at the same game time at every rate and where a frame begins (the production ends on a tick of its own at every rate).</summary>
     private static (SimulationWorld World, Feeder Feeder, Entity Jet, Entity Airfield) ParkedJet(SimulationRate rate)
     {

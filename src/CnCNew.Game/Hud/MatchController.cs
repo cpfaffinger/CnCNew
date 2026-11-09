@@ -535,6 +535,7 @@ public sealed partial class MatchController
         // The world moved under a resting pointer: the context (and with it the cursor) is evaluated again every frame, not only on input events.
         if (!PointerOverWindow) Input.RefreshHint(Match.World, Match.Camera);
         Input.Selection.TrackIdleWorkers(Match.World);
+        Input.Selection.SelectNewGunships(Match.World);
         CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
         UpdateGenerals();
