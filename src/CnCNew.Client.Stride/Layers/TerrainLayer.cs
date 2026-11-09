@@ -75,6 +75,10 @@ internal sealed class TerrainLayer : IWorldLayer
     private IReadOnlyList<MinimapDot> _dots = [];
     private int _dotSize = 2;
     private long _gpuBytes;
+    private Material? _terrainMaterial;
+    private System.Numerics.Vector2 _fogScale;
+    private byte[] _lightTable = [];
+    private readonly List<(IDisposable Resource, int Frames)> _retired = [];
 
     /// <summary>Debug aid (<c>CNCNEW_TERRAIN_PROFILE=1</c>): accumulates <see cref="Update"/> wall time and prints the per-frame average on <see cref="Dispose"/>.</summary>
     private readonly bool _profile = Environment.GetEnvironmentVariable("CNCNEW_TERRAIN_PROFILE") == "1";
@@ -119,7 +123,9 @@ internal sealed class TerrainLayer : IWorldLayer
         var atlas = CreateAtlas(device, model, linear);
         var lightTable = linear ? PackedColor.SrgbDecodeTable() : PackedColor.IdentityTable();
         _overlay = CreateOverlay(services, match, linear);
-        var material = TerrainMaterials.CreateTerrain(device, atlas, _fogMap!, linear, services.DepthWrites, _overlay);
+        var material = _terrainMaterial = TerrainMaterials.CreateTerrain(device, atlas, _fogMap!, linear, services.DepthWrites, _overlay);
+        _fogScale = fogScale;
+        _lightTable = lightTable;
 
         var blendCells = 0;
         var extraCells = 0;
@@ -147,6 +153,7 @@ internal sealed class TerrainLayer : IWorldLayer
             _chunkVisible[i] = true;
         }
 
+        match.TakeChangedTerrainChunks();
         CreateWater(services, match, linear, fogScale);
         var roadWatch = Stopwatch.StartNew();
         var roads = CreateRoads(services, match, linear, fogScale, lightTable);
@@ -188,6 +195,7 @@ internal sealed class TerrainLayer : IWorldLayer
             _chunkComponents[i].Enabled = now[i];
         }
 
+        ReplaceChangedChunks(match);
         UpdateFog(frame.CommandList, frame.TotalSeconds);
         UpdateClouds(frame.CommandList);
         foreach (var draw in _bridgeDraws)
@@ -224,6 +232,8 @@ internal sealed class TerrainLayer : IWorldLayer
             foreach (var entity in _entities) services.Scene.Entities.Remove(entity);
         _entities.Clear();
         _chunkComponents.Clear();
+        foreach (var retired in _retired) retired.Resource.Dispose();
+        _retired.Clear();
         _waterDraws.Clear();
         _bridgeDraws.Clear();
         foreach (var resource in _resources) resource.Dispose();
@@ -251,6 +261,43 @@ internal sealed class TerrainLayer : IWorldLayer
         (_fogLevels, _fogUpload) = (_fogUpload, _fogLevels);
         _fogUploaded = true;
         _minimapDirty = true;
+    }
+
+    /// <summary>
+    /// A building that levels its ground makes new chunks of the terrain model (<see cref="LiveGame.TakeChangedTerrainChunks"/>): their merged meshes are made again and the
+    /// buffers of the chunk are replaced. The old buffers are let go a few frames later, when no command list in flight can still name them.
+    /// </summary>
+    private void ReplaceChangedChunks(LiveGame match)
+    {
+        for (var i = _retired.Count - 1; i >= 0; i--)
+        {
+            if (_retired[i].Frames > 0) { _retired[i] = _retired[i] with { Frames = _retired[i].Frames - 1 }; continue; }
+            _retired[i].Resource.Dispose();
+            _retired.RemoveAt(i);
+        }
+        var changed = match.TakeChangedTerrainChunks();
+        if (changed.IsEmpty || _services is not { } services || _terrainMaterial is not { } material) return;
+        var model = match.TerrainModel;
+        var device = services.GraphicsDevice;
+        foreach (var index in changed)
+        {
+            var chunk = model.Chunks[index];
+            var merged = TerrainMeshMerger.Merge(model, chunk, _fogScale, _lightTable);
+            TerrainMeshMerger.Validate(merged, chunk);
+            for (var t = 0; t < merged.Indices.Length; t += 3) (merged.Indices[t + 1], merged.Indices[t + 2]) = (merged.Indices[t + 2], merged.Indices[t + 1]);
+            var vertexBuffer = StrideBuffer.Vertex.New(device, merged.Vertices, GraphicsResourceUsage.Immutable);
+            var indexBuffer = StrideBuffer.Index.New(device, merged.Indices, GraphicsResourceUsage.Immutable);
+            var component = _chunkComponents[index];
+            foreach (var old in component.Model.Meshes[0].Draw.VertexBuffers.Select(binding => (IDisposable)binding.Buffer).Append(component.Model.Meshes[0].Draw.IndexBuffer.Buffer))
+            {
+                _resources.Remove(old);
+                _retired.Add((old, 8));
+            }
+            _resources.Add(vertexBuffer);
+            _resources.Add(indexBuffer);
+            var bounds = new BoundingBox(ToStride(chunk.Bounds.Min), ToStride(chunk.Bounds.Max));
+            component.Model = BuildModel(material, vertexBuffer, TerrainLayout, merged.Vertices.Length, indexBuffer, false, merged.Indices.Length, bounds);
+        }
     }
 
     /// <summary>The clouds slide with the game's time (<c>updateCloud</c>); a new picture only when they have moved by a part of a texel.</summary>
@@ -509,6 +556,16 @@ internal sealed class TerrainLayer : IWorldLayer
     private ModelComponent CreateModel(string name, Material material, StrideBuffer vertexBuffer, VertexDeclaration layout, int vertexCount,
         StrideBuffer indexBuffer, bool wideIndices, int indexCount, BoundingBox bounds)
     {
+        var component = new ModelComponent(BuildModel(material, vertexBuffer, layout, vertexCount, indexBuffer, wideIndices, indexCount, bounds));
+        var entity = new Entity(name) { component };
+        _services!.Scene.Entities.Add(entity);
+        _entities.Add(entity);
+        return component;
+    }
+
+    private static Model BuildModel(Material material, StrideBuffer vertexBuffer, VertexDeclaration layout, int vertexCount,
+        StrideBuffer indexBuffer, bool wideIndices, int indexCount, BoundingBox bounds)
+    {
         var sphere = BoundingSphere.FromBox(bounds);
         var model = new Model { BoundingBox = bounds, BoundingSphere = sphere };
         model.Materials.Add(material);
@@ -525,11 +582,7 @@ internal sealed class TerrainLayer : IWorldLayer
             BoundingBox = bounds,
             BoundingSphere = sphere,
         });
-        var component = new ModelComponent(model);
-        var entity = new Entity(name) { component };
-        _services!.Scene.Entities.Add(entity);
-        _entities.Add(entity);
-        return component;
+        return model;
     }
 
     private void Track(IDisposable resource, long bytes)
