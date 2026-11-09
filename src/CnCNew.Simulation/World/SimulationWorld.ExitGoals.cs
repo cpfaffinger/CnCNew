@@ -50,6 +50,13 @@ public sealed partial class SimulationWorld
         _exitClaims.RemoveRange(kept, _exitClaims.Count - kept);
     }
 
+    /// <summary>
+    /// Above 30 Hz a claim is decided in the last tick of its mover's frame. An object the spawn phase created in that frame - at the end of one of its earlier ticks - is not there yet where
+    /// the 30 Hz spawn phase decides the claim: claims come first in that phase, creations after them (F-167: a pilot that came out of a jet in the claimant's frame was asked to step aside
+    /// at 60 Hz and not at 30 Hz). Nothing at 30 Hz.
+    /// </summary>
+    private bool AppearedInTheFrameOfTheClaim(Entity other, long claimTick) => _firstFrameTicks != TickOrder.Next && other.SpawnTick > claimTick - _firstFrameTicks;
+
     private bool AppearsAfterClaim(Entity other) => _claiming is { } unit && other.SpawnTick == unit.SpawnTick && other.Id.Value > unit.Id.Value;
 
     // Written only while a claim waits, which never happens at 30 Hz: a 30 Hz world keeps its serialized form (and hash).
@@ -175,7 +182,7 @@ public sealed partial class SimulationWorld
                 _stepAsides[kept++] = claim;
                 continue;
             }
-            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false, HasMoveTarget: true } mover) StepInfantryAside(mover, claim.Dx, claim.Dy);
+            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false, HasMoveTarget: true } mover) StepInfantryAside(mover, claim.Dx, claim.Dy, claim.Tick);
         }
         _stepAsides.RemoveRange(kept, _stepAsides.Count - kept);
     }
@@ -184,7 +191,7 @@ public sealed partial class SimulationWorld
     /// <c>aiMoveAwayFromUnit</c>, <c>Pathfinder::getMoveAwayFromPath</c>: the nearest place whose box does not touch the mover's way. Here the way is the line the mover looked along, and the places lie
     /// across it at the infantry's own place, on its own side first.
     /// </summary>
-    private void StepInfantryAside(Entity mover, Fixed dx, Fixed dy)
+    private void StepInfantryAside(Entity mover, Fixed dx, Fixed dy, long claimTick)
     {
         var length = Fixed.Sqrt(dx * dx + dy * dy);
         if (length == Fixed.Zero) return;
@@ -196,6 +203,7 @@ public sealed partial class SimulationWorld
         {
             var other = mobiles[index];
             if (!other.Template.IsKindOf("INFANTRY") || !StandsStill(other, mover, goal) || OnAnotherLevel(mover, other) || other.DestroyRequested) continue;
+            if (AppearedInTheFrameOfTheClaim(other, claimTick)) continue;
             if (RelationshipOf(mover.Owner, other.Owner) == Relationship.Enemies) continue;
             var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
             var (ox, oy) = (other.X - mover.X, other.Y - mover.Y);
@@ -443,12 +451,12 @@ public sealed partial class SimulationWorld
                 _clearPaths[kept++] = claim;
                 continue;
             }
-            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false } mover && AiOf(mover) is { } ai) MoveAlliesOffPath(mover, ai);
+            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false } mover && AiOf(mover) is { } ai) MoveAlliesOffPath(mover, ai, claim.Tick);
         }
         _clearPaths.RemoveRange(kept, _clearPaths.Count - kept);
     }
 
-    private void MoveAlliesOffPath(Entity mover, AIUpdateInterface moving)
+    private void MoveAlliesOffPath(Entity mover, AIUpdateInterface moving, long claimTick)
     {
         var path = moving.PathNodes;
         var ignored = moving.IgnoredObstacle;
@@ -460,6 +468,7 @@ public sealed partial class SimulationWorld
             foreach (var other in _mobiles)
             {
                 if (other.Id == mover.Id || other.Id == ignored || other.HasMoveTarget || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+                if (AppearedInTheFrameOfTheClaim(other, claimTick)) continue;
                 var limit = radius + CircleRadius(other);
                 var (standsX, standsY, _) = other.FrameEnd(_tick);
                 if (FurtherThan(standsX, x, limit) || FurtherThan(standsY, y, limit)) continue;

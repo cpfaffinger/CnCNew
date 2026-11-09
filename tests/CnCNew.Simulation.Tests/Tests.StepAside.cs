@@ -50,6 +50,43 @@ static partial class Tests
     }
 
     /// <summary>
+    /// F-167: a step-aside request of a vehicle is decided at the end of the vehicle's frame, after the spawn phase of an earlier tick of that frame has created an infantry unit above 30 Hz; at
+    /// 30 Hz the spawn phase decides claims first and creates objects after them, so the new infantry is not asked in that frame. A pilot that came out of a jet in the frame was asked at 60
+    /// Hz and not at 30 (Armored Fury America against China, frame 18,391). Infantry created in the first tick of every frame in which the car's request may fall ends at the same place at every rate.
+    /// </summary>
+    public static void InfantryCreatedInTheFrameOfARequestIsNotAskedToStepAside()
+    {
+        (Fixed X, Fixed Y)? Run(SimulationRate rate, int frame, int tickInFrame)
+        {
+            var (world, feeder, _) = RatedWorld(rate, StepAsideFiles(), NavTerrain());
+            feeder.Spawn(1, "ForwardCar", x: 20, y: 100);
+            feeder.Spawn(1, "Marcher", x: 70, y: 102);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var car = world.Entities.Single(value => value.Template.Name == "ForwardCar");
+            Check.That(feeder.SetMoveTarget(1, car.Id.Value, 170, 100).Accepted, "The move is accepted.");
+            for (var tick = 0; tick < frame * rate.TicksPerOriginalFrame + tickInFrame; tick++) world.Step();
+            var spawned = feeder.Spawn(1, "Marcher", x: 60, y: 98);
+            Check.That(spawned.Accepted, "The infantry is created: " + spawned.Reason + ".");
+            for (var tick = 0; tick < 150 * rate.TicksPerOriginalFrame; tick++) world.Step();
+            var man = world.Entities.OrderBy(value => value.Id.Value).Last(value => value.Template.Name == "Marcher");
+            return (man.X, man.Y);
+        }
+        var asked = 0;
+        for (var frame = 0; frame < 40; frame++)
+        {
+            var reference = Run(SimulationRate.Hz30, frame, 0);
+            if (reference is { } place && place != (Fixed.FromInt(60), Fixed.FromInt(98))) asked++;
+            foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+            {
+                // Created in the first tick of the frame, as the pilot was: the car's frame ends in a later tick, where the request is decided.
+                var other = Run(rate, frame, 0);
+                Check.That(other == reference, $"{rate}: infantry created in the first tick of frame {frame} after the move order stands at {other} instead of {reference}.");
+            }
+        }
+        Check.That(asked > 0, "Setup: the infantry in the car's way is asked to step aside at 30 Hz when it is created in some of the frames.");
+    }
+
+    /// <summary>
     /// <c>INFANTRY_MOVES_THROUGH_INFANTRY</c>: "Infantry can run through infantry". Infantry whose way crosses a row of standing infantry plans no way round it and goes straight on, the same at the end of
     /// every frame at 30, 60 and 120 Hz; a vehicle goes round the same row.
     /// </summary>
