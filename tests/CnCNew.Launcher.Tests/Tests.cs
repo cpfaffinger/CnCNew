@@ -541,7 +541,8 @@ static class Tests
         var references = Regex.Matches(windowProject, "<ProjectReference Include=\"([^\"]+)\"").Select(match => match.Groups[1].Value.Replace('\\', '/')).ToArray();
         Check.That(references.Length == 1 && references[0].EndsWith("CnCNew.Launcher.Core/CnCNew.Launcher.Core.csproj", StringComparison.Ordinal), "the window references only the core: " + string.Join(",", references));
         Check.That(!windowProject.Contains("PackageReference", StringComparison.Ordinal), "the window references no package");
-        var forbidden = new Regex(@"\b(CnCNew\.(Simulation|Data|Game|Net|Server|Content|Import|Archives|IO|Formats|Images|Presentation|Ui|Audio|Video|W3D|Client)|Stride)\b");
+        // File names such as CnCNew.Client.Stride.exe are data; what is forbidden is a namespace of the game or of Stride being used or referred to.
+        var forbidden = new Regex(@"(using\s+(static\s+)?(CnCNew\.(?!Launcher)\w+|Stride))|new\s+CnCNew\.(?!Launcher)|CnCNew\.(Simulation|Data|Game|Net|Server|Content|Import|Archives|IO|Formats|Images|Presentation|Ui|Audio|Video|W3D)\.\w+\.\w+");
         foreach (var file in Directory.EnumerateFiles(core, "*.cs", SearchOption.AllDirectories).Concat(Directory.EnumerateFiles(window, "*.cs", SearchOption.AllDirectories)).Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
             Check.That(!forbidden.IsMatch(File.ReadAllText(file)), $"{Path.GetFileName(file)} names a game layer");
         foreach (var file in Directory.EnumerateFiles(core, "*.cs", SearchOption.TopDirectoryOnly))
