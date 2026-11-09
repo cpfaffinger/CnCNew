@@ -208,3 +208,7 @@ of any; below 800 × 600 it is raised, a smaller desktop gives 800 × 600 with a
 ## Phase 62: schema 6 and the borderless mode
 
 **Schema 6** (the owner's decision of 7 November 2026, D-21 for everyone): the migration step 5 to 6 sets `display.skin` to `modern` in any older file and keeps every other setting; a file saved at schema 6 keeps the skin chosen in "More options"; a missing file starts in the modern skin. A PC whose settings file had saved `display.skin = original` stayed on the old skin before. **`display.mode`** gains `borderlessFullscreen` (no schema bump; older files still load).
+
+## Phase 64: schema 7 and the hotkeys
+
+**Schema 7** (the owner's playtest of 8 November 2026): `controls.hotkeys` maps an action name to `MODIFIERS KEY TRANSITION` or `UNBOUND` and holds **only what differs from the shipped `CommandMap.ini`**; the migration step 6 to 7 adds an empty object. A non-string entry is reported and dropped. Nothing is written to `game/` or to the installation's `CommandMap.ini`. The match starts from the shipped keys plus these overrides and updates a running match when the settings are saved (`MatchController.ApplyHotkeys`).

@@ -94,7 +94,8 @@ phase number is 32.
 | 61 | [HANDOFF-PHASE61.md](HANDOFF-PHASE61.md) | S1-M11 | What the survey and the rate comparison of Phase 60 left, and the named rest | **done** by machine (6 November 2026): §85 |
 | 62 | [HANDOFF-PHASE62.md](HANDOFF-PHASE62.md) | S1-M11 | The original's fire cycle (F-140), the rate corrections (F-144 to F-148) and the owner's playtest of 7 November 2026 | **done** by machine (7 November 2026): §86 |
 | 63 | [HANDOFF-PHASE63.md](HANDOFF-PHASE63.md) | S1-M11 | The attack's approach for a unit inside its minimum range (F-143), the open rate differences, the Patriot beams | **done** by machine (8 November 2026): §87 |
-| 64 | [HANDOFF-PHASE64.md](HANDOFF-PHASE64.md) | S1-M11 | The rest of Phase 63: F-164, the AI that sells nothing, F-140's rest | current |
+| 64 | [HANDOFF-PHASE64.md](HANDOFF-PHASE64.md) | S1-M11 | The owner's playtest of 8 November 2026, the rest of Phase 63, the product survey | **done** by machine (9 November 2026): §88 |
+| 65 | [HANDOFF-PHASE65.md](HANDOFF-PHASE65.md) | S1-M11 | What Phase 64 left: F-168, F-169, the AI's last money, and the owner's next playtest | current |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 

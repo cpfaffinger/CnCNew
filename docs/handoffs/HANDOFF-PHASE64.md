@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 64
-> **Status:** current (written 8 November 2026 at the end of Phase 63)
+> **Status:** done by machine (8 to 9 November 2026; `docs/SIMULATION-CORE.md` §88; written 8 November 2026 at the end of Phase 63)
 > **Predecessor:** HANDOFF-PHASE63.md · **Results in:** `docs/SIMULATION-CORE.md` §88, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -56,3 +56,15 @@ Tier 4 at the final state; every item built or named with its reason.
 ## Final report and N+1
 
 Numbers with commit hashes, the tier that ran, what was not run, what no human has seen; the registers of `docs/plan/` brought up to date; the next brief written.
+
+## Result (9 November 2026)
+
+Done by machine, on one machine; no human has seen or heard any of it. Per item of the brief:
+
+1. **The 16 pairings:** compared on the final state; F-164 was not the path queue (riders held a frame), F-165 to F-167 found and fixed; 15 of 16 are the same game at 30 and 60 Hz to their ends, Armored Fury GLA against America parts at frame 49,697 (F-168) (§88.4).
+2. **The AI's economy:** built (§88.2); the threshold (no player with a centre and no carrier for 90 s) is met in 255 of 256 cases, the one left has nothing to sell.
+3. **F-140's rest, F-137's sounds, the lasers' particles:** built (§88.3).
+4. **The check scripts:** steps of `scripts/test.ps1` (§88.5).
+5. **The product survey:** `scripts/check-product-survey.ps1` and `ProductSurveyTests` (§88.5); it found the map picker, the hint, the 150 % text and the list at the screen's edge, all fixed.
+
+Added on the way: the owner's playtest of 8 November (15 findings, §88.1, `docs/ACCEPTANCE-FINDINGS.md`).

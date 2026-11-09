@@ -248,7 +248,9 @@ Since Phase 29 the menus' way to a server is checked by programs that stand in f
   draws 15 screens of both skins in three sizes with the renderer's GDI font and checks the modern skin against R3 (no label wider than its window; the smallest text
   13, 16, 24 px). The suite `SkinTests` of `Game.Tests` walks the same script without a window and pins the options, More options and the HUD in both skins; every
   suite that pins pictures walks a second time in the modern skin against `baselines/*-modern.txt`.
-- All four need a display and end with exit code 3 (**NOT RUN**) without one.
+- `check-minimap` (`scripts/check-minimap.ps1`, gate of `client`; Phase 62/64): the fog on the radar and on objects in the window client - the minimap as composed, a fogged object at about half its brightness. `check-ingame-menu` (`scripts/check-ingame-menu.ps1`, gate of `game` and `client`): the in-game menu of a skirmish by script - Options, Save/Load, Restart, Exit.
+- `product-survey` (`scripts/check-product-survey.ps1`, about fifteen minutes; gate of `ui` and `client`, tier 4; Phase 64, `docs/SIMULATION-CORE.md` §88.5): every shell screen of both skins at four sizes and two text sizes with the client's GDI font, a person by script through the setup's options, a match and the in-game menu in the window client, Tab through a structure group, and a match of 8 game minutes against each AI profile at 1x and 3x (ended, bases built, collected, replayed to the same state). The suite `ProductSurveyTests` of `Game.Tests` is the part without a window; known and explained findings are in `baselines/product-survey-known.txt`. Exit code 0 nothing found, 1 a finding, 2 no game data, 3 not run for lack of a display.
+- All of them need a display and end with exit code 3 (**NOT RUN**) without one.
 
 Measurements by hand (real time; a quiet machine, nothing built meanwhile): `scripts/measure-net-latency.ps1 -Label NAME [-ClientArguments ...]` (a local match
 and four lines through a proxy, about twelve minutes; the table of `docs/MULTIPLAYER-FINDINGS.md` section 3), `PresentationTool smoothness` (the steps of what is

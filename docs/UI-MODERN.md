@@ -289,3 +289,7 @@ Measured by picture at 800 x 600, 1280 x 720, 1920 x 1080 (`UiRenderTool --skins
 ## Phase 62: the default skin
 
 The modern skin is the default for every settings file since schema 6 (`docs/UI-TEXT-AND-SETTINGS.md`), not only for a first start; the original skin stays one choice away in "More options".
+
+## Phase 64: opened lists, text that does not fit, 16:10, the hotkey editor
+
+An opened drop-down is drawn last, after any picture a screen adds itself (`UiDrawList.DropDownStart`). A label that does not fit its window at 125 % or 150 % text steps its font down one point at a time to its 100 % size in that skin, then wraps where the window has the height, then ends in an ellipsis - never drawn outside its window (`UiTextFit`, used by the draw and the readability check; nothing moves at 100 %); the product survey finds 0 overflows at 150 % in both skins, and two shipped labels of the original skin that do not fit at 100 % are known and kept. The 16:10 sizes 1440 x 900, 1680 x 1050 and 1920 x 1200 are pinned for the main menu, the options and the HUD in both skins in `skin-screens-16x10.txt` (R2b), beside the six fixed sizes. The hotkey list of More options is editable (see `docs/GAME-SHELL.md`).

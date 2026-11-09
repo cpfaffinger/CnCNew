@@ -143,3 +143,24 @@ Build `9f04c34a` on a handheld-sized test PC; 23 findings, each read in the orig
 | 22 | The Comanche does not fire its cannon at buildings while its missiles reload | the original's rule: a preferred weapon is kept while it reloads | a rule fix |
 | 23 | Debug options: quick build, returning neutral buildings, general points | | `MatchDebugOptions`, protocol 9 |
 | 24 | Choose the AI (old or new, aggressive, turtle, eco) in the setup | the engine was a command-line option | the AI options screen |
+
+## The owner's playtest of 8 November 2026
+
+15 findings, each read in the original where it has the feature, each fixed or named; **no human has seen the fixes.** `docs/SIMULATION-CORE.md` §88.1 has the simulation causes.
+
+| # | Finding | Cause | Fix |
+|---|---|---|---|
+| 1 | About 20 s of nothing on screen at the start | `LoadContent` loaded the game data on the thread that draws | the data loads on a worker thread; the original's boot picture (`loadpageuserinterface.tga`, from the user's content) with a progress bar from the first frame; the `startup:` log lines |
+| 2 | Only 800 x 600 and 1280 x 720 are offered | the shell got the window as the desktop | the display's sizes and the adapter's modes (`IShellEnvironment.DisplayModes`), every standard size up to the desktop, 16:10 pinned (`skin-screens-16x10.txt`); the saved size applies at the start |
+| 3 | The hotkeys are read only | | rebindable in More options (settings schema 7; a begin/end pair moves together and keeps its transitions; Delete unbinds; Esc cancels); live in a running match |
+| 4 | An opened drop-down is drawn under the badges | the screen's pictures were added after the tree's draw list | `UiDrawList.DropDownStart`; a list also stays inside the screen (opens upward in the modern skin or shows fewer rows) |
+| 5 | Returning neutral buildings belongs to the advanced options | | `AdvancedOptionsScreen` beside the AI and Debug options, in the setup and the room; no format change |
+| 6, 6.1 | The queue limit is not respected; money is taken for lost orders | an absent `MaxQueueEntries` read as "no limit" (the original's default is 9) | the limit with `QueueFull` before payment, the balancer skips full queues, each building's load "n/9" on the bar |
+| 7 | Soldiers enter an enemy transport | only the data's relationship was tested | `TransportContain::isValidContainerFor`: the transport's own player only; the pointer shows attack |
+| 8 | The Patriot data stream is white outlines, not animated | one untextured band | `W3DLaserDraw`: bands, colours, tiled scrolling texture; the lasers' muzzle and target particles |
+| 9 | The shot-down Comanche's spiral is far too large | the wreck moved straight by the forward speed | a motive force over its mass and the 2D friction of the physics step (about 35 units, not 143) |
+| 10 | A unit should prefer the targets it hurts most | | rule fix 27 `target-by-damage-potential` |
+| 11, 13 | The Comanche dies too fast against rocket troopers | measured: the shipped data (`RealCombatMathMatchesTheData`), volleys and splash | nothing changed; a balance change is the owner's decision |
+| 12 | The supply drop zone shows no countdown and no planes come | a chute dropped its inert rider, the crates were never taken; the bar knew no `OCLUpdate` timer | `RealSupplyDropZoneDropsItsCrates`, the countdown on the bar |
+| 14 | The USA Chinooks do not gather | the simulation worked; the pointer did not count `ChinookAIUpdate` as a supply carrier | the dock pointer and the right-click order |
+| 15 | The particle cannon's clock runs without power | the simulation paused the power; the superweapon list and the cameo clock read the raw ready frame | `getReadyFrame`/`getPercentReady` with a running pause |
