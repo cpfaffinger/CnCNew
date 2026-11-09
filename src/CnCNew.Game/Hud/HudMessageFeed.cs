@@ -83,6 +83,17 @@ public sealed class HudMessageFeed
     /// </summary>
     public Vector2? LastRadarEvent { get; private set; }
 
+    /// <summary>How many radar events the space bar can walk back through (this build's extension of <c>getLastEventLoc</c>, which remembers only the last).</summary>
+    public const int MaxRadarHistory = 32;
+
+    private readonly List<Vector2> _radarHistory = [];
+
+    /// <summary>The places of the last <see cref="MaxRadarHistory"/> radar events (all but a beacon's pulse), the newest last.</summary>
+    public IReadOnlyList<Vector2> RadarHistory => _radarHistory;
+
+    /// <summary>Counts the events that entered <see cref="RadarHistory"/>, so a viewer of the history can tell that a new one arrived.</summary>
+    public long RadarHistoryVersion { get; private set; }
+
     /// <summary>A radar event a script made (<c>RADAR_CREATE_EVENT</c>, <c>OBJECT_CREATE_RADAR_EVENT</c>, <c>TEAM_CREATE_RADAR_EVENT</c>: <c>ScriptActions::doRadarCreateEvent</c>), of the raw <c>RadarEventType</c> the script passed.</summary>
     public void NoteRadarEvent(Vector2 position, int type, long tick) => CreateEvent(type, position, tick, fromScript: true);
 
@@ -91,7 +102,11 @@ public sealed class HudMessageFeed
     {
         _radarEvents.Add(new RadarEntry(type, tick, position, fromScript));
         if (_radarEvents.Count > MaxRadarEvents) _radarEvents.RemoveAt(0);
-        if (type != EventBeaconPulse) LastRadarEvent = position;
+        if (type == EventBeaconPulse) return;
+        LastRadarEvent = position;
+        _radarHistory.Add(position);
+        if (_radarHistory.Count > MaxRadarHistory) _radarHistory.RemoveAt(0);
+        RadarHistoryVersion++;
     }
 
     /// <summary>

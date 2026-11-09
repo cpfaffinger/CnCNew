@@ -383,8 +383,32 @@ public sealed partial class MatchController
         if (action == MetaAction.PlaceBeacon) { ArmBeacon(); return; }
         if (action == MetaAction.DeleteBeacon) { RemoveSelectedBeacons(); return; }
         // MSG_META_VIEW_LAST_RADAR_EVENT: "You don't need radar for the space bar."
-        if (action == MetaAction.ViewLastRadarEvent) { if (Messages.LastRadarEvent is { } last) Match.Camera.CenterOn(last); return; }
+        if (action is MetaAction.ViewLastRadarEvent or MetaAction.ViewNewerRadarEvent) { ViewRadarHistory(older: action == MetaAction.ViewLastRadarEvent); return; }
         UiRequest?.Invoke(action);
+    }
+
+    /// <summary>How long the space bar can rest before its pointer into the history of radar events goes back to the newest one.</summary>
+    public const long RadarHistoryResetMilliseconds = 3000;
+
+    private int _radarHistoryIndex;
+    private long _radarHistoryPressedMs = -RadarHistoryResetMilliseconds;
+    private long _radarHistorySeen;
+
+    /// <summary>
+    /// The space bar. The original looks at the last radar event only (<c>getLastEventLoc</c>); here the first press looks at the newest event, each further press within
+    /// <see cref="RadarHistoryResetMilliseconds"/> of the one before goes one event further back, Shift+Space one forward, and a rest of that long (or a new event) puts the pointer back on the newest.
+    /// The ends of the history hold (no wrap-around).
+    /// </summary>
+    private void ViewRadarHistory(bool older)
+    {
+        var history = Messages.RadarHistory;
+        if (history.Count == 0) return;
+        var fresh = _clockMs - _radarHistoryPressedMs >= RadarHistoryResetMilliseconds || _radarHistorySeen != Messages.RadarHistoryVersion;
+        if (fresh) _radarHistoryIndex = 0;
+        else _radarHistoryIndex = Math.Clamp(_radarHistoryIndex + (older ? 1 : -1), 0, history.Count - 1);
+        _radarHistoryPressedMs = _clockMs;
+        _radarHistorySeen = Messages.RadarHistoryVersion;
+        Match.Camera.CenterOn(history[history.Count - 1 - _radarHistoryIndex]);
     }
 
     private void OpenMenu()

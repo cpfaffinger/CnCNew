@@ -35,6 +35,7 @@ internal static class RadarEventTests
         {
             var directory = args[index + 1];
             harness.Run("Real data: the space bar looks at the last of the events (a beacon, a captured building, a lost unit)", () => SpaceBar(directory));
+            harness.Run("Real data: the space bar walks back through the history of events, Shift+Space forward, a rest of three seconds or a new event starts at the newest", () => SpaceBarHistory(directory));
         }
         return harness.Failures;
     }
@@ -275,5 +276,99 @@ internal static class RadarEventTests
         var seen = match.Camera.Pivot;
         var target = SimulationQueries.GroundOf(unit);
         TestHarness.Assert(Vector2.Distance(seen, target) < 1f || Vector2.Distance(seen, target) < Vector2.Distance(SimulationQueries.GroundOf(mine), target), $"the space bar centres the view on it (pivot {seen}, unit {target})");
+    }
+
+    private static void SpaceBarHistory(string directory)
+    {
+        var data = GameData.Load(directory, rate: CnCNew.Tests.TestRate.Default);
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        // Game time is the controller's own clock, advanced by Update; no real time passes in this test.
+        void Wait(double seconds) { for (var rest = seconds; rest > 0; rest -= 0.25) controller.Update(0.25); }
+        for (var i = 0; i < (int)match.World.Time.OriginalFrames(4); i++) match.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+        // Let the camera settle: its limits depend on its height, which eases to the default for a while.
+        Wait(5);
+        var feed = controller.Messages;
+        var world = match.World;
+        var places = world.Entities.Select(SimulationQueries.GroundOf)
+            .Distinct().OrderBy(place => place.X).ThenBy(place => place.Y).ToList();
+        // Spread the places out so that no two are the same camera position.
+        var spread = new List<Vector2>();
+        foreach (var place in places)
+        {
+            // The camera keeps its pivot inside the map; only a place it can reach exactly tells which event it looked at.
+            match.Camera.CenterOn(place);
+            if (Vector2.Distance(match.Camera.Pivot, place) > 0.01f) continue;
+            if (spread.All(other => Vector2.Distance(other, place) > 150f)) spread.Add(place);
+        }
+        TestHarness.Assert(spread.Count >= 5, $"premise: five places apart ({spread.Count})");
+        var events = spread.Take(5).ToList();
+
+        long time = 10_000;
+        void Tap(params KeyCode[] chord)
+        {
+            foreach (var key in chord) controller.Process(new KeyEvent(time += 16, key, true));
+            foreach (var key in chord.Reverse()) controller.Process(new KeyEvent(time += 16, key, false));
+        }
+        void Space() { Tap(KeyCode.Space); }
+        void ShiftSpace() { Tap(KeyCode.LeftShift, KeyCode.Space); }
+        void Expect(Vector2 place, string what)
+        {
+            // The camera's limits move with its state: compare with where it keeps the pivot when it is sent to the place now.
+            var seen = match.Camera.Pivot;
+            match.Camera.CenterOn(place);
+            var reachable = match.Camera.Pivot;
+            TestHarness.Assert(Vector2.Distance(seen, reachable) < 1f, $"{what} (pivot {seen}, wanted {place}, nearest the camera can look {reachable})");
+        }
+
+        Space();
+        var before = match.Camera.Pivot;
+        var already = feed.RadarHistory.Count;
+        for (var i = 0; i < events.Count; i++) { feed.NoteRadarEvent(events[i], 3, world.Tick); Wait(0.5); }
+        var beforePulse = feed.RadarHistory.Count;
+        feed.NoteRadarEvent(new Vector2(1, 1), 5, world.Tick);
+        TestHarness.Assert(feed.RadarHistory.Count == beforePulse && feed.RadarHistory[^1] == events[4], $"a beacon's pulse is no history entry ({already} before, {beforePulse} after the five, {feed.RadarHistory.Count} after the pulse)");
+        Wait(5);
+
+        Space();
+        Expect(events[4], "the first press looks at the newest event");
+        Wait(1);
+        Space();
+        Expect(events[3], "the second press, a second later, goes one event back");
+        Wait(1);
+        Space();
+        Expect(events[2], "the third goes one further back");
+        Wait(1);
+        ShiftSpace();
+        Expect(events[3], "Shift+Space goes one forward again");
+        ShiftSpace();
+        Expect(events[4], "and again, to the newest");
+        ShiftSpace();
+        Expect(events[4], "the newest end holds");
+        for (var i = 0; i < 4; i++) { Wait(0.5); Space(); }
+        Expect(events[0], "older events are reached one by one (four presses from the newest)");
+        Wait(3.5);
+        Space();
+        Expect(events[4], "after three seconds of rest the pointer is back at the newest event");
+        Wait(2.5);
+        Space();
+        Expect(events[3], "a rest of less than three seconds keeps the pointer");
+        feed.NoteRadarEvent(events[1], 3, world.Tick);
+        Wait(0.5);
+        Space();
+        Expect(events[1], "a new event puts the pointer on itself at once");
+        Space();
+        Expect(events[4], "and the next press goes back from it");
+        TestHarness.Assert(before != events[4], "premise: the camera had to move");
+        for (var i = 0; i < 40; i++) feed.NoteRadarEvent(events[i % events.Count], 3, world.Tick);
+        TestHarness.Assert(feed.RadarHistory.Count == HudMessageFeed.MaxRadarHistory, "the history keeps the last thirty-two events");
+        Wait(4);
+        for (var i = 0; i < HudMessageFeed.MaxRadarHistory; i++) { Wait(0.1); Space(); }
+        // The 40 events are events[0..4] cycled; the 32 kept are the last of them, so the oldest kept is the ninth event, events[8 % 5].
+        Expect(events[8 % events.Count], "the first press looks at the newest, thirty-one more reach the oldest kept event");
+        for (var i = 0; i < 5; i++) { Wait(0.1); Space(); }
+        Expect(events[8 % events.Count], "the oldest end holds: more presses stay on it");
     }
 }

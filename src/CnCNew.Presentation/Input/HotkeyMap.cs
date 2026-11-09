@@ -264,15 +264,17 @@ public sealed class HotkeyMap
     public HotkeyMap WithEngineDefaults()
     {
         var added = new List<HotkeyEntry>(Entries);
-        void Add(MetaAction action, KeyCode key)
+        void Add(MetaAction action, KeyCode key, KeyModifiers modifiers = KeyModifiers.None)
         {
             if (added.All(entry => entry.Action != action))
-                added.Add(new HotkeyEntry(action, new KeyBinding(key, KeyModifiers.None), HotkeyContexts.Game, "INTERFACE", string.Empty, string.Empty, HotkeySource.Engine));
+                added.Add(new HotkeyEntry(action, new KeyBinding(key, modifiers), HotkeyContexts.Game, "INTERFACE", string.Empty, string.Empty, HotkeySource.Engine));
         }
         Add(MetaAction.CameraScrollUp, KeyCode.Up);
         Add(MetaAction.CameraScrollDown, KeyCode.Down);
         Add(MetaAction.CameraScrollLeft, KeyCode.Left);
         Add(MetaAction.CameraScrollRight, KeyCode.Right);
+        // The space bar walks back through the radar events (VIEW_LAST_RADAR_EVENT); Shift+Space walks forward again.
+        Add(MetaAction.ViewNewerRadarEvent, KeyCode.Space, KeyModifiers.Shift);
         return new HotkeyMap([..added], Issues, Compatibility);
     }
 
