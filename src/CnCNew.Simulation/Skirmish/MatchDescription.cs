@@ -63,8 +63,8 @@ public sealed record MatchDescription(
     int TickRate, string MapPath, string TerrainFingerprint, string DefinitionFingerprint, uint Seed, uint AiSeed, long MaxTicks, int StartMoney, long GraceFrames,
     long SciencePointIntervalFrames, ImmutableArray<MatchSlotDescription> Slots)
 {
-    /// <summary>4: the debug options (<see cref="Debug"/>). 3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
-    public const int EncodingVersion = 4;
+    /// <summary>5: the debug options state whether buildings may be placed in the fog, and the starting general points are skill points. 4: the debug options (<see cref="Debug"/>). 3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
+    public const int EncodingVersion = 5;
     private static ReadOnlySpan<byte> Magic => "CNCMATCH"u8;
 
     /// <summary>The version of the simulation the description was made for: the command table and the world state. A machine with another one must refuse the match.</summary>
@@ -98,7 +98,7 @@ public sealed record MatchDescription(
 
     /// <summary>
     /// The canonical bytes, little endian: <c>"CNCMATCH"</c>, u32 encoding version, u32 command table version, u32 world state version, string simulation identifier, u32 tick rate, string map path, string terrain
-    /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, i32 build time percent, i32 neutral respawn seconds, i32 starting general points, u16 slot count
+    /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, i32 build time percent, i32 neutral respawn seconds, i32 starting general points (skill points), u8 place buildings in the fog, u16 slot count
     /// (u8 kind, string faction, i32 team, i32 colour, i32 start position, i32 AI strength, i32 AI composition, i32 AI tactics). Strings are u16-length-prefixed UTF-8.
     /// </summary>
     public byte[] Encode()
@@ -124,6 +124,7 @@ public sealed record MatchDescription(
             writer.Write(Debug.BuildTimePercent);
             writer.Write(Debug.NeutralRespawnSeconds);
             writer.Write(Debug.StartingGeneralPoints);
+            writer.Write(Debug.PlaceBuildingsInFog);
             writer.Write(checked((ushort)Slots.Length));
             foreach (var slot in Slots)
             {
@@ -162,7 +163,7 @@ public sealed record MatchDescription(
             var startMoney = ReadInt32(data, ref position);
             var grace = ReadInt64(data, ref position);
             var science = ReadInt64(data, ref position);
-            var debug = new MatchDebugOptions(ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position));
+            var debug = new MatchDebugOptions(ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position), ReadFlag(data, ref position));
             var count = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(position, 2));
             position += 2;
             var slots = ImmutableArray.CreateBuilder<MatchSlotDescription>(count);
@@ -288,6 +289,12 @@ public sealed record MatchDescription(
         var value = BinaryPrimitives.ReadInt32LittleEndian(data.Slice(position, 4));
         position += 4;
         return value;
+    }
+
+    private static bool ReadFlag(ReadOnlySpan<byte> data, ref int position)
+    {
+        var value = data[position++];
+        return value <= 1 ? value == 1 : throw new FormatException($"A flag byte is 0 or 1, not {value}.");
     }
 
     private static long ReadInt64(ReadOnlySpan<byte> data, ref int position)

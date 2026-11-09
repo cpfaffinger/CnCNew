@@ -9,7 +9,9 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="NeutralRespawnSeconds">When above 0, a destroyed neutral building of the map comes back at its place after that many seconds of game time; 0 is off.</param>
 /// <param name="StartingGeneralPoints">The skill points (experience) every player of the match starts with, added as earned points are (<c>Player::addSkillPoints</c>): the general's rank rises to
 /// the level those points reach and each level grants its science purchase points and sciences. 0 is the normal start (rank 1).</param>
-public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.NormalBuildTime, int NeutralRespawnSeconds = 0, int StartingGeneralPoints = 0)
+/// <param name="PlaceBuildingsInFog">When set, a builder may be ordered to put a structure on ground the player has not explored or does not look at: the build site check leaves out its
+/// shroud rule (<c>SHROUD_REVEALED</c>). The original refuses such a site.</param>
+public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.NormalBuildTime, int NeutralRespawnSeconds = 0, int StartingGeneralPoints = 0, bool PlaceBuildingsInFog = false)
 {
     public const int NormalBuildTime = 100;
     public const int MinimumBuildTimePercent = 1, MaximumBuildTimePercent = 1000;
@@ -21,7 +23,7 @@ public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.
     /// <summary>The build time the setup offers for "quick build": a tenth of the normal time (90 % less).</summary>
     public const int QuickBuildPercent = 10;
 
-    public bool IsDefault => BuildTimePercent == NormalBuildTime && NeutralRespawnSeconds == 0 && StartingGeneralPoints == 0;
+    public bool IsDefault => BuildTimePercent == NormalBuildTime && NeutralRespawnSeconds == 0 && StartingGeneralPoints == 0 && !PlaceBuildingsInFog;
 
     /// <summary>Whether every value is inside its range; <see cref="Problem"/> names the first that is not.</summary>
     public bool IsValid => Problem is null;

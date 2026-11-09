@@ -147,6 +147,7 @@ public enum EndReason : byte
 public static class Protocol
 {
     /// <summary>
+    /// Version 10: the debug options state whether buildings may be placed in the fog; the starting general points are skill points.
     /// Version 9: the debug options of a match in the room's settings (quick building, returning neutral buildings, general points at the start).
     /// Version 8: the rules of the map in the room's settings (the server has no game data; a match on a map with rules of its own states them).
     /// Version 7 (phase 53): the votes of a match; a hash a majority of at least three players disagrees with drops the one who said it, and the match goes on.
@@ -156,7 +157,7 @@ public static class Protocol
     /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 9;
+    public const ushort Version = 10;
     /// <summary>Rooms one list names at most; a server with more names the first ones in the order of their names.</summary>
     public const int MaxListedRooms = 64;
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
@@ -532,6 +533,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
         writer.I32(Debug.BuildTimePercent);
         writer.I32(Debug.NeutralRespawnSeconds);
         writer.I32(Debug.StartingGeneralPoints);
+        writer.Bool(Debug.PlaceBuildingsInFog);
     }
 
     internal static RoomSettings Read(ref WireReader reader)
@@ -556,7 +558,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             slots.Add(new MatchSlotDescription((MatchSlotKind)kind, reader.Text(Protocol.MaxNameBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32()));
         }
         var rules = reader.Text(Protocol.MaxIdBytes);
-        var debug = new MatchDebugOptions(reader.I32(), reader.I32(), reader.I32());
+        var debug = new MatchDebugOptions(reader.I32(), reader.I32(), reader.I32(), reader.Bool());
         if (debug.Problem is { } problem) throw new ProtocolException(problem);
         return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed, rules) { Debug = debug };
     }

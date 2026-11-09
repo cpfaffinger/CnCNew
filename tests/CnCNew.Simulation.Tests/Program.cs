@@ -110,6 +110,7 @@ run.Test("Acceptance (UNIT-02): a unit beside a mover is no obstacle", Tests.AUn
 run.Test("Acceptance (UNIT-19): a locomotor reads its lift", Tests.ALocomotorReadsItsLift);
 run.Test("Acceptance (UNIT-19): a jet flares its landing", Tests.AJetFlaresItsLanding);
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
+run.Test("Debug options: a building site in the fog of war is legal when the match allows it", Tests.BuildSiteInTheFogWhenTheOptionIsOn);
 run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlliesMakeWayForAHarvester);
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);
 run.Test("Phase 62 (F-147): a bored dozer sees a hurt that came before its update", Tests.BoredDozerSeesAHurtBeforeItsUpdate);

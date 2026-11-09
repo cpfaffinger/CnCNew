@@ -293,6 +293,46 @@ static partial class Tests
     }
 
     /// <summary>
+    /// The skirmish option "build in the fog of war" (a debug option, the owner's request of 9 November 2026): without it the shroud refuses a site and the order, as the original does; with it
+    /// ground nobody has seen and ground that is only fogged are sites, the order is accepted, and a dozer builds there. The option is state: a snapshot keeps it.
+    /// </summary>
+    public static void BuildSiteInTheFogWhenTheOptionIsOn()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            SimulationWorld Make(bool inFog, out Feeder feeder, out SyntheticFixture fixture, out TerrainMap terrain)
+            {
+                terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "site");
+                var (world, made, built) = RatedWorld(rate, BuildSiteFiles(), terrain);
+                fixture = built;
+                feeder = made;
+                if (inFog) world.ConfigureMatchOptions(100, 0, 0, true);
+                feeder.GiveMoney(1, 1000);
+                feeder.Spawn(1, "Dozer", owner: 1, x: 100, y: 100);
+                for (var tick = 0; tick < world.Frames(3); tick++) world.Step();
+                return world;
+            }
+
+            var plain = Make(false, out var plainFeeder, out _, out _);
+            Check.That(SiteCode(plain, 100, 500) == LegalBuildCode.Shroud && plainFeeder.Construct(1, 1, "Plant", 100, 500).Reason == CommandRejection.InvalidPlacement, $"{rate}: without the option unexplored ground is refused.");
+
+            var world = Make(true, out var feeder, out var fixture, out var terrain);
+            Check.That(world.PlaceBuildingsInFog && !plain.PlaceBuildingsInFog, $"{rate}: the world knows the option.");
+            Check.That(SiteCode(world, 100, 500) == LegalBuildCode.Ok, $"{rate}: unexplored ground is a site with the option ({SiteCode(world, 100, 500)}).");
+            world.ExploreMap(new PlayerId(1));
+            Check.That(SiteCode(world, 100, 500) == LegalBuildCode.Ok, $"{rate}: fogged ground is a site with the option ({SiteCode(world, 100, 500)}).");
+            Check.That(feeder.Construct(1, 1, "Plant", 200, 25).Reason == CommandRejection.InvalidPlacement, $"{rate}: the map's edge still refuses the order.");
+            Check.That(feeder.Construct(1, 1, "Plant", 100, 500).Accepted, $"{rate}: the order on unexplored ground is accepted.");
+            for (var tick = 0; tick < world.Frames(60); tick++) world.Step();
+            Check.That(world.Entities.Any(value => value.Template.Name == "Plant"), $"{rate}: the dozer begins the structure there.");
+
+            var restored = CnCNew.Simulation.Snapshots.WorldSnapshot.Restore(CnCNew.Simulation.Snapshots.WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, terrain);
+            Check.That(restored.PlaceBuildingsInFog && restored.StateHash == world.StateHash, $"{rate}: a snapshot keeps the option.");
+            Check.That(!System.Text.Encoding.UTF8.GetString(CnCNew.Simulation.Snapshots.WorldSnapshot.Write(plain)).Contains("placeBuildingsInFog", StringComparison.Ordinal), $"{rate}: a world without it writes nothing new.");
+        }
+    }
+
+    /// <summary>
     /// <c>CANNOT_BUILD_NEAR_SUPPLIES</c>: a supply center may not touch a supply source's footprint grown by <c>SupplyBuildBorder</c>; other buildings may, and so may a supply center beyond the
     /// border. A turned site is measured turned. Before, a supply center could stand against the supplies.
     /// </summary>

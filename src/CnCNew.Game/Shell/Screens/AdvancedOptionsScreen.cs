@@ -12,9 +12,11 @@ namespace CnCNew.Game.Shell.Screens;
 /// 2026). The screen is opened from the skirmish setup and from the network room by their "Advanced options" button; in a room only the host changes them, everybody else sees what the
 /// match will be played with.
 /// <para>
-/// The option travels where it always travelled: in <see cref="MatchDebugOptions.NeutralRespawnSeconds"/> of the match description (the field's name is an internal detail and the
-/// serialized form does not change; a protocol or format version would not either). This screen changes that one field of the value it is given and keeps the debug fields
-/// (<see cref="DebugOptionsScreen"/>) as it found them.
+/// The second is building in the fog of war: the original refuses a building site on ground the player has not explored or does not look at (<c>SHROUD_REVEALED</c>, the message
+/// "can't build in the shroud"); with the option on the site check asks no shroud question (the owner's request of 9 November 2026).
+/// <para>
+/// The options travel in <see cref="MatchDebugOptions"/> of the match description: <see cref="MatchDebugOptions.NeutralRespawnSeconds"/> and <see cref="MatchDebugOptions.PlaceBuildingsInFog"/>
+/// (the fields' names are an internal detail). This screen changes those two fields of the value it is given and keeps the debug fields (<see cref="DebugOptionsScreen"/>) as it found them.
 /// </para>
 /// Like <see cref="DebugOptionsScreen"/> it has no layout of the original: it is made at run time from the shipped <c>OptionsMenu.wnd</c> (the way <c>DebugOptionsScreen.BuildLayout</c> makes its own)
 /// and drawn in the current skin. Accept hands the chosen options to whoever opened it.
@@ -27,9 +29,12 @@ public sealed class AdvancedOptionsScreen : ShellScreen
     public const string Button = "AdvancedOptionsButton.wnd:ButtonAdvancedOptions";
 
     /// <summary>The rows in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
-    public static readonly ImmutableArray<(string Row, string Label)> Rows = [("Respawn", "Respawn neutral buildings"), ("RespawnAfter", "Respawn after")];
+    public static readonly ImmutableArray<(string Row, string Label)> Rows = [("Respawn", "Respawn neutral buildings"), ("RespawnAfter", "Respawn after"), ("FogBuild", "Build in the fog of war")];
 
     public static readonly ImmutableArray<(bool On, string Text)> RespawnChoices = [(false, "Off"), (true, "On")];
+
+    /// <summary>Off, or a builder may be ordered to put a structure on ground that is not explored or not in sight (<see cref="MatchDebugOptions.PlaceBuildingsInFog"/>).</summary>
+    public static readonly ImmutableArray<(bool On, string Text)> FogChoices = [(false, "Off"), (true, "On")];
 
     /// <summary>The times a destroyed neutral building takes to come back, in seconds of game time; <see cref="DefaultRespawnSeconds"/> is chosen when the option is switched on.</summary>
     public static readonly ImmutableArray<int> RespawnSeconds = [30, 60, 120, 300, 600];
@@ -56,6 +61,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
     private readonly MatchDebugOptions _current;
     private bool _respawnOn;
     private int _respawnSeconds;
+    private bool _fogOn;
 
     public AdvancedOptionsScreen(GameShell shell, MatchDebugOptions current, bool readOnly, Action<MatchDebugOptions> accepted)
         : base(shell, File, shell.Skin.Derive(BuildLayout(shell.Layouts.Get(ShellLayoutNames.OptionsMenu)), shell.Layouts.HeaderTemplates))
@@ -65,6 +71,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
         _accepted = accepted;
         _respawnOn = current.NeutralRespawnSeconds > 0;
         _respawnSeconds = _respawnOn ? current.NeutralRespawnSeconds : DefaultRespawnSeconds;
+        _fogOn = current.PlaceBuildingsInFog;
         Tree.Register("AdvancedOptionsSystem", OnSystem);
         Tree.Register("AdvancedOptionsInput", OnInput);
         W("Title").SetText("Advanced options");
@@ -72,6 +79,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("Respawn", RespawnChoices.Select(choice => choice.Text));
         Fill("RespawnAfter", RespawnSeconds.Select(SecondsText));
+        Fill("FogBuild", FogChoices.Select(choice => choice.Text));
         if (readOnly) W("ButtonAccept").SetHidden(true);
         Refresh();
     }
@@ -81,7 +89,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
         => seconds % 60 == 0 ? $"{seconds / 60} {(seconds == 60 ? "minute" : "minutes")}" : $"{seconds.ToString(CultureInfo.InvariantCulture)} seconds";
 
     /// <summary>Whether an advanced option is on; the debug options (<see cref="DebugOptionsScreen.IsOn"/>) are not counted.</summary>
-    public static bool IsOn(MatchDebugOptions options) => options.NeutralRespawnSeconds > 0;
+    public static bool IsOn(MatchDebugOptions options) => options.NeutralRespawnSeconds > 0 || options.PlaceBuildingsInFog;
 
     /// <summary>The caption of the button: it says when something is on (short, because the button stands beside two others in a smaller type).</summary>
     public static string ButtonText(MatchDebugOptions options) => IsOn(options) ? "Advanced (on)" : "Advanced";
@@ -99,6 +107,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
         W("ComboRespawn").SetComboSelection(_respawnOn ? 1 : 0);
         W("ComboRespawnAfter").SetComboSelection(NearestSeconds(_respawnSeconds));
         W("ComboRespawnAfter").SetEnabled(!_readOnly && _respawnOn);
+        W("ComboFogBuild").SetComboSelection(_fogOn ? 1 : 0);
     }
 
     private static int NearestSeconds(int seconds)
@@ -110,7 +119,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
     }
 
     /// <summary>What the boxes say now, on top of the value the screen was given. A time the box does not offer is kept until the box is touched (a match from a save or another tool).</summary>
-    public MatchDebugOptions Chosen => _current with { NeutralRespawnSeconds = _respawnOn ? _respawnSeconds : 0 };
+    public MatchDebugOptions Chosen => _current with { NeutralRespawnSeconds = _respawnOn ? _respawnSeconds : 0, PlaceBuildingsInFog = _fogOn };
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
@@ -136,6 +145,7 @@ public sealed class AdvancedOptionsScreen : ShellScreen
     {
         if (source == Name("ComboRespawn") && index < RespawnChoices.Length) _respawnOn = RespawnChoices[index].On;
         else if (source == Name("ComboRespawnAfter") && index < RespawnSeconds.Length) _respawnSeconds = RespawnSeconds[index];
+        else if (source == Name("ComboFogBuild") && index < FogChoices.Length) _fogOn = FogChoices[index].On;
         else return;
         Refresh();
     }

@@ -1083,6 +1083,7 @@ internal static class ShellTests
         tree = shell.CurrentScreen.Tree;
         string[] AdvancedEntries(string combo) => [.. tree.FindByName($"AdvancedOptions.wnd:{combo}")!.ComboBox!.Entries];
         int AdvancedSelected(string combo) => tree.FindByName($"AdvancedOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
+        TestHarness.Assert(AdvancedEntries("ComboFogBuild").SequenceEqual(["Off", "On"]) && AdvancedSelected("ComboFogBuild") == 0 && setup.DebugOptions.PlaceBuildingsInFog == false, "the advanced screen offers building in the fog, off");
         TestHarness.Assert(AdvancedEntries("ComboRespawn").SequenceEqual(["Off", "On"]) && AdvancedEntries("ComboRespawnAfter").SequenceEqual(["30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes"]),
             $"the choices: {string.Join(" | ", AdvancedEntries("ComboRespawn").Concat(AdvancedEntries("ComboRespawnAfter")))}");
         TestHarness.Assert(AdvancedSelected("ComboRespawn") == 0 && AdvancedSelected("ComboRespawnAfter") == 2 && !tree.FindByName("AdvancedOptions.wnd:ComboRespawnAfter")!.IsEffectivelyEnabled,
@@ -1123,6 +1124,17 @@ internal static class ShellTests
         Click(shell, "AdvancedOptions.wnd:ButtonAccept");
         TestHarness.Assert(setup.DebugOptions == chosen, "and chosen again");
 
+        // Building in the fog of war: an advanced option; Accept keeps the others, the Advanced button still says "on", the Debug button does not count it.
+        Click(shell, AdvancedButton);
+        Choose(shell, "ComboFogBuild", 1, "AdvancedOptions");
+        Click(shell, "AdvancedOptions.wnd:ButtonAccept");
+        chosen = chosen with { PlaceBuildingsInFog = true };
+        TestHarness.Assert(setup.DebugOptions == chosen && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)", $"Accept gives the setup the fog option ({setup.DebugOptions})");
+        Click(shell, AdvancedButton);
+        tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(AdvancedSelected("ComboFogBuild") == 1, "reopened, the advanced screen shows the fog option on");
+        Click(shell, "AdvancedOptions.wnd:ButtonBack");
+
         // Start: the setup, the description, the world and the general's window.
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
         shell.BuildDrawList();
@@ -1134,14 +1146,15 @@ internal static class ShellTests
         live.Session.Step();
         live.Session.Step();
         var world = live.Session.World;
-        TestHarness.Assert(world.BuildTimePercent == 10 && world.NeutralRespawnSeconds == 120, $"the world plays them ({world.BuildTimePercent} %, {world.NeutralRespawnSeconds} s)");
+        TestHarness.Assert(world.BuildTimePercent == 10 && world.NeutralRespawnSeconds == 120 && world.PlaceBuildingsInFog, $"the world plays them ({world.BuildTimePercent} %, {world.NeutralRespawnSeconds} s, fog {world.PlaceBuildingsInFog})");
         var control = LiveMatch.Create(data, started with { Debug = CnCNew.Simulation.Skirmish.MatchDebugOptions.None, Options = started.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
         control.Session.Step();
         control.Session.Step();
         var ranks = world.Templates.Ranks;
         var granted = Enumerable.Range(2, 3).Sum(level => ranks.At(level)!.SciencePurchasePointsGranted);
         TestHarness.Assert(world.RankLevelOf(live.Human) == 4 && world.SkillPointsOf(live.Human) == 2500 && control.Session.World.RankLevelOf(live.Human) == 1
-                           && world.SciencePointsOf(live.Human) == control.Session.World.SciencePointsOf(live.Human) + granted && control.Session.World.BuildTimePercent == 100 && control.Description.Debug.IsDefault,
+                           && world.SciencePointsOf(live.Human) == control.Session.World.SciencePointsOf(live.Human) + granted && control.Session.World.BuildTimePercent == 100 && !control.Session.World.PlaceBuildingsInFog
+                           && control.Description.Debug.IsDefault,
             $"the human is a rank 4 general with the points of ranks 2 to 4 ({world.RankLevelOf(live.Human)}, {world.SciencePointsOf(live.Human)} against {control.Session.World.SciencePointsOf(live.Human)} + {granted})");
         TestHarness.Assert(DebugOptionsScreen.GeneralPointChoices.Select((points, index) => (points, index)).All(choice => choice.points == ranks.At(choice.index + 1)!.SkillPointsNeeded),
             "the points the debug screen offers are the points the ranks of Rank.ini need");

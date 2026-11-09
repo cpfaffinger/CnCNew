@@ -27,14 +27,14 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>BuildAssistant::isLocationLegalToBuild</c> for a builder's order (<c>TERRAIN_RESTRICTIONS | CLEAR_PATH | NO_OBJECT_OVERLAP | SHROUD_REVEALED</c>): the shroud comes first, "since returning
-    /// other errors for shrouded areas could be used to game the system", and only a place the player looks at now is free of it (<c>CELLSHROUD_CLEAR</c>; fogged ground is not). A world without
-    /// terrain has no site rules.
+    /// other errors for shrouded areas could be used to game the system", and only a place the player looks at now is free of it (<c>CELLSHROUD_CLEAR</c>; fogged ground is not). A world whose match
+    /// allows buildings in the fog (<see cref="PlaceBuildingsInFog"/>, a debug option) asks no shroud question. A world without terrain has no site rules.
     /// </summary>
     public LegalBuildCode CheckBuildSite(Entity builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
     {
         if (Navigation is not { } navigation) return LegalBuildCode.Ok;
         if (!navigation.Terrain.IsOnMap(x, y)) return LegalBuildCode.RestrictedTerrain;
-        return !IsPositionVisibleTo(builder.Owner, x, y) ? LegalBuildCode.Shroud : CheckGround(navigation, builder, template, x, y, angle, false);
+        return !PlaceBuildingsInFog && !IsPositionVisibleTo(builder.Owner, x, y) ? LegalBuildCode.Shroud : CheckGround(navigation, builder, template, x, y, angle, false);
     }
 
     /// <summary>The same for a computer player's search (<c>TERRAIN_RESTRICTIONS | NO_OBJECT_OVERLAP</c> without a builder, <c>AIPlayer::buildStructureNow</c>).</summary>

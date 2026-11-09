@@ -17,6 +17,9 @@ public sealed partial class SimulationWorld
 
     private const int NormalBuildTimePercent = 100;
 
+    /// <summary>Whether a builder may be ordered to put a structure on ground the player has not explored or does not look at (the debug option; the original refuses it - <see cref="CheckBuildSite"/>).</summary>
+    public bool PlaceBuildingsInFog { get; private set; }
+
     /// <summary>Seconds of game time after which a destroyed neutral building of the map comes back; 0 when it does not.</summary>
     public int NeutralRespawnSeconds { get; private set; }
 
@@ -42,9 +45,10 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// Sets the debug options before the first tick. Values of the original game leave the world as it is. The build time is a percentage of the normal time, the respawn a number of
     /// seconds of game time (0: off). <paramref name="startingSkillPoints"/> are given to every player that has a rank, as earned points are (<see cref="AddSkillPoints"/>: the level rises to the
-    /// one they reach, with the purchase points and sciences of each level, the rank-level limit and the player's skill-point modifier applied).
+    /// one they reach, with the purchase points and sciences of each level, the rank-level limit and the player's skill-point modifier applied); <paramref name="placeBuildingsInFog"/>
+    /// takes the shroud rule out of the build site check.
     /// </summary>
-    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0)
+    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0, bool placeBuildingsInFog = false)
     {
         if (_tick != 0) throw new InvalidOperationException("The debug options of a match are set before its first tick.");
         if (buildTimePercent <= 0) throw new ArgumentOutOfRangeException(nameof(buildTimePercent));
@@ -52,6 +56,7 @@ public sealed partial class SimulationWorld
         if (startingSkillPoints < 0) throw new ArgumentOutOfRangeException(nameof(startingSkillPoints));
         BuildTimePercent = buildTimePercent;
         NeutralRespawnSeconds = neutralRespawnSeconds;
+        PlaceBuildingsInFog = placeBuildingsInFog;
         if (startingSkillPoints > 0)
             foreach (var player in _playerList)
                 AddSkillPoints(player.Id, startingSkillPoints);
@@ -135,6 +140,7 @@ public sealed partial class SimulationWorld
     private void DescribeMatchOptions(IStateWriter writer)
     {
         if (BuildTimePercent != NormalBuildTimePercent) writer.Int("buildTimePercent", BuildTimePercent);
+        if (PlaceBuildingsInFog) writer.Bool("placeBuildingsInFog", true);
         if (NeutralRespawnSeconds == 0) return;
         writer.Int("neutralRespawnSeconds", NeutralRespawnSeconds);
         writer.BeginArray("neutralBuildings");
@@ -158,6 +164,7 @@ public sealed partial class SimulationWorld
     private void LoadMatchOptions(IStateReader state)
     {
         BuildTimePercent = state.Has("buildTimePercent") ? checked((int)state.Int("buildTimePercent")) : NormalBuildTimePercent;
+        PlaceBuildingsInFog = state.Has("placeBuildingsInFog") && state.Bool("placeBuildingsInFog");
         NeutralRespawnSeconds = state.Has("neutralRespawnSeconds") ? checked((int)state.Int("neutralRespawnSeconds")) : 0;
         _neutralBuildings.Clear();
         if (NeutralRespawnSeconds == 0) return;

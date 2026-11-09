@@ -56,7 +56,7 @@ static partial class Tests
         Check.Throws<FormatException>(() => MatchDescription.Decode([..bytes, 0]), "Trailing bytes");
         Check.Throws<ArgumentException>(() => (description with { CommandTableVersion = description.CommandTableVersion + 1 }).Resolve(fixture.Templates, terrain), "simulation version");
         Check.Throws<ArgumentException>(() => (description with { TerrainFingerprint = "other" }).Resolve(fixture.Templates, terrain), "different terrain");
-        Check.That(MatchDescription.EncodingVersion == 4 && description.SimulationId.Length == 0, "A description made in the process states no simulation identifier (encoding 4).");
+        Check.That(MatchDescription.EncodingVersion == 5 && description.SimulationId.Length == 0, "A description made in the process states no simulation identifier (encoding 5).");
         Check.Throws<ArgumentException>(() => (description with { Slots = description.Slots.SetItem(0, slot with { AiStrength = 3 }) }).Resolve(fixture.Templates, terrain), "unknown AI strength");
         Check.Throws<ArgumentException>(() => (description with { Slots = description.Slots.SetItem(0, slot with { AiTactics = 9 }) }).Resolve(fixture.Templates, terrain), "unknown tactics profile");
         var stated = description with { SimulationId = "abc" };

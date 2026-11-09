@@ -42,8 +42,8 @@ public sealed class SkirmishMatchSession
 
     /// <summary>Format of <see cref="Save"/>: the match description, the session's counters, one state block per computer player, the recording so far and the world.</summary>
     public const string SaveFormat = "cncnew-skirmish-state";
-    /// <summary>4: the embedded match description has encoding 4 (debug options). 3 (phase 33): encoding 3 (tactics profile). 2 (phase 25): encoding 2 (simulation identifier). Older versions are refused.</summary>
-    public const int SaveVersion = 4;
+    /// <summary>5: the embedded match description has encoding 5 (buildings in the fog; the starting general points are skill points). 4: encoding 4 (debug options). 3 (phase 33): encoding 3 (tactics profile). 2 (phase 25): encoding 2 (simulation identifier). Older versions are refused.</summary>
+    public const int SaveVersion = 5;
 
     private readonly MatchDescription _description;
     private readonly List<SimCommand> _commands = [];

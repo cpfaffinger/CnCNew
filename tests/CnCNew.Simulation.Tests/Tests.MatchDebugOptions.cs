@@ -95,13 +95,14 @@ static partial class Tests
     {
         var (fixture, terrain, _) = StartSyntheticMatch(100);
         var description = SyntheticDescription(fixture, terrain);
-        Check.That(MatchDescription.EncodingVersion == 4 && description.Debug.IsDefault && description.Debug == MatchDebugOptions.None, "A description made without options states the original game (encoding 4).");
+        Check.That(MatchDescription.EncodingVersion == 5 && description.Debug.IsDefault && description.Debug == MatchDebugOptions.None, "A description made without options states the original game (encoding 5).");
         var variants = new[]
         {
             description with { Debug = new MatchDebugOptions(BuildTimePercent: MatchDebugOptions.QuickBuildPercent) },
             description with { Debug = new MatchDebugOptions(NeutralRespawnSeconds: 120) },
             description with { Debug = new MatchDebugOptions(StartingGeneralPoints: 5) },
-            description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 120, 5) },
+            description with { Debug = new MatchDebugOptions(PlaceBuildingsInFog: true) },
+            description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 120, 5, true) },
         };
         var seen = new HashSet<string>(StringComparer.Ordinal) { description.Fingerprint };
         foreach (var changed in variants)
@@ -111,12 +112,12 @@ static partial class Tests
             Check.That(decoded.Debug == changed.Debug && decoded.Fingerprint == changed.Fingerprint && decoded.Encode().AsSpan().SequenceEqual(changed.Encode()), "The options survive the description's bytes.");
             Check.That(changed.Resolve(fixture.Templates, terrain).Slots.Length == 2, "A description with options resolves.");
         }
-        Check.That(variants[3].Equals(MatchDescription.Decode(variants[3].Encode())) && !variants[3].Equals(variants[0]), "Descriptions with other options are not equal.");
+        Check.That(variants[4].Equals(MatchDescription.Decode(variants[4].Encode())) && !variants[4].Equals(variants[0]), "Descriptions with other options are not equal.");
 
         var bytes = description.Encode();
         var older = bytes.ToArray();
-        older[8] = 3;
-        Check.Throws<FormatException>(() => MatchDescription.Decode(older), "Unsupported match description version 3");
+        older[8] = 4;
+        Check.Throws<FormatException>(() => MatchDescription.Decode(older), "Unsupported match description version 4");
         Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(BuildTimePercent: 0) }).Resolve(fixture.Templates, terrain), "build time");
         Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(BuildTimePercent: 5000) }).Resolve(fixture.Templates, terrain), "build time");
         Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(NeutralRespawnSeconds: -1) }).Resolve(fixture.Templates, terrain), "respawn time");
