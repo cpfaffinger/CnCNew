@@ -477,7 +477,7 @@ internal static class NetScreenTests
         ChooseDebug(shell, "ComboGeneralPoints", 4);
         TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
         Click(shell, "DebugOptions.wnd:ButtonAccept");
-        var debugOnly = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 0, 10);
+        var debugOnly = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 0, 5000);
         TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } debugAsked && debugAsked.Debug == debugOnly && debugAsked.MapPath == settings.MapPath && debugAsked.Slots.SequenceEqual(settings.Slots),
             $"Accept asks the server to change the room, and nothing else in it changes ({string.Join("; ", lobby.Calls)})");
         lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
@@ -492,7 +492,7 @@ internal static class NetScreenTests
         ChooseDebug(shell, "ComboRespawnAfter", 0, "AdvancedOptions");
         TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
         Click(shell, "AdvancedOptions.wnd:ButtonAccept");
-        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 10);
+        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 5000);
         TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } asked && asked.Debug == chosen && asked.MapPath == settings.MapPath && asked.Slots.SequenceEqual(settings.Slots),
             $"Accept asks the server to change the room: the respawn is in, the debug options stay, nothing else changes ({string.Join("; ", lobby.Calls)})");
         lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);

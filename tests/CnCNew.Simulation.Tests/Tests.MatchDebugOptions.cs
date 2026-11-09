@@ -120,7 +120,7 @@ static partial class Tests
         Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(BuildTimePercent: 0) }).Resolve(fixture.Templates, terrain), "build time");
         Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(BuildTimePercent: 5000) }).Resolve(fixture.Templates, terrain), "build time");
         Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(NeutralRespawnSeconds: -1) }).Resolve(fixture.Templates, terrain), "respawn time");
-        Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(StartingGeneralPoints: 5000) }).Resolve(fixture.Templates, terrain), "general points");
+        Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(StartingGeneralPoints: 5_000_000) }).Resolve(fixture.Templates, terrain), "general points");
     }
 
     /// <summary>
@@ -338,6 +338,16 @@ static partial class Tests
         Science SCIENCE_Debug
           SciencePurchasePointCost = 2
         End
+        Rank 1
+          RankName = GUI:Rank1
+          SkillPointsNeeded = 0
+          SciencePurchasePointsGranted = 0
+        End
+        Rank 2
+          RankName = GUI:Rank2
+          SkillPointsNeeded = 800
+          SciencePurchasePointsGranted = 3
+        End
         Object MapHut
           KindOf = STRUCTURE IMMOBILE SELECTABLE
           Geometry = BOX
@@ -368,7 +378,7 @@ static partial class Tests
         var plain = SkirmishMatchSession.Describe(new SkirmishMatchOptions(0xC0FFEE06, 7, TestRate.Default.Time.OriginalFrames(3_000), 60, 500, 500, 0), fixture.Templates, fixture.Fingerprint, terrain,
             [..participants.Select(participant => new SkirmishSlot(participant))], "Maps/Synthetic/Synthetic.map");
         var human = plain with { Slots = plain.Slots.SetItem(0, plain.Slots[0] with { Kind = MatchSlotKind.Human }) };
-        var debug = human with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 5, 3) };
+        var debug = human with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 5, 800) };
         ImmutableArray<MapObject> objects = [new MapObject("MapHut", 20m, 200m, 0m, 0m, 0, new MapProperties([new MapProperty("objectInitialHealth", MapPropertyType.Int, 5, 0m, "")]))];
 
         SkirmishMatchSession Start(MatchDescription description) => SkirmishMatchSession.Start(description, fixture.Templates, terrain, objects, definitionFingerprint: fixture.Fingerprint);
@@ -379,9 +389,10 @@ static partial class Tests
         control.Step();
         session.Step();
 
-        // General points: every player has them on top of what it started with, and a human spends them.
+        // General points: 800 skill points are rank 2 for every player, with the 3 purchase points of that rank, and a human spends them.
         var (one, two) = (new PlayerId(1), new PlayerId(2));
-        Check.That(control.World.SciencePointsOf(one) == 0 && session.World.SciencePointsOf(one) == 3 && session.World.SciencePointsOf(two) == 3, "Both players start with 3 general points; the match without the option with none.");
+        Check.That(control.World.SciencePointsOf(one) == 0 && control.World.RankLevelOf(one) == 1 && session.World.SciencePointsOf(one) == 3 && session.World.SciencePointsOf(two) == 3
+                   && session.World.RankLevelOf(one) == 2 && session.World.RankLevelOf(two) == 2, $"Both players start at rank 2 with its 3 general points; the match without the option at rank 1 with none ({control.World.RankLevelOf(one)}/{control.World.SciencePointsOf(one)}, {session.World.RankLevelOf(one)}/{session.World.SciencePointsOf(one)}, {session.World.RankLevelOf(two)}/{session.World.SciencePointsOf(two)}).");
         var humanSequence = 1UL;
         Check.That(session.Submit(new PurchaseScienceCommand(one, humanSequence++, session.World.Tick, "SCIENCE_Debug")).Accepted, "The human buys a science of the general's window.");
         session.Step();
@@ -430,7 +441,7 @@ static partial class Tests
         Check.That(killed > 0, $"The hut of the map was destroyed by the soldier ({string.Join(" ", session.World.Entities.Where(entity => entity.Template.Name == "MapHut").Select(entity => entity.Body!.Health))} {soldier.X},{soldier.Y} {session.World.FindEntity(soldier.Id)?.Body?.Health}).");
         var wanted = session.World.Time.WholeSecondsToTicks(5);
         Check.That(back - killed >= wanted - session.Frames(2) && back - killed <= wanted + session.Frames(6), $"The hut is back after its 5 seconds ({session.World.InFrames(back - killed)} frames).");
-        Check.That(session.Description.Debug == new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 5, 3), "The session carries the options of its description.");
+        Check.That(session.Description.Debug == new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 5, 800), "The session carries the options of its description.");
         var save = saves.Where(pair => pair.Key > killed && pair.Key < killed + wanted - every / 2).OrderBy(pair => pair.Key).Select(pair => pair.Value).FirstOrDefault();
         Check.That(save is not null, "A save was made while the hut was gone.");
 

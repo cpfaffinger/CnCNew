@@ -41,15 +41,20 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// Sets the debug options before the first tick. Values of the original game leave the world as it is. The build time is a percentage of the normal time, the respawn a number of
-    /// seconds of game time (0: off).
+    /// seconds of game time (0: off). <paramref name="startingSkillPoints"/> are given to every player that has a rank, as earned points are (<see cref="AddSkillPoints"/>: the level rises to the
+    /// one they reach, with the purchase points and sciences of each level, the rank-level limit and the player's skill-point modifier applied).
     /// </summary>
-    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds)
+    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0)
     {
         if (_tick != 0) throw new InvalidOperationException("The debug options of a match are set before its first tick.");
         if (buildTimePercent <= 0) throw new ArgumentOutOfRangeException(nameof(buildTimePercent));
         if (neutralRespawnSeconds < 0) throw new ArgumentOutOfRangeException(nameof(neutralRespawnSeconds));
+        if (startingSkillPoints < 0) throw new ArgumentOutOfRangeException(nameof(startingSkillPoints));
         BuildTimePercent = buildTimePercent;
         NeutralRespawnSeconds = neutralRespawnSeconds;
+        if (startingSkillPoints > 0)
+            foreach (var player in _playerList)
+                AddSkillPoints(player.Id, startingSkillPoints);
     }
 
     /// <summary>

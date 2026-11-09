@@ -180,6 +180,51 @@ static partial class Tests
         Check.That(limited.RankLevelLimit == 2 && limited.RankLevelOf(alpha) == 2 && limited.StateHash == world.StateHash && limited.SciencePointsOf(alpha) == world.SciencePointsOf(alpha), "The limit crosses a save.");
     }
 
+    /// <summary>
+    /// The debug option "general points at the start": the points are skill points given as earned ones are, so the general's level is the one they reach, with each level's purchase points
+    /// and sciences; a player without a rank gets nothing; the world of a match started with the option equals one that was given the points by hand; a snapshot keeps it. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void RankStartingPointsRaiseTheLevel()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: RankFiles());
+            SimulationWorld Make(int points)
+            {
+                ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", "RankedFaction"), new(new PlayerId(2), "Beta", "RankedFaction", 1), new(new PlayerId(3), "Gamma")];
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+                if (points > 0) world.ConfigureMatchOptions(100, 0, points);
+                return world;
+            }
+
+            var (alpha, beta) = (new PlayerId(1), new PlayerId(2));
+            var none = Make(0);
+            Check.That(none.RankLevelOf(alpha) == 1 && none.SkillPointsOf(alpha) == 0 && none.SciencePointsOf(alpha) == 3, $"{rate}: no option, level 1 with its point.");
+            var below = Make(799);
+            Check.That(below.RankLevelOf(alpha) == 1 && below.SkillPointsOf(alpha) == 799 && below.SciencePointsOf(alpha) == 3, $"{rate}: 799 points are not yet level 2.");
+            var two = Make(800);
+            Check.That(two.RankLevelOf(alpha) == 2 && two.SciencePointsOf(alpha) == 4 && Holds(two, alpha, "SCIENCE_RankTwo") && Holds(two, alpha, "SCIENCE_RankOne") && !Holds(two, alpha, "SCIENCE_RankThree"),
+                $"{rate}: 800 points are level 2 with its point and its science ({two.RankLevelOf(alpha)}).");
+            var three = Make(1600);
+            Check.That(three.RankLevelOf(alpha) == 3 && three.SkillPointsOf(alpha) == 1500 && three.SciencePointsOf(alpha) == 7 && Holds(three, alpha, "SCIENCE_RankThree") && three.NextLevelPointsOf(alpha) == -1,
+                $"{rate}: 1,600 points are the last level, the points stop at 1,500 ({three.RankLevelOf(alpha)}, {three.SkillPointsOf(alpha)}).");
+            Check.That(three.RankLevelOf(beta) == 3 && three.RankLevelOf(new PlayerId(3)) == 0, $"{rate}: every player with a rank gets it, one without gets none.");
+
+            var byHand = Make(0);
+            byHand.AddSkillPoints(alpha, 1600);
+            byHand.AddSkillPoints(beta, 1600);
+            Check.That(byHand.StateHash == three.StateHash, $"{rate}: the same state as points earned by hand.");
+
+            var limited = Make(0);
+            limited.SetRankLevelLimit(2);
+            limited.AddSkillPoints(alpha, 1600);
+            Check.That(limited.RankLevelOf(alpha) == 2, $"{rate}: the limit of the map holds the same way.");
+
+            var restored = WorldSnapshot.Restore(WorldSnapshot.Write(three), fixture.Templates, fixture.Fingerprint);
+            Check.That(restored.StateHash == three.StateHash && restored.RankLevelOf(alpha) == 3, $"{rate}: a snapshot keeps the level.");
+        }
+    }
+
     private static int KillFor(SyntheticFixture fixture, string victimTemplate, string victimFaction = "RankedFaction", bool underConstruction = false)
     {
         var world = RankWorld(fixture, victimFaction);

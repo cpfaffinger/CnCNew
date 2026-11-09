@@ -31,8 +31,11 @@ public sealed class DebugOptionsScreen : ShellScreen
     /// <summary>Off, or everything built takes a tenth of its time (<see cref="MatchDebugOptions.QuickBuildPercent"/>).</summary>
     public static readonly ImmutableArray<(int Percent, string Text)> QuickBuildChoices = [(MatchDebugOptions.NormalBuildTime, "Off"), (MatchDebugOptions.QuickBuildPercent, "On: 90 % less build time")];
 
-    /// <summary>The general points every player starts with; 0 is the normal start.</summary>
-    public static readonly ImmutableArray<int> GeneralPointChoices = [0, 1, 3, 5, 10, 20, 50];
+    /// <summary>
+    /// The experience (skill points) every player starts with, which gives its general the rank those points reach (<c>Player::addSkillPoints</c>); 0 is the normal start at rank 1. The
+    /// choices are the points the ranks of the shipped <c>Rank.ini</c> need (a test compares them with the data).
+    /// </summary>
+    public static readonly ImmutableArray<int> GeneralPointChoices = [0, 800, 1500, 2500, 5000];
 
     public override bool HidesScreensBelow => true;
 
@@ -52,7 +55,7 @@ public sealed class DebugOptionsScreen : ShellScreen
         W("NoteLabel").SetText(readOnly ? "For testing. The host chose these rules." : "For testing. Every player plays by these rules.");
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("QuickBuild", QuickBuildChoices.Select(choice => choice.Text));
-        Fill("GeneralPoints", GeneralPointChoices.Select(points => points == 0 ? "0 (normal start)" : points.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        Fill("GeneralPoints", GeneralPointChoices.Select((points, index) => index == 0 ? "0 (normal start)" : $"{points.ToString(System.Globalization.CultureInfo.InvariantCulture)} (rank {index + 1})"));
         if (readOnly) W("ButtonAccept").SetHidden(true);
         Refresh();
     }

@@ -7,12 +7,13 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="BuildTimePercent">What everything built takes of its normal time, in percent (100 normal): units, structures under construction and researched upgrades - everything
 /// <c>calcTimeToBuild</c> and the upgrade's build time give, before the power-supply ratio is applied.</param>
 /// <param name="NeutralRespawnSeconds">When above 0, a destroyed neutral building of the map comes back at its place after that many seconds of game time; 0 is off.</param>
-/// <param name="StartingGeneralPoints">The science purchase points of the general's window every player of the match starts with, on top of its rank's.</param>
+/// <param name="StartingGeneralPoints">The skill points (experience) every player of the match starts with, added as earned points are (<c>Player::addSkillPoints</c>): the general's rank rises to
+/// the level those points reach and each level grants its science purchase points and sciences. 0 is the normal start (rank 1).</param>
 public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.NormalBuildTime, int NeutralRespawnSeconds = 0, int StartingGeneralPoints = 0)
 {
     public const int NormalBuildTime = 100;
     public const int MinimumBuildTimePercent = 1, MaximumBuildTimePercent = 1000;
-    public const int MaximumRespawnSeconds = 86_400, MaximumStartingGeneralPoints = 1000;
+    public const int MaximumRespawnSeconds = 86_400, MaximumStartingGeneralPoints = 1_000_000;
 
     /// <summary>The original's rules: nothing is changed.</summary>
     public static MatchDebugOptions None { get; } = new();

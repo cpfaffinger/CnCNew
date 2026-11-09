@@ -234,6 +234,7 @@ run.Test("Fidelity B (F-43): an upgrade is researched in its producer's queue fo
 run.Test("Fidelity B (F-44): a producer that dies refunds its whole queue", Tests.FidelityDeadProducerRefundsItsQueue);
 run.Test("Rank (D-15): the start of a player, the levels, a step down", Tests.RankStartAndLevels);
 run.Test("Rank (D-15): the limit and the scale of a script, across a save", Tests.RankLimitAndModifier);
+run.Test("Rank (D-15): the debug option's starting points raise the level like earned points", Tests.RankStartingPointsRaiseTheLevel);
 run.Test("Rank (D-15): the points of a kill", Tests.RankPointsOfAKill);
 run.Test("Rank (D-15): the script actions act on the world", Tests.RankScriptActions);
 run.Test("Solo bonuses (D-6): health and weapon bonus by difficulty and owner, off for a script, across a save, none in a skirmish", Tests.SoloBonuses);

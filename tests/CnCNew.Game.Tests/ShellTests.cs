@@ -1064,7 +1064,7 @@ internal static class ShellTests
         var tree = shell.CurrentScreen.Tree;
         string[] Entries(string combo) => [.. tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.Entries];
         int Selected(string combo) => tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
-        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 90 % less build time"]) && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "1", "3", "5", "10", "20", "50"]),
+        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 90 % less build time"]) && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "800 (rank 2)", "1500 (rank 3)", "2500 (rank 4)", "5000 (rank 5)"]),
             $"the choices: {string.Join(" | ", Entries("ComboQuickBuild").Concat(Entries("ComboGeneralPoints")))}");
         TestHarness.Assert(tree.FindByName("DebugOptions.wnd:ComboRespawn") is null && tree.FindByName("DebugOptions.wnd:ComboRespawnAfter") is null
                            && !Enumerable.Range(0, 1).Any(_ => shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Respawn", StringComparison.Ordinal))), "the debug screen no longer has the returning neutral buildings");
@@ -1100,12 +1100,12 @@ internal static class ShellTests
                            && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)" && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug",
             $"Accept gives the setup the respawn after 2 minutes ({setup.DebugOptions}); the Advanced button says 'Advanced (on)', the Debug button does not count it ('{setup.Tree.FindByName(DebugButton)!.Text!.Value}')");
 
-        // Accept of the debug screen keeps the advanced option; the debug screen shows nothing of it. Quick build and 5 general points.
+        // Accept of the debug screen keeps the advanced option; the debug screen shows nothing of it. Quick build and 2,500 general points (rank 4).
         Click(shell, DebugButton);
         Choose(shell, "ComboQuickBuild", 1);
         Choose(shell, "ComboGeneralPoints", 3);
         Click(shell, "DebugOptions.wnd:ButtonAccept");
-        var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 5);
+        var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 2500);
         TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)" && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)",
             $"Accept gives the setup {chosen} and both buttons say so");
         Click(shell, DebugButton);
@@ -1138,8 +1138,17 @@ internal static class ShellTests
         var control = LiveMatch.Create(data, started with { Debug = CnCNew.Simulation.Skirmish.MatchDebugOptions.None, Options = started.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
         control.Session.Step();
         control.Session.Step();
-        TestHarness.Assert(world.SciencePointsOf(live.Human) == control.Session.World.SciencePointsOf(live.Human) + 5 && control.Session.World.BuildTimePercent == 100 && control.Description.Debug.IsDefault,
-            $"the human has 5 general points more than in the match without them ({world.SciencePointsOf(live.Human)} against {control.Session.World.SciencePointsOf(live.Human)})");
+        var ranks = world.Templates.Ranks;
+        var granted = Enumerable.Range(2, 3).Sum(level => ranks.At(level)!.SciencePurchasePointsGranted);
+        TestHarness.Assert(world.RankLevelOf(live.Human) == 4 && world.SkillPointsOf(live.Human) == 2500 && control.Session.World.RankLevelOf(live.Human) == 1
+                           && world.SciencePointsOf(live.Human) == control.Session.World.SciencePointsOf(live.Human) + granted && control.Session.World.BuildTimePercent == 100 && control.Description.Debug.IsDefault,
+            $"the human is a rank 4 general with the points of ranks 2 to 4 ({world.RankLevelOf(live.Human)}, {world.SciencePointsOf(live.Human)} against {control.Session.World.SciencePointsOf(live.Human)} + {granted})");
+        TestHarness.Assert(DebugOptionsScreen.GeneralPointChoices.Select((points, index) => (points, index)).All(choice => choice.points == ranks.At(choice.index + 1)!.SkillPointsNeeded),
+            "the points the debug screen offers are the points the ranks of Rank.ini need");
+        var odd = LiveMatch.Create(data, started with { Debug = new CnCNew.Simulation.Skirmish.MatchDebugOptions(StartingGeneralPoints: 3000), Options = started.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
+        odd.Session.Step();
+        TestHarness.Assert(odd.Session.World.RankLevelOf(live.Human) == 4 && odd.Session.World.RankLevelOf(new CnCNew.Simulation.Ids.PlayerId(2)) == 4 && odd.Session.World.SkillPointsOf(live.Human) == 3000,
+            $"3,000 points are rank 4 for the human and the computer player alike ({odd.Session.World.RankLevelOf(live.Human)}, {odd.Session.World.SkillPointsOf(live.Human)} points)");
 
         // A setup that was not touched starts the original game.
         var plain = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);

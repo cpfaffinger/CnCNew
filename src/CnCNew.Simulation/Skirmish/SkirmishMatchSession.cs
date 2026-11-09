@@ -451,8 +451,6 @@ public sealed class SkirmishMatchSession
             var (bx, by) = (starts[slot.StartPosition].X, starts[slot.StartPosition].Y);
             var participant = slot.Participant;
             System(sequence => new GiveMoneyCommand(PlayerId.System, sequence, 0, player, Fixed.FromInt(_description.StartMoney)));
-            // A debug option: purchase points for the general's window on top of the rank's, for every player that takes part (computer players too).
-            if (_description.Debug.StartingGeneralPoints > 0) System(sequence => new GiveSciencePointsCommand(PlayerId.System, sequence, 0, player, _description.Debug.StartingGeneralPoints));
             // GameLogic::startNewGame: "remove shroud for the player in MP games" unless Multiplayer.ini says UseShroud.
             if (!catalog.ShroudInMultiplayer) System(sequence => new ExploreMapCommand(PlayerId.System, sequence, 0, player));
             if (participant.Substitution is { } substitution) notes.Add($"{participant.Faction.Name}: {substitution}; starts with {participant.BaseBuilding}");
