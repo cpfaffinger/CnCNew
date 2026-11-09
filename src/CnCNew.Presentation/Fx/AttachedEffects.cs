@@ -26,6 +26,57 @@ public sealed record TransitionFxSlot(int State, bool IsParticleSystem, string? 
 /// <param name="MissileIgnitionFrames">For a projectile with <c>MissileAIUpdate</c> its <c>IgnitionDelay</c> in logic frames of the original (the exhaust starts then); null for every other object.</param>
 public sealed record AttachedEffectTemplate(ImmutableArray<BoneFxSlot> BoneFx, ImmutableArray<TransitionFxSlot> Transition, bool HasActiveBody, long? MissileIgnitionFrames);
 
+/// <summary>
+/// A <c>RadiusDecalTemplate</c> (<c>RadiusDecal.cpp parseRadiusDecalTemplate</c>) of an object's module: its texture, how its opacity throbs between <paramref name="OpacityMin"/> and
+/// <paramref name="OpacityMax"/> over <paramref name="ThrobMilliseconds"/>, its colour (red, green, blue, alpha in 0..1) and whether only the owner sees it.
+/// </summary>
+public sealed record RadiusDecalSpec(string Texture, float OpacityMin, float OpacityMax, int ThrobMilliseconds, Vector4 Color, bool OnlyVisibleToOwningPlayer)
+{
+    /// <summary><c>RadiusDecal::update</c>: the opacity follows a sine over the throb time, counted in logic frames of the original.</summary>
+    public float Opacity(long originalFrame)
+    {
+        var throb = Math.Max(1L, (long)ThrobMilliseconds * CnCNew.Data.OriginalFrame.PerSecond / 1000);
+        var theta = 2 * Math.PI * (originalFrame % throb) / throb;
+        return OpacityMin + (float)(0.5 * (Math.Sin(theta) + 1)) * (OpacityMax - OpacityMin);
+    }
+
+    /// <summary>The nested block <paramref name="section"/> (<c>AttackAreaDecal</c>, <c>TargetingReticleDecal</c>); defaults as the reference: full opacity, a second, white, owner only.</summary>
+    public static RadiusDecalSpec? Parse(DefinitionSection section)
+    {
+        string texture = string.Empty;
+        float min = 1f, max = 1f;
+        var throb = 1000;
+        var color = Vector4.One;
+        var owner = true;
+        float Percent(string text) => float.TryParse(text.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? (text.EndsWith('%') ? value / 100f : value) : 1f;
+        foreach (var field in section.Fields)
+        {
+            var text = field.Value.OriginalText.Split(';')[0].Trim();
+            switch (field.Name.ToUpperInvariant())
+            {
+                case "TEXTURE": texture = text; break;
+                case "OPACITYMIN": min = Percent(text); break;
+                case "OPACITYMAX": max = Percent(text); break;
+                case "OPACITYTHROBTIME": throb = int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms) ? ms : throb; break;
+                case "ONLYVISIBLETOOWNINGPLAYER": owner = text.Equals("Yes", StringComparison.OrdinalIgnoreCase); break;
+                case "COLOR":
+                {
+                    var channels = new float[] { 0f, 0f, 0f, 1f };
+                    var parts = text.Split([' ', '	'], StringSplitOptions.RemoveEmptyEntries);
+                    for (var index = 0; index < parts.Length && index < 4; index++)
+                        if (parts[index].Length > 2 && float.TryParse(parts[index][2..], NumberStyles.Float, CultureInfo.InvariantCulture, out var channel)) channels[index] = channel / 255f;
+                    color = new Vector4(channels[0], channels[1], channels[2], channels[3]);
+                    break;
+                }
+            }
+        }
+        return texture.Length == 0 || texture.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : new RadiusDecalSpec(texture, min, max, throb, color, owner);
+    }
+}
+
+/// <summary>The two decals of a <c>SpectreGunshipUpdate</c>: the big circle of the attack area around the first target and the small reticle that follows the player's clicks; either may be absent.</summary>
+public sealed record GunshipDecalSpec(RadiusDecalSpec? AttackArea, RadiusDecalSpec? Reticle);
+
 /// <summary>One category of <c>ActiveBody</c>'s automatic particles (<c>GameData.ini</c> <c>AutoFireParticleSmallPrefix</c> etc.): bones named PREFIX01, PREFIX02 ... of the current model.</summary>
 public sealed record BodyParticleRule(string Prefix, string System, int Max);
 
@@ -69,6 +120,9 @@ public sealed class AttachedEffectCatalog
     /// <summary><c>GattlingStrafeFXParticleSystem</c> of a <c>SpectreGunshipUpdate</c>, by the object's template.</summary>
     public ImmutableDictionary<string, string> StrafeSystems { get; private init; } = ImmutableDictionary<string, string>.Empty;
 
+    /// <summary><c>AttackAreaDecal</c> and <c>TargetingReticleDecal</c> of a <c>SpectreGunshipUpdate</c>, by the object's template.</summary>
+    public ImmutableDictionary<string, GunshipDecalSpec> GunshipDecals { get; private init; } = ImmutableDictionary<string, GunshipDecalSpec>.Empty;
+
     /// <summary>Values the parser could not read, each with its place: counted, never guessed at.</summary>
     public ImmutableArray<string> Problems { get; private init; } = [];
 
@@ -88,6 +142,7 @@ public sealed class AttachedEffectCatalog
         var laserFlares = new Dictionary<string, (string Muzzle, string Target)>(StringComparer.OrdinalIgnoreCase);
         var abilities = new List<(string Owner, string Object, string Bone)>();
         var strafes = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
+        var gunshipDecals = ImmutableDictionary.CreateBuilder<string, GunshipDecalSpec>(StringComparer.OrdinalIgnoreCase);
         var rules = new BodyParticleRule[BodyKeys.Length];
         for (var index = 0; index < rules.Length; index++) rules[index] = new BodyParticleRule(string.Empty, string.Empty, 0);
         foreach (var definition in graph.Definitions)
@@ -119,6 +174,12 @@ public sealed class AttachedEffectCatalog
                             laserFlares[obj.OriginalName] = (Key("MuzzleParticleSystem"), Key("TargetParticleSystem"));
                         if (module.Name.Equals("SpecialAbilityUpdate", StringComparison.Ordinal) && Key("SpecialObject").Length > 0) abilities.Add((obj.OriginalName, Key("SpecialObject"), Key("SpecialObjectAttachToBone")));
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
+                        if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && !module.Sections.IsDefaultOrEmpty)
+                        {
+                            RadiusDecalSpec? Decal(string name) => module.Sections.LastOrDefault(section => section.Declaration.Split([' ', '	'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Equals(name, StringComparison.OrdinalIgnoreCase) == true) is { } found ? RadiusDecalSpec.Parse(found) : null;
+                            var decals = new GunshipDecalSpec(Decal("AttackAreaDecal"), Decal("TargetingReticleDecal"));
+                            if (decals.AttackArea is not null || decals.Reticle is not null) gunshipDecals[obj.OriginalName] = decals;
+                        }
                     }
                     if (obj.Modules.FirstOrDefault(module => module.Name.Equals("W3DProjectileStreamDraw", StringComparison.Ordinal)) is { } stream)
                     {
@@ -173,7 +234,7 @@ public sealed class AttachedEffectCatalog
         var owners = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (owner, made, bone) in abilities)
             if (lasers.ContainsKey(made)) owners[owner] = bone;
-        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
+        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), GunshipDecals = gunshipDecals.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
     }
 
     private static string? Named(string token) => token.Length == 0 || token.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : token;
@@ -533,6 +594,14 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     private long _streamProjectiles;
     private long _motionSystems;
 
+    /// <summary>The player whose screen this is: a decal that only its owner sees (<c>OnlyVisibleToOwningPlayer</c>) is made for this player's objects only. Null: for nobody.</summary>
+    public PlayerId? Viewer { get; set; }
+
+    private ImmutableArray<DecalInstance> _decalFrame = [];
+
+    /// <summary>The radius decals of the last update (<see cref="FxExecutor.ObjectDecals"/>).</summary>
+    public ImmutableArray<DecalInstance> Decals => _decalFrame;
+
     /// <summary>The projectile streams of the last update, for the frame (<see cref="FxExecutor.ProjectileStreams"/>).</summary>
     public ImmutableArray<StreamInstance> ProjectileStreams => _streamFrame;
     private readonly SortedDictionary<uint, Tracked> _tracked = [];
@@ -600,6 +669,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         }
         foreach (var id in gone) _tracked.Remove(id);
         UpdateStreams(world, view);
+        UpdateGunshipDecals(world, originalFrame);
         foreach (var item in _ordered)
         {
             var id = item.Entity.Value;
@@ -648,6 +718,36 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             fx.Particles.Spawn(template, new ParticleSpawn(position));
             _strafeSystems++;
         }
+    }
+
+    /// <summary>
+    /// <c>SpectreGunshipUpdate::update</c> while the ship inserts or orbits: "m_attackAreaDecal.setPosition( m_initialTargetPosition ); m_targetingReticleDecal.setPosition( m_overrideTargetDestination )" -
+    /// the big circle of the attack area stays on the first target and the small reticle goes where the player last clicked (at once; the aim of the gattling follows it
+    /// along the ground at <c>StrafingIncrement</c> a frame). Both throb in the opacity their template names (<c>RadiusDecal::update</c>) and are seen only by the ship's owner.
+    /// </summary>
+    private void UpdateGunshipDecals(SimulationWorld world, long originalFrame)
+    {
+        if (catalog.GunshipDecals.IsEmpty) { _decalFrame = []; return; }
+        var decals = ImmutableArray.CreateBuilder<DecalInstance>();
+        void Add(RadiusDecalSpec? spec, CnCNew.Simulation.Modules.BuiltIn.Point3 at, Simulation.Numerics.Fixed radius)
+        {
+            if (spec is null || radius <= Simulation.Numerics.Fixed.Zero) return;
+            var color = new Vector4(spec.Color.X, spec.Color.Y, spec.Color.Z, spec.Color.W * spec.Opacity(originalFrame));
+            decals.Add(new DecalInstance(DecalKind.Fx, spec.Texture + ".tga", new Vector3(FixedConvert.ToSingle(at.X), FixedConvert.ToSingle(at.Y), FixedConvert.ToSingle(at.Z)),
+                FixedConvert.ToSingle(radius), 0f, color, new Vector4(0f, 0f, 1f, 1f), originalFrame, null, 0));
+        }
+        foreach (var item in _ordered)
+        {
+            if (!catalog.GunshipDecals.TryGetValue(item.Visual.TemplateName, out var spec) || world.FindEntity(item.Entity) is not { } entity || entity.EffectivelyDead) continue;
+            foreach (var module in entity.Modules)
+            {
+                if (module is not CnCNew.Simulation.Modules.BuiltIn.SpectreGunshipUpdate { IsActive: true } gunship) continue;
+                bool Seen(RadiusDecalSpec? decal) => decal is not null && (!decal.OnlyVisibleToOwningPlayer || Viewer == entity.Owner);
+                if (Seen(spec.AttackArea)) Add(spec.AttackArea, gunship.InitialTarget, gunship.AttackAreaRadius);
+                if (Seen(spec.Reticle)) Add(spec.Reticle, gunship.OverrideTarget, gunship.TargetingReticleRadius);
+            }
+        }
+        _decalFrame = decals.ToImmutable();
     }
 
     private long _strafeSystems;

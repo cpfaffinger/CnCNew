@@ -365,10 +365,14 @@ public sealed class FxExecutor
     /// <summary>The radius cursor under the mouse (<c>InGameUI::handleRadiusCursor</c>), set by the HUD every frame; null when there is none.</summary>
     public DecalInstance? CursorDecal { get; set; }
 
+    /// <summary>Who supplies the radius decals objects carry (<see cref="AttachedEffects.Decals"/>: the Spectre gunship's attack area and reticle); null: none.</summary>
+    public Func<ImmutableArray<DecalInstance>>? ObjectDecals { get; set; }
+
     /// <summary>The current renderable state; ray and shake requests are handed out once.</summary>
     public FxFrame Capture(Func<Vector3, float, bool>? isVisible = null)
     {
         var decals = Decals.Snapshot();
+        if (ObjectDecals?.Invoke() is { IsDefaultOrEmpty: false } carried) decals = decals.AddRange(carried);
         if (CursorDecal is { } cursor) decals = decals.Add(cursor);
         var frame = new FxFrame(Frame, Particles.Capture(isVisible),
             [.._tracers.Select(tracer => tracer.ToInstance()), ..Ropes?.Invoke() ?? []],

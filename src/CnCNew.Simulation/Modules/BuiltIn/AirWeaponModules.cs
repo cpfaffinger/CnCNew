@@ -1056,7 +1056,7 @@ public sealed record SpectreData(string PowerName, string GattlingTemplate, stri
 /// <c>HowitzerFollowLag</c> ticks each cycle also fires the howitzer weapon at the aim point with a random offset (<c>RandomOffsetForHowitzer</c>). After the orbit it <b>departs</b> straight
 /// ahead at the transit locomotor and is deleted once it left the map; the gattling is deleted with the cleanup. Movement is kinematic (turn rate and speed of the locomotor; the height is the
 /// locomotor's preferred height at once); the gattling is a free-standing entity that follows the ship (put into its container when the container accepts it). Not modeled: fog of war (the
-/// reference lets it fire only at what its player sees), the command-from-script variant, the radius decals, afterburner and door
+/// reference lets it fire only at what its player sees), the command-from-script variant, afterburner and door
 /// model conditions.
 /// </summary>
 public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateModule, ISpecialPowerHandler, ISteerablePower
@@ -1103,6 +1103,15 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     public GunshipStatus Status => _status;
     public EntityId Gattling => _gattling;
     public Point3 InitialTarget => _initialTarget;
+
+    /// <summary>Where the player last aimed the reticle (<c>m_overrideTargetDestination</c>): the first click's place until a click while the ship is up moves it.</summary>
+    public Point3 OverrideTarget => _overrideTarget;
+
+    /// <summary><c>m_attackAreaRadius</c>: the big circle around the initial target.</summary>
+    public Fixed AttackAreaRadius => data.AttackAreaRadius;
+
+    /// <summary><c>m_targetingReticleRadius</c>: the small circle that follows the player's click.</summary>
+    public Fixed TargetingReticleRadius => data.TargetingReticleRadius;
 
     /// <summary>Where the gattling's aim point stands as it creeps toward the target (<c>m_gattlingTargetPosition</c>).</summary>
     public Point3 GattlingTarget => _gattlingTarget;

@@ -108,6 +108,8 @@ public abstract class LiveGame
         Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed };
         Fx.ProjectileStreams = () => Attached.ProjectileStreams;
         Fx.Ropes = () => Attached.Ropes;
+        Fx.ObjectDecals = () => Attached.Decals;
+        Attached.Viewer = human;
         // Bones and muzzles are those of the object's current model (the attached effects know which state every object shows).
         _fxView = new SimulationFxWorldView(world,
             (entity, bone) => _fxView!.GetPose(entity) is { } pose ? Attached.BonePosition(entity, bone, pose) : null,
