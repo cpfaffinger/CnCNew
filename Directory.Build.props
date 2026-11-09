@@ -7,5 +7,15 @@
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+
+  <!--
+    The product version: version.txt at the repository root holds one line, MAJOR.MINOR.PATCH, raised by scripts/release.ps1 (docs/RELEASING.md).
+    It becomes the assembly, file and informational version of every project (the launcher's and the client's file version, "productVersion" of
+    install.json). It does not feed CnCNew.Net.BuildIdentity (commit and modified flag) or any simulation, protocol or manifest value.
+  -->
+  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)version.txt')">
+    <CnCNewProductVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)version.txt').Trim())</CnCNewProductVersion>
+    <Version>$(CnCNewProductVersion)</Version>
+  </PropertyGroup>
 </Project>
 
