@@ -66,7 +66,7 @@ public readonly record struct ModelStateRef(int Index, bool IsTransition)
 /// animation time, so it reports completion; the tracker only decides which state plays. Optional: a renderer that ignores transitions
 /// can use <see cref="BestStateSelector.FindBest"/> directly.
 /// </summary>
-public sealed class ModelStateTracker(DrawSpec spec)
+public sealed class ModelStateTracker(DrawSpec spec, bool useTransitions = true)
 {
     public ModelStateRef Current { get; private set; } = ModelStateRef.None;
 
@@ -95,7 +95,7 @@ public sealed class ModelStateTracker(DrawSpec spec)
             Pending = state;
             return;
         }
-        if (!isSame && !Current.IsTransition && FindTransitionFrom(Current.Index, state) is var transition and >= 0)
+        if (useTransitions && !isSame && !Current.IsTransition && FindTransitionFrom(Current.Index, state) is var transition and >= 0)
         {
             Current = new ModelStateRef(transition, true);
             Pending = state;
@@ -114,4 +114,35 @@ public sealed class ModelStateTracker(DrawSpec spec)
     }
 
     private int FindTransitionFrom(int from, int to) => BestStateSelector.FindTransition(Spec, from, to);
+}
+
+/// <summary>
+/// <c>WaitForStateToFinishIfPossible</c> alone (<c>W3DModelDraw::setModelState</c>, "check for allow-to-finish implicit transitions"): a draw module whose new state names the transition key of the
+/// state that is playing lets that state's animation run to its end first, and shows the new state then. The Chinook's net is lowered, filled and pulled up this way: the first box that
+/// comes aboard turns <c>DOCKING</c> into <c>DOCKING CARRYING</c> at once, and the lowering of the net would be cut off. The renderer asks <see cref="Follow"/> once per drawn frame with the state the
+/// object's conditions select and whether the animation that is playing has ended.
+/// </summary>
+public sealed class StateWaitFollower
+{
+    private readonly ModelStateTracker _tracker;
+
+    public StateWaitFollower(DrawSpec spec) => _tracker = new ModelStateTracker(spec, useTransitions: false);
+
+    /// <summary>Whether a module with this spec ever waits (a state names a <c>WaitForStateToFinishIfPossible</c> key); every other module is drawn in the state its conditions select.</summary>
+    public static bool Needed(DrawSpec spec)
+    {
+        foreach (var state in spec.States)
+            if (state.WaitForStateToFinishKey is not null) return true;
+        return false;
+    }
+
+    /// <summary>The state to show now: <paramref name="requested"/>, or the playing one while its animation runs on and <paramref name="requested"/> waits for it.</summary>
+    public int Follow(int requested, bool currentAnimationComplete)
+    {
+        if (requested < 0) return requested;
+        // doDrawModule: a finished animation lets the pending state take over before the new request is looked at.
+        if (currentAnimationComplete) _tracker.AnimationCompleted();
+        _tracker.Request(requested, currentAnimationComplete);
+        return _tracker.Current.Index;
+    }
 }

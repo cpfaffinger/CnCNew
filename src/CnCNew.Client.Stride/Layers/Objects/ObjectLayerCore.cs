@@ -186,7 +186,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         for (var i = 0; i < selections.Length; i++)
         {
             var draw = drawable.Visual.Draws[i];
-            var selection = selections[i];
+            var selection = Followed(draw, selections[i], instance.Parts[i]);
             var part = instance.Parts[i];
             if (draw.Kind is not (DrawModuleKind.Model or DrawModuleKind.Tree or DrawModuleKind.Prop) || selection.Model is null || selection.StateIndex < 0)
             {
@@ -196,6 +196,35 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
             UpdatePart(drawable, draw, selection, part, frame);
         }
+    }
+
+    /// <summary>
+    /// The state to draw: the one the conditions select, unless the state that is playing has to finish its animation first (<c>WaitForStateToFinishIfPossible</c>, which the Chinook's net
+    /// needs: <c>DOCKING</c> lowers it, and the first box aboard must not turn it into <c>DOCKING CARRYING</c> half way down).
+    /// </summary>
+    private static DrawModuleSelection Followed(DrawSpec draw, DrawModuleSelection selection, DrawPartState part)
+    {
+        if (!part.FollowerChecked)
+        {
+            part.FollowerChecked = true;
+            part.Follower = StateWaitFollower.Needed(draw) ? new StateWaitFollower(draw) : null;
+        }
+
+        if (part.Follower is not { } follower || selection.StateIndex < 0) return selection;
+        var shown = follower.Follow(selection.StateIndex, CurrentAnimationComplete(draw, part));
+        return shown == selection.StateIndex || shown < 0 || shown >= draw.States.Length ? selection : new DrawModuleSelection(shown, draw.States[shown].Model);
+    }
+
+    /// <summary><c>isAnimationComplete</c> for the state the part plays now: no animation is complete, a looping or manual one never is.</summary>
+    private static bool CurrentAnimationComplete(DrawSpec draw, DrawPartState part)
+    {
+        if (part.StateIndex < 0 || part.StateIndex >= draw.States.Length || part.Binding is null) return true;
+        var state = draw.States[part.StateIndex];
+        var mode = (W3dAnimationMode)(int)state.Mode;
+        var animation = part.Binding.Animation;
+        var manualFrame = state.Flags.HasFlag(AnimationFlags.StartFrameLast) ? animation.FrameCount - 1 : 0;
+        var frame = W3dAnimationClock.GetFrame(mode, animation.FrameCount, animation.FrameRate, part.ElapsedInState, part.Speed, manualFrame);
+        return W3dAnimationClock.IsComplete(mode, animation.FrameCount, frame);
     }
 
     private void UpdatePart(DrawableInstance drawable, DrawSpec draw, DrawModuleSelection selection, DrawPartState part, in WorldFrame frame)

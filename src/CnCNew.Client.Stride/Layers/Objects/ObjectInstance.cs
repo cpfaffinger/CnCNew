@@ -37,6 +37,13 @@ internal sealed class DrawPartState
     public PooledEntity? Placeholder;
     public W3dPose? Pose;
     public int StateIndex = -1;
+
+    /// <summary>
+    /// <c>WaitForStateToFinishIfPossible</c> (<c>W3DModelDraw::setModelState</c>): lets the animation of the playing state run to its end before the state the conditions select takes over;
+    /// null for a draw module that never waits.
+    /// </summary>
+    public StateWaitFollower? Follower;
+    public bool FollowerChecked;
     public AnimationSpec? Animation;
     public W3dAnimationBinding? Binding;
     public double Speed = 1.0;
