@@ -569,9 +569,13 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         var cos = box ? FixedTrig.Cos(Entity.Angle) : Fixed.Zero;
         var sin = box ? FixedTrig.Sin(Entity.Angle) : Fixed.Zero;
         var (major, minor) = (Entity.Template.GeometryMajorRadius, Entity.Template.GeometryMinorRadius);
+        var (top, bottom) = (Entity.Z + ToppleAndFallModules.MaxHeightAbovePosition(Entity.Template), Entity.Z);
         foreach (var other in world.Entities)
         {
             if (other.Id == Entity.Id || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+            // The physics engine calls onCollide only for a pair whose boxes meet in height as well (PartitionManager's z-intersection test): inside a tunnel the train runs below the
+            // terrain, and what stands on the hill above it is nowhere near.
+            if (top < other.Z || bottom > other.Z + ToppleAndFallModules.MaxHeightAbovePosition(other.Template)) continue;
             if (box)
             {
                 var otherRadius = other.Template.BoundingCircleRadius;
