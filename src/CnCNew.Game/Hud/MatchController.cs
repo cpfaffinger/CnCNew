@@ -1027,7 +1027,9 @@ public sealed partial class MatchController
         // The indicators of a match of a server lie over the HUD.
         if (Net is { } net) commands = commands.AddRange(net.Build(width, height, _textMeasure));
         // Mouse::drawTooltip lies over everything, the window tree's own tooltips (TOOLTIPTEXT) and the command button descriptions alike.
-        if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure, Skin));
+        if (_tree.Tooltip is { } tooltip)
+            commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure, Skin,
+                _modernBar is { } plateBar && PlateKindAt(_pointer) is not null ? plateBar.BandTop - 2 : null));
         return baseList with { Commands = commands };
     }
 

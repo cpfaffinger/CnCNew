@@ -16,7 +16,7 @@ public static class UiTooltipLayout
 {
     private const int HighlightWidth = 15;
 
-    public static ImmutableArray<UiDrawCommand> Build(UiTooltip tooltip, MouseTooltipSettings style, UiFont font, UiViewport viewport, IUiTextMeasure measure)
+    public static ImmutableArray<UiDrawCommand> Build(UiTooltip tooltip, MouseTooltipSettings style, UiFont font, UiViewport viewport, IUiTextMeasure measure, int? bottomLimit = null)
     {
         ArgumentNullException.ThrowIfNull(tooltip);
         ArgumentNullException.ThrowIfNull(style);
@@ -33,6 +33,8 @@ public static class UiTooltipLayout
         var y = tooltip.Y;
         if (x + width + 4 > viewport.Width) x -= 20 + width;
         if (y + height + 4 > viewport.Height) y -= height;
+        // A host that has something under the pointer the tooltip must not cover (the cells of the selection plate) keeps the box above that line.
+        if (bottomLimit is { } limit && y + height + 2 > limit) y = Math.Max(0, limit - height - 2);
 
         // m_highlightPos starts at 0 when the tooltip appears and follows width * elapsed / fill time until it has passed the text and the band.
         long reveal = style.FillTimeMilliseconds <= 0 ? width + HighlightWidth : Math.Min(width + HighlightWidth, width * tooltip.AgeMs / style.FillTimeMilliseconds);

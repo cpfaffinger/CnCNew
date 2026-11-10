@@ -723,8 +723,23 @@ internal static class StructureGroupTests
         var over = rig.Controller.PlateKindCells[1].Rect;
         rig.Controller.Process(new MouseMoveEvent(rig.Time + 1000, new Vector2(over.CenterX, over.CenterY)));
         rig.Frame(90);
-        texts = Texts(rig);
-        TestHarness.Assert(texts.Any(text => text.Contains("select only this type", StringComparison.Ordinal)) && texts.Any(text => text.Contains("Shift-click or Ctrl-click", StringComparison.Ordinal)), $"the tooltip of a cell says what the clicks do ({string.Join("|", texts.Where(text => text.Contains("click", StringComparison.OrdinalIgnoreCase)))})");
+        var tipLines = rig.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(text => text.Text is PlateText.KindClick or PlateText.KindShiftClick || text.Text == "Crusader").ToArray();
+        TestHarness.Assert(tipLines.Any(text => text.Text == PlateText.KindClick) && tipLines.Any(text => text.Text == PlateText.KindShiftClick), $"the tooltip of a cell says what the clicks do, each on a line of its own ({string.Join("|", tipLines.Select(text => text.Text))})");
+        TestHarness.Assert(!tipLines.Any(text => text.Text.Contains("Ctrl", StringComparison.Ordinal)), "and names only Shift");
+        var cellTop = rig.Controller.PlateKindCells.Min(cell => cell.Rect.Y);
+        TestHarness.Assert(tipLines.All(text => text.Y + 18 <= cellTop), $"the tooltip lies above the plate and covers no cell (lines at {string.Join(",", tipLines.Select(text => text.Y))}, cells from {cellTop})");
+        // Idle hover: the pointer leaves the cell for an empty place of the plate, and for the world; no tooltip stays.
+        var plateEmpty = new Vector2(over.CenterX, over.Bottom + 12);
+        TestHarness.Assert(!rig.Controller.PlateKindCells.Any(cell => cell.Rect.Contains((int)plateEmpty.X, (int)plateEmpty.Y)), "the empty place is not a cell");
+        rig.Controller.Process(new MouseMoveEvent(rig.Time + 3000, plateEmpty));
+        rig.Frame(90);
+        TestHarness.Assert(!Texts(rig).Any(text => text.Contains("only this type", StringComparison.Ordinal) || text.Contains("Shift-click", StringComparison.Ordinal)), "the pointer left the cell for the plate: no tooltip stays");
+        rig.Controller.Process(new MouseMoveEvent(rig.Time + 3100, new Vector2(over.CenterX, over.CenterY)));
+        rig.Frame(90);
+        TestHarness.Assert(Texts(rig).Contains(PlateText.KindClick), "back on the cell: the tooltip returns");
+        rig.Controller.Process(new MouseMoveEvent(rig.Time + 3200, new Vector2(640, 300)));
+        rig.Frame(90);
+        TestHarness.Assert(!Texts(rig).Any(text => text.Contains("only this type", StringComparison.Ordinal) || text.Contains("Shift-click", StringComparison.Ordinal)), "the pointer left for the world: no tooltip stays");
 
         // The original skin has no such cells.
         var original = MixedRig(data, "plate-clicks-original");
