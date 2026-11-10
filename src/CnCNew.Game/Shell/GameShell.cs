@@ -406,7 +406,12 @@ public sealed class GameShell
     public void Resize(int width, int height)
     {
         Viewport = new UiViewport(width, height);
-        foreach (var screen in _stack) screen.Tree.SetViewport(Viewport, ScaleOptions);
+        foreach (var screen in _stack)
+        {
+            screen.Tree.SetViewport(Viewport, ScaleOptions);
+            // The effects of a running transition read their windows' places once: they follow the new layout.
+            screen.Transitions?.Relayout();
+        }
     }
 
     public void HandleInput(InputEvent evt)

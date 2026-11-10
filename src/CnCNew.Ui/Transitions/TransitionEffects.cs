@@ -56,6 +56,16 @@ public abstract class TransitionEffect
         Bounds = win.Rect;
     }
 
+    /// <summary>
+    /// The screen was laid out again (the window changed its size): the geometry read at <see cref="Init"/> is read again, so the stand-in is drawn where the window now is. The original
+    /// never resizes a running shell; without this a window that opens at a size other than the one the shell was built for drew its stand-ins (the flashing button boxes, the logo's fade)
+    /// at the old positions for as long as the group ran.
+    /// </summary>
+    public virtual void Relayout()
+    {
+        if (Win is not null) Bounds = Win.Rect;
+    }
+
     /// <summary>The shared <c>init</c> tail: run the start frame as if reversed (that hides the window), then arm the effect forward.</summary>
     protected void ArmForward()
     {
@@ -346,6 +356,17 @@ public sealed class ScaleUpEffect(ITransitionHost host, string soundOnFirstFrame
         FrameLength = End;
         Capture(win);
         ArmForward();
+        Measure();
+    }
+
+    public override void Relayout()
+    {
+        base.Relayout();
+        Measure();
+    }
+
+    private void Measure()
+    {
         _centerX = Bounds.X + Bounds.Width / 2;
         _centerY = Bounds.Y + Bounds.Height / 2;
         _incrementX = Bounds.Width / End;
@@ -410,14 +431,25 @@ public sealed class MainMenuScaleUpEffect(ITransitionHost host) : TransitionEffe
             IsFinished = true;
             return;
         }
-        _growBounds = _grow.Rect;
         ArmForward();
+        Measure();
+        _image = Win.DisabledImage;
+        _grow.SetEnabledImage(_image);
+    }
+
+    public override void Relayout()
+    {
+        base.Relayout();
+        if (_grow is not null && Win is not null) Measure();
+    }
+
+    private void Measure()
+    {
+        _growBounds = _grow!.Rect;
         _incrementPosX = (_growBounds.X - Bounds.X) / End;
         _incrementPosY = (_growBounds.Y - Bounds.Y) / End;
         _incrementSizeX = (_growBounds.Width - Bounds.Width) / End;
         _incrementSizeY = (_growBounds.Height - Bounds.Height) / End;
-        _image = Win.DisabledImage;
-        _grow.SetEnabledImage(_image);
     }
 
     public override void Update(int frame)
@@ -476,11 +508,22 @@ public sealed class FactionScaleEffect(ITransitionHost host, bool medium) : Tran
         if (Win is null) { IsFinished = true; return; }
         _grow = Host.Find(Win.Name + (medium ? "Medium" : "Small"));
         if (_grow is null) { IsFinished = true; return; }
-        var grow = _grow.Rect;
         ArmForward();
+        Measure();
+        if (!medium) _grow.SetEnabledImage(Win.EnabledImage);
+    }
+
+    public override void Relayout()
+    {
+        base.Relayout();
+        if (_grow is not null) Measure();
+    }
+
+    private void Measure()
+    {
+        var grow = _grow!.Rect;
         _incrementX = (grow.Width - Bounds.Width) / End;
         _incrementY = (grow.Height - Bounds.Height) / End;
-        if (!medium) _grow.SetEnabledImage(Win.EnabledImage);
     }
 
     public override void Update(int frame)
@@ -899,7 +942,20 @@ public sealed class ControlBarArrowEffect(ITransitionHost host) : TransitionEffe
             _arrow = null;
             return;
         }
-        var rect = general.Rect;
+        _general = general;
+        Measure();
+    }
+
+    private ITransitionWindow? _general;
+
+    public override void Relayout()
+    {
+        if (_general is not null) Measure();
+    }
+
+    private void Measure()
+    {
+        var rect = _general!.Rect;
         _incrementY = (int)(rect.Y * Percent);
         _posY = 0 - _sizeY + 20;
         _posX = rect.X + rect.Width / 2 - _sizeX / 2;

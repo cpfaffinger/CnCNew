@@ -36,6 +36,8 @@ internal sealed class TransitionWindow(TransitionWindowSpec spec, ITransitionHos
 
     public void Skip() => _effect?.Skip();
 
+    public void Relayout() => _effect?.Relayout();
+
     public void Draw(List<UiDrawCommand> output) => _effect?.Draw(output);
 }
 
@@ -103,6 +105,11 @@ internal sealed class TransitionGroup
     public void Skip()
     {
         foreach (var window in _windows) window.Skip();
+    }
+
+    public void Relayout()
+    {
+        foreach (var window in _windows) window.Relayout();
     }
 
     public void Draw(List<UiDrawCommand> output)
@@ -288,6 +295,15 @@ public sealed class WindowTransitionHandler
         _carry -= frames;
         for (var i = 0; i < frames; i++) Step();
         return frames;
+    }
+
+    /// <summary>
+    /// The screen's windows were laid out again (<see cref="TransitionEffect.Relayout"/>): every group that has been started takes the new positions and sizes of its windows, so
+    /// a transition that is running (or waiting) draws where the windows are now.
+    /// </summary>
+    public void Relayout()
+    {
+        foreach (var group in _groups.Values) group.Relayout();
     }
 
     /// <summary>The stand-ins of the groups drawn this frame, to be appended after the screen's own draw list (<c>draw</c>).</summary>
