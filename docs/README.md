@@ -34,6 +34,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 |---|---|
 | [../BUILDING.md](../BUILDING.md) | Build requirements (SDK, PowerShell 7, Python, NuGet source, game), install commands, setting up a developer machine |
 | [INSTALLATION.md](INSTALLATION.md) | Patcher: installation from your own Steam copy, uninstallation, developer content, the self-contained package (Phase 30), the public launcher |
+| [RELEASING.md](RELEASING.md) | The release: `version.txt`, `scripts/release.ps1`, the tag-triggered GitLab and GitHub pipelines, the assets the launcher expects, the release-day checklist (Phase 65) |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Phase 30: where logs, crash reports and desync packages are, the support bundle, "my match has diverged", the server's refusals, profiler switches |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | Phase 30: every format and protocol version and what refuses what; the proposed rule for the first release (decision D-31) |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | Phase 30, generated: every NuGet package of every project with its declared licence and the programs that carry it |
