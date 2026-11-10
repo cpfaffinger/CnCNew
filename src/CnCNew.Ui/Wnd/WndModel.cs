@@ -223,6 +223,9 @@ public sealed record WndWindow(
     /// <summary>Set by the modern skin's derivation only.</summary>
     public WndFlatRole Flat { get; init; }
 
+    /// <summary>The screen that builds this layout gave the window its rectangle: the modern skin does not move it to the place it has for the window's name.</summary>
+    public bool KeepRect { get; init; }
+
     /// <summary>In the anchored scale mode: a group that stays in the middle of the window with the rest of its screen, instead of going to the edge it lies nearest to.</summary>
     public bool GroupCentered { get; init; }
 

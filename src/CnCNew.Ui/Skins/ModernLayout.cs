@@ -67,7 +67,7 @@ public static class ModernLayout
         var font = new WndFont(style.FontFamily, style.Points(step), bold || UiSkinStyle.IsBold(step));
         var derived = window with { Font = font, HeaderTemplate = null, Children = children };
         if (keepArt) return derived;
-        derived = derived with { Rect = ModernScreens.Place(window), GroupCentered = groupRoot && !Covers(window) && StaysCentered(window) };
+        derived = derived with { Rect = window.KeepRect ? window.Rect : ModernScreens.Place(window), GroupCentered = groupRoot && !Covers(window) && StaysCentered(window) };
         var palette = style.Palette;
         derived = derived with { TextColors = TextColors(window, step, palette) };
         return window.Type switch
@@ -122,6 +122,9 @@ public static class ModernLayout
 
     private static WndWindow UserWindow(WndWindow window, WndWindow? parent, UiSkinPalette palette, bool inPanel)
     {
+        // The marker of a winning row, placed by the score screen itself: a bar in the skin's good colour (the shipped window has no picture to draw).
+        if (window.KeepRect && window.Name is { } marker && marker.StartsWith("ScoreScreen.wnd:GameWindowWinner", StringComparison.Ordinal))
+            return window with { Flat = WndFlatRole.Gadget, Status = window.Status & ~WndStatus.Image, DrawData = Families(_ => [new WndDrawData(null, palette.Good, WndColor.Undefined)]) };
         if ((window.Status & WndStatus.Image) != 0)
         {
             // The general's window: one picture is all its chrome, frame and all. The skin has a panel for that.
