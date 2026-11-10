@@ -7,7 +7,11 @@
     <StridePlatform>Windows</StridePlatform>
     <StrideGraphicsApi>Direct3D11</StrideGraphicsApi>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/cncnew.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/cncnew.ico" LogicalName="cncnew.ico" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Stride.Core.Assets.CompilerApp"
                       Version="4.3.0.2507"

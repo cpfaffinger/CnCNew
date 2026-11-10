@@ -534,6 +534,7 @@ internal sealed class CnCNewGame(
         if (Environment.GetCommandLineArgs().Contains("--no-vsync", StringComparer.OrdinalIgnoreCase)) GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
         base.Initialize();
         CnCNew.Client.Stride.StartupClock.Note("window and device ready");
+        CnCNew.Client.Stride.WindowIcon.Apply(Window.NativeWindow.Handle);
         Window.Title = "CnCNew — Stride Direct3D 11 W3D Viewer";
     }
 
