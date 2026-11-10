@@ -84,6 +84,74 @@ try {
         Reset-Environment
         if ($refused -notmatch "Failed\s+The game goes to this folder.*$($case[1])") { $problems.Add("the folder $($case[0]) was not refused for '$($case[1])':`n$refused") }
     }
+
+    # The simulation check is offered by default and left out by the switch (the window's box is remembered in setup\options.txt and does the same).
+    foreach ($case in @(@(@(), 'To do\s+Simulation against the reference values'), @(@('-NoSimulationCheck'), 'Skipped\s+Simulation against the reference values'))) {
+        Set-Environment (Get-EmptyMachine $work @())
+        $extra = $case[0]
+        $shown = & $powershell -NoProfile -ExecutionPolicy Bypass -File $launcher -CheckOnly -SteamRoots $steam @extra 2>&1 | Out-String
+        Reset-Environment
+        if ($shown -notmatch $case[1]) { $problems.Add("the simulation row is not '$($case[1])' with '$($case[0])':`n$shown") }
+    }
+
+    # The skip of the simulation check and the shortcuts: the launcher's own functions, cut out with the parser, run under Windows PowerShell 5.1 against stubs.
+    $parts = Join-Path $work 'parts.ps1'
+    [IO.File]::WriteAllText($parts, @'
+param([string]$Launcher, [string]$Root)
+$ErrorActionPreference = 'Stop'
+$ast = [Management.Automation.Language.Parser]::ParseFile($Launcher, [ref]$null, [ref]$null)
+foreach ($f in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+    if (@('Set-Skippable', 'Skip-Simulation', 'Step-Simulation', 'Invoke-Logged', 'Get-ShortcutFolders', 'Get-PlayCommand', 'New-GameShortcuts', 'Test-Inside', 'Add-ReportLine', 'Set-Done') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) }
+}
+$logDir = Join-Path $Root 'setup'; New-Item -ItemType Directory -Force $logDir | Out-Null
+$repo = Split-Path -Parent (Split-Path -Parent $Launcher)
+$shortcutFile = Join-Path $Root 'shortcuts.txt'
+$iconFile = Join-Path $repo 'src\CnCNew.Client.Stride\Assets\cncnew.ico'
+$programFiles = Join-Path $Root 'program-files'
+$script:report = New-Object System.Collections.ArrayList
+$script:rows = @{}
+$script:cancel = $false; $script:skip = $false; $script:skippable = $false; $script:skipButton = $null; $script:statusLabel = $null; $script:wantSim = $true
+$script:installDir = Join-Path $Root 'game'; $contentDir = Join-Path $script:installDir 'content'; $simProject = 'x'; $Unattended = $false
+$fake = Join-Path $Root 'client'; New-Item -ItemType Directory -Force $fake | Out-Null
+[IO.File]::WriteAllText((Join-Path $fake 'CnCNew.Client.Stride.dll'), ''); [IO.File]::WriteAllText((Join-Path $fake 'CnCNew.Client.Stride.exe'), '')
+function Find-Client { Join-Path $fake 'CnCNew.Client.Stride.dll' }
+function Set-Row([string]$Id, [string]$State, [string]$Detail) { $script:rows[$Id] = $State }
+function Say([string]$Text) { }
+function Get-Commit { 'abc' }
+function Start-Behind([string]$File, [string]$Arguments, [string]$Log) { $script:child = Start-Process (Join-Path $env:windir 'System32\ping.exe') -ArgumentList '-n 120 127.0.0.1' -PassThru -WindowStyle Hidden; $script:child }
+$script:calls = 0
+function Get-LastLine([string]$Path) { $script:calls++; if ($script:calls -eq 6) { $script:skip = $true }; '' }
+$script:tools = @{ Dotnet = 'C:\Dotnet\dotnet.exe' }
+
+$result = Step-Simulation
+if ($result -ne $true) { 'FAIL skip: the step did not go on' }
+if (-not $script:child.HasExited) { 'FAIL skip: the child process was not stopped'; Stop-Process -Id $script:child.Id -Force }
+if ($script:rows['sim'] -ne 'Skipped') { "FAIL skip: the row is $($script:rows['sim'])" }
+if (Test-Path -LiteralPath (Join-Path $logDir 'sim-done.txt')) { 'FAIL skip: a skipped check was recorded as done' }
+if (-not ($script:report -match 'not run')) { 'FAIL skip: the report does not say "not run"' }
+if ($script:skippable) { 'FAIL skip: the Skip button stays' }
+
+$env:CNCNEW_SETUP_SHORTCUT_ROOT = Join-Path $Root 'lnk'
+$shell = New-Object -ComObject WScript.Shell
+foreach ($case in @(@('C:\Dotnet\dotnet.exe', 'cmd'), @((Join-Path $programFiles 'dotnet\dotnet.exe'), 'exe'))) {
+    $script:tools.Dotnet = $case[0]
+    $made = @(New-GameShortcuts)
+    if ($made.Count -ne 2) { "FAIL shortcuts: $($made.Count) made" ; continue }
+    foreach ($path in $made) {
+        $link = $shell.CreateShortcut($path)
+        if (-not (Test-Path -LiteralPath $path)) { "FAIL shortcuts: $path is not there" }
+        if ($link.WorkingDirectory -ne $script:installDir) { "FAIL shortcuts: working directory $($link.WorkingDirectory)" }
+        if ($link.IconLocation -notlike '*cncnew.ico*') { "FAIL shortcuts: icon $($link.IconLocation)" }
+        if ($link.Arguments -notlike "*--content-dir*$contentDir*") { "FAIL shortcuts: arguments $($link.Arguments)" }
+        if ($case[1] -eq 'exe' -and $link.TargetPath -notlike '*CnCNew.Client.Stride.exe') { "FAIL shortcuts: target $($link.TargetPath)" }
+        if ($case[1] -eq 'cmd' -and ($link.TargetPath -notlike '*cmd.exe' -or $link.Arguments -notlike '*dotnet.exe*CnCNew.Client.Stride.dll*')) { "FAIL shortcuts: target $($link.TargetPath) $($link.Arguments)" }
+    }
+}
+if (@(Get-Content -LiteralPath $shortcutFile).Count -ne 2) { 'FAIL shortcuts: the record does not hold exactly the two shortcuts' }
+'parts done'
+'@)
+    $partsOutput = & $powershell -NoProfile -ExecutionPolicy Bypass -File $parts -Launcher $launcher -Root (Join-Path $work 'parts') 2>&1 | Out-String
+    if ($partsOutput -notmatch 'parts done' -or $partsOutput -match 'FAIL') { $problems.Add("the skip and shortcut parts of the launcher:`n$partsOutput") }
 } finally {
     Reset-Environment
     if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
