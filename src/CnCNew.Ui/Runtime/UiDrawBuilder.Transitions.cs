@@ -12,7 +12,7 @@ namespace CnCNew.Ui.Runtime;
 /// </summary>
 public sealed partial class UiWindowTree
 {
-    /// <summary>The left/middle/right enabled images of a push button as <see cref="UiImageDraw"/>s tinted white with <paramref name="alpha"/> (0..255); empty when the window has no such images.</summary>
+    /// <summary>The left/middle/right enabled images of a push button as <see cref="UiImageDraw"/>s tinted white with <paramref name="alpha"/> (0..255); empty when the window has no such images. A button of the modern skin gives its fill and border.</summary>
     public ImmutableArray<UiDrawCommand> BuildPushButtonImages(UiWindow window, int alpha)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -34,6 +34,12 @@ public sealed partial class UiWindowTree
         {
             _tintAlpha = (byte)Math.Clamp(alpha, 0, 255);
             var set = window.Definition.GetDrawData(WndDrawDataKind.Enabled);
+            // A button of the modern skin has no images: its look is a fill and a border, and that is what stands in for it (the flat button without its label, as the original's images are drawn without theirs).
+            if (window.Definition.Flat != WndFlatRole.None)
+            {
+                Box(Offset(window, window.Rect), set[0]);
+                return _commands.ToImmutable();
+            }
             ThreePiece(Offset(window, window.Rect), set[0].Image, set[5].Image, set[6].Image, true);
             return _commands.ToImmutable();
         }

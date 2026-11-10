@@ -35,6 +35,7 @@ internal static class ShellSizeTests
         harness.Run("Issue 273: a shell resized while the main menu fades in draws, frame by frame, what a shell built at that size draws (both skins, five sizes, at every moment of the entry)", () => ResizedEntryEqualsBuiltEntry(data));
         harness.Run("Issue 273: a resize at any frame of the entry draws every flash exactly over its button or the menu's border", () => EveryResizeMoment(data));
         harness.Run("Issue 273: at the end of the entry every button shows its label, and the pointer over a button changes what is drawn there (both skins, five sizes, built and resized)", () => EntryEndsWithLabelsAndHighlight(data));
+        harness.Run("Issue 273: the modern skin's flashing buttons stand in with their own fill and border, not with a bare white box", () => ModernStandInHasItsArt(data));
         return harness.Failures;
     }
 
@@ -151,4 +152,21 @@ internal static class ShellSizeTests
         UiTextDraw text => text.X >= rect.X && text.X <= rect.Right && text.Y >= rect.Y - 4 && text.Y <= rect.Bottom,
         _ => false,
     };
+
+    private static void ModernStandInHasItsArt(GameData data)
+    {
+        var shell = NewShell(data, UiSkin.Modern, 1050, 825);
+        var first = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonSinglePlayer")!.Rect;
+        var shown = false;
+        for (var frame = 0; frame < 70; frame++)
+        {
+            var list = shell.BuildDrawList();
+            var inside = list.Commands.OfType<UiFillRect>().Where(fill => fill.Rect.X >= first.X && fill.Rect.Y >= first.Y && fill.Rect.Right <= first.Right && fill.Rect.Bottom <= first.Bottom).ToArray();
+            var flashing = inside.Any(fill => fill.Color is { R: 255, G: 255, B: 255, A: < 255 });
+            // While the stand-in flashes at its fading stage (frames 4 to 7 of the effect) the button's own fill lies under the flash.
+            if (flashing && inside.Any(fill => fill.Color.A >= 200 && !(fill.Color.R == 255 && fill.Color.G == 255 && fill.Color.B == 255))) shown = true;
+            shell.Update(Frame);
+        }
+        TestHarness.Assert(shown, "a flashing button of the modern skin draws its own fill under the fading flash");
+    }
 }
