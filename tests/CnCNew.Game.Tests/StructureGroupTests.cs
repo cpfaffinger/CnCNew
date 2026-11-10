@@ -43,6 +43,7 @@ internal static class StructureGroupTests
         harness.Run("Tab walks the kinds of a selection of units, Shift+Tab back; the bar and the highlight follow; a button acts on the kind only, a right click on all", () => TabSubgroups(data));
         harness.Run("Tab keeps the diplomacy window when the selection has one kind, and a new selection or a lost kind ends the subgroup", () => TabFallsBack(data));
         harness.Run("E on a building whose bar has a button on E keeps the button", () => EKeepsButton(data));
+        harness.Run("A click on a type's cell in the modern plate narrows the selection to the type, Shift-click or Ctrl-click takes the whole type out, the plate and the bar follow, a tooltip says so; the world sees no click (issue 290)", () => PlateKindClicks(data));
         harness.Run("The modern plate names a mixed selection by its count, not after one of its kinds; a selection of one kind keeps 'N x Name' (issue 291)", () => MixedTitle(data));
         return harness.Failures;
     }
@@ -657,6 +658,80 @@ internal static class StructureGroupTests
         rig.Key(KeyCode.Tab);
         rig.Frame();
         TestHarness.Assert(Texts(rig).Any(text => text.StartsWith("2 x ", StringComparison.Ordinal) && text.EndsWith("(1/2)", StringComparison.Ordinal)), "the active kind of a Tab subgroup still names itself");
+    }
+
+    private static string[] SelectedTags(Rig rig, params string[] tags) => [..tags.Where(tag => rig.Selection.Contains(rig.Tag(tag)))];
+
+    private static void ClickCell(Rig rig, string template, params KeyCode[] held)
+    {
+        rig.Frame();
+        rig.Controller.BuildDrawList(1280, 720);
+        var cell = rig.Controller.PlateKindCells.First(entry => entry.Template == template).Rect;
+        rig.Click(new Vector2(cell.CenterX, cell.CenterY), MouseButton.Left, 1, held);
+        rig.Frame();
+        rig.Controller.BuildDrawList(1280, 720);
+    }
+
+    /// <summary>Issue 290: taking a whole type out of a mixed selection from the plate, without clicking units in the world one by one.</summary>
+    private static void PlateKindClicks(GameData data)
+    {
+        const string ranger = "AmericaInfantryRanger", crusader = "AmericaTankCrusader", dozer = "AmericaVehicleDozer";
+        string[] all = ["r1", "r2", "c1", "c2", "c3", "d1"];
+        var rig = MixedRig(data, "plate-clicks", ModernSettings);
+        void SelectAll() { rig.Selection.Replace(all.Select(rig.Tag)); rig.Frame(2); rig.Controller.BuildDrawList(1280, 720); }
+        SelectAll();
+        TestHarness.Assert(rig.Controller.PlateKindCells.Select(cell => cell.Template).SequenceEqual([ranger, crusader, dozer]), "the plate has a cell per kind, in the order of Tab");
+
+        // Shift-click: the Crusaders leave, the others stay.
+        ClickCell(rig, crusader, KeyCode.LeftShift);
+        TestHarness.Assert(SelectedTags(rig, all).SequenceEqual(["r1", "r2", "d1"]) && rig.Selection.Selected.Length == 3, $"Shift-click on the Crusaders removes exactly them ({string.Join(",", SelectedTags(rig, all))})");
+        TestHarness.Assert(rig.Controller.PlateKindCells.Select(cell => cell.Template).SequenceEqual([ranger, dozer]), "the plate shows two kinds now");
+        var texts = Texts(rig);
+        TestHarness.Assert(texts.Contains("3 units"), $"and says '3 units' ({string.Join("|", texts.Where(text => text.Contains("unit", StringComparison.Ordinal)))})");
+        TestHarness.Assert(rig.Controller.CommandBar.Context == CommandBarContext.MultiSelect, "the bar is the one of the two kinds");
+        TestHarness.Assert(all.All(tag => !rig.Entity(tag).HasMoveTarget), "the click gave no order in the world");
+
+        // Ctrl-click does the same.
+        SelectAll();
+        ClickCell(rig, ranger, KeyCode.LeftControl);
+        TestHarness.Assert(SelectedTags(rig, all).SequenceEqual(["c1", "c2", "c3", "d1"]) && rig.Selection.Selected.Length == 4, "Ctrl-click on the Rangers removes both of them");
+
+        // A plain click narrows to the type.
+        SelectAll();
+        ClickCell(rig, crusader);
+        TestHarness.Assert(SelectedTags(rig, all).SequenceEqual(["c1", "c2", "c3"]) && rig.Selection.Selected.Length == 3, "a plain click on the Crusaders keeps only them");
+        texts = Texts(rig);
+        TestHarness.Assert(texts.Any(text => text.StartsWith("3 x ", StringComparison.Ordinal)) && rig.Controller.PlateKindCells.Length == 1, "the plate now names the one kind");
+        TestHarness.Assert(rig.Controller.CommandBar.Context is not CommandBarContext.Empty, "and the bar is the Crusaders'");
+
+        // With one kind left there is nothing to choose: neither click changes anything.
+        ClickCell(rig, crusader, KeyCode.LeftShift);
+        TestHarness.Assert(rig.Selection.Selected.Length == 3, "Shift-click on the last kind does not empty the selection");
+        ClickCell(rig, crusader);
+        TestHarness.Assert(rig.Selection.Selected.Length == 3, "a plain click on the only kind changes nothing");
+
+        // The Tab subgroup ends with a narrower selection; a click beside the cells is the bar's own business, not a plate click.
+        SelectAll();
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        ClickCell(rig, dozer);
+        TestHarness.Assert(SelectedTags(rig, all).SequenceEqual(["d1"]) && rig.Selection.ActiveSubgroupIn(rig.Live.World) is null && rig.Controller.CommandBar.Group is null, "a click while a subgroup is active narrows and ends the subgroup");
+
+        // The tooltip names the clicks.
+        SelectAll();
+        rig.Controller.BuildDrawList(1280, 720);
+        var over = rig.Controller.PlateKindCells[1].Rect;
+        rig.Controller.Process(new MouseMoveEvent(rig.Time + 1000, new Vector2(over.CenterX, over.CenterY)));
+        rig.Frame(90);
+        texts = Texts(rig);
+        TestHarness.Assert(texts.Any(text => text.Contains("select only this type", StringComparison.Ordinal)) && texts.Any(text => text.Contains("Shift-click or Ctrl-click", StringComparison.Ordinal)), $"the tooltip of a cell says what the clicks do ({string.Join("|", texts.Where(text => text.Contains("click", StringComparison.OrdinalIgnoreCase)))})");
+
+        // The original skin has no such cells.
+        var original = MixedRig(data, "plate-clicks-original");
+        original.Selection.Replace(all.Select(original.Tag));
+        original.Frame(2);
+        original.Controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(original.Controller.PlateKindCells.IsEmpty, "the original skin's bar has no plate cells");
     }
 
     private static void TabFallsBack(GameData data)

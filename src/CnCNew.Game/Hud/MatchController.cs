@@ -65,6 +65,8 @@ public sealed partial class MatchController
 
     private bool _showsSideLogo = true;
     private bool _uiOwnsMouse;
+    private bool _plateDown;
+    private Vector2 _pointer;
     private bool _minimapPanning;
     private bool _wasPausedBeforeMenu;
     private long _clockMs;
@@ -250,6 +252,7 @@ public sealed partial class MatchController
         switch (inputEvent)
         {
             case MouseMoveEvent move:
+                _pointer = move.Position;
                 _tree.MouseMove(Round(move.Position.X), Round(move.Position.Y));
                 if (_minimapPanning && TryMinimapWorld(move.Position, out var panTo)) Match.Camera.CenterOn(panTo);
                 else if (!_uiOwnsMouse) Input.Process(inputEvent, Match.World, Match.Camera);
@@ -276,6 +279,8 @@ public sealed partial class MatchController
 
     private void HandleMouseButton(MouseButtonEvent button)
     {
+        _pointer = button.Position;
+        if (HandlePlateClick(button)) return;
         if (!IsMenuOpen && TryMinimapWorld(button.Position, out var world))
         {
             _uiOwnsMouse = true;
@@ -315,6 +320,40 @@ public sealed partial class MatchController
             }
             else Input.Process(button, Match.World, Match.Camera);
         }
+    }
+
+    /// <summary>The kind cell of the modern bar's selection plate under <paramref name="at"/>, as drawn last (null: none, or the bar is hidden or the menu open).</summary>
+    private (UiRect Rect, string Template)? PlateKindAt(Vector2 at)
+    {
+        if (_modernBar is not { HasPlate: true } plate || _controlBarRoot.IsHidden || IsMenuOpen) return null;
+        foreach (var cell in plate.KindCells)
+            if (cell.Rect.Contains(Round(at.X), Round(at.Y))) return cell;
+        return null;
+    }
+
+    /// <summary>
+    /// A click on a kind cell of the selection plate (the modern bar; the original's bar has no such cells): a plain left click narrows the selection to that kind, a Shift-click or Ctrl-click
+    /// takes every unit of the kind out of it. The press acts, the release is eaten; the world sees neither. With one kind there is nothing to choose and the click does nothing.
+    /// </summary>
+    private bool HandlePlateClick(MouseButtonEvent button)
+    {
+        if (button.Button != MouseButton.Left) return false;
+        if (!button.IsDown)
+        {
+            if (!_plateDown) return false;
+            _plateDown = false;
+            _uiOwnsMouse = false;
+            return true;
+        }
+        if (PlateKindAt(button.Position) is not { } cell) return false;
+        _plateDown = true;
+        _uiOwnsMouse = true;
+        var modifiers = Input.State.Modifiers;
+        var acted = (modifiers & (KeyModifiers.Shift | KeyModifiers.Control)) != KeyModifiers.None
+            ? Input.Selection.RemoveKind(Match.World, cell.Template)
+            : Input.Selection.KeepOnlyKind(Match.World, cell.Template);
+        if (acted) ButtonClicked?.Invoke();
+        return true;
     }
 
     private void HandleKey(KeyEvent key)
@@ -1003,14 +1042,14 @@ public sealed partial class MatchController
         var first = entities[0];
         var health = first.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
         if (entities.Length == 1) return new ModernSelection(_descriptions.DisplayName(first.Template.Name), 1, health, []);
-        var kinds = ImmutableArray.CreateBuilder<(string, int)>();
+        var kinds = ImmutableArray.CreateBuilder<(string, int, string)>();
         var active = Input.Selection.ActiveSubgroupIn(Match.World);
         var activeIndex = -1;
         foreach (var group in entities.GroupBy(entity => entity.Template.Name, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
             if (Match.Data.Visuals.TryGet(group.Key, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _))
             {
                 if (group.Key.Equals(active, StringComparison.Ordinal)) activeIndex = kinds.Count;
-                kinds.Add((image, group.Count()));
+                kinds.Add((image, group.Count(), group.Key));
             }
         // The active kind of a mixed selection (Tab) names itself, with its place among the kinds.
         if (CommandBar.Group is { Kind: SelectionGroupKind.Subgroup } subgroup)
@@ -1018,7 +1057,7 @@ public sealed partial class MatchController
         // A selection of one kind is named after it; a mixed one is named after none of its kinds (the original shows no single name for a group): its count, the kinds below.
         var count = entities.Length.ToString(CultureInfo.InvariantCulture);
         var mixed = entities.Any(entity => !entity.Template.Name.Equals(first.Template.Name, StringComparison.Ordinal));
-        return new ModernSelection(mixed ? count + " units" : count + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable(), activeIndex);
+        return new ModernSelection(mixed ? count + " " + PlateText.Units : count + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable(), activeIndex);
     }
 
     /// <summary>
@@ -1029,6 +1068,8 @@ public sealed partial class MatchController
     private string? CommandButtonTooltip(UiWindow window)
     {
         const string prefix = "ControlBar.wnd:ButtonCommand";
+        if (PlateKindAt(_pointer) is { } cell && Input.Selection.Subgroups(Match.World).Contains(cell.Template, StringComparer.Ordinal))
+            return _descriptions.DisplayName(cell.Template) + "\n" + PlateText.KindClick + "\n" + PlateText.KindShiftClick;
         if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
         if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
         if (window.Name == "ControlBar.wnd:PopupCommunicator") return CommunicatorTooltip();
@@ -1449,6 +1490,9 @@ public sealed partial class MatchController
 
     /// <summary>Where the cells of the queue loads stood in the last drawn frame (the tray's or the modern plate's); empty when none were drawn. Tests check that they overlap nothing.</summary>
     public ImmutableArray<UiRect> QueueLoadCells => _modernBar is { HasPlate: true } plate && !plate.QueueCells.IsEmpty ? plate.QueueCells : _trayCells;
+
+    /// <summary>The kind cells of the modern bar's selection plate in the last drawn frame, with the template each stands for; empty in the original skin and when the plate shows no kinds.</summary>
+    public ImmutableArray<(UiRect Rect, string Template)> PlateKindCells => _modernBar is { HasPlate: true } plate ? plate.KindCells : [];
 
     private ImmutableArray<UiRect> _trayCells = [];
 

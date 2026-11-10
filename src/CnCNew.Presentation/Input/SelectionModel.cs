@@ -135,6 +135,29 @@ public sealed class SelectionModel
         return true;
     }
 
+    /// <summary>
+    /// A click on the cell of one kind in the selection plate: the selection narrows to the units of <paramref name="template"/> (the other kinds leave it). False, doing nothing, when the
+    /// selection has no such kind among at least two.
+    /// </summary>
+    public bool KeepOnlyKind(SimulationWorld world, string template)
+    {
+        if (!Subgroups(world).Contains(template, StringComparer.Ordinal)) return false;
+        Replace(SubgroupMembers(world, template).Select(entity => entity.Id));
+        return true;
+    }
+
+    /// <summary>
+    /// A Shift-click or Ctrl-click on the cell of one kind in the selection plate: every unit of <paramref name="template"/> leaves the selection, the other kinds stay. False, doing nothing,
+    /// when the selection has no such kind among at least two (the last kind is not removed: that would be an empty selection).
+    /// </summary>
+    public bool RemoveKind(SimulationWorld world, string template)
+    {
+        if (!Subgroups(world).Contains(template, StringComparer.Ordinal)) return false;
+        var leaving = SubgroupMembers(world, template).Select(entity => entity.Id.Value).ToHashSet();
+        Replace(_selected.Where(id => !leaving.Contains(id)).Select(id => new EntityId(id)));
+        return true;
+    }
+
     public void Replace(IEnumerable<EntityId> ids)
     {
         var next = new SortedSet<uint>(ids.Select(id => id.Value));

@@ -8,7 +8,7 @@ namespace CnCNew.Game.Hud;
 
 /// <summary>What the selection plate of the modern bar shows: one object with its health, or the kinds of several.</summary>
 /// <param name="ActiveKind">The index in <paramref name="Kinds"/> of the kind Tab chose in a mixed selection, or -1.</param>
-internal sealed record ModernSelection(string Name, int Count, float Health, ImmutableArray<(string Image, int Count)> Kinds, int ActiveKind = -1);
+internal sealed record ModernSelection(string Name, int Count, float Health, ImmutableArray<(string Image, int Count, string Template)> Kinds, int ActiveKind = -1);
 
 /// <summary>
 /// The command bar of the modern skin (docs/UI-MODERN.md section 17): a band across the whole width of the window at every aspect ratio. Nothing of it is stretched art. The radar, the
@@ -99,6 +99,9 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     /// <summary>The places of the queue-load cells drawn by the last <see cref="Selection"/> (empty when none were).</summary>
     internal ImmutableArray<UiRect> QueueCells { get; private set; } = [];
 
+    /// <summary>The places of the kind cells drawn by the last <see cref="Selection"/> with the template each stands for (empty when none were): what a click on the plate acts on.</summary>
+    internal ImmutableArray<(UiRect Rect, string Template)> KindCells { get; private set; } = [];
+
     /// <summary>The top edge of the band: what the tray of the queue loads stands on when the window has no plate.</summary>
     internal int BandTop => _band.Y;
 
@@ -167,9 +170,11 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     public ImmutableArray<UiDrawCommand> Selection(ModernSelection? selection, IUiTextMeasure measure, decimal textScale, ImmutableArray<CnCNew.Presentation.Input.QueueLoad> queues = default)
     {
         QueueCells = [];
+        KindCells = [];
         if (!HasPlate || selection is null) return [];
         var palette = skin.Style.Palette;
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        var kindCells = ImmutableArray.CreateBuilder<(UiRect, string)>();
         var inner = _plate.Inset(Scale(6));
         var heading = skin.Style.Font(UiTypeStep.Heading, tree.Viewport, textScale);
         var caption = skin.Style.Font(UiTypeStep.Caption, tree.Viewport, textScale);
@@ -197,13 +202,14 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
             var kindsTop = y;
             var x = inner.X;
             var kindIndex = -1;
-            foreach (var (image, count) in selection.Kinds)
+            foreach (var (image, count, template) in selection.Kinds)
             {
                 kindIndex++;
                 if (x + width > inner.Right) break;
                 var cell = new UiRect(x, y, width, height);
                 commands.Add(new UiImageDraw(image, cell, WndColor.White, false, false));
                 commands.Add(new UiBorderRect(cell, palette.Border));
+                kindCells.Add((cell, template));
                 if (kindIndex == selection.ActiveKind)
                 {
                     commands.Add(new UiBorderRect(cell.Inset(-1), palette.Accent));
@@ -223,6 +229,7 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
                 commands.AddRange(QueueLoadStrip.Draw(layout, new QueueLoadStrip.Colours(palette.Control, palette.Border, palette.Canvas, palette.Good, palette.Bad, palette.Text, WndColor.Undefined), caption, _plate));
             }
         }
+        KindCells = kindCells.ToImmutable();
         commands.Add(new UiPopClip());
         return commands.ToImmutable();
     }
