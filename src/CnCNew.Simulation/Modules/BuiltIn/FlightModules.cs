@@ -1271,6 +1271,35 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     /// <summary>Where the beam burns right now (valid while <see cref="InUse"/> and the beam is born).</summary>
     public Point3 BeamPosition => _current;
 
+    /// <summary>
+    /// The width the orbit-to-target laser drawable has now (<c>LaserUpdate::m_currentWidthScalar</c>: growing from nothing over <c>WidthGrowTime</c> from the beam's birth, shrinking the same way once the
+    /// decay began), as a part of its template's width; null while that drawable does not exist - before its birth <c>BeamTravelTime</c> after the order and after its death.
+    /// </summary>
+    public Fixed? OrbitBeamWidthScale(IWorldServices world)
+    {
+        if (_startAttack == 0 || _beam is not (Beam.Born or Beam.Decaying)) return null;
+        if (data.WidthGrowTicks <= 0) return Fixed.One;
+        var scalar = _beam == Beam.Decaying
+            ? Fixed.One - Fixed.FromInt(world.Tick - _decayStart) / Fixed.FromInt(data.WidthGrowTicks)
+            : Fixed.Min(Fixed.One, Fixed.FromInt(world.Tick - _startAttack - data.BeamTravelTicks) / Fixed.FromInt(data.WidthGrowTicks));
+        return Fixed.Max(Fixed.Zero, scalar);
+    }
+
+    /// <summary>
+    /// The width of the ground-to-orbit laser drawable (<c>createGroundToOrbitLaser</c>, made by <c>setClientStatus</c> when the cannon starts to fire and again, already decaying, when it
+    /// stops): growing from nothing over <c>WidthGrowTime</c> while it fires, shrinking the same way after; null when the cannon is in any other stage.
+    /// </summary>
+    public Fixed? GroundBeamWidthScale(IWorldServices world)
+    {
+        var status = StatusAt(world);
+        if (status is not (UplinkStatus.Firing or UplinkStatus.PostFire)) return null;
+        if (data.WidthGrowTicks <= 0) return Fixed.One;
+        var grow = Fixed.FromInt(data.WidthGrowTicks);
+        return status == UplinkStatus.Firing
+            ? Fixed.Min(Fixed.One, Fixed.FromInt(world.Tick - _startAttack) / grow)
+            : Fixed.Max(Fixed.Zero, Fixed.One - Fixed.FromInt(world.Tick - _startDecay) / grow);
+    }
+
     /// <summary><c>PUCStatus</c>: the logical stage of the cannon (<c>setLogicalStatus</c>); the reference derives the antenna stages from the clock alone, so they are read here and not stored.</summary>
     public enum UplinkStatus : byte { Idle, Charging, Preparing, AlmostReady, ReadyToFire, Firing, PostFire, Packing }
 

@@ -47,6 +47,31 @@ public sealed class ModelBoneTable(ContentFileSystem content)
         return pose.GetBoneWorldTransform(index);
     }
 
+    /// <summary>
+    /// The model-space matrix of a bone under the last frame of an animation (<c>getCurrentClientBonePositions</c> of a drawable that shows its state with <c>START_FRAME_LAST</c>: the particle
+    /// cannon's dish deployed). Null when the model, the animation or the bone is not there.
+    /// </summary>
+    public Matrix4x4? FindAtFinalFrame(string model, string animation, string bone)
+    {
+        var skeleton = Skeleton(model);
+        if (skeleton is null) return null;
+        var index = skeleton.FindBone(bone);
+        if (index <= 0) return null;
+        W3dAnimationBinding? binding;
+        try
+        {
+            binding = animation.Contains('.', StringComparison.Ordinal) ? _library.GetAnimation(animation) : null;
+        }
+        catch (Exception exception) when (exception is W3dMissingAssetException or InvalidDataException or IOException)
+        {
+            binding = null;
+        }
+        if (binding is null || binding.PivotCount > skeleton.BoneCount) return null;
+        var pose = new W3dPose(skeleton);
+        pose.Evaluate(binding, binding.Animation.FrameCount - 1, Matrix4x4.Identity);
+        return pose.GetBoneWorldTransform(index);
+    }
+
     private W3dSkeleton? Skeleton(string model)
     {
         if (!_skeletons.TryGetValue(model, out var skeleton))

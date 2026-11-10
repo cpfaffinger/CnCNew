@@ -8,6 +8,7 @@ using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Views;
 using CnCNew.Simulation.World;
 
@@ -123,6 +124,9 @@ public sealed class AttachedEffectCatalog
     /// <summary><c>AttackAreaDecal</c> and <c>TargetingReticleDecal</c> of a <c>SpectreGunshipUpdate</c>, by the object's template.</summary>
     public ImmutableDictionary<string, GunshipDecalSpec> GunshipDecals { get; private init; } = ImmutableDictionary<string, GunshipDecalSpec>.Empty;
 
+    /// <summary>The keys of the <c>ParticleUplinkCannonUpdate</c> that draw the cannon (the lasers and flares of <c>setClientStatus</c>), by the object's template.</summary>
+    public ImmutableDictionary<string, UplinkSpec> Uplinks { get; private init; } = ImmutableDictionary<string, UplinkSpec>.Empty;
+
     /// <summary>Values the parser could not read, each with its place: counted, never guessed at.</summary>
     public ImmutableArray<string> Problems { get; private init; } = [];
 
@@ -143,6 +147,7 @@ public sealed class AttachedEffectCatalog
         var abilities = new List<(string Owner, string Object, string Bone)>();
         var strafes = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         var gunshipDecals = ImmutableDictionary.CreateBuilder<string, GunshipDecalSpec>(StringComparer.OrdinalIgnoreCase);
+        var uplinks = ImmutableDictionary.CreateBuilder<string, UplinkSpec>(StringComparer.OrdinalIgnoreCase);
         var rules = new BodyParticleRule[BodyKeys.Length];
         for (var index = 0; index < rules.Length; index++) rules[index] = new BodyParticleRule(string.Empty, string.Empty, 0);
         foreach (var definition in graph.Definitions)
@@ -173,6 +178,12 @@ public sealed class AttachedEffectCatalog
                         if (module.Name.Equals("LaserUpdate", StringComparison.Ordinal) && (Key("MuzzleParticleSystem").Length > 0 || Key("TargetParticleSystem").Length > 0))
                             laserFlares[obj.OriginalName] = (Key("MuzzleParticleSystem"), Key("TargetParticleSystem"));
                         if (module.Name.Equals("SpecialAbilityUpdate", StringComparison.Ordinal) && Key("SpecialObject").Length > 0) abilities.Add((obj.OriginalName, Key("SpecialObject"), Key("SpecialObjectAttachToBone")));
+                        if (module.Name.Equals("ParticleUplinkCannonUpdate", StringComparison.Ordinal))
+                            uplinks[obj.OriginalName] = new UplinkSpec(Key("OuterEffectBoneName"), (int)Amount("OuterEffectNumBones"), Key("ConnectorBoneName"), Key("FireBoneName"), Key("ParticleBeamLaserName"),
+                                Key("ConnectorMediumLaserName"), Key("ConnectorIntenseLaserName"),
+                                [Key("OuterNodesLightFlareParticleSystem"), Key("OuterNodesMediumFlareParticleSystem"), Key("OuterNodesIntenseFlareParticleSystem")],
+                                [Key("LaserBaseLightFlareParticleSystemName"), Key("LaserBaseMediumFlareParticleSystemName"), Key("LaserBaseIntenseFlareParticleSystemName")],
+                                [string.Empty, Key("ConnectorMediumFlare"), Key("ConnectorIntenseFlare")]);
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && !module.Sections.IsDefaultOrEmpty)
                         {
@@ -234,7 +245,7 @@ public sealed class AttachedEffectCatalog
         var owners = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (owner, made, bone) in abilities)
             if (lasers.ContainsKey(made)) owners[owner] = bone;
-        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), GunshipDecals = gunshipDecals.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
+        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), GunshipDecals = gunshipDecals.ToImmutable(), Uplinks = uplinks.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
     }
 
     private static string? Named(string token) => token.Length == 0 || token.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : token;
@@ -332,6 +343,14 @@ public sealed class AttachedEffectCatalog
         return new Slot(bone, onlyOnce, min, max, name, randomBone, location);
     }
 }
+
+/// <summary>
+/// What <c>ParticleUplinkCannonUpdate::setClientStatus</c> draws of a cannon: the bones of its outer nodes (<c>OuterEffectBoneName</c> and a number, 01 to <see cref="OuterCount"/>), of the connector
+/// where their lasers meet and of the main beam; the laser objects of the beam (<see cref="BeamLaser"/>) and of the connectors (medium, intense); the particle systems at the outer nodes, at the
+/// base of the beam and at the connector, each by intensity (light, medium, intense; empty: none).
+/// </summary>
+public sealed record UplinkSpec(string OuterBone, int OuterCount, string ConnectorBone, string FireBone, string BeamLaser, string ConnectorMediumLaser, string ConnectorIntenseLaser,
+    ImmutableArray<string> OuterSystems, ImmutableArray<string> BaseSystems, ImmutableArray<string> ConnectorSystems);
 
 /// <summary>The beam of a weapon: its picture, the bone it leaves from, and how many frames of the original a shot draws it (the <c>DeletionUpdate</c> of the laser object).</summary>
 public sealed record WeaponLaser(LaserSpec Laser, string Bone, long Frames);
@@ -447,7 +466,7 @@ public sealed record LaserSpec(string Texture, float Width, int Segments, float 
     /// along the beam is <see cref="ScrollRate"/> times the seconds the laser has lived, kept in [0, 1) (<c>SegLineRendererClass::Render</c>); the original's time is a frame of the
     /// original each time it draws, so it advances per frame of the original at every simulation rate.
     /// </summary>
-    public StreamInstance Draw(Vector3 start, Vector3 end, Func<float, float, float> ground, long framesAlive)
+    public StreamInstance Draw(Vector3 start, Vector3 end, Func<float, float, float> ground, long framesAlive, float widthScale = 1f)
     {
         ArgumentNullException.ThrowIfNull(ground);
         var segments = ImmutableArray.CreateBuilder<LaserSegment>(Segments);
@@ -480,9 +499,12 @@ public sealed record LaserSpec(string Texture, float Width, int Segments, float 
         var points = ImmutableArray.CreateBuilder<Vector3>(segments.Count + 1);
         foreach (var segment in segments) points.Add(segment.From);
         if (segments.Count > 0) points.Add(segments[^1].To);
-        return new StreamInstance(points.MoveToImmutable(), Texture, Width, 1f)
+        // LaserUpdate::m_currentWidthScalar (getWidthScale): a laser that grows or decays draws every one of its beams that much of its width.
+        var bands = Bands();
+        if (widthScale != 1f) bands = [.. bands.Select(band => band with { Width = band.Width * widthScale })];
+        return new StreamInstance(points.MoveToImmutable(), Texture, Width * widthScale, 1f)
         {
-            Laser = new LaserDraw(segments.ToImmutable(), Bands(), Tile, TilingScalar, (float)(scroll - Math.Floor(scroll))),
+            Laser = new LaserDraw(segments.ToImmutable(), bands, Tile, TilingScalar, (float)(scroll - Math.Floor(scroll))),
         };
     }
 }
@@ -791,6 +813,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         if (_beams.Count > 0) AddBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         if (_feedbackBeams.Count > 0) AddFeedbackBeams(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
+        if (!catalog.Uplinks.IsEmpty) AddUplinks(world, view, frame, world.Tick / world.Time.TicksPerOriginalFrame);
         ReleaseFlares();
         _streamFrame = frame.ToImmutable();
         UpdateRopes(world);
@@ -958,6 +981,141 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     /// <summary>The frame an ability's laser object was first seen: the scroll of its texture counts from there.</summary>
     private readonly Dictionary<EntityId, long> _abilityBeams = [];
 
+    /// <summary>"orbitPosition.z += 500.0f": the beams of the cannon run from the ground to this far above it.</summary>
+    private const float UplinkOrbitHeight = 500f;
+
+    private sealed class UplinkDrawn
+    {
+        public ParticleUplinkCannonUpdate.UplinkStatus Status = ParticleUplinkCannonUpdate.UplinkStatus.Idle;
+        public readonly List<int> Systems = [];
+        public Vector3[] Outer = [];
+        public bool BonesCached;
+        public Vector3 Connector, Base;
+        public long StatusFrame, OrbitBorn = -1;
+    }
+
+    private readonly Dictionary<EntityId, UplinkDrawn> _uplinks = [];
+
+    /// <summary>The systems the particle cannons now have running (the outer nodes, the connector and the base of the beam).</summary>
+    public ImmutableArray<int> UplinkSystems => [.. _uplinks.Values.SelectMany(drawn => drawn.Systems)];
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate::setClientStatus</c> and <c>update</c>: "delete everything between status changes and create the ones we want" - the flares of the outer nodes, the lasers from every
+    /// outer node to the connector, the flare at the base of the beam and, while the cannon fires and decays, the laser from its fire bone up into the orbit (<c>createGroundToOrbitLaser</c>); and
+    /// from the beam's birth to its death the laser from the orbit down to the aim point (<c>createOrbitToTargetLaser</c>, reset to the beam's position every update), both widening and
+    /// narrowing as <c>LaserUpdate</c> does. What belongs to the building is not drawn where the viewer cannot see it; the beam on the ground is, where its place is not shrouded.
+    /// </summary>
+    private void AddUplinks(SimulationWorld world, IFxWorldView view, ImmutableArray<StreamInstance>.Builder frame, long originalFrame)
+    {
+        var seen = new HashSet<EntityId>();
+        float Ground(float x, float y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f;
+        foreach (var entity in world.EntitiesWithModule<ParticleUplinkCannonUpdate>().AsSpan())
+        {
+            if (!catalog.Uplinks.TryGetValue(entity.Template.Name, out var spec) || entity.Modules.OfType<ParticleUplinkCannonUpdate>().FirstOrDefault() is not { } module) continue;
+            seen.Add(entity.Id);
+            if (!_uplinks.TryGetValue(entity.Id, out var drawn)) _uplinks[entity.Id] = drawn = new UplinkDrawn();
+
+            if (module.OrbitBeamWidthScale(world) is { } orbit && orbit > Simulation.Numerics.Fixed.Zero && catalog.Lasers.TryGetValue(spec.BeamLaser, out var beam))
+            {
+                var at = new Vector3(FixedConvert.ToSingle(module.BeamPosition.X), FixedConvert.ToSingle(module.BeamPosition.Y), FixedConvert.ToSingle(module.BeamPosition.Z));
+                if (drawn.OrbitBorn < 0) drawn.OrbitBorn = originalFrame;
+                if (!view.IsShrouded(at))
+                    frame.Add(beam.Draw(at + new Vector3(0f, 0f, UplinkOrbitHeight), at, Ground, originalFrame - drawn.OrbitBorn, FixedConvert.ToSingle(orbit)));
+            }
+            else
+            {
+                drawn.OrbitBorn = -1;
+            }
+
+            var status = module.StatusAt(world);
+            if (!_current.ContainsKey(entity.Id.Value) || view.GetPose(entity.Id) is not { } pose)
+            {
+                // Out of the viewer's sight every client effect the logic added is removed.
+                Destroy(drawn.Systems);
+                drawn.Status = ParticleUplinkCannonUpdate.UplinkStatus.Idle;
+                continue;
+            }
+            if (drawn.Outer.Length == 0 && spec.OuterCount > 0)
+            {
+                var outer = new Vector3[spec.OuterCount];
+                var all = true;
+                for (var node = 0; node < outer.Length; node++)
+                {
+                    if (view.GetBonePosition(entity.Id, $"{spec.OuterBone}{node + 1:00}") is { } found) outer[node] = found;
+                    else all = false;
+                }
+                if (all) drawn.Outer = outer;
+            }
+            if (!drawn.BonesCached && status >= ParticleUplinkCannonUpdate.UplinkStatus.AlmostReady)
+            {
+                // calculateUpBonePositions, on the first use: the connector and the beam's base where the deployed model has them.
+                var connectorAt = DeployedBone(entity.Id, spec.ConnectorBone, pose) ?? view.GetBonePosition(entity.Id, spec.ConnectorBone);
+                var fire = DeployedBone(entity.Id, spec.FireBone, pose) ?? view.GetBonePosition(entity.Id, spec.FireBone);
+                drawn.Connector = connectorAt ?? pose.Position;
+                drawn.Base = fire ?? pose.Position;
+                // A model that lacks the bones keeps the object's place, as the original does; one that has them is asked again until it answers.
+                drawn.BonesCached = connectorAt is not null && fire is not null;
+            }
+            if (status != drawn.Status)
+            {
+                Destroy(drawn.Systems);
+                drawn.Status = status;
+                drawn.StatusFrame = originalFrame;
+                var outerLevel = status switch
+                {
+                    ParticleUplinkCannonUpdate.UplinkStatus.Charging => 0,
+                    ParticleUplinkCannonUpdate.UplinkStatus.Preparing or ParticleUplinkCannonUpdate.UplinkStatus.AlmostReady or ParticleUplinkCannonUpdate.UplinkStatus.ReadyToFire
+                        or ParticleUplinkCannonUpdate.UplinkStatus.PostFire => 1,
+                    ParticleUplinkCannonUpdate.UplinkStatus.Firing => 2,
+                    _ => -1,
+                };
+                if (outerLevel >= 0)
+                    foreach (var node in drawn.Outer) Start(drawn.Systems, spec.OuterSystems[outerLevel], node);
+                var connectorLevel = ConnectorLevel(status);
+                if (connectorLevel > 0) Start(drawn.Systems, spec.ConnectorSystems[connectorLevel], drawn.Connector);
+                var baseLevel = status switch
+                {
+                    ParticleUplinkCannonUpdate.UplinkStatus.ReadyToFire => 0,
+                    ParticleUplinkCannonUpdate.UplinkStatus.PostFire => 1,
+                    ParticleUplinkCannonUpdate.UplinkStatus.Firing => 2,
+                    _ => -1,
+                };
+                if (baseLevel >= 0) Start(drawn.Systems, spec.BaseSystems[baseLevel], drawn.Base);
+            }
+
+            var level = ConnectorLevel(status);
+            if (level > 0 && drawn.Outer.Length > 0 && catalog.Lasers.TryGetValue(level == 1 ? spec.ConnectorMediumLaser : spec.ConnectorIntenseLaser, out var connector))
+                foreach (var node in drawn.Outer) frame.Add(connector.Draw(node, drawn.Connector, Ground, originalFrame - drawn.StatusFrame));
+            if (module.GroundBeamWidthScale(world) is { } ground && ground > Simulation.Numerics.Fixed.Zero && catalog.Lasers.TryGetValue(spec.BeamLaser, out var column))
+                frame.Add(column.Draw(drawn.Base, drawn.Base + new Vector3(0f, 0f, UplinkOrbitHeight), Ground, originalFrame - drawn.StatusFrame, FixedConvert.ToSingle(ground)));
+        }
+        foreach (var id in _uplinks.Keys.Where(id => !seen.Contains(id)).ToList())
+        {
+            Destroy(_uplinks[id].Systems);
+            _uplinks.Remove(id);
+        }
+    }
+
+    /// <summary><c>createConnectorLasers</c>/<c>createConnectorFlare</c> by stage: medium from almost ready to ready and after the shot, intense while firing, none otherwise (0).</summary>
+    private static int ConnectorLevel(ParticleUplinkCannonUpdate.UplinkStatus status) => status switch
+    {
+        ParticleUplinkCannonUpdate.UplinkStatus.AlmostReady or ParticleUplinkCannonUpdate.UplinkStatus.ReadyToFire or ParticleUplinkCannonUpdate.UplinkStatus.PostFire => 1,
+        ParticleUplinkCannonUpdate.UplinkStatus.Firing => 2,
+        _ => 0,
+    };
+
+    private void Start(List<int> systems, string name, Vector3 position)
+    {
+        if (name.Length == 0) return;
+        if (fx.Catalog.FindParticleSystem(name) is not { } template)
+        {
+            _missingTemplates++;
+            return;
+        }
+        var id = fx.Particles.Spawn(template, new ParticleSpawn(position));
+        if (id != 0) systems.Add(id);
+    }
+
     private static void Flush(ImmutableArray<StreamInstance>.Builder frame, StreamSpec spec, List<Vector3> points)
     {
         if (points.Count >= 2)
@@ -970,6 +1128,29 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
 
     /// <summary>The bones of a model with its turrets turned (<c>ModelBoneTable.FindPosed</c>). Without it a bone stands in its rest pose.</summary>
     public Func<string, string, TurretPose, Matrix4x4?>? PosedBones { get; init; }
+
+    /// <summary>A bone of a model under the last frame of one of its animations (model, animation, bone): where a deployed structure has it. Without it only the rest pose is known.</summary>
+    public Func<string, string, string, Matrix4x4?>? DeployedBones { get; init; }
+
+    /// <summary>
+    /// A bone of the object's model as its DEPLOYED state shows it - the state's animation at its last frame (<c>START_FRAME_LAST</c>) - in world space, or null: what
+    /// <c>ParticleUplinkCannonUpdate::calculateUpBonePositions</c> asks the drawable for when the dish is up.
+    /// </summary>
+    private Vector3? DeployedBone(EntityId entity, string bone, FxEntityPose pose)
+    {
+        if (DeployedBones is null || !_current.TryGetValue(entity.Value, out var item)) return null;
+        var wanted = item.Conditions.With(ModelConditions.Deployed);
+        foreach (var draw in item.Visual.Draws)
+        {
+            if (BestStateSelector.FindBest(draw, wanted) is not (var index and >= 0) || index >= draw.States.Length) continue;
+            var state = draw.States[index];
+            if (state.Model is not { } model || state.Animations.IsDefaultOrEmpty) continue;
+            if (DeployedBones(model, state.Animations[0].Name, bone) is not { } local) continue;
+            local.Translation *= item.Visual.Scale;
+            return (local * pose.Transform).Translation;
+        }
+        return null;
+    }
 
     /// <summary>The world position of a bone of the object's current model (what <see cref="IFxWorldView.GetBonePosition"/> answers), or null.</summary>
     public Vector3? BonePosition(EntityId entity, string bone, FxEntityPose pose)

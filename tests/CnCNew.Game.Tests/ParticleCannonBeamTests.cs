@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
@@ -31,6 +32,7 @@ internal static class ParticleCannonBeamTests
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("The cannon launched from the shortcut bar is selected, the pointer is the uplink cannon's and a click drives the beam at the manual speed, a second click fast", () => Steering(data));
+        harness.Run("The beam: the laser from the dish up into the orbit, the connector lasers and the flares while it fires, the laser from the orbit down to the aim point from its birth, narrowing at the end, steered by clicks", () => Beam(data));
         return harness.Failures;
     }
 
@@ -85,6 +87,71 @@ internal static class ParticleCannonBeamTests
     }
 
     private static float Distance(Point3 from, float x, float y) => MathF.Sqrt(MathF.Pow((float)from.X.ToDecimal() - x, 2) + MathF.Pow((float)from.Y.ToDecimal() - y, 2));
+
+    private static ImmutableArray<StreamInstance> Streams(Scene scene, string texture) => [.. scene.Live.Fx.Capture().ProjectileStreams.Where(stream => stream.Texture.StartsWith(texture, StringComparison.OrdinalIgnoreCase) && stream.Laser is not null)];
+
+    private static void Beam(GameData data)
+    {
+        var scene = FireFromShortcut(data, out _);
+        var (live, module) = (scene.Live, scene.Module);
+        TestHarness.Assert(data.AttachedEffects.Uplinks.TryGetValue("AmericaParticleCannonUplink", out var spec) && spec is { OuterCount: 5, BeamLaser: "ParticleUplinkCannon_OrbitalLaser" }, "the module's draw keys are read");
+
+        // Firing, the beam still on its way (BeamTravelTime 2.5 s): the laser from the dish up into the orbit grows, five connector lasers join the outer nodes, five flares burn there.
+        scene.Seconds(1);
+        TestHarness.Assert(module.StatusAt(live.World) == ParticleUplinkCannonUpdate.UplinkStatus.Firing, $"the cannon fires ({module.StatusAt(live.World)})");
+        var columns = Streams(scene, "EXNoise02");
+        TestHarness.Assert(columns.Length == 1, $"one laser stands over the dish while the beam travels ({columns.Length})");
+        var column = columns[0];
+        TestHarness.Assert(Math.Abs(column.Points[^1].Z - column.Points[0].Z - 500f) < 0.01f && Math.Abs(column.Points[0].X - column.Points[^1].X) < 0.01f, $"it runs 500 units straight up from the dish ({column.Points[0]} to {column.Points[^1]})");
+        var cannonAt = new Vector2((float)scene.Cannon.X.ToDecimal(), (float)scene.Cannon.Y.ToDecimal());
+        TestHarness.Assert(Vector2.Distance(new Vector2(column.Points[0].X, column.Points[0].Y), cannonAt) < 40f && column.Points[0].Z > 0f, $"and its foot is on the dish ({column.Points[0]}; the building at {cannonAt})");
+        var full = data.AttachedEffects.Lasers["ParticleUplinkCannon_OrbitalLaser"].Draw(Vector3.Zero, Vector3.UnitZ, (_, _) => 0f, 0).Laser!.Bands[0].Width;
+        var grown = column.Laser!.Bands[0].Width;
+        TestHarness.Assert(grown > 0f && grown < full * 0.7f, $"it is still growing to its full width of {full} ({grown})");
+        var connectors = Streams(scene, "EXLaser");
+        TestHarness.Assert(connectors.Length == 5 && connectors.Select(stream => stream.Points[^1]).Distinct().Count() == 1 && connectors.Select(stream => stream.Points[0]).Distinct().Count() == 5, $"five lasers run from the outer nodes to the one connector ({connectors.Length})");
+        TestHarness.Assert(live.Attached.UplinkSystems.Length == 5, $"the flares of the five outer nodes burn ({live.Attached.UplinkSystems.Length})");
+        TestHarness.Assert(Streams(scene, "EXNoise02").Length == 1, "no beam stands on the ground yet");
+
+        // The beam is born: the laser from the orbit down to the aim point, 500 units above it, and it grows to its full width in WidthGrowTime (2 s).
+        scene.Seconds(2.0);
+        var beams = Streams(scene, "EXNoise02");
+        var ground = (float)module.BeamPosition.Z.ToDecimal();
+        TestHarness.Assert(beams.Length == 2, $"the beam stands beside the column ({beams.Length})");
+        var down = beams.Single(stream => stream.Points[0].Z > stream.Points[^1].Z && Math.Abs(stream.Points[^1].X - (float)module.BeamPosition.X.ToDecimal()) < 0.01f);
+        TestHarness.Assert(Math.Abs(down.Points[0].Z - down.Points[^1].Z - 500f) < 0.01f && Math.Abs(down.Points[^1].Z - ground) < 1f && Math.Abs(down.Points[0].X - down.Points[^1].X) < 0.01f,
+            $"it comes straight down from 500 units above the ground to the ground ({down.Points[0]} to {down.Points[^1]}; the ground at {ground})");
+        scene.Seconds(2.0);
+        TestHarness.Assert(Math.Abs(Streams(scene, "EXNoise02").Single(stream => stream.Points[0].Z > stream.Points[^1].Z).Laser!.Bands[0].Width - full) < 0.01f, "and at full width after the growth time");
+
+        // The pointer drives the beam; the drawn beam goes with it.
+        var far = new Vector2(420, 130);
+        var farGround = live.Camera.TryScreenToGround(far, out var target) ? target : throw new InvalidOperationException("not on the ground");
+        scene.Controller.Process(new MouseMoveEvent(40_000, far));
+        scene.Controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        scene.Controller.Process(new MouseButtonEvent(40_100, MouseButton.Right, true, far));
+        scene.Controller.Process(new MouseButtonEvent(40_150, MouseButton.Right, false, far));
+        var before = down.Points[^1];
+        scene.Seconds(1);
+        down = Streams(scene, "EXNoise02").Single(stream => stream.Points[0].Z > stream.Points[^1].Z && stream.Points[0].X - stream.Points[^1].X is > -0.01f and < 0.01f && Vector2.Distance(new Vector2(stream.Points[^1].X, stream.Points[^1].Y), cannonAt) > 60f);
+        TestHarness.Assert(Vector2.Distance(new Vector2(down.Points[^1].X, down.Points[^1].Y), new Vector2(before.X, before.Y)) is > 15f and < 25f
+            && Vector2.Distance(new Vector2(down.Points[^1].X, down.Points[^1].Y), new Vector2(farGround.X, farGround.Y)) < Vector2.Distance(new Vector2(before.X, before.Y), new Vector2(farGround.X, farGround.Y)),
+            $"after a second the drawn beam has moved 20 units towards the click ({before} to {down.Points[^1]})");
+        TestHarness.Assert(Math.Abs(down.Points[^1].X - (float)module.BeamPosition.X.ToDecimal()) < 1f && Math.Abs(down.Points[^1].Y - (float)module.BeamPosition.Y.ToDecimal()) < 1f, "it is where the module has it");
+
+        // The firing ends at TotalFiringTime (10 s); the column narrows, then the beam, and nothing is left.
+        scene.Seconds(4.7);
+        TestHarness.Assert(module.StatusAt(live.World) == ParticleUplinkCannonUpdate.UplinkStatus.PostFire, $"the shot is over ({module.StatusAt(live.World)})");
+        var narrowing = Streams(scene, "EXNoise02").Select(stream => stream.Laser!.Bands[0].Width).Order().ToArray();
+        TestHarness.Assert(narrowing.Length == 2 && narrowing[0] < full - 0.5f && narrowing[0] > 0f && Math.Abs(narrowing[1] - full) < 0.01f, $"the column narrows at once, the beam on the ground after its travel time ({string.Join(", ", narrowing)})");
+        TestHarness.Assert(Streams(scene, "EXLaser").Length == 5, "the connector lasers go on at medium strength");
+        scene.Seconds(3);
+        narrowing = [.. Streams(scene, "EXNoise02").Select(stream => stream.Laser!.Bands[0].Width).Order()];
+        TestHarness.Assert(narrowing.Length == 1 && narrowing[0] > 0f && narrowing[0] < full, $"then the beam alone narrows ({string.Join(", ", narrowing)})");
+        scene.Seconds(8);
+        TestHarness.Assert(Streams(scene, "EXNoise02").IsEmpty && Streams(scene, "EXLaser").IsEmpty && live.Attached.UplinkSystems.IsEmpty, "when it has packed up no laser and no flare is left");
+        TestHarness.Assert(!module.InUse, "and the power is over");
+    }
 
     private static void Steering(GameData data)
     {

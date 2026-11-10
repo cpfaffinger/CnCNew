@@ -105,7 +105,7 @@ public abstract class LiveGame
         _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
-        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed };
+        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed, DeployedBones = data.ModelBones.FindAtFinalFrame };
         Fx.ProjectileStreams = () => Attached.ProjectileStreams;
         Fx.Ropes = () => Attached.Ropes;
         Fx.ObjectDecals = () => Attached.Decals;
