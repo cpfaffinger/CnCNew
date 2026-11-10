@@ -67,6 +67,47 @@ internal static class HudSelectionScenes
     }
 
     /// <summary>
+    /// A barracks under construction selected, in both skins and three window sizes, over a striped backdrop: the original's cancel button with its cameo and the percent beside it,
+    /// and the modern skin's construction overlay. Written as <c>hudconstruct-SKIN-WxH.png</c>.
+    /// </summary>
+    public static void CaptureConstruction(GameData data, IUiTextMeasure measure, Action<UiDrawList, int, int, string> capture)
+    {
+        foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
+            foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1920, 1080) })
+            {
+                var scenario = new DemoScenario("hud-construct", "hud-construct", "hud-construct", 6000, [new ScenarioUnit("dozer", "AmericaVehicleDozer", 1, 0, 100, 0f)], [], 100f, 0f, CameraHeight: 330f) { StartMoney = 5000 };
+                var live = LiveScenario.Create(data, scenario, new Vector2(width, height));
+                var settings = GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin.Name } };
+                var controller = new MatchController(live, settings, "English", measure) { StarBlinks = false };
+                void Frame(int count)
+                {
+                    for (var frame = 0; frame < count; frame++)
+                    {
+                        live.Advance(1.0 / CnCNew.Data.OriginalFrame.PerSecond);
+                        controller.Update(1.0 / CnCNew.Data.OriginalFrame.PerSecond);
+                    }
+                }
+                Frame(3);
+                var dozer = live.World.FindEntity(live.Tags["dozer"])!;
+                live.Issue(new CnCNew.Simulation.Ids.PlayerId(1), (sequence, tick) => new CnCNew.Simulation.Commands.ConstructCommand(new CnCNew.Simulation.Ids.PlayerId(1), sequence, tick, dozer.Id, "AmericaBarracks",
+                    CnCNew.Simulation.Numerics.Fixed.FromDecimal((decimal)(live.Anchor.X + 80)), CnCNew.Simulation.Numerics.Fixed.FromDecimal((decimal)(live.Anchor.Y + 240)), CnCNew.Simulation.Numerics.Fixed.FromInt(0)));
+                CnCNew.Simulation.World.Entity? site = null;
+                for (var frame = 0; frame < 400 && site is null; frame++)
+                {
+                    Frame(1);
+                    site = live.World.Entities.FirstOrDefault(entity => entity.Owner.Value == 1 && entity.Template.Name == "AmericaBarracks" && entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction));
+                }
+                Frame(150);
+                controller.Input.Selection.Replace([site!.Id]);
+                Frame(2);
+                var hud = controller.BuildDrawList(width, height);
+                var backdrop = ImmutableArray.CreateBuilder<UiDrawCommand>();
+                backdrop.Add(new UiFillRect(new CnCNew.Ui.Layout.UiRect(0, 0, width, height), new WndColor(88, 104, 72, 255)));
+                capture(hud with { Commands = backdrop.ToImmutable().AddRange(hud.Commands) }, width, height, $"hudconstruct-{skin.Id}-{width}x{height}");
+            }
+    }
+
+    /// <summary>
     /// The selection markers and health bars of the three styles (<c>display.markerStyle</c>), three heights and the three health bar modes: two barracks (one hurt by an enemy tank) and a tank of
     /// the enemy's, the viewer's Rangers, with one barracks and two Rangers selected. Written as <c>hudmarkers-STYLE-MODE-HEIGHT-WxH.png</c>.
     /// </summary>

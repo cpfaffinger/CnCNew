@@ -10,6 +10,12 @@ namespace CnCNew.Game.Hud;
 /// <param name="ActiveKind">The index in <paramref name="Kinds"/> of the kind Tab chose in a mixed selection, or -1.</param>
 internal sealed record ModernSelection(string Name, int Count, float Health, ImmutableArray<(string Image, int Count, string Template)> Kinds, int ActiveKind = -1);
 
+/// <summary>What the construction overlay of the modern bar shows for a structure under construction (docs/UI-MODERN.md section 19).</summary>
+/// <param name="Cameo">The building's cameo (<c>ButtonImage</c>), or null when it has none.</param>
+/// <param name="Text">The original's line under the percent (<c>CONTROLBAR:UnderConstructionDesc</c> with the share).</param>
+/// <param name="Share">How far the construction is, 0 to 1.</param>
+internal sealed record ModernConstruction(string Name, string? Cameo, string Text, float Share);
+
 /// <summary>
 /// The command bar of the modern skin (docs/UI-MODERN.md section 17): a band across the whole width of the window at every aspect ratio. Nothing of it is stretched art. The radar, the
 /// cameos and the portrait keep their proportions at the window's uniform scale; the radar with its buttons stands at the left edge, the portrait and the command buttons at the
@@ -47,8 +53,14 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
 
     private WndColor Faded(WndColor color) => color with { A = (byte)Math.Clamp((color.A * Math.Clamp(OpacityPercent, 0, 100) + 50) / 100, 0, 255) };
 
+    /// <summary>
+    /// Set while the selected structure is under construction: the bar then has no button grid (a structure under construction has no other command than the cancel button) and
+    /// the construction overlay stands in its place. The HUD sets it before every frame.
+    /// </summary>
+    public ModernConstruction? Construction { get; set; }
+
     private UiViewport _placed;
-    private UiRect _band, _radarWell, _rightWell, _grid, _plate, _power;
+    private UiRect _band, _radarWell, _rightWell, _grid, _plate, _power, _cameo, _cancel, _column;
 
     /// <summary>The numbers of the layout at the window's uniform scale.</summary>
     private int Scale(int units)
@@ -91,6 +103,25 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
         _plate = UiRect.FromEdges(X(222, true), Y(481), _grid.X - Scale(4), Y(595));
         _power = UiRect.FromEdges(X(356, true), Y(455), X(608, false), Y(464));
         tree.FindByName(Prefix + "PowerWindow")?.SetScreenRect(_power);
+        PlaceConstruction();
+    }
+
+    /// <summary>
+    /// The places inside the grid's area for a structure under construction: its cameo at the left, its name, bar and percent in a column beside it, the cancel button (the
+    /// original's own window, so that clicks, the tooltip and the tests find it by its name) at the right end.
+    /// </summary>
+    private void PlaceConstruction()
+    {
+        var pad = Scale(6);
+        var inner = _grid.Inset(pad);
+        var cellHeight = Math.Min(inner.Height, Scale(48));
+        var top = inner.Y + (inner.Height - cellHeight) / 2;
+        _cameo = new UiRect(inner.X, top, cellHeight * 4 / 3, cellHeight);
+        var cancelWidth = Scale(56);
+        _cancel = new UiRect(inner.Right - cancelWidth, top, cancelWidth, cellHeight);
+        _column = UiRect.FromEdges(_cameo.Right + pad, inner.Y, _cancel.X - pad, inner.Bottom);
+        tree.FindByName(Prefix + "ButtonCancelConstruction")?.SetScreenRect(_cancel);
+        tree.FindByName(Prefix + "UnderConstructionDesc")?.SetScreenRect(_column);
     }
 
     /// <summary>Whether the window leaves room for the selection plate (at 4:3 it does not).</summary>
@@ -116,8 +147,16 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
         commands.Add(new UiFillRect(new UiRect(0, _band.Y + 1, _band.Width, Math.Max(1, Scale(2))), palette.Panel));
         foreach (var rect in new[] { _radarWell, _rightWell }) AddWell(commands, rect, Faded(well), palette.Border);
         commands.Add(new UiFillRect(tree.FindByName(Prefix + "LeftHUD")!.Rect, new WndColor(0, 0, 0, 255)));
-        for (var slot = 1; slot <= CnCNew.Presentation.Input.CommandBarModel.GridSlots; slot++)
-            if (tree.FindByName($"{Prefix}ButtonCommand{slot:00}") is { } button) AddWell(commands, button.Rect.Inset(-1), Faded(well), palette.Border);
+        if (Construction is not null)
+        {
+            // The construction overlay's plate in the grid's area, with a well behind the cameo and the cancel button.
+            AddWell(commands, _grid, Faded(well), palette.Border);
+            AddWell(commands, _cameo.Inset(-1), Faded(well), palette.Border);
+            AddWell(commands, _cancel.Inset(-1), Faded(well), palette.Border);
+        }
+        else
+            for (var slot = 1; slot <= CnCNew.Presentation.Input.CommandBarModel.GridSlots; slot++)
+                if (tree.FindByName($"{Prefix}ButtonCommand{slot:00}") is { } button) AddWell(commands, button.Rect.Inset(-1), Faded(well), palette.Border);
         foreach (var name in new[] { "ButtonOptions", "ButtonIdleWorker", "ButtonPlaceBeacon", "PopupCommunicator" })
             if (tree.FindByName(Prefix + name) is { IsHidden: false } button) AddWell(commands, button.Rect, palette.Control, palette.Border);
         if (HasPlate) AddWell(commands, _plate, Faded(well), palette.Border);
@@ -128,6 +167,39 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     {
         commands.Add(new UiFillRect(rect, fill));
         commands.Add(new UiBorderRect(rect, border));
+    }
+
+    /// <summary>
+    /// The construction overlay's contents over its plate: the building's cameo, its name and the construction's bar with the original's line of text under it. The cancel button
+    /// is a window of the layout and draws itself. Nothing when no structure is under construction.
+    /// </summary>
+    public ImmutableArray<UiDrawCommand> ConstructionOverlay(IUiTextMeasure measure, decimal textScale)
+    {
+        if (Construction is not { } site) return [];
+        var palette = skin.Style.Palette;
+        var heading = skin.Style.Font(UiTypeStep.Heading, tree.Viewport, textScale);
+        var body = skin.Style.Font(UiTypeStep.Body, tree.Viewport, textScale);
+        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        if (site.Cameo is { Length: > 0 } cameo)
+        {
+            commands.Add(new UiImageDraw(cameo, _cameo, WndColor.White, false, false));
+            commands.Add(new UiBorderRect(_cameo, palette.Border));
+        }
+        var nameHeight = measure.LineHeight(heading);
+        var barHeight = Math.Max(4, Scale(10));
+        var textHeight = measure.LineHeight(body);
+        var gap = Scale(4);
+        var block = nameHeight + gap + barHeight + gap + textHeight;
+        var y = _column.Y + Math.Max(0, (_column.Height - block) / 2);
+        commands.Add(new UiPushClip(_column));
+        commands.Add(new UiTextDraw(site.Name, null, heading, palette.Text, WndColor.Undefined, _column.X, y, UiTextAlignment.Left, _column));
+        var bar = new UiRect(_column.X, y + nameHeight + gap, _column.Width, barHeight);
+        commands.Add(new UiFillRect(bar, palette.Control));
+        commands.Add(new UiFillRect(bar with { Width = (int)(bar.Width * Math.Clamp(site.Share, 0f, 1f)) }, palette.Accent));
+        commands.Add(new UiBorderRect(bar, palette.Border));
+        commands.Add(new UiTextDraw(site.Text, null, body, palette.Text, WndColor.Undefined, _column.X, bar.Bottom + gap, UiTextAlignment.Left, _column));
+        commands.Add(new UiPopClip());
+        return commands.ToImmutable();
     }
 
     /// <summary>The power bar on its track, with the two numbers beside it.</summary>

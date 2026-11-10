@@ -100,6 +100,7 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
                 var manifest = new List<string>();
                 HudSelectionScenes.Capture(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
                 HudSelectionScenes.CaptureMarkers(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
+                HudSelectionScenes.CaptureConstruction(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
             }
             else if (SkinsOnly)
             {

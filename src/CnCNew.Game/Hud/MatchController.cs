@@ -1039,6 +1039,8 @@ public sealed partial class MatchController
     {
         var entities = Input.Selection.Selected.Select(Match.World.FindEntity).Where(entity => entity is not null).Select(entity => entity!).ToArray();
         if (entities.Length == 0) return null;
+        // A structure under construction has the construction overlay (name, cameo, bar, percent and cancel button in one place), not the plate.
+        if (entities.Length == 1 && CommandBar.Context == CommandBarContext.UnderConstruction) return null;
         var first = entities[0];
         var health = first.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
         if (entities.Length == 1) return new ModernSelection(_descriptions.DisplayName(first.Template.Name), 1, health, []);
@@ -1352,7 +1354,15 @@ public sealed partial class MatchController
             cancel.SetOverlayStates(true);
             cancel.SetEnabledImage0(CancelConstructionInfo is { ButtonImage.Length: > 0 } info && _assets.Images.TryGet(info.ButtonImage, out _) ? info.ButtonImage : null);
         }
-        _tree.FindByName("ControlBar.wnd:UnderConstructionDesc")?.SetText(ConstructionText(site));
+        var text = ConstructionText(site);
+        _tree.FindByName("ControlBar.wnd:UnderConstructionDesc")?.SetText(text);
+        // The modern skin gives the job to its construction overlay (docs/UI-MODERN.md section 19): name, cameo, bar, percent and the cancel button in the grid's area; the layout's
+        // description window stays hidden there, the overlay draws the line itself.
+        if (_modernBar is null) return;
+        _tree.FindByName("ControlBar.wnd:UnderConstructionDesc")?.SetHidden(true);
+        var cameo = Match.Data.Visuals.TryGet(site.Template.Name, out var visual) ? visual.ButtonImage ?? visual.SelectPortrait : null;
+        _modernBar.Construction = new ModernConstruction(_descriptions.DisplayName(site.Template.Name), cameo is { Length: > 0 } && _assets.Images.TryGet(cameo, out _) ? cameo : null, text,
+            (float)site.ConstructionShare.ToDecimal());
     }
 
     private CnCNew.Presentation.Input.CommandButtonInfo? CancelConstructionInfo => Input.CommandBar!.Catalog.TryGetButton("Command_CancelConstruction", out var info) ? info : null;
@@ -1360,6 +1370,7 @@ public sealed partial class MatchController
     private void RefreshDynamicWindows()
     {
         var view = CommandBar;
+        if (_modernBar is not null) _modernBar.Construction = null;
         // InGameUI::update: the money window shows "GUI:ControlBarMoneyDisplay" with the local player's money; ControlBarScheme::updateControlBarScheme
         // puts it at the scheme's money rectangle. The layout file keeps a placeholder text and a 100x100 rectangle at the top left.
         _tree.FindByName("ControlBar.wnd:MoneyDisplay")?.SetText(_assets.Text.Format("GUI:ControlBarMoneyDisplay", (int)Hud.Money.ToDecimal()));
@@ -1490,6 +1501,7 @@ public sealed partial class MatchController
         {
             if (!_controlBarRoot.IsHidden)
             {
+                commands.AddRange(modern.ConstructionOverlay(_textMeasure, _scaleOptions.TextScale));
                 commands.AddRange(modern.Power(Hud.EnergyProduction, Hud.EnergyConsumption, _textMeasure, _scaleOptions.TextScale));
                 commands.AddRange(modern.Selection(SelectionForPlate(), _textMeasure, _scaleOptions.TextScale, CommandBar.GroupQueues));
                 if (Generals is { } general) commands.AddRange(modern.General(_assets.Text.Get("SCIENCE:Rank" + general.RankLevel.ToString(CultureInfo.InvariantCulture)), general.ProgressPercent, StarBlinks && _starFlash, _textMeasure, _scaleOptions.TextScale));
