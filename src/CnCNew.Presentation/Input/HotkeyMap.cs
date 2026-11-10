@@ -275,6 +275,9 @@ public sealed class HotkeyMap
         Add(MetaAction.CameraScrollRight, KeyCode.Right);
         // The space bar walks back through the radar events (VIEW_LAST_RADAR_EVENT); Shift+Space walks forward again.
         Add(MetaAction.ViewNewerRadarEvent, KeyCode.Space, KeyModifiers.Shift);
+        // The original has the idle worker only as a button of the control bar (InGameUI::selectNextIdleWorker); Ctrl+I selects the next idle worker like a click on it. Ctrl is free of every
+        // other binding with the letter I, and the command buttons' hotkeys are plain letters.
+        Add(MetaAction.SelectNextIdleWorker, KeyCode.I, KeyModifiers.Control);
         return new HotkeyMap([..added], Issues, Compatibility);
     }
 
