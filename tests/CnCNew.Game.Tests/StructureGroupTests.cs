@@ -43,6 +43,7 @@ internal static class StructureGroupTests
         harness.Run("Tab walks the kinds of a selection of units, Shift+Tab back; the bar and the highlight follow; a button acts on the kind only, a right click on all", () => TabSubgroups(data));
         harness.Run("Tab keeps the diplomacy window when the selection has one kind, and a new selection or a lost kind ends the subgroup", () => TabFallsBack(data));
         harness.Run("E on a building whose bar has a button on E keeps the button", () => EKeepsButton(data));
+        harness.Run("The modern plate names a mixed selection by its count, not after one of its kinds; a selection of one kind keeps 'N x Name' (issue 291)", () => MixedTitle(data));
         return harness.Failures;
     }
 
@@ -627,6 +628,35 @@ internal static class StructureGroupTests
         modern.Frame();
         var texts = modern.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text).ToArray();
         TestHarness.Assert(texts.Any(text => text.EndsWith("(1/3)", StringComparison.Ordinal) && text.StartsWith("2 x ", StringComparison.Ordinal)), $"the modern plate names the active kind ({string.Join("|", texts.Where(text => text.Contains('/')))})");
+    }
+
+    private static readonly GameSettings ModernSettings = GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = CnCNew.Ui.Skins.UiSkin.Modern.Name } };
+
+    private static string[] Texts(Rig rig) => [..rig.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text)];
+
+    /// <summary>Issue 291: 'three tanks, four dozers, eight Humvees' was titled '15 x Construction Dozer', after the first unit.</summary>
+    private static void MixedTitle(GameData data)
+    {
+        var rig = MixedRig(data, "plate-title", ModernSettings);
+        rig.Selection.Replace(new[] { "r1", "r2", "c1", "c2", "c3", "d1" }.Select(rig.Tag));
+        rig.Frame(2);
+        var texts = Texts(rig);
+        TestHarness.Assert(texts.Contains("6 units"), $"the plate of a mixed selection says '6 units' ({string.Join("|", texts.Where(text => text.Contains(" x ", StringComparison.Ordinal) || text.Contains("units", StringComparison.Ordinal)))})");
+        TestHarness.Assert(!texts.Any(text => text.StartsWith("6 x ", StringComparison.Ordinal)), "and is named after none of its kinds");
+        // The kind that happens to come first does not matter: the dozer alone first.
+        rig.Selection.Replace(new[] { "d1", "c1" }.Select(rig.Tag));
+        rig.Frame(2);
+        TestHarness.Assert(Texts(rig).Contains("2 units"), "two kinds: '2 units'");
+        rig.Selection.Replace(new[] { "c1", "c2", "c3" }.Select(rig.Tag));
+        rig.Frame(2);
+        texts = Texts(rig);
+        TestHarness.Assert(texts.Any(text => text.StartsWith("3 x ", StringComparison.Ordinal) && !text.Contains("units", StringComparison.Ordinal)), "one kind: 'N x Name'");
+        TestHarness.Assert(!texts.Contains("3 units"), "one kind is not 'units'");
+        rig.Selection.Replace(new[] { "r1", "r2", "c1" }.Select(rig.Tag));
+        rig.Frame(2);
+        rig.Key(KeyCode.Tab);
+        rig.Frame();
+        TestHarness.Assert(Texts(rig).Any(text => text.StartsWith("2 x ", StringComparison.Ordinal) && text.EndsWith("(1/2)", StringComparison.Ordinal)), "the active kind of a Tab subgroup still names itself");
     }
 
     private static void TabFallsBack(GameData data)

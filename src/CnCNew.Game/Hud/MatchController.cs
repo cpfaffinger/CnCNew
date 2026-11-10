@@ -1015,7 +1015,10 @@ public sealed partial class MatchController
         // The active kind of a mixed selection (Tab) names itself, with its place among the kinds.
         if (CommandBar.Group is { Kind: SelectionGroupKind.Subgroup } subgroup)
             return new ModernSelection(string.Create(CultureInfo.InvariantCulture, $"{subgroup.Count} x {_descriptions.DisplayName(subgroup.Template)} ({subgroup.Index}/{subgroup.Total})"), entities.Length, health, kinds.ToImmutable(), activeIndex);
-        return new ModernSelection(entities.Length.ToString(CultureInfo.InvariantCulture) + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable(), activeIndex);
+        // A selection of one kind is named after it; a mixed one is named after none of its kinds (the original shows no single name for a group): its count, the kinds below.
+        var count = entities.Length.ToString(CultureInfo.InvariantCulture);
+        var mixed = entities.Any(entity => !entity.Template.Name.Equals(first.Template.Name, StringComparison.Ordinal));
+        return new ModernSelection(mixed ? count + " units" : count + " x " + _descriptions.DisplayName(first.Template.Name), entities.Length, health, kinds.ToImmutable(), activeIndex);
     }
 
     /// <summary>
