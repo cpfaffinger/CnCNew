@@ -33,9 +33,9 @@ internal static class ObserverTests
     private static readonly Vector2 Viewport = new(1280, 720);
     private static readonly DateTimeOffset RecordedAt = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>The match of these tests: two computer players with the rush profile on Alpine Assault, seed 11, for this long.</summary>
+    /// <summary>The match of these tests: two computer players with the rush profile on Alpine Assault, seed 1, for this long.</summary>
     private const int MatchSeconds = 420;
-    private const int Seed = 11;
+    private const int Seed = 1;
 
     public static int Run(string[] args)
     {
