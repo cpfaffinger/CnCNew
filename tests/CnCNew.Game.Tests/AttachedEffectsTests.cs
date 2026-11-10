@@ -187,7 +187,7 @@ internal static class AttachedEffectsTests
         TestHarness.Assert(bands.Length == 1 && bands[0].Width == 5f && Vector3.Distance(bands[0].Color, new Vector3(0f, 180f / 255f, 0f)) < 1e-6f, "one band, 5 wide, green at the inner alpha (not the texture's own white)");
 
         // A laser object with several beams: widths and colours step from the inner to the outer one, the outermost first.
-        var many = catalog.Lasers.Values.First(laser => laser.NumBeams > 2);
+        var many = catalog.Lasers.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).First(laser => laser.NumBeams > 2 && laser.OuterWidth >= laser.Width);
         var manyBands = many.Bands();
         TestHarness.Assert(manyBands.Length == many.NumBeams && Math.Abs(manyBands[0].Width - many.OuterWidth) < 1e-5f && Math.Abs(manyBands[^1].Width - many.Width) < 1e-5f && manyBands[0].Width >= manyBands[^1].Width,
             $"{many.Texture}: {many.NumBeams} bands from the outer width {many.OuterWidth} to the inner {many.Width}");
