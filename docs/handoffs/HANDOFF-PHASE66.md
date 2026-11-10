@@ -25,13 +25,15 @@ One product (D-3, D-4, D-32, D-33). The original's way is the yardstick; a chang
 
 ## Brief (in this order)
 
+The findings are GitHub issues (`gh issue list --state open`; `CLAUDE.md` "Issues"). Open at the end of Phase 65: #273 (main menu buttons at a non-default size), #286 and #287 (the construction button and a construction overlay), #165, #166, #167, #172 (F-168, F-169, F-170, F-175), #274 to #281, #282 and #283 (the release), #284, #285. The table below says in which order to take them; commits end with `Fixes #N`.
+
 | # | Work | Port | Original |
 |---|---|---|---|
-| 1 | The owner's next playtest findings (`docs/ACCEPTANCE-FINDINGS.md`) | | |
-| 2 | F-168 (Armored Fury GLA against America, frame 49,697, a Tank Avenger's blockers ahead), F-169 (the Patriot's first assisting shot a frame later at 60 Hz; a dozer with a second AI module drifts 0.0167 units a frame), F-170 (`AimBodyAt`'s has-a-move-target shortcut), F-175 (the shapes of `PartitionData::collidesWith` for flight contacts); then the 16 pairings again at 30, 60 and 120 Hz | `SimulationWorld.Movement*.cs`, `SimulationWorld.Turrets.cs`, `SimulationWorld.FlightContacts.cs` | `PartitionData::collidesWith` |
-| 3 | The first real release when the owner says so: the pipelines have never run; proof of the launcher against a real GitHub release (download, hash, patcher against the real Steam copy, update banner), the asset names, SmartScreen (unsigned), a simulation check in the client package for the launcher's optional step | `tools/CnCNew.Launcher*`, `scripts/release-build.ps1` | |
-| 4 | The AI's last money on carriers without a safe source in reach; the minimap's fading triangle and the radar-priority test of `defect` (F-137); a script attack without a shot limit and the button's `MaxShotsToFire` (F-140); Esc and key-up bindings in the hotkey editor; the gunship's voice line | | |
-| 5 | The runs not made since Phase 63: `scripts/perf-profile.ps1` against `3f19aa96`, the clean room with a real download, the campaign checks (reachability, audit, drive), the AI survey on the final state | | |
+| 1 | The owner's next playtest findings (new issues; #273, #286, #287 first) | | |
+| 2 | #165 F-168 (Armored Fury GLA against America, frame 49,697, a Tank Avenger's blockers ahead), #166 F-169 (the Patriot's first assisting shot a frame later at 60 Hz; a dozer with a second AI module drifts 0.0167 units a frame), #167 F-170 (`AimBodyAt`'s has-a-move-target shortcut), #172 F-175 (the shapes of `PartitionData::collidesWith` for flight contacts); then the 16 pairings again at 30, 60 and 120 Hz | `SimulationWorld.Movement*.cs`, `SimulationWorld.Turrets.cs`, `SimulationWorld.FlightContacts.cs` | `PartitionData::collidesWith` |
+| 3 | #282, #283: the first real release when the owner says so: the pipelines have never run; proof of the launcher against a real GitHub release (download, hash, patcher against the real Steam copy, update banner), the asset names, SmartScreen (unsigned), a simulation check in the client package for the launcher's optional step | `tools/CnCNew.Launcher*`, `scripts/release-build.ps1` | |
+| 4 | #274 the AI's last money on carriers without a safe source in reach; #275 the minimap's fading triangle and #276 the radar-priority test of `defect` (F-137); #277 a script attack without a shot limit and the button's `MaxShotsToFire` (F-140); #278 Esc and key-up bindings in the hotkey editor; #279 the gunship's voice line | | |
+| 5 | #284, #285, #280, #281: the runs not made since Phase 63: `scripts/perf-profile.ps1` against `3f19aa96`, the clean room with a real download, the campaign checks (reachability, audit, drive), the AI survey on the final state | | |
 
 ## Thresholds (to be committed before the first measurement)
 

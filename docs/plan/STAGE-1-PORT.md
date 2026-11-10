@@ -197,7 +197,7 @@ build, client package), 8 (documentation for humans).
 
 Every known place where the port behaves differently from the original, or where that is not verified. "Fix" means Stage 1
 work with its own manifest commit; "decision" waits for the project owner (PROGRAMME.md §7); "limit" is named and not
-planned to change. New deviations are entered here before they are fixed or left.
+planned to change. New deviations are entered here before they are fixed or left. **Since 10 November 2026 every entry of this table is also a GitHub issue (title `F-nnn: ...`, `gh issue list --state all --search "F-171"`), and new deviations are opened as issues only, with no F-number (`CLAUDE.md` "Issues"); this table is the record up to that day.**
 
 | ID | Deviation | Original (source) | Found | Disposition |
 |---|---|---|---|---|

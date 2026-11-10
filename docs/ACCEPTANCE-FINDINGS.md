@@ -3,6 +3,8 @@
 The report of 1 November 2026 (commit `d3451bb76e`, the second PC with sound, 60 Hz): 115 goals, 79 passed, 21 failed, 8 skipped, 7 open.
 Every finding below is fixed or named as a limit. `scripts/acceptance/accepted.json` holds what is settled, and the suite does not ask it again (`docs/ACCEPTANCE.md`, "What is asked again").
 
+Every finding in this file was backfilled as a GitHub issue on 10 November 2026; from then on findings are opened there first (`CLAUDE.md` "Issues") and this file is the record up to that day.
+
 The causes are worth reading together: most of them are places where the port was right on paper and no check looked at the same thing a person did.
 
 ## Effects and projectiles
