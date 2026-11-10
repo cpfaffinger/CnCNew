@@ -16,7 +16,8 @@
     -GameDir DIR         the Steam installation of the game (default: the Steam libraries of this machine)
     -InstallDir DIR      where the game is made (default: the folder chosen before, else CnCNew in the user's home); Steam itself is only read
     -NoWinget            leaves winget out: the fallbacks that download from the makers directly
-    -NoSimulationCheck   leaves the comparison with the reference values out
+    -NoSimulationCheck   leaves the comparison with the reference values out (the window has a box for it, remembered)
+    -Shortcuts           makes a desktop and a Start menu shortcut for the game when the setup is done (the window has a box for it, remembered)
     -SteamRoots DIR,...  further Steam installations to search
     -ReportPath FILE     where the report goes (default: the desktop)
 
@@ -31,6 +32,7 @@ param(
     [string]$InstallDir,
     [switch]$NoWinget,
     [switch]$NoSimulationCheck,
+    [switch]$Shortcuts,
     [string[]]$SteamRoots,
     [string]$ReportPath
 )
@@ -45,6 +47,9 @@ $clientStamp = Join-Path $dataDir 'acceptance\client-built.txt'
 $gameFolderFile = Join-Path $dataDir 'game-folder.txt'
 $installFolderFile = Join-Path $dataDir 'install-folder.txt'
 $contentStamp = Join-Path $logDir 'content-done.txt'
+$optionsFile = Join-Path $logDir 'options.txt'
+$shortcutFile = Join-Path $dataDir 'shortcuts.txt'
+$iconFile = Join-Path $repo 'src\CnCNew.Client.Stride\Assets\cncnew.ico'
 $clientProject = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 $assetProject = Join-Path $repo 'tools\CnCNew.AssetTool\CnCNew.AssetTool.csproj'
 $simProject = Join-Path $repo 'tools\CnCNew.SimTool\CnCNew.SimTool.csproj'
@@ -67,9 +72,34 @@ $script:busy = $false
 $script:rows = New-Object System.Collections.ArrayList
 $script:tools = @{ Dotnet = $null; Pwsh = $null; Git = $null }
 $script:gameDir = $GameDir
+# PowerShell names are case-insensitive: $script:installDir (where the game is now) is the parameter $InstallDir, so what the command line gave is kept apart.
+$script:installDirGiven = $InstallDir
 $script:behind = 0
 $script:report = New-Object System.Collections.ArrayList
 $script:summary = ''
+$script:skip = $false
+$script:skippable = $false
+$script:targetRefusal = ''
+$script:pickRefusal = ''
+$script:shortcutsMade = @()
+
+# What the window remembers between two starts: one line per box, name=1 or name=0 (a switch of the command line wins).
+function Get-Option([string]$Name, [bool]$Default) {
+    if (Test-Path -LiteralPath $optionsFile) {
+        foreach ($line in Get-Content -LiteralPath $optionsFile) {
+            if ($line -match ('^\s*' + $Name + '\s*=\s*(\d)')) { return ($Matches[1] -eq '1') }
+        }
+    }
+    $Default
+}
+function Set-Option([string]$Name, [bool]$Value) {
+    $lines = @()
+    if (Test-Path -LiteralPath $optionsFile) { $lines = @(Get-Content -LiteralPath $optionsFile | Where-Object { $_ -notmatch ('^\s*' + $Name + '\s*=') }) }
+    $lines += ($Name + '=' + [int]$Value)
+    [IO.File]::WriteAllLines($optionsFile, [string[]]$lines)
+}
+$script:wantSim = if ($NoSimulationCheck) { $false } else { Get-Option 'simulation' $true }
+$script:wantShortcuts = if ($Shortcuts) { $true } else { Get-Option 'shortcuts' $false }
 
 # ------------------------------------------------------------------------------------------------------------------ rows
 
@@ -237,7 +267,7 @@ function Get-DefaultInstallDir {
 }
 
 function Find-InstallDir {
-    if ($InstallDir) { return [IO.Path]::GetFullPath($InstallDir) }
+    if ($script:installDirGiven) { return [IO.Path]::GetFullPath($script:installDirGiven) }
     if (Test-Path -LiteralPath $installFolderFile) {
         $saved = (Get-Content -LiteralPath $installFolderFile -Raw).Trim()
         if ($saved) { return $saved }
@@ -317,6 +347,14 @@ function Test-ClientDone {
     (Find-Client) -and (Test-Path -LiteralPath $clientStamp) -and ((Get-Content -LiteralPath $clientStamp -Raw).Trim() -eq (Get-Commit))
 }
 
+# A step that records its version in a done-file: done, left out (the sim row, when its box is off) or still to do.
+function Show-DoneRow([string]$Id) {
+    $file = Join-Path $logDir "$Id-done.txt"
+    if ((Test-Path -LiteralPath $file) -and ((Get-Content -LiteralPath $file -Raw).Trim() -eq (Get-Commit))) { Set-Row $Id 'OK' 'Done for this version' }
+    elseif ($Id -eq 'sim' -and -not $script:wantSim) { Set-Row $Id 'Skipped' 'Left out: the box is off. Tick it to make this check.' }
+    else { Set-Row $Id 'To do' $(switch ($Id) { 'verify' { 'A minute' } 'start' { 'A window opens for a moment' } 'sim' { 'About 25 minutes; this PC against the reference PC. Can be skipped.' } }) }
+}
+
 function Invoke-Checks {
     Update-EnvironmentPath
     $os = [Environment]::OSVersion.Version
@@ -372,16 +410,12 @@ function Invoke-Checks {
     if ($found) { Set-Row 'game' 'OK' $found } else { Set-Row 'game' 'Missing' "Not found. Install it in Steam (app $steamAppId) in English, or choose its folder." }
 
     $refusal = Test-InstallFolder $script:installDir
+    $script:targetRefusal = $refusal
     if ($refusal) { Set-Row 'target' 'Failed' "$($script:installDir): $refusal" } else { Set-Row 'target' 'OK' $script:installDir }
 
     if (Test-ContentDone) { Set-Row 'content' 'OK' 'Made for this version' } else { Set-Row 'content' 'To do' 'About 5 minutes; fetches the patch once (110 MB)' }
     if (Test-ClientDone) { Set-Row 'client' 'OK' "Built at $(Get-Commit)" } else { Set-Row 'client' 'To do' 'About 5 minutes the first time; fetches 259 packages' }
-    foreach ($id in 'verify', 'start', 'sim') {
-        $file = Join-Path $dataDir "setup\$id-done.txt"
-        if ((Test-Path -LiteralPath $file) -and ((Get-Content -LiteralPath $file -Raw).Trim() -eq (Get-Commit))) { Set-Row $id 'OK' 'Done for this version' }
-        elseif ($id -eq 'sim' -and $NoSimulationCheck) { Set-Row $id 'Skipped' 'Left out' }
-        else { Set-Row $id 'To do' $(switch ($id) { 'verify' { 'A minute' } 'start' { 'A window opens for a moment' } 'sim' { 'About 10 minutes; the first run of the game on this PC against the reference PC' } }) }
-    }
+    foreach ($id in 'verify', 'start', 'sim') { Show-DoneRow $id }
 
     $script:behind = 0
     if ($script:tools.Git -and -not (Get-Row 'network').Detail.StartsWith('No answer')) {
@@ -427,6 +461,7 @@ function Invoke-Logged([string]$Name, [string]$Title, [string]$File, [string]$Ar
     $shown = ''
     while (-not $process.HasExited) {
         if ($script:cancel) { & "$env:windir\System32\taskkill.exe" /PID $process.Id /T /F 2>$null | Out-Null; return -1 }
+        if ($script:skip) { & "$env:windir\System32\taskkill.exe" /PID $process.Id /T /F 2>$null | Out-Null; return -2 }
         $last = Get-LastLine $log
         $seconds = [int]((Get-Date) - $started).TotalSeconds
         if ($script:statusLabel) {
@@ -557,23 +592,96 @@ function Step-Start {
 }
 
 # Not required for the acceptance: a difference here is itself a finding (two machines that compute differently cannot play together), so it is reported, not fatal.
+# It takes about 25 minutes, so it can be left out (the box) or skipped while it runs (the Skip button): neither writes a done-file, so the next start offers it again.
+function Set-Skippable([bool]$Value) {
+    $script:skippable = $Value
+    if ($script:skipButton) { $script:skipButton.Visible = $Value; $script:skipButton.Enabled = $Value; [Windows.Forms.Application]::DoEvents() }
+}
+
+function Skip-Simulation {
+    Set-Row 'sim' 'Skipped' 'Skipped by you: not run. The next start offers it again.'
+    Add-ReportLine 'Simulation check: not run (skipped by the user; the next start offers it again)'
+    $true
+}
+
 function Step-Simulation {
-    if ($NoSimulationCheck) { Set-Row 'sim' 'Skipped' 'Left out'; return $true }
+    if (-not $script:wantSim) { Set-Row 'sim' 'Skipped' 'Left out: the box is off.'; Add-ReportLine 'Simulation check: not run (the box was off)'; return $true }
     $done = Join-Path $logDir 'sim-done.txt'
     if ((Test-Path -LiteralPath $done) -and ((Get-Content -LiteralPath $done -Raw).Trim() -eq (Get-Commit))) { return $true }
-    Set-Row 'sim' 'Working' 'Building the tool'
-    $exit = Invoke-Logged 'sim-build' 'Building the measuring tool' $script:tools.Dotnet "build `"$simProject`" -c Release --nologo -v quiet"
-    if ($exit -ne 0) { Set-Row 'sim' 'Warning' "The tool did not build (exit code $exit)."; return $true }
-    $tool = Join-Path $repo 'tools\CnCNew.SimTool\bin\Release\net10.0\CnCNew.SimTool.dll'
-    Set-Row 'sim' 'Working' 'The data against the reference values'
-    $inputs = Invoke-Logged 'sim-inputs' 'Comparing the data with the reference values' $script:tools.Dotnet "`"$tool`" input-manifest check `"$contentDir`" baselines/input-manifest.json"
-    Set-Row 'sim' 'Working' 'Nine matches against their recorded results'
-    $matches9 = Invoke-Logged 'sim-matches' 'Playing nine matches against their recorded results' $script:tools.Dotnet "`"$tool`" reference-manifest check `"$contentDir`" baselines/reference-manifest.json --set quick"
-    Add-ReportLine "Input manifest: exit code $inputs. $(Get-LastLine (Join-Path $logDir 'sim-inputs.log'))"
-    Add-ReportLine "Reference matches, quick set: exit code $matches9. $(Get-LastLine (Join-Path $logDir 'sim-matches.log'))"
-    if ($inputs -eq 0 -and $matches9 -eq 0) { Set-Done 'sim'; Set-Row 'sim' 'OK' 'The same results as on the reference PC'; return $true }
-    Set-Row 'sim' 'Warning' 'This PC computes differently: a finding. The acceptance can go on; hand back the report.'
-    $true
+    $script:skip = $false
+    Set-Skippable $true
+    try {
+        Set-Row 'sim' 'Working' 'Building the tool'
+        $exit = Invoke-Logged 'sim-build' 'Building the measuring tool (the simulation check can be skipped)' $script:tools.Dotnet "build `"$simProject`" -c Release --nologo -v quiet"
+        if ($script:cancel) { return $false }
+        if ($script:skip) { return (Skip-Simulation) }
+        if ($exit -ne 0) { Set-Row 'sim' 'Warning' "The tool did not build (exit code $exit)."; return $true }
+        $tool = Join-Path $repo 'tools\CnCNew.SimTool\bin\Release\net10.0\CnCNew.SimTool.dll'
+        Set-Row 'sim' 'Working' 'The data against the reference values'
+        $inputs = Invoke-Logged 'sim-inputs' 'Comparing the data with the reference values (can be skipped)' $script:tools.Dotnet "`"$tool`" input-manifest check `"$contentDir`" baselines/input-manifest.json"
+        if ($script:cancel) { return $false }
+        if ($script:skip) { return (Skip-Simulation) }
+        Set-Row 'sim' 'Working' 'Nine matches against their recorded results'
+        $matches9 = Invoke-Logged 'sim-matches' 'Playing nine matches against their recorded results (can be skipped)' $script:tools.Dotnet "`"$tool`" reference-manifest check `"$contentDir`" baselines/reference-manifest.json --set quick"
+        if ($script:cancel) { return $false }
+        if ($script:skip) { return (Skip-Simulation) }
+        Add-ReportLine "Input manifest: exit code $inputs. $(Get-LastLine (Join-Path $logDir 'sim-inputs.log'))"
+        Add-ReportLine "Reference matches, quick set: exit code $matches9. $(Get-LastLine (Join-Path $logDir 'sim-matches.log'))"
+        if ($inputs -eq 0 -and $matches9 -eq 0) { Set-Done 'sim'; Set-Row 'sim' 'OK' 'The same results as on the reference PC'; return $true }
+        Set-Row 'sim' 'Warning' 'This PC computes differently: a finding. The acceptance can go on; hand back the report.'
+        $true
+    } finally {
+        Set-Skippable $false
+    }
+}
+
+# ------------------------------------------------------------------------------------------------------------------ shortcuts
+
+function Get-ShortcutFolders {
+    # A check of this script itself must not put anything on the real desktop.
+    if ($env:CNCNEW_SETUP_SHORTCUT_ROOT) { return [pscustomobject]@{ Desktop = (Join-Path $env:CNCNEW_SETUP_SHORTCUT_ROOT 'Desktop'); Menu = (Join-Path $env:CNCNEW_SETUP_SHORTCUT_ROOT 'Programs') } }
+    [pscustomobject]@{ Desktop = [Environment]::GetFolderPath('Desktop'); Menu = [Environment]::GetFolderPath('Programs') }
+}
+
+# What the Play button starts. The program of the build runs by itself when .NET is installed for the whole machine; with a .NET in the user's profile (the fallback of this
+# assistant) it needs dotnet.exe, which runs minimised under cmd.exe as the Play button runs it.
+function Get-PlayCommand {
+    $dll = Find-Client
+    if (-not $dll -or -not $script:tools.Dotnet) { return $null }
+    $arguments = "--content-dir `"$contentDir`""
+    $program = [IO.Path]::ChangeExtension($dll, '.exe')
+    if ((Test-Path -LiteralPath $program) -and (Test-Inside $script:tools.Dotnet (Join-Path $programFiles 'dotnet'))) {
+        return [pscustomobject]@{ File = $program; Arguments = $arguments; Style = 1 }
+    }
+    [pscustomobject]@{ File = $env:ComSpec; Arguments = "/c `"`"$($script:tools.Dotnet)`" `"$dll`" $arguments`""; Style = 7 }
+}
+
+# A desktop shortcut and a Start menu shortcut, with the game's icon and the install folder as the working directory. Each is recorded (install folder|shortcut) in
+# shortcuts.txt beside the logs, so that scripts\uninstall.ps1 removes exactly the ones made for the folder it removes.
+function New-GameShortcuts {
+    $play = Get-PlayCommand
+    if (-not $play) { throw 'The game program is not built yet.' }
+    $folders = Get-ShortcutFolders
+    $shell = New-Object -ComObject WScript.Shell
+    $made = @()
+    foreach ($path in @((Join-Path $folders.Desktop 'CnCNew.lnk'), (Join-Path $folders.Menu 'CnCNew.lnk'))) {
+        New-Item -ItemType Directory -Force (Split-Path -Parent $path) | Out-Null
+        $link = $shell.CreateShortcut($path)
+        $link.TargetPath = $play.File
+        $link.Arguments = $play.Arguments
+        $link.WorkingDirectory = $script:installDir
+        $link.WindowStyle = $play.Style
+        $link.Description = 'CnCNew'
+        if (Test-Path -LiteralPath $iconFile) { $link.IconLocation = "$iconFile,0" }
+        $link.Save()
+        $made += $path
+    }
+    $kept = @()
+    if (Test-Path -LiteralPath $shortcutFile) { $kept = @(Get-Content -LiteralPath $shortcutFile | Where-Object { $_ -and ($made -notcontains ($_ -split '\|', 2)[1]) }) }
+    foreach ($path in $made) { $kept += "$($script:installDir)|$path" }
+    [IO.File]::WriteAllLines($shortcutFile, [string[]]$kept)
+    $script:shortcutsMade = $made
+    $made
 }
 
 function Write-Report {
@@ -585,6 +693,8 @@ function Write-Report {
     [void]$lines.Add('# CnCNew setup report')
     [void]$lines.Add('')
     [void]$lines.Add("Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm'). Commit: $(Get-Commit). Windows: $([Environment]::OSVersion.Version). CPU: $cpu. Memory: $('{0:0} GB' -f ($memory / 1GB)).")
+    [void]$lines.Add('')
+    [void]$lines.Add("Install folder: $($script:installDir)")
     [void]$lines.Add('')
     [void]$lines.Add('| Step | State | Detail |')
     [void]$lines.Add('| --- | --- | --- |')
@@ -623,6 +733,10 @@ function Invoke-Setup {
             if ($script:cancel) { return $false }
             if (-not (& $step)) { return $false }
         }
+        if ($script:wantShortcuts) {
+            try { $made = New-GameShortcuts; Add-ReportLine "Shortcuts: $($made -join ', ')" }
+            catch { Add-ReportLine "Shortcuts: not made ($($_.Exception.Message))" }
+        }
         $true
     } finally {
         $script:busy = $false
@@ -660,7 +774,9 @@ $form = New-Object Windows.Forms.Form
 $script:form = $form
 $form.Text = 'CnCNew'
 $form.StartPosition = 'CenterScreen'
-$form.ClientSize = New-Object Drawing.Size 820, 720
+# Tall enough for the list, the folder and the two boxes; on a small screen the list is what scrolls.
+$workArea = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+$form.ClientSize = New-Object Drawing.Size 820, ([Math]::Min(870, $workArea.Height - 70))
 $form.MinimumSize = New-Object Drawing.Size 700, 560
 $form.Font = New-Object Drawing.Font 'Segoe UI', 10
 
@@ -683,6 +799,26 @@ foreach ($row in $script:rows) {
     $row.Item = $item
 }
 
+# Where the game is made and what else the setup does, in view from the start: the folder can be changed (a picker, or typed and confirmed with Enter) before the work begins.
+$opts = New-Object Windows.Forms.Panel
+$opts.Dock = 'Top'; $opts.Height = 164
+$opts.Width = $form.ClientSize.Width
+$folderLabel = New-Object Windows.Forms.Label
+$folderLabel.Text = 'The game is made in this folder:'; $folderLabel.Font = New-Object Drawing.Font 'Segoe UI', 10, ([Drawing.FontStyle]::Bold); $folderLabel.SetBounds(14, 8, 500, 22)
+$pathBox = New-Object Windows.Forms.TextBox
+$pathBox.SetBounds(14, 32, 560, 28); $pathBox.Anchor = 'Top,Left,Right'
+$changeFolder = New-Object Windows.Forms.Button
+$changeFolder.Text = 'Change the folder ...'; $changeFolder.SetBounds(584, 30, 220, 32); $changeFolder.Anchor = 'Top,Right'
+$folderNote = New-Object Windows.Forms.Label
+$folderNote.SetBounds(14, 64, 790, 38); $folderNote.Anchor = 'Top,Left,Right'
+$simBox = New-Object Windows.Forms.CheckBox
+$simBox.Text = 'Check the simulation against the reference values (about 25 minutes)'; $simBox.SetBounds(14, 106, 790, 24); $simBox.Anchor = 'Top,Left,Right'
+$shortcutBox = New-Object Windows.Forms.CheckBox
+$shortcutBox.Text = 'Make a desktop and a Start menu shortcut for the game when it is ready'; $shortcutBox.SetBounds(14, 132, 790, 24); $shortcutBox.Anchor = 'Top,Left,Right'
+$simBox.Checked = $script:wantSim
+$shortcutBox.Checked = $script:wantShortcuts
+$opts.Controls.AddRange(@($folderLabel, $pathBox, $changeFolder, $folderNote, $simBox, $shortcutBox))
+
 $foot = New-Object Windows.Forms.Panel
 $foot.Dock = 'Bottom'; $foot.Height = 216
 # Anchors measure against the panel as it is now: at its default width the status line would grow past the window and never wrap.
@@ -695,23 +831,28 @@ $main = New-Object Windows.Forms.Button
 $main.SetBounds(14, 88, 290, 44); $main.Font = New-Object Drawing.Font 'Segoe UI', 11, ([Drawing.FontStyle]::Bold)
 $play = New-Object Windows.Forms.Button
 $play.Text = 'Play the game'; $play.SetBounds(312, 88, 150, 44)
+# The Skip button takes the place of Play while the simulation check runs.
+$script:skipButton = New-Object Windows.Forms.Button
+$script:skipButton.Text = 'Skip this check'; $script:skipButton.SetBounds(312, 88, 150, 44); $script:skipButton.Visible = $false
 $update = New-Object Windows.Forms.Button
 $update.SetBounds(470, 88, 334, 44); $update.Visible = $false
-$chooseTarget = New-Object Windows.Forms.Button
-$chooseTarget.Text = 'Choose the install folder ...'; $chooseTarget.SetBounds(14, 136, 290, 32)
+$again = New-Object Windows.Forms.Button
+$again.Text = 'Check again'; $again.SetBounds(14, 136, 120, 32)
+$logs = New-Object Windows.Forms.Button
+$logs.Text = 'Open the logs'; $logs.SetBounds(142, 136, 130, 32)
+$openFolder = New-Object Windows.Forms.Button
+$openFolder.Text = 'Open the game folder'; $openFolder.SetBounds(280, 136, 170, 32)
+$shortcutButton = New-Object Windows.Forms.Button
+$shortcutButton.Text = 'Create shortcut'; $shortcutButton.SetBounds(458, 136, 150, 32)
+$close = New-Object Windows.Forms.Button
+$close.Text = 'Close'; $close.SetBounds(684, 136, 120, 32)
 $choose = New-Object Windows.Forms.Button
 $choose.Text = 'Choose the game in Steam ...'; $choose.SetBounds(14, 176, 290, 32)
 $steamPage = New-Object Windows.Forms.Button
 $steamPage.Text = 'Install it in Steam'; $steamPage.SetBounds(312, 176, 150, 32)
-$again = New-Object Windows.Forms.Button
-$again.Text = 'Check again'; $again.SetBounds(312, 136, 150, 32)
-$logs = New-Object Windows.Forms.Button
-$logs.Text = 'Open the logs'; $logs.SetBounds(470, 136, 150, 32)
-$close = New-Object Windows.Forms.Button
-$close.Text = 'Close'; $close.SetBounds(684, 136, 120, 32)
-$foot.Controls.AddRange(@($script:statusLabel, $progress, $main, $play, $update, $chooseTarget, $choose, $steamPage, $again, $logs, $close))
+$foot.Controls.AddRange(@($script:statusLabel, $progress, $main, $play, $script:skipButton, $update, $again, $logs, $openFolder, $shortcutButton, $close, $choose, $steamPage))
 
-$form.Controls.AddRange(@($list, $foot, $head))
+$form.Controls.AddRange(@($list, $opts, $foot, $head))
 $list.BringToFront()
 
 function Update-Buttons {
@@ -725,20 +866,33 @@ function Update-Buttons {
     $play.Visible = $done
     foreach ($button in @($choose, $steamPage)) { $button.Visible = $gameMissing -or ((Get-Row 'content').State -eq 'Failed'); $button.Enabled = -not $script:busy }
     $again.Enabled = -not $script:busy
-    $chooseTarget.Enabled = -not $script:busy
+    $changeFolder.Enabled = -not $script:busy
+    $pathBox.Enabled = -not $script:busy
+    $simBox.Enabled = -not $script:busy
+    $shortcutBox.Enabled = -not $script:busy
+    $openFolder.Visible = $done
+    $shortcutButton.Visible = $done
+    $shortcutButton.Enabled = $done -and -not $script:busy
+    $script:skipButton.Visible = $script:skippable
+    if (-not $pathBox.Focused) { $pathBox.Text = $script:installDir }
+    if ($script:pickRefusal) { $folderNote.ForeColor = [Drawing.Color]::Firebrick; $folderNote.Text = $script:pickRefusal }
+    elseif ($script:targetRefusal) { $folderNote.ForeColor = [Drawing.Color]::Firebrick; $folderNote.Text = $script:targetRefusal }
+    else { $folderNote.ForeColor = [Drawing.Color]::DimGray; $folderNote.Text = 'About 3 GB. Steam is only read and never changed. Change it before you start; type a folder and press Enter, or use the button.' }
     $update.Visible = $script:behind -gt 0
     $update.Enabled = -not $script:busy
     $update.Text = "Get the new version ($($script:behind) change(s) on GitHub)"
     $progress.Visible = $script:busy
     if ($script:busy) { return }
-    if ($blocked) {
+    if ($script:pickRefusal) {
+        Say $script:pickRefusal
+    } elseif ($blocked) {
         $failed = @($script:rows | Where-Object { $_.Group -eq 'need' -and $_.State -in 'Failed', 'Missing' -and $_.Id -notin 'git', 'dotnet', 'pwsh', 'vc' } | ForEach-Object { "$($_.Title): $($_.Detail)" })
         Say ($failed -join "`n")
     } elseif ($done) {
         $warning = (Get-Row 'sound').State -eq 'Warning'
-        Say ("Ready. Everything is set up for version $(Get-Commit)." + $(if ($warning) { "`nThis PC has no sound device: skip the goals about sound." } else { '' }))
+        Say ("Ready. The game is made in $($script:installDir) (version $(Get-Commit)). Start it with 'Play the game' or from a shortcut (Create shortcut)." + $(if ($warning) { "`nThis PC has no sound device: skip the goals about sound." } else { '' }))
     } else {
-        $text = "The game goes to $($script:installDir). Steam is only read. The rest is automatic and takes 15 to 30 minutes; you can stop and go on later."
+        $text = "The game goes to $($script:installDir). Steam is only read. The rest is automatic and takes 15 to 45 minutes; you can stop and go on later."
         if ($missing.Count -gt 0) { $text = "Set up will also install, each from its maker and under its own licence: $($missing -join ', '). Windows may ask for permission.`n$text" }
         Say $text
     }
@@ -783,7 +937,10 @@ $main.Add_Click({
             if (-not $ok) {
                 $failed = @($script:rows | Where-Object { $_.State -eq 'Failed' } | Select-Object -First 1)
                 Say ("Stopped at: $($failed[0].Title).`n$($failed[0].Detail)`nThe report lies at $file")
-            } else { Say ("Ready. The report lies at $file.`nStart the acceptance when you like.") }
+            } else {
+                $made = if ($script:shortcutsMade.Count -gt 0) { "`nShortcuts: $($script:shortcutsMade -join ', ')" } else { '' }
+                Say ("Ready. The game is made in $($script:installDir). Start it with 'Play the game'.$made`nThe report lies at $file. Start the acceptance when you like.")
+            }
         }
     })
 $play.Add_Click({
@@ -804,7 +961,30 @@ $update.Add_Click({
             else { Say 'The new version is here. Set up the game once more; only what changed is made again.' }
         }
     })
-$chooseTarget.Add_Click({
+# Takes a folder the user named: refused in words (Steam, the checkout, other files, not writable) or remembered and checked at once.
+function Set-InstallFolder([string]$Folder, [bool]$FromPicker) {
+    $Folder = $Folder.Trim().Trim('"')
+    if (-not $Folder) { $script:pickRefusal = ''; Update-Buttons; return }
+    try { $Folder = [IO.Path]::GetFullPath($Folder).TrimEnd('\') } catch { $script:pickRefusal = "'$Folder' is not a folder name Windows accepts."; $pathBox.Text = $script:installDir; Update-Buttons; return }
+    # As installers do: a folder picked that holds other things gets a CnCNew of its own.
+    if ($FromPicker -and (Test-Path -LiteralPath $Folder -PathType Container) -and (Get-ChildItem -LiteralPath $Folder -Force -ErrorAction SilentlyContinue | Select-Object -First 1) -and -not (Test-Path -LiteralPath (Join-Path $Folder 'install.json'))) { $Folder = Join-Path $Folder 'CnCNew' }
+    if ($Folder -eq $script:installDir) { $script:pickRefusal = ''; Update-Buttons; return }
+    $refusal = Test-InstallFolder $Folder
+    if ($refusal) {
+        $script:pickRefusal = "$Folder was not taken: $refusal"
+        $pathBox.Text = $script:installDir
+        Say "$Folder`n$refusal"
+        Update-Buttons
+        return
+    }
+    $script:pickRefusal = ''
+    $script:installDirGiven = $null
+    [IO.File]::WriteAllText($installFolderFile, $Folder)
+    Invoke-Checks
+    Update-Buttons
+}
+
+$changeFolder.Add_Click({
         Invoke-Guarded {
             $dialog = New-Object Windows.Forms.FolderBrowserDialog
             $dialog.Description = 'Where the game is made: about 3 GB. Steam is only read and stays as it is.'
@@ -813,16 +993,32 @@ $chooseTarget.Add_Click({
             while ($start -and -not (Test-Path -LiteralPath $start -PathType Container)) { $start = Split-Path -Parent $start }
             if ($start) { $dialog.SelectedPath = $start }
             if ($dialog.ShowDialog($form) -ne 'OK') { return }
-            $folder = $dialog.SelectedPath.TrimEnd('\')
-            # As installers do: a folder that holds other things gets a CnCNew of its own.
-            if ((Get-ChildItem -LiteralPath $dialog.SelectedPath -Force -ErrorAction SilentlyContinue | Select-Object -First 1) -and -not (Test-Path -LiteralPath (Join-Path $folder 'install.json'))) { $folder = Join-Path $folder 'CnCNew' }
-            $refusal = Test-InstallFolder $folder
-            if ($refusal) { Say "$folder`n$refusal"; return }
-            [IO.File]::WriteAllText($installFolderFile, $folder)
-            Invoke-Checks
-            Update-Buttons
+            Set-InstallFolder $dialog.SelectedPath $true
         }
     })
+$pathBox.Add_KeyDown({
+        param($sender, $key)
+        if ($key.KeyCode -eq 'Return') { $key.SuppressKeyPress = $true; Invoke-Guarded { Set-InstallFolder $pathBox.Text $false } }
+    })
+$pathBox.Add_Leave({ Invoke-Guarded { if ($pathBox.Text.Trim().TrimEnd('\') -ne $script:installDir) { Set-InstallFolder $pathBox.Text $false } } })
+$simBox.Add_CheckedChanged({
+        $script:wantSim = $simBox.Checked
+        Set-Option 'simulation' $script:wantSim
+        if (-not $script:busy) { Show-DoneRow 'sim'; Update-Buttons }
+    })
+$shortcutBox.Add_CheckedChanged({ $script:wantShortcuts = $shortcutBox.Checked; Set-Option 'shortcuts' $script:wantShortcuts })
+$script:skipButton.Add_Click({
+        $script:skip = $true
+        $script:skipButton.Enabled = $false
+        Say 'Skipping the simulation check ...'
+    })
+$shortcutButton.Add_Click({
+        Invoke-Guarded {
+            $made = New-GameShortcuts
+            Say ("Shortcuts made, with the game's icon: $($made -join '; ')`nThey start the game from $($script:installDir). scripts\uninstall.ps1 removes them with the game.")
+        }
+    })
+$openFolder.Add_Click({ Invoke-Guarded { if (Test-Path -LiteralPath $script:installDir) { Start-Process explorer.exe -ArgumentList "`"$($script:installDir)`"" } } })
 $choose.Add_Click({
         Invoke-Guarded {
             $dialog = New-Object Windows.Forms.FolderBrowserDialog
@@ -837,7 +1033,7 @@ $choose.Add_Click({
         }
     })
 $steamPage.Add_Click({ Invoke-Guarded { Start-Process "steam://install/$steamAppId" } })
-$again.Add_Click({ Invoke-Guarded { Say 'Checking ...'; Invoke-Checks; Update-Buttons } })
+$again.Add_Click({ Invoke-Guarded { Say 'Checking ...'; $script:pickRefusal = ''; Invoke-Checks; Update-Buttons } })
 $logs.Add_Click({ Invoke-Guarded { Start-Process explorer.exe -ArgumentList "`"$logDir`"" } })
 $close.Add_Click({ $form.Close() })
 $form.Add_FormClosing({
