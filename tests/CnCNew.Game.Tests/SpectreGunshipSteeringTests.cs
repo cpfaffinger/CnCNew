@@ -94,10 +94,10 @@ internal static class SpectreGunshipSteeringTests
             $"the reticle of 25 lies on it ({string.Join("; ", decals)})");
 
         // The pointer over the map is the uplink cannon's, over an object as well.
-        var second = new Vector2(640, 420);
+        var second = new Vector2(640, 520);
         var secondGround = Ground(second);
         var apart = Vector2.Distance(new Vector2(firstGround.X, firstGround.Y), new Vector2(secondGround.X, secondGround.Y));
-        TestHarness.Assert(apart > 40f && apart < 170f, $"setup: the second place is {apart} units from the first, inside the attack area");
+        TestHarness.Assert(apart > 90f && apart < 170f, $"setup: the second place is {apart} units from the first, inside the attack area");
         controller.Process(new MouseMoveEvent(20_000, second));
         controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(controller.Cursor.Kind == CursorKind.ParticleUplinkCannon, $"the pointer with the gunship selected: the uplink pointer ({controller.Cursor.Kind})");
