@@ -572,7 +572,9 @@ public sealed class CommandModeController
                 var source = SpecialPowerSource(world, button, sources);
                 if (source is null) return ActivationResult.NoSource;
                 if (button.NeedsTarget) return EnterButtonMode(button, [source.Id]);
-                return Result(Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero, button.SpecialPowerOption)));
+                var used = Result(Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero, button.SpecialPowerOption)));
+                if (used == ActivationResult.Issued) SelectSourceOfSteerablePower(button, source);
+                return used;
             }
             case GuiCommandKind.AttackMove or GuiCommandKind.Guard or GuiCommandKind.GuardWithoutPursuit or GuiCommandKind.GuardFlyingUnitsOnly:
             {
@@ -872,7 +874,19 @@ public sealed class CommandModeController
             result = Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.Location, EntityId.Invalid, x, y, button.SpecialPowerOption));
         }
         if (result.Accepted) Feedback(FeedbackKind.AttackMarker, world, objectTarget is null ? position!.Value : EntityPicker.CenterOf(objectTarget), objectTarget?.Id ?? EntityId.Invalid, Settings.MarkerFrames);
+        if (result.Accepted) SelectSourceOfSteerablePower(button, source);
         return result.Accepted;
+    }
+
+    /// <summary>
+    /// <c>CommandTranslator::issueSpecialPowerCommand</c>, at its end: a power used from the shortcut bar whose source "accepts input from the player (particle uplink cannon, spectre gunship)"
+    /// (<c>findSpecialPowerWithOverridableDestination</c>) replaces the selection with that source: "simply select the object now", so that the next click on the map drives the beam
+    /// (<c>canSelectedObjectsOverrideSpecialPowerDestination</c> asks the selection). Used from the building's own command bar the building is selected already.
+    /// </summary>
+    private void SelectSourceOfSteerablePower(CommandButtonInfo button, Entity source)
+    {
+        if (button.Kind != GuiCommandKind.SpecialPowerFromShortcut || !source.Modules.OfType<ISteerablePower>().Any()) return;
+        Selection.Replace([source.Id]);
     }
 
     // ------------------------------------------------------------------------------------------------ placement

@@ -23,6 +23,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(HotkeyBindingTests), HotkeyBindingTests.Run),
     (nameof(RadiusCursorTests), RadiusCursorTests.Run),
     (nameof(SpectreGunshipSteeringTests), SpectreGunshipSteeringTests.Run),
+    (nameof(ParticleCannonBeamTests), ParticleCannonBeamTests.Run),
     (nameof(PlaytestHudTests), PlaytestHudTests.Run),
     (nameof(ConstructionBarTests), ConstructionBarTests.Run),
     (nameof(PlaytestContextTests), PlaytestContextTests.Run),
