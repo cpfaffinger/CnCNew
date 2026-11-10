@@ -22,9 +22,10 @@ public sealed class ScoreScreenScreen : ShellScreen
     /// <summary>The faction of the first player of this machine; none for a watcher.</summary>
     public string? ViewerFaction => _result.Rows.FirstOrDefault(row => !row.Player.IsComputer)?.Player.Faction;
 
-    public ScoreScreenScreen(GameShell shell, MatchResult result) : base(shell, ShellLayoutNames.ScoreScreen)
+    public ScoreScreenScreen(GameShell shell, MatchResult result) : base(shell, ShellLayoutNames.ScoreScreen, shell.Layout(ShellLayoutNames.ScoreScreen, "ScoreScreen.skirmish", ScoreScreenLayout.Prepare))
     {
         _result = result;
+        W("ListboxWarschoolAdvice").ListBox!.IsReadOnly = true;
         Tree.Register("ScoreScreenSystem", OnSystem);
         Tree.Register("ScoreScreenInput", OnInput);
 
@@ -62,14 +63,12 @@ public sealed class ScoreScreenScreen : ShellScreen
         Transitions?.SetGroup("ScoreScreenShow");
     }
 
-    /// <summary>The panel "Tactical Analysis" (<c>ListboxWarschoolAdvice</c>, <see cref="TacticalAdvice"/>); the panel's title stands on the list's first lines in the layout.</summary>
+    /// <summary>The panel "Tactical Analysis" (<c>ListboxWarschoolAdvice</c>, <see cref="TacticalAdvice"/>); the list scrolls (<see cref="ScoreScreenLayout"/>) and lies under the panel's title.</summary>
     private void ShowTacticalAnalysis(MatchAnalysis analysis)
     {
         var list = W("ListboxWarschoolAdvice");
         var measure = Tree.Services.TextMeasure;
         var width = UiGadgetGeometry.ListContent(list).Width - 2 * list.Transform.X.Length(UiGadgetGeometry.TextInset);
-        if (!Shell.Skin.IsModern)
-            for (var line = 0; line * UiGadgetGeometry.RowHeight(list) < W("StaticTextWarSchool").Rect.Bottom - list.Rect.Y; line++) list.AddListRow(new UiListRow(string.Empty));
         foreach (var advice in TacticalAdvice.For(analysis, null, Text))
             foreach (var line in CnCNew.Ui.Rendering.UiSentenceLayout.Layout(advice, list.Font, measure, width, false).Lines)
                 list.AddListRow(new UiListRow(line.Text));

@@ -18,6 +18,8 @@
   <ItemGroup>
     <Compile Include="**/*.cs" Exclude="bin/**;obj/**" />
     <!-- The client's UI/rendering classes are internal; link its sources (everything but its own Program.cs) instead of referencing the assembly. -->
+    <!-- The score screen's fixture is shared with the game tests. -->
+    <Compile Include="../../tests/CnCNew.Game.Tests/ScoreScreenFixture.cs" Link="ScoreScreenFixture.cs" />
     <Compile Include="../../src/CnCNew.Client.Stride/**/*.cs" Exclude="../../src/CnCNew.Client.Stride/Program.cs;../../src/CnCNew.Client.Stride/bin/**;../../src/CnCNew.Client.Stride/obj/**" />
   </ItemGroup>
   <ItemGroup>

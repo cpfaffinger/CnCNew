@@ -119,6 +119,14 @@ public sealed class GameShell
         return layout;
     }
 
+    /// <summary>A shipped layout that a screen changes first (<paramref name="prepare"/>, given whether the skin is the modern one) and then has derived for the skin; made once per skin and <paramref name="key"/>.</summary>
+    internal CnCNew.Ui.Wnd.WndLayout Layout(string name, string key, Func<CnCNew.Ui.Wnd.WndLayout, bool, CnCNew.Ui.Wnd.WndLayout> prepare)
+    {
+        var cacheKey = (Skin.Name, key);
+        if (!_derivedLayouts.TryGetValue(cacheKey, out var layout)) _derivedLayouts[cacheKey] = layout = Skin.Derive(prepare(Layouts.Get(name), Skin.IsModern), Layouts.HeaderTemplates);
+        return layout;
+    }
+
     /// <summary>
     /// Builds the menus again in the current skin: the main menu, and over it the options when <paramref name="withOptions"/> (where a skin chosen in the options
     /// leaves the person). Only while the menus are shown.

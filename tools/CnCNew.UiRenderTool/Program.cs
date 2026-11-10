@@ -19,6 +19,8 @@ var fontAudit = args.Contains("--font-audit", StringComparer.OrdinalIgnoreCase);
 // --skins: only the scenes of both interface skins and their readability check (docs/UI-MODERN.md section 9, R3); exit code 1 when the modern skin misses a threshold.
 var skins = args.Contains("--skins", StringComparer.OrdinalIgnoreCase);
 var hudOnly = args.Contains("--hud", StringComparer.OrdinalIgnoreCase);
+// --score: only the score screen (the end screen) in both skins at four sizes and three text sizes, for two and eight players.
+var scoreOnly = args.Contains("--score", StringComparer.OrdinalIgnoreCase);
 var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() switch
 {
     "gdi" => UiFontBackend.Gdi,
@@ -30,7 +32,7 @@ var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() 
 var rate = GetArgument(args, "--tick-rate") is { } rateText
     ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, CultureInfo.InvariantCulture))
     : GameData.DefaultSessionRate;
-using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate) { SkinsOnly = skins, HudOnly = hudOnly };
+using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate) { SkinsOnly = skins, HudOnly = hudOnly, ScoreOnly = scoreOnly };
 game.Run();
 return game.Failures == 0 ? 0 : 1;
 
@@ -62,6 +64,8 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
     public bool SkinsOnly { get; init; }
 
     public bool HudOnly { get; init; }
+
+    public bool ScoreOnly { get; init; }
 
     protected override void Initialize()
     {
@@ -101,6 +105,11 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
                 HudSelectionScenes.Capture(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
                 HudSelectionScenes.CaptureMarkers(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
                 HudSelectionScenes.CaptureConstruction(_data!, _renderer!.TextMeasure, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
+            }
+            else if (ScoreOnly)
+            {
+                var manifest = new List<string>();
+                Failures += ScoreScenes.Capture(_data!, _renderer!.TextMeasure, outputDirectory, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
             }
             else if (SkinsOnly)
             {

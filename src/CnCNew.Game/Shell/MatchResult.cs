@@ -17,6 +17,10 @@ public sealed class PlayerTally
     public int BuildingsDestroyed { get; internal set; }
     public long Resources { get; internal set; }
 
+    /// <summary>A tally with the seven counters of the score screen (tools and tests that show a result without playing a match).</summary>
+    public static PlayerTally Of(int unitsBuilt, int unitsLost, int unitsDestroyed, int buildingsBuilt, int buildingsLost, int buildingsDestroyed, long resources)
+        => new() { UnitsBuilt = unitsBuilt, UnitsLost = unitsLost, UnitsDestroyed = unitsDestroyed, BuildingsBuilt = buildingsBuilt, BuildingsLost = buildingsLost, BuildingsDestroyed = buildingsDestroyed, Resources = resources };
+
     /// <summary><c>getTotalUnitsBuilt</c> with the honors' masks: scored vehicles that are no aircraft, and scored aircraft.</summary>
     public int VehiclesBuilt { get; internal set; }
 

@@ -74,6 +74,7 @@ public sealed partial class UiWindowTree
         if (_grab is not null)
         {
             if (_grab.Slider is { Dragging: true }) SetSliderFromPointer(_grab, x, y);
+            if (_grab.ListBox is { BarDragging: true }) ScrollListToPointer(_grab, y);
             return true;
         }
         if (target != _hover)
@@ -192,6 +193,7 @@ public sealed partial class UiWindowTree
         }
         if (button != UiMouseButton.Left) return target is not null;
         _grab = null;
+        if (grabbed?.ListBox is { } scrolled) scrolled.BarDragging = false;
         if (grabbed is null) return target is not null;
         // The grab window gets the up only when the pointer is still inside it (winProcessMouseEvent, GWM_LEFT_UP).
         var inside = grabbed.HitRect.Contains(x, y);
@@ -232,6 +234,7 @@ public sealed partial class UiWindowTree
     public void PointerLeft()
     {
         if (_grab?.Slider is { } slider) slider.Dragging = false;
+        if (_grab?.ListBox is { } scrolled) scrolled.BarDragging = false;
         _grab = null;
         _pointerInside = false;
         if (_hover is null) return;
@@ -266,6 +269,14 @@ public sealed partial class UiWindowTree
         radio.SetChecked(true);
     }
 
+    /// <summary>The list's top row for a pointer at height <paramref name="y"/> on the scroll bar's track (a click on the track and a drag of the thumb).</summary>
+    private static void ScrollListToPointer(UiWindow window, int y)
+    {
+        var track = UiGadgetGeometry.ScrollTrack(window);
+        var maxTop = UiGadgetGeometry.MaxTopIndex(window);
+        if (track.Height > 0) window.ListBox!.TopIndex = Math.Clamp((int)((long)(y - track.Y) * (maxTop + 1) / track.Height), 0, maxTop);
+    }
+
     private void ListMouseDown(UiWindow window, int x, int y, UiMouseButton button)
     {
         var list = window.ListBox!;
@@ -276,11 +287,12 @@ public sealed partial class UiWindowTree
             else if (UiGadgetGeometry.DownButton(window).Contains(x, y)) list.TopIndex = Math.Min(maxTop, list.TopIndex + 1);
             else
             {
-                var track = UiGadgetGeometry.ScrollTrack(window);
-                if (track.Height > 0) list.TopIndex = Math.Clamp((int)((long)(y - track.Y) * (maxTop + 1) / track.Height), 0, maxTop);
+                ScrollListToPointer(window, y);
+                list.BarDragging = true;
             }
             return;
         }
+        if (list.IsReadOnly) return;
         var content = UiGadgetGeometry.ListContent(window);
         var row = list.TopIndex + (y - content.Y) / UiGadgetGeometry.RowHeight(window);
         if (row >= list.Rows.Count) row = -1;

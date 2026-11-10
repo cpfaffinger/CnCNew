@@ -21,6 +21,12 @@ public sealed class UiListBoxState(WndListBoxData data)
     public int SelectedIndex => _selection.Count > 0 ? _selection.Min : -1;
     public int TopIndex { get; internal set; }
 
+    /// <summary>A list that only shows text (the score screen's advice): a click on a row selects nothing, the wheel and the scroll bar still work.</summary>
+    public bool IsReadOnly { get; set; }
+
+    /// <summary>A left press on the scroll bar's track is held: the thumb follows the pointer until the button goes up.</summary>
+    public bool BarDragging { get; internal set; }
+
     /// <summary>
     /// Adds a row. A full list (<c>LENGTH</c>) drops its first row when <c>AUTOPURGE</c> is set and rejects the row
     /// otherwise (returns -1).
