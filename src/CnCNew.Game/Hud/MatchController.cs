@@ -897,7 +897,7 @@ public sealed partial class MatchController
             if (!Input.Selection.Picker.TryProject(view, unit, out var projected)) continue;
             var bar = MathF.Max(26f, projected.Radius * (drawable.IsStructure ? 1.1f : 1.7f));
             var (barLeft, barTop) = (projected.Center.X - bar / 2f, projected.Center.Y - MathF.Max(projected.Radius, 6f) - 11f);
-            if (building) labels.Add(new UnitLabel(unit.Id, new Vector2(projected.Center.X, projected.Center.Y), _assets.Text.Format("CONTROLBAR:UnderConstructionDesc", (decimal)(unit.ConstructionShare.ToDecimal() * 100m))));
+            if (building) labels.Add(new UnitLabel(unit.Id, new Vector2(projected.Center.X, projected.Center.Y), ConstructionText(unit)));
             if (unit.EffectivelyDead || unit.Template.IsKindOf("IGNORED_IN_GUI")) continue;
             if (enthusiastic && Animations.FrameAt((bonuses & SubliminalBonus) != 0 ? "Subliminal" : "Enthusiastic", _clockMs, unit.Id.Value) is { } frame)
             {
@@ -1073,6 +1073,7 @@ public sealed partial class MatchController
         if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
         if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
         if (window.Name == "ControlBar.wnd:PopupCommunicator") return CommunicatorTooltip();
+        if (window.Name == CancelConstructionWindow) return CancelConstructionInfo is { } cancel ? _descriptions.Plain(cancel).ToTooltip() : null;
         if (GeneralsButton(window.Name) is { } science) return _descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null;
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
         if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;
@@ -1334,6 +1335,28 @@ public sealed partial class MatchController
         }
     }
 
+    private const string CancelConstructionWindow = "ControlBar.wnd:ButtonCancelConstruction";
+
+    /// <summary>The text under a building's percent: <c>CONTROLBAR:UnderConstructionDesc</c> with the share of its construction (<c>updateConstructionTextDisplay</c>).</summary>
+    private string ConstructionText(Entity site)
+        => _assets.Text.Format("CONTROLBAR:UnderConstructionDesc", (decimal)(site.ConstructionShare.ToDecimal() * 100m));
+
+    /// <summary>
+    /// <c>ControlBar::populateUnderConstruction</c>: the cancel button wears the cameo of <c>Command_CancelConstruction</c> and draws as an image with overlays
+    /// (<c>WIN_STATUS_USE_OVERLAY_STATES</c>), and the description window says how far the building is.
+    /// </summary>
+    private void RefreshUnderConstruction(Entity site)
+    {
+        if (_tree.FindByName(CancelConstructionWindow) is { } cancel)
+        {
+            cancel.SetOverlayStates(true);
+            cancel.SetEnabledImage0(CancelConstructionInfo is { ButtonImage.Length: > 0 } info && _assets.Images.TryGet(info.ButtonImage, out _) ? info.ButtonImage : null);
+        }
+        _tree.FindByName("ControlBar.wnd:UnderConstructionDesc")?.SetText(ConstructionText(site));
+    }
+
+    private CnCNew.Presentation.Input.CommandButtonInfo? CancelConstructionInfo => Input.CommandBar!.Catalog.TryGetButton("Command_CancelConstruction", out var info) ? info : null;
+
     private void RefreshDynamicWindows()
     {
         var view = CommandBar;
@@ -1347,8 +1370,7 @@ public sealed partial class MatchController
         // InGameUI::updateIdleWorker: the button is enabled while the local player has an idle worker, disabled otherwise.
         _tree.FindByName("ControlBar.wnd:ButtonIdleWorker")?.SetEnabled(Input.Selection.IdleWorkerCount > 0);
         RefreshOclTimer(view);
-        var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
-        if (view.Context == CommandBarContext.UnderConstruction && Match.World.FindEntity(view.Producer) is { } site) underConstructionDesc?.SetText(site.Template.Name);
+        if (view.Context == CommandBarContext.UnderConstruction && Match.World.FindEntity(view.Producer) is { } site) RefreshUnderConstruction(site);
 
         for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
         {

@@ -63,6 +63,11 @@ public sealed partial class UiWindowTree
         private void FlatButton(UiWindow window)
         {
             var set = Set(window, WndDrawDataKind.Enabled);
+            if ((window.Status & WndStatus.UseOverlayStates) != 0)
+            {
+                OverlayButton(window, set);
+                return;
+            }
             Box(window.Rect, set[window.IsSelected ? 1 : 0]);
             // The hilited or pressed button carries the accent as a bar at its left edge.
             if (StateOf(window) == DrawState.Hilite || window.IsSelected)

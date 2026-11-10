@@ -135,6 +135,14 @@ public sealed class CommandButtonDescription
         return new CommandButtonTexts(name, cost, description);
     }
 
+    /// <summary>The popup of a button that is no slot of the bar (the cancel button of a structure under construction): its name and its description, nothing else.</summary>
+    public CommandButtonTexts Plain(CommandButtonInfo info)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+        return new CommandButtonTexts(info.TextLabel.Length > 0 ? _text.Get(info.TextLabel).Replace("&", string.Empty, StringComparison.Ordinal) : string.Empty,
+            null, info.DescriptLabel.Length > 0 ? _text.Get(info.DescriptLabel) : string.Empty);
+    }
+
     /// <summary>The money window's popup (<c>CONTROLBAR:Money</c>, <c>CONTROLBAR:MoneyDescription</c>).</summary>
     public CommandButtonTexts Money() => new(_text.Get("CONTROLBAR:Money"), null, _text.Get("CONTROLBAR:MoneyDescription"));
 

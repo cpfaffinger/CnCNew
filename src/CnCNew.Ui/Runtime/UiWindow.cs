@@ -105,6 +105,9 @@ public sealed class UiWindow
         if (hidden) Tree.OnWindowHidden(this);
     }
 
+    /// <summary><c>winSetStatus(WIN_STATUS_USE_OVERLAY_STATES)</c>: the button is drawn as one image with the pushed and hilited overlays over it (<c>W3DGadgetPushButtonImageDrawOne</c>), never as three pieces.</summary>
+    public void SetOverlayStates(bool overlay) => Status = overlay ? Status | WndStatus.UseOverlayStates : Status & ~WndStatus.UseOverlayStates;
+
     public void SetEnabled(bool enabled)
     {
         Status = enabled ? Status | WndStatus.Enabled : Status & ~WndStatus.Enabled;

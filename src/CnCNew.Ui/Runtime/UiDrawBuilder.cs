@@ -125,6 +125,12 @@ public sealed partial class UiWindowTree
             var state = StateOf(window);
             var set = Set(window, WndDrawDataKind.Enabled);
             var selected = window.IsSelected;
+            if ((window.Status & WndStatus.UseOverlayStates) != 0)
+            {
+                // W3DGadgetPushButtonImageDraw: a button with overlay states is drawn as one image even when the layout names three pieces.
+                OverlayButton(window, set);
+                return;
+            }
             if ((window.Status & WndStatus.Image) != 0)
             {
                 if (window.Definition.GetDrawData(WndDrawDataKind.Enabled)[5].Image is not null)
@@ -144,6 +150,18 @@ public sealed partial class UiWindowTree
             else Box(window.Rect, set[selected ? 1 : 0]);
             // drawButtonText: wrap at the window width, no clip region.
             Text(window, window.Rect, UiTextAlignment.Center, window.Rect.Width, true, tree.Viewport.Bounds);
+        }
+
+        /// <summary>
+        /// <c>W3DGadgetPushButtonImageDrawOne</c> with <c>WIN_STATUS_USE_OVERLAY_STATES</c>: the enabled image (a command button's cameo), and over it the pushed or hilited
+        /// overlay of an enabled button. No frame, no fill and no text of the layout.
+        /// </summary>
+        private void OverlayButton(UiWindow window, WndDrawDataSet set)
+        {
+            if (window.DrawImage(set, 0) is { } image) Image(image, Offset(window, window.Rect));
+            if (!window.IsEnabled) return;
+            var overlay = window.IsSelected ? "Cameo_push" : window.IsHilited ? "Cameo_hilited" : null;
+            if (overlay is not null) Image(overlay, window.Rect);
         }
 
         private void DrawCheckBox(UiWindow window)
