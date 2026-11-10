@@ -8,20 +8,14 @@ selectable computer opponents, and multiplayer skirmishes through dedicated serv
 > local game folder from *your* copy of the English Steam version of *Command & Conquer Generals – Zero Hour*; your Steam installation is only read, never changed.
 > Without that copy there is nothing to play. See [Legal matters](#legal-matters).
 
-<!--
-SCREENSHOTS (not enabled: the pictures show the original game's art and so must not be committed - the owner decides whether and where they are published).
-To enable them: make the pictures with `pwsh scripts/capture-readme-screenshots.ps1` (it writes outside the repository), copy them to docs/screenshots/ (git-ignored),
-check them, publish them on a host of your choice, and replace the comment markers around the block below with real image links.
-
 ## Screenshots
 
 | | |
 |---|---|
-| ![The main menu in the modern skin](docs/screenshots/main-menu.png) | ![The skirmish setup](docs/screenshots/skirmish-setup.png) |
-| ![In a match: world and command bar in the modern skin](docs/screenshots/match-hud.png) | ![The observer: ticker, player views and research tab](docs/screenshots/observer.png) |
-| ![Options and More options](docs/screenshots/options.png) | ![The replay browser](docs/screenshots/replay-browser.png) |
-| ![The analysis of a match](docs/screenshots/match-analysis.png) | |
--->
+| ![In a match: the world and the command bar in the modern skin](docs/screenshots/match-hud.jpg) | ![The observer: score bar, event ticker, player views and the research tab](docs/screenshots/observer.jpg) |
+| ![The skirmish setup, with the AI, advanced and debug options](docs/screenshots/skirmish-setup.png) | ![More options: skin, control bar opacity, selection markers, health bars, hotkeys](docs/screenshots/options.png) |
+
+*The pictures show the original game's art, which belongs to its owners; they are here to show the interface of CnCNew and nothing else (see [Legal matters](#legal-matters)).*
 
 ## Contents
 
@@ -237,7 +231,7 @@ simulation is deterministic (fixed point, no wall clock, no ambient randomness) 
 | `baselines/` | checked-in yardsticks: compatibility baseline, input and reference manifests, descriptions of the supported game and patch versions (only paths, sizes, checksums) |
 | `docs/` | documentation; entry point is [docs/README.md](docs/README.md) |
 
-Not in the repository and ignored by Git: `game/` (developer installation), `.local/` (local working data), `references/` (foreign source code for reading), `docs/screenshots/`,
+Not in the repository and ignored by Git: `game/` (developer installation), `.local/` (local working data), `references/` (foreign source code for reading),
 `bin/`, `obj/`. The plan and the history of the work: [docs/plan/PROGRAMME.md](docs/plan/PROGRAMME.md) (four stages: port, engine, changes, multiplayer). The code is written
 predominantly by coding agents under the direction of the project owner; [CLAUDE.md](CLAUDE.md) (with the pointer [AGENTS.md](AGENTS.md)) is their binding working instruction and
 the most precise record of the measured state.

@@ -3,10 +3,9 @@
     Makes the pictures the public README can show (the modern skin), into a directory OUTSIDE the repository.
 
 .DESCRIPTION
-    THE PICTURES MUST NOT ENTER THE REPOSITORY. They show the original game's art (menus, command bar, cameos, units, terrain); CLAUDE.md "Git rules" forbids
-    committing anything exported from the game, and whether to publish such pictures anywhere is the project owner's legal decision, not a build step.
-    docs/screenshots/ is git-ignored for the case that someone copies the pictures there to look at the README with them; the README holds the image links only
-    inside an HTML comment (README.md, "Screenshots").
+    The pictures show the original game's art (menus, command bar, cameos, units, terrain). CLAUDE.md "Git rules" forbids committing anything exported from the game
+    EXCEPT these README screenshots, which the project owner decided on 10 November 2026 may be committed to docs/screenshots/. The script still writes outside the
+    repository (a refusal otherwise) so that nothing is staged by accident: look at each picture, then copy the ones you use to docs/screenshots/ by hand.
 
     Produces <OutDir>/<name>.png for the names the README's comment block uses:
         main-menu, skirmish-setup, options, match-hud, replay-browser, match-analysis, observer
@@ -42,7 +41,7 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 if (($OutDir + [IO.Path]::DirectorySeparatorChar).StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) {
-    Write-Host "Refused: $OutDir lies inside the repository. The pictures show the game's art and never belong in it; choose a directory outside."
+    Write-Host "Refused: $OutDir lies inside the repository. Make the pictures outside it, look at them, and copy the ones the README uses to docs/screenshots/ by hand."
     exit 1
 }
 if (-not (Test-Path -LiteralPath (Join-Path $ContentDir 'content-manifest.json'))) {

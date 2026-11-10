@@ -39,7 +39,7 @@ Item 2: every pairing either the same at 30 and 60 Hz to its end or its first di
 
 ## Bottlenecks and showstoppers
 
-A manifest measurement is an hour of both cores: measure once per phase after the last change of the simulation and say so. Remove worktrees only through `C:/wf45bin/pt/wtremove.ps1`. Tell agents to use the junction, never to copy `game/`. The owner allows commits and pushes in between, so he can test sooner: push a finished, tested piece, do not wait for the whole phase. Screenshots of the game are not committed (the original's art).
+A manifest measurement is an hour of both cores: measure once per phase after the last change of the simulation and say so. Remove worktrees only through `C:/wf45bin/pt/wtremove.ps1`. Tell agents to use the junction, never to copy `game/`. The owner allows commits and pushes in between, so he can test sooner: push a finished, tested piece, do not wait for the whole phase. The README's four screenshots are the only capture of the game in the repository (the owner's decision of 10 November 2026): regenerate them with `scripts/capture-readme-screenshots.ps1` when the interface changes, nothing else of the game is committed.
 
 ## Out of scope
 
