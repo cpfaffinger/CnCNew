@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How the project works, how to build it
+    url: https://github.com/cpfaffinger/CnCNew#readme
+    about: The README explains what the game is, what you need and where its limits are.

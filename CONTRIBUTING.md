@@ -51,6 +51,10 @@ the pull request what was run. The complete list of test programs, audits and ma
 9. New NuGet dependencies only with a justification; numbers in the documentation are measured, not taken over.
 10. Keep the line endings of each file (`git ls-files --eol <file>`; `.gitattributes` sets `* -text`).
 
+## Issues
+
+Every finding - a defect, a deviation from the original game, a wish - is a GitHub issue, opened before it is fixed. Give it a short title, say what you saw (and on which version: the launcher shows it, a source build `git rev-parse --short HEAD`), what you expected, and how to reproduce it. Attach logs (`--support-bundle FILE` makes a ZIP that holds no key and no file of the game) but never files, pictures or texts taken from the game. A commit that resolves an issue ends with `Fixes #N`; one that only works on it with `Refs #N`.
+
 ## Style and commits
 
 - Everything is English: identifiers, comments, commit messages, documentation (`docs/`, README), script help and

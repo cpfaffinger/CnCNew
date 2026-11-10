@@ -1,0 +1,18 @@
+name: A wish
+description: Something the game could do that it does not do yet.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: wish
+    attributes:
+      label: What would you like
+      description: Describe the feature and why it would help when playing. Please do not attach files, pictures or texts taken from the game.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the launcher; for a source build, the output of `git rev-parse --short HEAD`.
+    validations:
+      required: false
