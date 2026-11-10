@@ -164,3 +164,28 @@ Build `9f04c34a` on a handheld-sized test PC; 23 findings, each read in the orig
 | 12 | The supply drop zone shows no countdown and no planes come | a chute dropped its inert rider, the crates were never taken; the bar knew no `OCLUpdate` timer | `RealSupplyDropZoneDropsItsCrates`, the countdown on the bar |
 | 14 | The USA Chinooks do not gather | the simulation worked; the pointer did not count `ChinookAIUpdate` as a supply carrier | the dock pointer and the right-click order |
 | 15 | The particle cannon's clock runs without power | the simulation paused the power; the superweapon list and the cameo clock read the raw ready frame | `getReadyFrame`/`getPercentReady` with a running pause |
+
+## The owner's playtest of 9 November 2026
+
+Build `92e16682`; 20 findings and the wish for a public launcher, each read in the original where it has the feature, each fixed or named; **no human has seen the fixes.** `docs/SIMULATION-CORE.md` §89 has the causes.
+
+| # | Finding | Cause | Fix |
+|---|---|---|---|
+| 1 | Resolutions larger than the screen can be chosen | the adapter's modes were offered whatever the screen | none wider or taller than the virtual desktop (windowed) or the display (full screen) |
+| 2 | The Debug option general points gives no level | the points were purchase points | skill points through `AddSkillPoints`; the level rises with them |
+| 3 | Option: allow buildings in the fog of war | | advanced option "Build in the fog of war" (match description 5, skirmish save 5, protocol 10) |
+| 4 | The queue-full marker is badly placed | floating text | pip cells in the selection plate |
+| 5 | The bar background should be a little transparent, adjustable, default 80 % | | `display.barOpacity` on More options (schema 8) |
+| 6 | The train kills a dozer standing above the tunnel | no height test in the train's collision | F-171 |
+| 7 | The space bar should cycle the history of events | only the last event was kept | 32 events, 3 s reset, Shift+Space back |
+| 8 | A repairing dozer cannot be given a build command | the bar asked "any task" | only a building in hand greys the buttons |
+| 9 | Units colliding (dozers) circle for ever | no donut timer, a reversing unit counted as blocked | F-173 |
+| 10 | Selection markers and health bars: original look, the current look, a modern look; bar modes and heights | | schema 8: `markerStyle`, `healthBarMode`, `healthBarHeight` |
+| 11 | USA built no Chinooks again | a USA player without a supply centre and under 2,000 credits never got one | sells a building after two minutes |
+| 12 | The fuel bomb still does not work | the gas was destroyed by the building under it | F-174 |
+| 13 | The Cannon Gunship: no targeting pointer, the fire point does not wander | the gunship was never selected | F-177 |
+| 14 | A Chinook gathers once and stands; home base by click | no wake-up after a player's order | F-176, rule fix 29 |
+| 15 | The Chinook's net animation is cut off | the client never waited for the state to finish | `StateWaitFollower` |
+| 16 | Units sent to guard a place should fight on the way | the original's walk looks only around the post | rule fix 28 |
+| 17 | Trees stay under a new building, the ground is not flattened | | F-172 |
+| 18 | A public launcher, a release pipeline, a public README | | §89.3 |

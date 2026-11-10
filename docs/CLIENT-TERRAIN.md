@@ -231,3 +231,7 @@ Screenshots were in the scratchpad of the session (`…/scratchpad/s1/`), not in
   `FogTexture`/`FogUvScale` are ready, but nobody consumes them so far – objects in the fog are
   not darkened.
 - Roads (map road objects) are drawn by the layer as alpha-blended strips on the terrain (`docs/CLIENT-ROADS.md`); bridges (`FLAG_BRIDGE_POINT*`) are not roads and are not drawn here.
+
+## Phase 65: a building lowers the ground
+
+`TerrainRenderModel.Reshape` remakes only the chunks whose heights a building's site changed (a full `Build` on the lowered heights is the test's yardstick), `TerrainHeightSampler.ReplaceHeights` serves the camera and the cursor, and `TerrainLayer` replaces the changed chunk buffers; `LiveGame.TakeChangedTerrainChunks` hands them over. The trees, props and fluff in the footprint leave the scene. Roads, decals, shadows and the minimap's picture are not rebuilt.

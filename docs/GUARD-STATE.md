@@ -272,3 +272,7 @@ retaliation (**B**/D).
 ## Phase 62: what a guard may attack
 
 The victim filter is `getAbleToAttackSpecificObject` with `CMD_FROM_AI`: no `UNATTACKABLE`, `MASKED` or `NO_ATTACK_FROM_AI` object. A vehicle's hulk is `HULK UNATTACKABLE` with default armour, so a sniper's round "hurts" it and only this check keeps a guard off it (a real Pathfinder walked 27 units at an `AmericaVehicleHumveeDeadHull`; tanks, Humvees, a dozer, a truck, a Comanche and a power plant were never the problem). `IsGuardVictim` and the guard look in `SimulationWorld.Guard.cs` apply the three tests, for the victim search and for the chase that follows (`GuardIgnoresWhatItCannotHurt`, `RealGuardIgnoresWhatItCannotHurt`).
+
+## The first walk (rule fix 28, Phase 65)
+
+In the original the walk to a guard post (`AIGuardReturnState`) looks every 30 frames for enemies within the guard range of the post itself and answers an attacker only in INNER and RETURN, so a unit walks past whatever stands beside its path. With `guard-engages-on-the-way` the first walk after the order (`OnTheWay`) scans at the attack-move rate with the unit's weapon range, fights what it finds in the new guard state `Way` for at most 300 frames and then goes on to the post; after its arrival the normal guard applies. The flag is saved only while set.

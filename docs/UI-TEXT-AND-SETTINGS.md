@@ -212,3 +212,7 @@ of any; below 800 × 600 it is raised, a smaller desktop gives 800 × 600 with a
 ## Phase 64: schema 7 and the hotkeys
 
 **Schema 7** (the owner's playtest of 8 November 2026): `controls.hotkeys` maps an action name to `MODIFIERS KEY TRANSITION` or `UNBOUND` and holds **only what differs from the shipped `CommandMap.ini`**; the migration step 6 to 7 adds an empty object. A non-string entry is reported and dropped. Nothing is written to `game/` or to the installation's `CommandMap.ini`. The match starts from the shipped keys plus these overrides and updates a running match when the settings are saved (`MatchController.ApplyHotkeys`).
+
+## Phase 65: schema 8
+
+**Schema 8** (the owner's playtest of 9 November 2026): the migration step 7 to 8 adds `display.barOpacity` (20 to 100, default 80; the modern control bar's band and the wells behind its buttons), `display.markerStyle` (`original`, `extended`, `modern`; default `extended`, the look before the setting), `display.healthBarMode` (`selectedOnly` the default, `belowFull`, `always`: a bar for every selectable object in view, or only the damaged ones) and `display.healthBarHeight` (`narrow`, `normal`, `wide`: 3, 5 or 8 pixels of fill, modern 3, 4 or 6). They are set on More options; buttons, cameos, the radar and text stay opaque at any opacity.

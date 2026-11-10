@@ -1,5 +1,5 @@
 > **Stage:** 1 - Port · **Milestone:** S1-M11 · **Phase:** 65
-> **Status:** current (written 9 November 2026 at the end of Phase 64)
+> **Status:** done by machine (9 to 10 November 2026; `docs/SIMULATION-CORE.md` §89; written 9 November 2026 at the end of Phase 64)
 > **Predecessor:** HANDOFF-PHASE64.md · **Results in:** `docs/SIMULATION-CORE.md` §89, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -56,3 +56,7 @@ Tier 4 at the final state; every item built or named with its reason.
 ## Final report and N+1
 
 Numbers with commit hashes, the tier that ran, what was not run, what no human has seen; the registers of `docs/plan/` brought up to date; the next brief written.
+
+## Result (10 November 2026)
+
+Done by machine, on one machine; no human has seen or heard any of it. The owner's playtest of build `92e16682` (item 3) arrived the same day and took the phase: 18 findings, the public launcher and the release pipeline (§89). Items 1 (F-168, F-169), 2 (the AI's last money on unusable carriers), 4 (the minimap's triangle, `defect`, the script attack without a shot limit, Esc and key-up bindings) and 5 (`scripts/perf-profile.ps1`, the clean room with a real download, the campaign checks, the survey on the final state) were not begun and move to Phase 66.

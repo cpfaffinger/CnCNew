@@ -1368,3 +1368,7 @@ comparison of the base data, so a member need not have compiled anything to ente
 ## 26. The room carries the debug options (Phase 62) - protocol version 9
 
 `RoomSettings` carries the three debug options of a match (`MatchDebugOptions`: `BuildTimePercent`, `NeutralRespawnSeconds`, `StartingGeneralPoints`; docs/SIMULATION-CORE.md section 86.8) and validates their ranges; only the host changes them, a member sees them. The match description's encoding goes from 3 to 4 and the skirmish save from 3 to 4; `CommandTypes.Version`, the replay format and `WorldSnapshot` do not change. The default values (100 per cent, off, 0) change nothing of a match. The AI options of the setup (docs/GAME-SHELL.md) use only fields the room carried already: a room has no Classic engine, a match on a server is the built-in AI's.
+
+## Phase 65: protocol version 10
+
+`RoomSettings` carries the advanced option "Build in the fog of war" (a flag; the match description is encoding 5 and a skirmish save is version 5). A client of protocol 9 is refused with a version message.

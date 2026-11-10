@@ -271,3 +271,7 @@ savegame: it holds the match description and every command, and is played from t
 The two meet in the playback - its checkpoints are the session state of `SkirmishMatchSession.Save` (§8), kept in memory while a replay is played, and a seek restores one.
 A skirmish continued from a savegame is recorded from the tick it was saved at; its replay holds the whole match (the session's recording is part of the save) and plays from
 tick 0, and its recorded hashes and counters begin at the saved tick. Missions are not recorded (their truth is the state, §4).
+
+## Phase 65: skirmish save 5
+
+`SkirmishSaveGame` is version 5 and the match description encoding 5 (the flag "Build in the fog of war"); a world that has cleared a building site also stores its `ClearedSite` log (`docs/SIMULATION-CORE.md` §89.1; written only when a building was placed). Saves and replays of version 4 are refused.
