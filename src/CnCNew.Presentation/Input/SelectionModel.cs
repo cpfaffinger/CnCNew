@@ -488,7 +488,7 @@ public sealed class SelectionModel
     }
 
     private bool IsIdleWorker(SimulationWorld world, Entity entity)
-        => entity.Owner == LocalPlayer && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Modules.Any(module => module is AIUpdateInterface) && world.IsAiIdle(entity);
+        => entity.Owner == LocalPlayer && world.IsIdleDozer(entity);
 
     /// <summary>
     /// <c>InGameUI::selectNextIdleWorker</c>: with nothing or several things selected, the first idle worker; with one selected, the idle worker after it (the first after the

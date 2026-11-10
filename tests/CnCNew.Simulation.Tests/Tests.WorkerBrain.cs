@@ -77,11 +77,16 @@ static partial class Tests
             long bored = -1, healing = -1, repaired = -1, truck = -1, delivered = -1, dozer = -1;
             var docked = false;
             var sentAway = false;
+            var idleAsDozer = false;
             for (var frame = 0; frame < 2_000 && dozer < 0; frame++)
             {
                 for (var tick = 0; tick < factor; tick++)
+                {
                     foreach (var item in world.Step().Events)
                         if (item.Kind == SimEventKind.SupplyDeposited && delivered < 0) delivered = Frame();
+                    if (brains.ActsAsSupplyTruck) Check.That(!world.IsIdleDozer(laborer), $"{rate}: tick {world.Tick}: a worker that acts as a supply truck is not on the idle worker list.");
+                    else if (world.IsAiIdle(laborer)) idleAsDozer = true;
+                }
                 if (bored < 0 && worker.HasBuilderTask) bored = Frame();
                 if (healing < 0 && bench.Body!.Health > Fixed.FromInt(50)) healing = Frame();
                 if (repaired < 0 && bored >= 0 && bench.Body!.Health == bench.Body.MaxHealth) repaired = Frame();
@@ -109,6 +114,7 @@ static partial class Tests
             Check.That(bored > 0 && repaired > bored, $"{rate}: the idle worker repairs the bench by itself ({bored}, {repaired}).");
             Check.That(truck > repaired && delivered > truck, $"{rate}: sent to the warehouse it acts as a supply truck and delivers ({truck}, {delivered}).");
             Check.That(dozer > 0, $"{rate}: sent away it is a dozer again ({dozer}).");
+            Check.That(idleAsDozer && world.IsIdleDozer(laborer) == world.IsAiIdle(laborer), $"{rate}: a worker that acts as a dozer and stands idle is on the idle worker list.");
             // The bench is full a frame later above 30 Hz (the heal slice per frame is rounded): the steps of the two brains are compared from where it is full.
             Check.That(healing == HealingAt30(healing), $"{rate}: the repair begins in the frame it begins at 30 Hz ({healing}, F-70).");
             var steps = new List<long> { bored, truck - repaired, delivered - truck, dozer - delivered };

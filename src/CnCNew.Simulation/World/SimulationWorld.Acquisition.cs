@@ -85,6 +85,14 @@ public sealed partial class SimulationWorld
         => AiOf(entity) is not { } ai
            || (ai.IsIdle && !ai.HidesIdle && entity.Acquisition is not ({ Victim.IsValid: true } or { AttackMove: true }) && !entity.HasStatus(UsingAbilityBit));
 
+    /// <summary>
+    /// The condition of <c>InGameUI::addIdleWorker</c> (<c>DozerPrimaryIdleState::update</c>, <c>Player::becomingTeamMember</c>): the object's dozer brain stands in its idle state - the AI is idle
+    /// (<see cref="IsAiIdle"/>), so no building, repair, supply run, move or fight is under way - and the object is not dying. A worker whose supply brain is in charge
+    /// (<c>ActAsSupplyTruckState</c>) has left the dozer's idle state (<c>onExit</c> removes it from the list), however idle its AI is between two legs of a run.
+    /// </summary>
+    public bool IsIdleDozer(Entity entity)
+        => !entity.EffectivelyDead && !entity.DestroyRequested && AiOf(entity) is { } ai && ai is not IWorkerBrains { ActsAsSupplyTruck: true } && IsAiIdle(entity);
+
     /// <summary>The unit is on an attack-move (<c>AI_ATTACK_MOVE_TO</c>): marching, or stopped on the way for a fight.</summary>
     public bool IsAttackMoving(Entity entity) => entity.Acquisition is { AttackMove: true };
 
