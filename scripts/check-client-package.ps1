@@ -35,15 +35,15 @@ if ($LASTEXITCODE -ne 0) { Write-Host 'Building the package failed.'; exit 1 }
 $package = Join-Path ([IO.Path]::GetFullPath($OutDir)) 'cncnew-win-x64'
 
 foreach ($needed in 'bin/CnCNew.Client.Stride.exe', 'patcher/CnCNew.AssetTool.exe', 'Install-CnCNew.cmd', 'Start-CnCNew.cmd', 'LICENSE.md', 'NOTICE.md', 'THIRD-PARTY.md', 'README-FIRST.txt',
-                    'bin/coreclr.dll', 'patcher/coreclr.dll', 'bin/hostfxr.dll') {
+                    'bin/coreclr.dll', 'patcher/coreclr.dll', 'bin/hostfxr.dll', 'simcheck/CnCNew.SimTool.exe', 'simcheck/baselines/input-manifest.json', 'simcheck/baselines/reference-manifest.json') {
     if (-not (Test-Path (Join-Path $package $needed))) { Fail "the package lacks $needed" }
 }
 if (-not (Get-ChildItem (Join-Path $package 'licences') -Recurse -File -ErrorAction SilentlyContinue)) { Fail 'the package carries no licence files of its packages' }
-foreach ($program in 'bin', 'patcher') {
+foreach ($program in 'bin', 'patcher', 'simcheck') {
     $config = Get-ChildItem (Join-Path $package $program) -Filter '*.runtimeconfig.json' | Select-Object -First 1
     if (-not $config -or -not ((Get-Content -Raw $config.FullName) -match 'includedFrameworks')) { Fail "$program is not self-contained (its runtimeconfig names no included framework)" }
 }
-if ($failed -eq 0) { Pass 'layout: client, patcher, the two scripts, licence, notice, third-party list and licence files; both programs self-contained' }
+if ($failed -eq 0) { Pass 'layout: client, patcher, simulation check, the two scripts, licence, notice, third-party list and licence files; the three programs self-contained' }
 
 pwsh -NoLogo -NoProfile -File scripts/check-separation.ps1 -Directory $package -List (Join-Path ([IO.Path]::GetFullPath($OutDir)) 'separation.tsv')
 if ($LASTEXITCODE -ne 0) { Fail 'the separation check found original data or a game data format in the package' } else { Pass 'separation: no original data' }
@@ -67,6 +67,10 @@ else {
         if ($process.ExitCode -ne 0) { Fail "the packaged client's smoke test ($($run.Name)) ended with exit code $($process.ExitCode) (log: $OutDir/client-$($run.Name).log)" }
         else { Pass "the packaged client ran its smoke test ($($run.Name))" }
     }
+    # The launcher's optional simulation check, run as the launcher runs it (the quick reference set is left to the launcher: 20 minutes).
+    & (Join-Path $package 'simcheck/CnCNew.SimTool.exe') input-manifest check $content (Join-Path $package 'simcheck/baselines/input-manifest.json') *> (Join-Path $OutDir 'simcheck.log')
+    if ($LASTEXITCODE -ne 0) { Fail "the packaged simulation check found the data different or failed (exit code $LASTEXITCODE, log: $OutDir/simcheck.log)" }
+    else { Pass 'the packaged simulation check finds the data identical to the reference values' }
 }
 
 if ($failed -gt 0) { Write-Host "check-client-package: $failed problem(s); logs in $OutDir"; exit 1 }

@@ -8,6 +8,7 @@
     <OutDir>/cncnew-win-x64:
         bin\            the client (CnCNew.Client.Stride.exe)
         patcher\        the patcher (CnCNew.AssetTool.exe), with the description of the one supported installation built in
+        simcheck\       the launcher's optional simulation check: CnCNew.SimTool.exe and baselines\ (the input and the reference manifest - names, sizes and hashes only)
         Install-CnCNew.cmd   finds the Steam installation, checks it and exports the content into game\ beside it (reads the installation only)
         Start-CnCNew.cmd     starts the client with that content
         LICENSE.md, NOTICE.md, THIRD-PARTY.md, licences\ (the licence files the packages ship), README-FIRST.txt
@@ -38,6 +39,12 @@ if ($LASTEXITCODE -ne 0) { Write-Host 'Publishing the client failed.'; exit 1 }
 Write-Host '== Publishing the patcher (win-x64, self-contained)'
 dotnet publish tools/CnCNew.AssetTool -c Release -r win-x64 --self-contained true -o (Join-Path $target 'patcher') -v q --nologo
 if ($LASTEXITCODE -ne 0) { Write-Host 'Publishing the patcher failed.'; exit 1 }
+# The optional check the launcher offers (tools/CnCNew.Launcher.Core/InstallLayout.cs, simcheck\): this machine's simulation against the reference values (issue #283).
+Write-Host '== Publishing the simulation check (win-x64, self-contained)'
+dotnet publish tools/CnCNew.SimTool -c Release -r win-x64 --self-contained true -o (Join-Path $target 'simcheck') -v q --nologo
+if ($LASTEXITCODE -ne 0) { Write-Host 'Publishing the simulation check failed.'; exit 1 }
+New-Item -ItemType Directory -Force -Path (Join-Path $target 'simcheck/baselines') | Out-Null
+Copy-Item baselines/input-manifest.json, baselines/reference-manifest.json -Destination (Join-Path $target 'simcheck/baselines')
 
 Copy-Item LICENSE.md, NOTICE.md, docs/THIRD-PARTY.md -Destination $target
 # The licence and notice files the client's packages ship, beside the list of them (docs/THIRD-PARTY.md).
