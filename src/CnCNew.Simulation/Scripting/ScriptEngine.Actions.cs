@@ -569,7 +569,9 @@ public sealed partial class ScriptEngine
                     return false;
                 }
                 if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target its options allow"); return false; }
-                if (_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target, slot, FireOrigin.Script)).Accepted) return true;
+                // doCommandButtonAtObject: aiAttackObject(obj, getMaxShotsToFire()) - a button without the key goes on until the victim dies (#277).
+                var limit = button.MaxShotsToFire > 0 ? button.MaxShotsToFire : FireWeaponCommand.NoMaxShotsLimit;
+                if (_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target, slot, FireOrigin.Script, limit)).Accepted) return true;
                 Diagnose($"fire-weapon button '{ability}' rejected");
                 return false;
             }

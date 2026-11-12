@@ -11,11 +11,11 @@ namespace CnCNew.Simulation.Commands;
 /// <summary>
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
 /// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
-/// amounts are raw values with 24 fraction bits instead of 16).
+/// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277).
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 27;
+    public const int Version = 28;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -199,7 +199,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), checked((int)reader.Int("slot"))),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target"))),
-                reader.Has("slot") ? checked((int)reader.Int("slot")) : WeaponSlot.Best, reader.Has("origin") ? (FireOrigin)checked((byte)reader.Int("origin")) : FireOrigin.Player),
+                reader.Has("slot") ? checked((int)reader.Int("slot")) : WeaponSlot.Best, reader.Has("origin") ? (FireOrigin)checked((byte)reader.Int("origin")) : FireOrigin.Player,
+                reader.Has("maxShots") ? checked((int)reader.Int("maxShots")) : 0),
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), checked((int)reader.Int("amount"))),
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, reader.Text("science")),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
@@ -363,23 +364,34 @@ public sealed record AttackMoveCommand(PlayerId Player, ulong Sequence, long Tic
 }
 
 /// <summary>
-/// Direct-target weapon fire ordered by a command giver (the units' own target acquisition fires without a command, docs/SIMULATION-CORE.md §33). One shot from
-/// one weapon slot: with <see cref="Slot"/> = <see cref="WeaponSlot.Best"/> the world chooses among the slots like <c>WeaponSet::chooseBestWeaponForTarget</c>
-/// (<see cref="Origin"/> decides which slots the unit may pick by itself, <c>AutoChooseSources</c>); an explicit slot is a <c>FIRE_WEAPON</c> command button's
-/// <c>WeaponSlot</c> and also pins the slot (<c>setWeaponLock(LOCKED_TEMPORARILY)</c>) until its clip empties or the unit is ordered to move.
+/// Direct-target weapon fire ordered by a command giver (the units' own target acquisition fires without a command, docs/SIMULATION-CORE.md §33), from one weapon slot: with
+/// <see cref="Slot"/> = <see cref="WeaponSlot.Best"/> the world chooses among the slots like <c>WeaponSet::chooseBestWeaponForTarget</c> (<see cref="Origin"/> decides which slots
+/// the unit may pick by itself, <c>AutoChooseSources</c>); an explicit slot is a <c>FIRE_WEAPON</c> command button's <c>WeaponSlot</c> and also pins the slot
+/// (<c>setWeaponLock(LOCKED_TEMPORARILY)</c>) until its clip empties or the unit is ordered to move.
+/// <para>
+/// <see cref="MaxShots"/> 0 (the default) is one shot: the order of a command giver that orders again while it wants the attack to go on (a player's standing order, the script VM's
+/// and the computer players' attacks). Above 0 it is the <c>maxShotsToFire</c> of <c>AIUpdateInterface::aiAttackObject</c>: the attack orders its own shots until that many are
+/// fired (<c>Weapon::m_maxShotCount</c>), and <see cref="NoMaxShotsLimit"/> - a <c>FIRE_WEAPON</c> button without <c>MaxShotsToFire</c>, used by a script
+/// (<c>Object::doCommandButtonAtObject</c>) - goes on until the victim dies (#277).
+/// </para>
 /// </summary>
-public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, EntityId Target, int Slot = WeaponSlot.Best, FireOrigin Origin = FireOrigin.Player)
+public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, EntityId Target, int Slot = WeaponSlot.Best, FireOrigin Origin = FireOrigin.Player,
+    int MaxShots = 0)
     : SimCommand(Player, Sequence, Tick)
 {
+    /// <summary><c>NO_MAX_SHOTS_LIMIT</c> (<c>Weapon.h</c>), also <c>CommandButton::m_maxShotsToFire</c>'s default ("huge number").</summary>
+    public const int NoMaxShotsLimit = 0x7fffffff;
+
     public override ushort TypeCode => CommandTypes.FireWeapon;
 
     protected override void DescribeBody(IStateWriter writer)
     {
         writer.UInt("source", Source.Value);
         writer.UInt("target", Target.Value);
-        // Written only when they differ from the defaults (best weapon, a player's order), so an ordinary fire command describes itself exactly as before the slot model.
+        // Written only when they differ from the defaults (best weapon, a player's order, one shot), so an ordinary fire command describes itself exactly as before.
         if (Slot != WeaponSlot.Best) writer.Int("slot", Slot);
         if (Origin != FireOrigin.Player) writer.Int("origin", (long)Origin);
+        if (MaxShots != 0) writer.Int("maxShots", MaxShots);
     }
 }
 

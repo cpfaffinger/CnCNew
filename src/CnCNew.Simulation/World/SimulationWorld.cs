@@ -1030,7 +1030,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(fire.Source.Value, out var source) || source.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (source.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(fire.Target.Value, out var fireTarget) || fireTarget.DestroyRequested || fireTarget.Body is null) return CommandRejection.UnknownEntity;
-                if (fire.Slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined(fire.Origin)) return CommandRejection.InvalidArguments;
+                if (fire.Slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined(fire.Origin) || fire.MaxShots < 0) return CommandRejection.InvalidArguments;
                 if (!TurretsLetAttack(source)) return CommandRejection.NoWeapon;
                 var choice = ChooseWeaponInView(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) return choice.Rejection;
@@ -1571,7 +1571,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
                 if (AiOf(source) is not null)
                 {
-                    OrderFireAttack(source, fireTarget, choice, fire.Origin, fire.Slot, command.Player);
+                    OrderFireAttack(source, fireTarget, choice, fire.Origin, fire.Slot, command.Player, fire.MaxShots);
                     break;
                 }
                 // An object without an AI (it has no attack state; the original does nothing with such an order, but no shipped object with a weapon that a player can order lacks an AI,

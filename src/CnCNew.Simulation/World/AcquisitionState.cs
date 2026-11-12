@@ -84,10 +84,17 @@ internal sealed class AcquisitionState
     public bool ShotPending;
 
     /// <summary>
-    /// <c>Weapon::m_maxShotCount</c> of an attack a module ordered with a limit (<c>aiAttackObject(victim, maxShots)</c>, e.g. <c>AssistedTargetingUpdate</c>'s clip): the shots still to fire, 0 for
-    /// no limit. Each shot orders the next one itself; the last one ends the attack.
+    /// <c>Weapon::m_maxShotCount</c> of an attack ordered with a limit (<c>aiAttackObject(victim, maxShots)</c>: <c>AssistedTargetingUpdate</c>'s clip, a script's <c>FIRE_WEAPON</c> button,
+    /// <see cref="Commands.FireWeaponCommand.MaxShots"/>): the shots still to fire - <c>NO_MAX_SHOTS_LIMIT</c> counts down from 2^31 - 1 as in the original -, 0 for an attack whose command
+    /// giver orders every shot. Each shot orders the next one itself; the last one ends the attack.
     /// </summary>
     public int ShotsLeft;
+
+    /// <summary>
+    /// <c>AIAttackState::m_lockedWeaponOnEnter</c> of an attack with <see cref="ShotsLeft"/>: the weapon slot that was locked when the attack was ordered, -1 for none. "If anything ever changes
+    /// that weapon, we exit attack mode immediately" - such as the chooser after the shot that empties the clip released a temporary lock.
+    /// </summary>
+    public int LockedSlot = -1;
 
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
@@ -109,6 +116,7 @@ internal sealed class AcquisitionState
         OrderOrigin = FireOrigin.Player;
         ShotPending = false;
         ShotsLeft = 0;
+        LockedSlot = -1;
     }
 
     public void Describe(IStateWriter writer)
@@ -127,6 +135,7 @@ internal sealed class AcquisitionState
             writer.Int("orderOrigin", (long)OrderOrigin);
             if (ShotPending) writer.Bool("shotPending", true);
             if (ShotsLeft > 0) writer.Int("shotsLeft", ShotsLeft);
+            if (LockedSlot >= 0) writer.Int("lockedSlot", LockedSlot);
         }
         Cycle?.Describe(writer);
         if (AttackMove)
@@ -173,6 +182,9 @@ internal sealed class AcquisitionState
             state.ShotPending = reader.Has("shotPending") && reader.Bool("shotPending");
             state.ShotsLeft = reader.Has("shotsLeft") ? checked((int)reader.Int("shotsLeft")) : 0;
             if (state.ShotsLeft < 0) throw new InvalidDataException("Negative shot limit in snapshot.");
+            state.LockedSlot = reader.Has("lockedSlot") ? checked((int)reader.Int("lockedSlot")) : -1;
+            if (state.LockedSlot < -1 || state.LockedSlot >= WeaponSlot.Count || (state.LockedSlot >= 0 && state.ShotsLeft == 0))
+                throw new InvalidDataException("The locked weapon of an attack out of range in snapshot.");
             if (!Enum.IsDefined(state.OrderOrigin)) throw new InvalidDataException("Origin of a fire order out of range in snapshot.");
         }
         if (reader.Has("fireCycle")) state.Cycle = FireCycle.Load(reader.Object("fireCycle"));
@@ -216,11 +228,13 @@ internal sealed class AcquisitionState
 
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
 internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral,
-    int ContinueOwner, Fixed ContinueX, Fixed ContinueY, FireCycleStamp Cycle, bool FireOrdered, FireOrigin OrderOrigin, bool ShotPending, int ShotsLeft)
+    int ContinueOwner, Fixed ContinueX, Fixed ContinueY, FireCycleStamp Cycle, bool FireOrdered, FireOrigin OrderOrigin, bool ShotPending, int ShotsLeft,
+    int LockedSlot)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
         => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral,
-            state.ContinueOwner, state.ContinueX, state.ContinueY, FireCycleStamp.Of(state.Cycle), state.FireOrdered, state.OrderOrigin, state.ShotPending, state.ShotsLeft);
+            state.ContinueOwner, state.ContinueX, state.ContinueY, FireCycleStamp.Of(state.Cycle), state.FireOrdered, state.OrderOrigin, state.ShotPending, state.ShotsLeft,
+            state.LockedSlot);
 }
 
 /// <summary>

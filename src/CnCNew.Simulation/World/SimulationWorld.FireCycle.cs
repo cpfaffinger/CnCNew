@@ -245,7 +245,9 @@ public sealed partial class SimulationWorld
     /// machine fires (F-140) - in this tick when it is in its fire state, else in a later frame of the unit, from the order stream or from the unit's own step. The order comes from a
     /// player's command giver, a script's command button (<c>Object::doCommandButtonAtObject</c> ends in <c>aiAttackObject</c> as well) or a module of the object
     /// (<c>CleanupHazardUpdate</c>, <c>AssistedTargetingUpdate</c>). <paramref name="lockSlot"/> of a command button pins its weapon slot until the clip empties
-    /// (<c>setWeaponLock(LOCKED_TEMPORARILY)</c> before the attack); -1 pins nothing.
+    /// (<c>setWeaponLock(LOCKED_TEMPORARILY)</c> before the attack); -1 pins nothing. <paramref name="shots"/> above 0 is the order's <c>maxShotsToFire</c> (the attack orders its own shots
+    /// until they are fired, <see cref="FireWeaponCommand.NoMaxShotsLimit"/> until the victim is gone); 0 is one shot of a command giver's stream, which keeps a limit a running attack on
+    /// the same victim has.
     /// </summary>
     private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter, int shots = 0)
     {
@@ -254,7 +256,18 @@ public sealed partial class SimulationWorld
         if (begins) RestartAttackCycles(source);
         if (lockSlot >= 0) SetWeaponLock(source, lockSlot, WeaponLockKind.Temporary);
         var attack = source.Acquisition!;
-        if (shots > 0) attack.ShotsLeft = shots;
+        if (shots > 0)
+        {
+            // AIUpdateInterface::privateAttackObject sets the weapon's maxShotCount after AIAttackState::onEnter, which noted the weapon that was locked then (m_lockedWeaponOnEnter).
+            attack.ShotsLeft = shots;
+            attack.LockedSlot = source.WeaponLock != WeaponLockKind.None ? source.CurrentWeaponSlot : -1;
+        }
+        else if (begins)
+        {
+            // Another victim is another attack: a limit of the attack it replaces does not carry over.
+            attack.ShotsLeft = 0;
+            attack.LockedSlot = -1;
+        }
         if (AttackCycleFires(source, ref attack.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: begins, byOrder: true))
         {
             attack.ShotPending = false;
@@ -288,9 +301,9 @@ public sealed partial class SimulationWorld
         NoteTurretShot(source, slot);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, emitter);
         AfterCycleShot(source, ref body, slot);
-        // Weapon::m_maxShotCount: AIAttackState::update fails once the weapon has no shots left to fire, and once the weapon the attack entered with is no longer the current one - the shot
-        // that empties a clip releases the temporary lock (Object::fireCurrentWeapon), which is how a limit larger than the clip ends the attack.
-        if (source.Acquisition is { ShotsLeft: > 0 } limited && (--limited.ShotsLeft == 0 || source.WeaponLock == WeaponLockKind.None))
+        // Weapon::m_maxShotCount: AIAttackState::update fails once the weapon has no shots left to fire. (It also fails once the weapon the attack entered with locked is no longer the
+        // current one - the shot that empties a clip releases the temporary lock, Object::fireCurrentWeapon -, which the attack's next frame decides, StepOrderedFire.)
+        if (source.Acquisition is { ShotsLeft: > 0 } limited && --limited.ShotsLeft == 0)
         {
             limited.ClearVictim();
             ReleaseWeaponLock(source, WeaponLockKind.Temporary);
@@ -320,6 +333,14 @@ public sealed partial class SimulationWorld
         }
         UpdateWeaponSet(entity);
         var choice = ChooseWeaponInView(entity, victim, state.OrderOrigin);
+        // AIAttackState::update: "if we entered with a locked weapon (ie, a special weapon), then we will only keep attacking as long as that weapon remains the cur weapon" - checked in every
+        // frame, before the machine runs. A temporary lock is released by the shot that empties its clip, and the chooser may then pick another slot.
+        if (state.ShotsLeft > 0 && state.LockedSlot >= 0 && choice.Slot != state.LockedSlot)
+        {
+            AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
+            state.ClearVictim();
+            return;
+        }
         if (choice.Slot < 0 || choice.Rejection == CommandRejection.OutOfRange)
         {
             if (choice.Rejection is CommandRejection.OutOfRange or CommandRejection.WeaponNotReady) AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);

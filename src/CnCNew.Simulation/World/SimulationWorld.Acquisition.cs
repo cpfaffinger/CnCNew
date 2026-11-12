@@ -359,7 +359,7 @@ public sealed partial class SimulationWorld
                 // "No order for longer than the grace" is noticed in the step after the grace: a logic frame of the original at every rate, not a tick.
                 // A fire order may name a victim that is no enemy (the force-fire of a player): its attack goes on as long as any other attack would.
                 var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false, forced: state.OrderOrigin == FireOrigin.Player));
-                if (ordered && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks)
+                if (ordered && tick - Math.Max(state.OrderedTick, OrderedAttackReadyTick(entity, state, tick)) < _orderedAttackGraceTicks + _turretFrameTicks)
                 {
                     if (state.FireOrdered) StepOrderedFire(entity, state, victim!);
                     return;
@@ -732,6 +732,16 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>The first tick from <paramref name="tick"/> on at which some weapon of the active set is ready, not looking further than the turrets' reload cap (an aircraft out of ammunition waits for its airfield).</summary>
+    /// <summary>
+    /// The ready tick an ordered attack's grace counts from: the earliest of the unit's weapons for an attack whose command giver orders every shot; for one that orders its own shots
+    /// (<see cref="AcquisitionState.ShotsLeft"/>, #277) the weapon it fires, so a clip's reload does not end it while another weapon of the unit would be ready.
+    /// </summary>
+    private long OrderedAttackReadyTick(Entity entity, AcquisitionState state, long tick)
+    {
+        if (state.ShotsLeft == 0 || ActiveWeaponSet(entity) is not { } set || !set.HasWeapon(entity.CurrentWeaponSlot)) return EarliestReadyTick(entity, tick);
+        return Math.Clamp(EffectiveReadyTick(entity, entity.CurrentWeaponSlot, set), tick - _orderedAttackGraceTicks - _turretFrameTicks, tick + _turretReloadHoldCapTicks);
+    }
+
     private long EarliestReadyTick(Entity entity, long tick)
     {
         if (ActiveWeaponSet(entity) is not { } set) return tick;

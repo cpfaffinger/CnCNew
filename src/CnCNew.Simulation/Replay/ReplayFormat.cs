@@ -45,14 +45,18 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 18 (phase 45): command table 20 with the mine-clearing flag of a group (units; F-69); version 17 is rejected.
 /// Version 20: command table 21 with the order that sends a ferry on its way (units; F-19); version 19 is rejected.
 /// Version 21: command table 22 with the two beacon orders (a place; units; F-24); version 20 is rejected.
+/// Version 27: command table 28, the fire command's shot limit (the origin byte's top bit says an i32 follows; #277); version 26 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 26;
+    public const int CurrentVersion = 27;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
+
+    /// <summary>The bit of a fire command's origin byte that says its shot limit follows (version 27).</summary>
+    private const byte FireShotLimitFlag = 0x80;
 
     public static byte[] Write(ReplayFile replay)
     {
@@ -301,7 +305,9 @@ public static class ReplayFormat
                 writer.Write(fire.Source.Value);
                 writer.Write(fire.Target.Value);
                 writer.Write((sbyte)fire.Slot);
-                writer.Write((byte)fire.Origin);
+                // The top bit of the origin says a shot limit follows: the stream's one-shot orders keep their size.
+                writer.Write((byte)((byte)fire.Origin | (fire.MaxShots != 0 ? FireShotLimitFlag : 0)));
+                if (fire.MaxShots != 0) writer.Write(fire.MaxShots);
                 break;
             case SetWeaponLockCommand weaponLock:
                 writer.Write(weaponLock.Source.Value);
@@ -552,9 +558,12 @@ public static class ReplayFormat
         var source = new EntityId(reader.ReadUInt32());
         var target = new EntityId(reader.ReadUInt32());
         int slot = reader.ReadSByte();
-        var origin = reader.ReadByte();
-        if (slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined((FireOrigin)origin)) throw new ReplayFormatException($"FireWeapon command with slot {slot} and origin {origin} is invalid.");
-        return new FireWeaponCommand(player, sequence, tick, source, target, slot, (FireOrigin)origin);
+        var flags = reader.ReadByte();
+        var origin = (byte)(flags & ~FireShotLimitFlag);
+        var shots = (flags & FireShotLimitFlag) != 0 ? reader.ReadInt32() : 0;
+        if (slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined((FireOrigin)origin) || shots < 0 || ((flags & FireShotLimitFlag) != 0 && shots == 0))
+            throw new ReplayFormatException($"FireWeapon command with slot {slot}, origin {origin} and shot limit {shots} is invalid.");
+        return new FireWeaponCommand(player, sequence, tick, source, target, slot, (FireOrigin)origin, shots);
     }
 
     private static PurchaseUpgradeCommand ReadPurchaseUpgrade(BinaryReader reader, PlayerId player, ulong sequence, long tick)
