@@ -194,7 +194,7 @@ internal static class ProjectileFlightTests
             if (scene.World.AcquiredVictimOf(hunter) != victimNow) (victimNow, switched) = (scene.World.AcquiredVictimOf(hunter), scene.World.Tick);
             foreach (var rocket in scene.World.Entities.Where(entity => entity.Template.Name == "TankHunterMissile"))
                 // A rocket that leaves within a second of the trooper changing his victim is the retaliation of the rangers (units pick victims by damage potential, so they
-                // answer his fire) with the fire-while-moving shortcut of SimulationWorld.AimBodyAt, not the turn this test is about.
+                // answer his fire), not the turn this test is about; until F-170 (#167) SimulationWorld.AimBodyAt also let a unit with a leftover move target fire such a rocket unturned.
                 if (seen.Add(rocket.Id.Value) && scene.World.Tick - switched > scene.World.Time.TicksPerSecond && rocket.Modules.OfType<MissileAIUpdate>().Single() is { Victim.IsValid: true } flight && scene.World.FindEntity(flight.Victim) is { } victim)
                 {
                     var bearing = FixedTrig.Atan2(victim.Y - hunter.Y, victim.X - hunter.X);

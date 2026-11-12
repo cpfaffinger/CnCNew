@@ -178,11 +178,17 @@ public sealed partial class SimulationWorld
     /// <c>AIAttackAimAtTargetState::update</c> for a weapon no turret can bring to bear: the unit turns on the spot until it faces the point within the weapon's
     /// <c>AcceptableAimDelta</c>, and fires only then. A weapon on a turret that turns has the turret's own aim, a contact weapon does not aim, a unit that cannot turn in place flies
     /// at its victim (<c>setLocomotorGoalPositionExplicit</c>, its flight modules do), and an immobile object has nothing to turn with. Not modeled: a rider in its container
-    /// (<see cref="FireWeaponAt"/> gives its shot the bearing), a unit on its way (the attack's approach ends before the aim in the original; a move goes on in the port).
+    /// (<see cref="FireWeaponAt"/> gives its shot the bearing).
+    /// <para>
+    /// A unit that still follows a path - a move it was on when the attack began: <c>aiAttackObject</c> exits the move state, but nothing clears the locomotor's goal
+    /// <c>POSITION_ON_PATH</c>, so <c>doLocomotor</c> goes on along the path - fires on its way when it already faces its target. When it does not, the aim's
+    /// <c>setLocomotorGoalOrientation</c> replaces that goal: the unit gives up the path and turns, and the aim's <c>onExit</c> leaves it standing (<c>setLocomotorGoalNone</c>). Here it
+    /// stops where the 30 Hz step ends (the unit's own decision comes after the movement of its frame) and an attack-move halts for the fight (F-170, #167).
+    /// </para>
     /// </summary>
     private bool AimBodyAt(Entity source, int slot, Fixed x, Fixed y)
     {
-        if (source.ContainedBy.IsValid || source.HasMoveTarget || source.Template.IsKindOf("IMMOBILE") || AiOf(source) is not { CanTurnInPlace: true } ai) return true;
+        if (source.ContainedBy.IsValid || source.Template.IsKindOf("IMMOBILE") || AiOf(source) is not { CanTurnInPlace: true } ai) return true;
         var weaponIndex = WeaponIndexIn(source, slot);
         if (weaponIndex < 0) return true;
         var weapon = _templates.Weapons[weaponIndex];
@@ -194,6 +200,12 @@ public sealed partial class SimulationWorld
         if (x == ownX && y == ownY) return true;
         var bearing = FixedTrig.Atan2(y - ownY, x - ownX);
         if (FixedTrig.AngleDifference(source.FrameEndAngle(_tick), bearing).Abs() <= Fixed.Max(weapon.AimDelta, BodyAimThreshold)) return true;
+        if (source.HasMoveTarget)
+        {
+            ai.StopInternalMoveAtFrameEnd(this);
+            if (source.Acquisition is { AttackMove: true, Halted: false } marching) marching.Halted = true;
+            MarkDirty(source);
+        }
         ai.TurnInPlace(this, bearing);
         return false;
     }
