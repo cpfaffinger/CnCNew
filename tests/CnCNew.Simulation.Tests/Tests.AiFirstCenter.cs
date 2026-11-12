@@ -1,4 +1,5 @@
 using CnCNew.Content;
+using CnCNew.Simulation.Commands;
 using CnCNew.Data.Compilation;
 using CnCNew.Data.Registry;
 using CnCNew.Data.World;
@@ -220,6 +221,76 @@ static partial class Tests
             }
             Check.That(sold || soldBefore > 0, $"{rate}: the broke player sold no building in two game minutes (money {world.MoneyOf(id).Floor()}).");
             Check.That(carrierAgain, $"{rate}: the broke player has no carrier again after two game minutes (money {world.MoneyOf(id).Floor()}).");
+        }
+    }
+
+    /// <summary>
+    /// #274 (econ-survey, Bitter Winter ChinaTank against AirForce, seed 3): America's only building left was its supply center, no stocked warehouse lay in its reach, and its last
+    /// 4,000 to 6,500 credits went to five Chinooks that flew to the far depots by the enemy's tanks and died. <c>AIPlayer::queueSupplyTruck</c> makes gatherers only for a center with
+    /// a stocked source that is not an enemy's within <c>SUPPLY_CENTER_CLOSE_DIST</c> plus the two bounding circles. America against China on Alpine Assault (seed 1): after four game
+    /// minutes every warehouse in reach of player 0's centers is emptied, its carriers are killed and it has 6,000 credits. For three game minutes no carrier may be queued by it while
+    /// none of its finished centers has supplies in reach (a center it builds at another source may get one), and the money of a carrier is not sold for. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void RealComputerPlayerBuysNoCarrierForACenterWithoutSupplies(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";
+        MapData map;
+        using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: RuleProfile.Product);
+            var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+            const uint Seed = 1;
+            var session = SkirmishMatchSession.Start(SkirmishMatchOptions.StandardAt(catalog.Rate) with { AiSeed = Seed, WorldSeed = Seed ^ 0xC0FFEE06 }, catalog, fingerprint, TerrainMap.Build(map, MapPath), map.Objects,
+                [new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionAmerica")), new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"))]);
+            var world = session.World;
+            var id = session.Players[0].Id;
+            bool IsCarrier(Entity entity) => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("HARVESTER") && !entity.Template.IsKindOf("STRUCTURE");
+            bool IsCentre(Entity entity) => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE")
+                && !entity.HasStatus(ObjectStatusBits.UnderConstruction);
+            bool InReach(Entity centre, Entity warehouse)
+            {
+                var reach = (long)(20 * TerrainMap.CellSize) + centre.Template.BoundingCircleRadius.Floor() + warehouse.Template.BoundingCircleRadius.Floor() + 1;
+                var (dx, dy) = ((warehouse.X - centre.X).Floor(), (warehouse.Y - centre.Y).Floor());
+                return dx * dx + dy * dy <= reach * reach;
+            }
+            Entity[] Warehouses() => world.Entities.Where(entity => world.WarehouseBoxes(entity.Id) is not null).ToArray();
+            bool Fed() => world.Entities.Where(IsCentre).Any(centre => Warehouses().Any(warehouse => world.WarehouseBoxes(warehouse.Id) > 0
+                && (warehouse.Owner.IsSystem || !world.AreEnemies(id, warehouse.Owner)) && InReach(centre, warehouse)));
+            var stage = rate.TicksPerSecond * 240;
+            while (world.Tick < stage && !session.IsOver) session.Step();
+            Check.That(world.Entities.Any(IsCentre), $"{rate}: player 0 has no finished supply center after four minutes.");
+            var drained = 0;
+            foreach (var warehouse in Warehouses())
+                if (world.Entities.Where(IsCentre).Any(centre => InReach(centre, warehouse)) && world.WarehouseBoxes(warehouse.Id) > 0) { world.SetWarehouseValue(warehouse.Id, 0); drained++; }
+            Check.That(drained > 0 && !Fed(), $"{rate}: the warehouses beside player 0's centers are emptied ({drained}).");
+            foreach (var carrier in world.Entities.Where(IsCarrier).ToArray()) world.Kill(carrier.Id);
+            world.SetMoney(id, Fixed.FromInt(6000));
+            var carrierNames = catalog.Templates.Where(template => template.IsKindOf("HARVESTER") && !template.IsKindOf("STRUCTURE")).Select(template => template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var end = world.Tick + rate.TicksPerSecond * 180;
+            var sold = 0;
+            var checkedTicks = 0;
+            while (world.Tick < end && !session.IsOver)
+            {
+                var fed = Fed();
+                var first = session.RecordedCommands.Count;
+                session.Step();
+                if (!fed) checkedTicks++;
+                for (var index = first; index < session.RecordedCommands.Count; index++)
+                {
+                    var command = session.RecordedCommands[index];
+                    if (command.Player != id) continue;
+                    if (command is SellCommand) sold++;
+                    if (command is QueueProductionCommand queue && carrierNames.Contains(queue.Template))
+                        Check.That(fed, $"{rate}, tick {world.Tick}: player 0 queued {queue.Template} while none of its centers has supplies in reach (money {world.MoneyOf(id).Floor()}).");
+                }
+            }
+            Check.That(checkedTicks > rate.TicksPerSecond * 30, $"{rate}: player 0 was without supplies in reach for {checkedTicks} ticks only - the case was not tested.");
+            Check.That(sold == 0, $"{rate}: player 0 sold {sold} building(s) with 6,000 credits.");
         }
     }
 }

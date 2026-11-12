@@ -39,6 +39,10 @@ public sealed partial class SimulationWorld
     public int? WarehouseBoxes(EntityId id)
         => FindEntity(id)?.ModuleArray.OfType<Modules.BuiltIn.SupplyWarehouseDockUpdate>().FirstOrDefault()?.Boxes;
 
+    /// <summary><c>doSetWarehouseValue</c> (<c>WAREHOUSE_SET_VALUE</c>): the warehouse holds enough boxes for <paramref name="cash"/>, rounded up; nothing for an object that is not a warehouse.</summary>
+    public void SetWarehouseValue(EntityId id, int cash)
+        => FindEntity(id)?.ModuleArray.OfType<Modules.BuiltIn.SupplyWarehouseDockUpdate>().FirstOrDefault()?.SetCashValue(this, cash, ValuePerSupplyBox);
+
     public bool CanBuildStructures(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || state.CanBuildBase;
     public bool CanBuildUnits(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || state.CanBuildUnits;
 

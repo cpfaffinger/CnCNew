@@ -506,11 +506,40 @@ public sealed partial class SkirmishAi
         var wantBuilders = supply > 0 || _structures.Count > 1 || builderCarries ? 2 : 1;
         if (builders < wantBuilders) saving = QueueWorker(Role.Builder);
         var carriers = CountAlive(Role.Carrier, false) + InFlight(Role.Carrier);
-        var wantCarriers = _warehouses.Count == 0 && CountAlive(Role.Carrier, false) > 0 ? 0 : Math.Min(_plan.MaxCarriers, _plan.CarriersPerCenter * Math.Max(0, supply));
+        // AIPlayer::queueSupplyTruck: gatherers are made only for a center with a stocked source in its reach that is not an enemy's ("make sure we have supplies near it"); a center whose
+        // source is empty earns nothing more from a new carrier, which would fly off to a far depot (#274: America's last money went to five Chinooks that died at the enemy's depots).
+        var fed = CountFedCenters();
+        var wantCarriers = _warehouses.Count == 0 && CountAlive(Role.Carrier, false) > 0 ? 0 : Math.Min(_plan.MaxCarriers, _plan.CarriersPerCenter * fed);
         if (carriers < wantCarriers) saving = Fixed.Max(saving, QueueWorker(Role.Carrier));
-        // Once a center stands, the price of a replacement carrier stays in the bank: a raid that kills every carrier at once leaves a player with less than that price and no income, for good.
-        if (supply > 0) saving = Fixed.Max(saving, CheapestWorkerPrice(Role.Carrier));
+        // Once a center with supplies in reach stands, the price of a replacement carrier stays in the bank: a raid that kills every carrier at once leaves a player with less than that
+        // price and no income, for good.
+        if (fed > 0) saving = Fixed.Max(saving, CheapestWorkerPrice(Role.Carrier));
         return saving;
+    }
+
+    /// <summary>The finished supply centers with a stocked warehouse that is not an enemy's in their reach (<see cref="CenterHasStockInReach"/>): the ones a new carrier earns at.</summary>
+    private int CountFedCenters()
+    {
+        var count = 0;
+        foreach (var center in _structures)
+            if ((RoleOf(center.Template) & Role.SupplyCenter) != 0 && CenterHasStockInReach(center)) count++;
+        return count;
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::queueSupplyTruck</c>'s look at a center: a warehouse that is not an enemy's holds supplies within <see cref="SupplyCenterCloseDistance"/> plus the two bounding circles.
+    /// </summary>
+    private bool CenterHasStockInReach(Entity center)
+    {
+        foreach (var entity in _world.Entities)
+        {
+            if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) continue;
+            if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) continue;
+            if (Views.EntityPresentationView.WarehouseSupplyBoxes(entity) <= 0) continue;
+            var limit = SupplyCenterCloseDistance + entity.Template.BoundingCircleRadius + center.Template.BoundingCircleRadius;
+            if (SquaredReach.Of(limit).Contains(DistanceSquared(center.X, center.Y, entity.X, entity.Y))) return true;
+        }
+        return false;
     }
 
     private Fixed CheapestWorkerPrice(Role wanted)
@@ -618,34 +647,20 @@ public sealed partial class SkirmishAi
     {
         var count = 0;
         foreach (var site in _sites) if ((RoleOf(site.Template) & Role.SupplyCenter) != 0) count++;
-        foreach (var center in _structures)
-        {
-            if ((RoleOf(center.Template) & Role.SupplyCenter) == 0) continue;
-            foreach (var entity in _world.Entities)
-            {
-                if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) continue;
-                if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) continue;
-                if (Views.EntityPresentationView.WarehouseSupplyBoxes(entity) <= 0) continue;
-                var limit = SupplyCenterCloseDistance + entity.Template.BoundingCircleRadius + center.Template.BoundingCircleRadius;
-                if (!SquaredReach.Of(limit).Contains(DistanceSquared(center.X, center.Y, entity.X, entity.Y))) continue;
-                count++;
-                break;
-            }
-        }
-        return count;
+        return count + CountFedCenters();
     }
 
     /// <summary>Back-off after a sale made to pay for a carrier (10 s): the refund arrives when the sale ends, and one building is enough more often than not.</summary>
     private const long SellForCarrierRetryFrames = 300;
 
     /// <summary>
-    /// A player with a finished supply center, no carrier alive or queued and less money than the cheapest carrier has no income and none to come: it sells its least valuable building
-    /// that it can do without (never a command center, a supply center, or a producer of builders or carriers) through the same <see cref="SellCommand"/> a human gives, preferring the
-    /// cheapest whose refund pays for the carrier.
+    /// A player with a finished supply center that has supplies in reach, no carrier alive or queued and less money than the cheapest carrier has no income and none to come: it sells
+    /// its least valuable building that it can do without (never a command center, a supply center, or a producer of builders or carriers) through the same <see cref="SellCommand"/> a
+    /// human gives, preferring the cheapest whose refund pays for the carrier. A center whose source is empty gets no carrier (<see cref="ProduceWorkers"/>), so nothing is sold for one.
     /// </summary>
     private void SellForCarrier()
     {
-        if (CountAlive(Role.SupplyCenter, false) == 0 || CountAlive(Role.Carrier, false) > 0 || InFlight(Role.Carrier) > 0) return;
+        if (CountFedCenters() == 0 || CountAlive(Role.Carrier, false) > 0 || InFlight(Role.Carrier) > 0) return;
         SellToCover(CheapestWorkerPrice(Role.Carrier));
     }
 
