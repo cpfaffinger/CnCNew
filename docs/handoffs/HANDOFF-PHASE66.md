@@ -2,6 +2,7 @@
 > **Status:** current (written 10 November 2026 at the end of Phase 65)
 > **Predecessor:** HANDOFF-PHASE65.md · **Results in:** `docs/SIMULATION-CORE.md` §90, fidelity register `docs/plan/STAGE-1-PORT.md` §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+> **Milestone on GitHub:** https://github.com/cpfaffinger/CnCNew/milestones/63 (since 12 November 2026 the brief lives there; this file is the last one written, and Phase 67's brief is a milestone only)
 
 N+1 handoff (Phase 66): what Phases 64 and 65 left, the first real release, and whatever the owner's next playtest finds.
 

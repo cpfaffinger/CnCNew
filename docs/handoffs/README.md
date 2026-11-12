@@ -1,5 +1,7 @@
 # Phase briefs, ordered by stage and milestone
 
+**Since 12 November 2026 every phase is a GitHub milestone** ([all milestones](https://github.com/cpfaffinger/CnCNew/milestones?state=all)): the title is `Phase <N>: <topic>`, the description is the brief, the milestone's issues are the phase's findings, and a done phase is a closed milestone. Phases 4 to 66 were brought over from the files below; **from Phase 67 on there is no file** - this index and the files are the record up to Phase 66. The current phase is [Phase 66](https://github.com/cpfaffinger/CnCNew/milestones/63).
+
 As of: 10 October 2026, state `2777a90`. The plan is [`../plan/PROGRAMME.md`](../plan/PROGRAMME.md); the format of a brief
 is [`../plan/BRIEF-FORMAT.md`](../plan/BRIEF-FORMAT.md). Every brief carries a header block with stage, milestone and
 status; the worked-off briefs keep their text as documents of their time (their numbers are outdated – the yardstick is

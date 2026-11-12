@@ -5,6 +5,10 @@ the self-contained working instruction of one phase: whoever reads it (a coding 
 without the conversation that produced it. The plan it belongs to is [PROGRAMME.md](PROGRAMME.md); the index of all
 briefs is [../handoffs/README.md](../handoffs/README.md).
 
+## 0. Where a brief lives (since 12 November 2026)
+
+A brief is the description of the phase's GitHub milestone (https://github.com/cpfaffinger/CnCNew/milestones?state=all), titled `Phase <N>: <topic>`; everything below about the header and the sections applies to that description. The phase's findings are the issues that carry its milestone; the milestone is closed when the phase is done. The files `docs/handoffs/HANDOFF-PHASE<N>.md` exist up to Phase 66 only and are kept as the record; section 1's file rule is historical.
+
 ## 1. File and header
 
 File: `docs/handoffs/HANDOFF-PHASE<N>.md`, `N` the phase number (continuing; the next free number is 31). One brief per

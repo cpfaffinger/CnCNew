@@ -31,7 +31,7 @@ ordered by stage and milestone, in [../handoffs/README.md](../handoffs/README.md
   run and will run interleaved; the stage says what a piece of work must respect and against what it is measured.
 - **Milestone** (`S<stage>-M<n>`): a self-contained deliverable of a stage with its own acceptance. A milestone is built in
   one or more **phases**.
-- **Phase** (`Phase N`, brief `docs/handoffs/HANDOFF-PHASE<N>.md`): one unit of work with a brief, a starting state, a
+- **Phase** (`Phase N`, brief: the GitHub milestone `Phase <N>: <topic>` of `cpfaffinger/CnCNew` since 12 November 2026, https://github.com/cpfaffinger/CnCNew/milestones?state=all; up to Phase 66 also the file `docs/handoffs/HANDOFF-PHASE<N>.md`): one unit of work with a brief, a starting state, a
   final report and an N+1 brief. The numbering of the phases is historical and continues (the next free number is 32).
   Phases 4 to 24 and 31 are worked off (31 ran before 24 by decision D-12 – phase numbers are identities, not
   an order), 26 follows, 27 to 30 are planned.
