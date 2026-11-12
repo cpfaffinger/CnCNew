@@ -799,6 +799,7 @@ run.Test("Phase 49 (F-66): what a falling plane makes flies on with the plane's 
 run.Test("Phase 44 (F-66): a thrown object that dies inside a frame stops where the frame ends", Tests.ThrownObjectThatDiesInsideAFrameStopsAtItsEnd);
 run.Test("Phase 44 (F-67): a dozer that stands idle repairs the closest hurt structure of its player", Tests.DozerRepairsWhenBored);
 run.Test("Phase 45 (F-68): a worker is a dozer by default, a supply truck while it gathers", Tests.WorkerSwitchesBetweenItsBrains);
+run.Test("#301: the kill rate of a target value is the whole victim, not an overflow, for a sliver of health", Tests.TargetValueOfASliverOfHealthIsWhole);
 run.Test("Slow death phases: a dying vehicle stops, takes no order and leaves its hull where it died, at every rate", Tests.SlowDeathStopsTheDyingMover);
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
 run.Test("Chinook (F-62): an unload at a place puts everybody out at once, a bare evacuation one by one through the door", Tests.ChinookUnloadAtAPlaceAtOnceAndAtTheDoorOneByOne);

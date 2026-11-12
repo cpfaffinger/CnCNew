@@ -173,6 +173,8 @@ public sealed partial class SimulationWorld
         // damage in the window = adjusted * shots * (window frames / cycle frames); the share of the health is that over the health.
         var window = (long)seconds * SimulationRate.OriginalFramesPerSecond;
         var taken = Fixed.MultiplyDivide(adjusted, Fixed.FromInt(shots * window), Fixed.FromInt(cycleLength));
-        return (efficiency, Fixed.Min(Fixed.One, taken / health));
+        // #301: the share saturates at the whole before it is divided - a million damage over a sliver of health (2.4e-6) is a quotient beyond the range. Below the whole the
+        // quotient is the same as before.
+        return (efficiency, taken >= health ? Fixed.One : taken / health);
     }
 }
