@@ -88,6 +88,11 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
             case SimEventKind.VoiceFearRequested:
                 ObjectSound(output, simEvent, simEvent.Entity, view, "VoiceFear", SoundCueKind.Voice);
                 break;
+            case SimEventKind.PowerSteered:
+                // SpectreGunshipUpdate::setSpecialPowerOverridableDestination plays getVoiceAttack() at the gunship for its local player only; the cue carries the owner, and the event's
+                // type (the shipped one is "ui voice player") keeps it from every other player's ear.
+                ObjectSound(output, simEvent, simEvent.Entity, view, "VoiceAttack", SoundCueKind.Voice);
+                break;
             case SimEventKind.ProductionCompleted:
                 if (view.GetTemplateName((int)simEvent.Value) is { } produced) _pendingProduction.Add((tick, produced));
                 break;

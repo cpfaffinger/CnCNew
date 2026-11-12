@@ -1069,6 +1069,8 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     {
         _overrideTarget = _overrideTarget with { X = x, Y = y };
         world.MarkDirty(Entity);
+        // The disabled object never gets here (the command's own test); the voice for the local player is the client's.
+        world.Emit(SimEventKind.PowerSteered, Entity.Id, EntityId.Invalid, string.Empty, 0);
     }
 
     /// <summary><c>getDisabledTypesToProcess</c>.</summary>

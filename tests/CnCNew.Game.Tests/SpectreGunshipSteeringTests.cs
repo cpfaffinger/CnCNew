@@ -106,12 +106,20 @@ internal static class SpectreGunshipSteeringTests
         // A click moves the reticle at once and the aim point creeps to it along the ground.
         var feedback = new List<string>();
         controller.CommandFeedbackObserved += value => feedback.Add(value.ToString());
+        live.DrainSoundCues();
+        var cues = new List<SoundCue>();
         controller.Process(new MouseButtonEvent(20_100, MouseButton.Right, true, second));
         controller.Process(new MouseButtonEvent(20_150, MouseButton.Right, false, second));
-        for (var frame = 0; frame < 12 && Math.Abs((float)gunship.OverrideTarget.Y.ToDecimal() - secondGround.Y) > 1f; frame++) Frame();
+        for (var frame = 0; frame < 12 && Math.Abs((float)gunship.OverrideTarget.Y.ToDecimal() - secondGround.Y) > 1f; frame++) { Frame(); cues.AddRange(live.DrainSoundCues()); }
         TestHarness.Assert(Math.Abs((float)gunship.OverrideTarget.X.ToDecimal() - secondGround.X) < 1f && Math.Abs((float)gunship.OverrideTarget.Y.ToDecimal() - secondGround.Y) < 1f,
             $"the reticle is where the click was ({gunship.OverrideTarget}; wanted {secondGround}; first {firstGround}; selected {controller.Input.Selection.Selected.Length}; mode {controller.Input.Commands.Mode}; ship {gunship.Status}; feedback {string.Join(" | ", feedback)})");
         Frame();
+        cues.AddRange(live.DrainSoundCues());
+        // #279, SpectreGunshipUpdate::setSpecialPowerOverridableDestination: the gunship's VoiceAttack for its player, once; HintSpy makes no move hint for the override.
+        var voices = cues.Where(cue => cue.Origin == "Object.VoiceAttack" && cue.Entity == ship.Id).ToArray();
+        TestHarness.Assert(voices.Length == 1 && voices[0].EventName == "SpectreGunshipVoiceAttack" && voices[0].Kind == SoundCueKind.Voice && voices[0].Player == live.Human,
+            $"the steered gunship says its attack line once ({string.Join("; ", voices.Select(cue => $"{cue.EventName} {cue.Kind} {cue.Player}"))})");
+        TestHarness.Assert(!feedback.Any(value => value.Contains(nameof(FeedbackKind.MoveMarker), StringComparison.Ordinal)), $"no move marker for a steering click ({string.Join(" | ", feedback)})");
         decals = [.. live.Fx.Capture().Decals.Where(decal => decal.Texture.StartsWith("SCCSpecRet", StringComparison.OrdinalIgnoreCase))];
         TestHarness.Assert(decals.Length == 1 && Math.Abs(decals[0].Position.X - secondGround.X) < 1f && Math.Abs(decals[0].Position.Y - secondGround.Y) < 1f,
             $"the drawn reticle moved with it ({string.Join("; ", decals)})");
@@ -133,6 +141,29 @@ internal static class SpectreGunshipSteeringTests
         TestHarness.Assert(toGoal.Zip(toGoal.Skip(1), (before, after) => after <= before + 0.01f).All(closer => closer), "it came closer in every frame, along the line");
         TestHarness.Assert(path.Count(point => Vector2.Distance(point, new Vector2(firstGround.X, firstGround.Y)) > 5f && Vector2.Distance(point, new Vector2(secondGround.X, secondGround.Y)) > 5f) >= 2,
             "it was seen between the two places, not only at their ends");
+
+        // #279, ActionManager::canOverrideSpecialPowerDestination: "so long as it's not in the black areas of the map" - a point the player has never explored is no steering point; the
+        // pointer is not the uplink's there, and a click does not move the reticle. The scene reveals the whole map; the reveal is taken back and a patch of shroud laid far from the gunship.
+        var human = live.Human;
+        var black = new Vector3(secondGround.X, secondGround.Y + 600f, secondGround.Z);
+        var (blackX, blackY) = (FixedConvert.FromSingle(black.X), FixedConvert.FromSingle(black.Y));
+        TestHarness.Assert(live.World.IsPositionExploredBy(human, blackX, blackY), "setup: the dark place lies on the map, explored before the shroud");
+        var reticleBefore = gunship.OverrideTarget;
+        TestHarness.Assert(gunship.IsSteerable, $"setup: the gunship can still be steered ({gunship.Status})");
+        var commands = controller.Input.Commands;
+        TestHarness.Assert(commands.Evaluate(live.World, null, secondGround).Action == ContextAction.SteerPower, "an explored place steers");
+        live.World.RevealMapPermanently(human, false);
+        live.World.ShroudArea(human, blackX, blackY, Fixed.FromInt(80));
+        TestHarness.Assert(!live.World.IsPositionExploredBy(human, blackX, blackY), "setup: the place is black for the player now");
+        var hint = commands.Evaluate(live.World, null, black);
+        TestHarness.Assert(hint.Action != ContextAction.SteerPower && hint.Cursor != CursorKind.ParticleUplinkCannon, $"a black place is no steering point ({hint.Action}, {hint.Cursor})");
+        TestHarness.Assert(commands.Evaluate(live.World, null, secondGround).Action == ContextAction.SteerPower, "an explored place still steers");
+        live.DrainSoundCues();
+        commands.IssueContext(live.World, hint, null);
+        cues.Clear();
+        for (var frame = 0; frame < 4; frame++) { Frame(); cues.AddRange(live.DrainSoundCues()); }
+        TestHarness.Assert(gunship.OverrideTarget == reticleBefore, $"the click into the black did not move the reticle ({gunship.OverrideTarget} against {reticleBefore})");
+        TestHarness.Assert(!cues.Any(cue => cue.Origin == "Object.VoiceAttack" && cue.Entity == ship.Id), "and the gunship said nothing");
     }
 
     private sealed record AirModulesShip(CnCNew.Simulation.Ids.EntityId Id, SpectreGunshipUpdate Module);

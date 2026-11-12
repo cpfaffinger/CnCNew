@@ -739,6 +739,61 @@ static partial class Tests
         FlightVerdict();
     }
 
+    /// <summary>
+    /// #279, <c>SpectreGunshipUpdate::setSpecialPowerOverridableDestination</c>: a gunship that is not disabled takes the clicked place and "if the controlling player is the local player"
+    /// plays its <c>VoiceAttack</c> - the simulation raises <see cref="SimEventKind.PowerSteered"/> once, in the tick the command is executed, at the same frame at 30, 60 and 120 Hz; a disabled
+    /// gunship keeps its destination and says nothing.
+    /// </summary>
+    public static void RateFlightSpectreGunshipSpeaksWhenSteered()
+    {
+        var spoken = new long[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var rate = FlightRates[index];
+            var (world, feeder) = FlightRateWorld(rate, AirWeaponFixtureFiles, terrain: false);
+            feeder.Spawn(1, "AirGunship", owner: 1, x: 0, y: 0);
+            StepFrames(world, 125);
+            var ship = Only(world, "AirGunship");
+            var spectre = ship.Modules.OfType<SpectreGunshipUpdate>().Single();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+            Check.That(feeder.UseSpecialPower(1, ship.Id.Value, "AirGunshipPower", CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, x: 400, y: 0).Accepted, "The power is used on a location.");
+            world.Step();
+            for (var frame = 0; frame < 400 && spectre.Status != SpectreGunshipUpdate.GunshipStatus.Orbiting; frame++) StepFrames(world, 1);
+            Check.That(spectre.Status == SpectreGunshipUpdate.GunshipStatus.Orbiting, $"{rate}: the gunship orbits.");
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+
+            int Steer(int x, ulong sequence)
+            {
+                Check.That(world.Submit(new CnCNew.Simulation.Commands.SteerPowerCommand(new PlayerId(1), sequence, world.Tick, [ship.Id], Fixed.FromInt(x), Fixed.Zero)).Accepted, $"{rate}: the click is accepted.");
+                var start = world.Tick;
+                var count = 0;
+                for (var tick = 0; tick < world.Time.TicksPerOriginalFrame * 2; tick++)
+                {
+                    var result = world.Step();
+                    foreach (var value in result.Events.Where(value => value.Kind == SimEventKind.PowerSteered))
+                    {
+                        Check.That(value.Entity == ship.Id, $"{rate}: the event names the gunship ({value.Entity}).");
+                        if (count++ == 0) spoken[index] = FrameQuarters(world, result.Tick - start);
+                    }
+                }
+                return count;
+            }
+
+            spoken[index] = -1;
+            var heard = Steer(440, 9000);
+            Check.That(heard == 1, $"{rate}: one click, one voice line ({heard}).");
+            Check.That(spectre.OverrideTarget.X == Fixed.FromInt(440), $"{rate}: the gunship took the clicked place ({spectre.OverrideTarget.X}).");
+
+            world.SetScriptDisable(ship, Entity.ScriptDisabled, true);
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+            var silent = Steer(480, 9001);
+            Check.That(silent == 0, $"{rate}: a disabled gunship says nothing ({silent}).");
+            Check.That(spectre.OverrideTarget.X == Fixed.FromInt(440), $"{rate}: a disabled gunship keeps its destination ({spectre.OverrideTarget.X}).");
+        }
+        SameFrames("Spectre gunship: the voice line of a click", spoken);
+        FlightVerdict();
+    }
+
     /// <summary>A parked jet of the airfield fixture, at the same game time at every rate and where a frame begins (the production ends on a tick of its own at every rate).</summary>
     private static (SimulationWorld World, Feeder Feeder, Entity Jet, Entity Airfield) ParkedJet(SimulationRate rate)
     {

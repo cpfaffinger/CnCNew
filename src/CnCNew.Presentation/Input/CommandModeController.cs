@@ -174,8 +174,9 @@ public sealed class CommandModeController
         if (target is not null && target.Owner == Player && PreferSelection) return Hint(ContextAction.Select, CursorKind.Select);
 
         // canSelectedObjectsOverrideSpecialPowerDestination: while a beam or a gunship of the selection runs, a click anywhere - the point under the pointer, whatever stands on it - drives it, and the
-        // pointer says so (MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION_HINT sets Mouse::PARTICLE_UPLINK_CANNON).
-        if (ground is not null && Steerable(own).Any()) return Hint(ContextAction.SteerPower, CursorKind.ParticleUplinkCannon);
+        // pointer says so (MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION_HINT sets Mouse::PARTICLE_UPLINK_CANNON) - "so long as it's not in the black areas of the map": a point its player has never
+        // explored is no steering point (ActionManager::canOverrideSpecialPowerDestination), and the click goes on to the checks below.
+        if (ground is { } steerAt && SteerableAt(world, own, steerAt).Any()) return Hint(ContextAction.SteerPower, CursorKind.ParticleUplinkCannon);
 
         var movers = own.Where(SimulationQueries.CanMove).ToList();
         if (WaypointMode && ground is not null && movers.Count > 0) return Hint(ContextAction.AddWaypoint, CursorKind.Waypoint);
@@ -253,6 +254,17 @@ public sealed class CommandModeController
     /// <summary>The units of the selection with a power that can be driven now.</summary>
     private static IEnumerable<Entity> Steerable(ImmutableArray<Entity> own) => own.Where(unit => unit.Modules.OfType<ISteerablePower>().Any(power => power.IsSteerable));
 
+    /// <summary>
+    /// <c>ActionManager::canOverrideSpecialPowerDestination</c>: the steerable units of the selection whose controlling player's shroud at <paramref name="at"/> is not
+    /// <c>CELLSHROUD_SHROUDED</c> - in the port, a cell the player has explored. The check is the client's (<c>CommandTranslator::evaluateContextCommand</c>); the logic's
+    /// <c>AIGroup::groupOverrideSpecialPowerDestination</c> makes none.
+    /// </summary>
+    private static IEnumerable<Entity> SteerableAt(SimulationWorld world, ImmutableArray<Entity> own, Vector3 at)
+    {
+        var (x, y) = (FixedConvert.FromSingle(at.X), FixedConvert.FromSingle(at.Y));
+        return Steerable(own).Where(unit => world.IsPositionExploredBy(unit.Owner, x, y));
+    }
+
     private static CollideEntry EntryOf(GuiCommandKind kind) => kind switch
     {
         GuiCommandKind.HijackVehicle => CollideEntry.Hijack,
@@ -289,9 +301,9 @@ public sealed class CommandModeController
             case ContextAction.SteerPower:
             {
                 var (x, y) = (FixedConvert.FromSingle(ground.X), FixedConvert.FromSingle(ground.Y));
-                if (!Issue((sequence, tick) => new SteerPowerCommand(Player, sequence, tick, [..Steerable(own).Select(unit => unit.Id)], x, y)).Accepted) return false;
-                Feedback(FeedbackKind.MoveMarker, world, ground, EntityId.Invalid, Settings.MoveHintFrames);
-                return true;
+                // MSG_DO_SPECIAL_POWER_OVERRIDE_DESTINATION makes no move hint (HintSpy makes them for MSG_DO_MOVETO and its kin only) and no voice of the client: the gunship speaks when the
+                // logic takes the new destination (SpectreGunshipUpdate::setSpecialPowerOverridableDestination, SimEventKind.PowerSteered).
+                return Issue((sequence, tick) => new SteerPowerCommand(Player, sequence, tick, [..Steerable(own).Select(unit => unit.Id)], x, y)).Accepted;
             }
             case ContextAction.AddWaypoint:
             {

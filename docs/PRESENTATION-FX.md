@@ -239,6 +239,7 @@ local player; `Player` is the player whom the reference addresses. `NoSound` and
 | FXList `Sound` | Effect at the primary position | `SoundFXNugget` |
 | `WeaponFired` | Weapon `FireSound` (Effect, source) | `FiringTracker::shotFired` |
 | `VoiceFearRequested` | Object `VoiceFear` (Voice) | `ActiveBody::attemptDamage` |
+| `PowerSteered` | Object `VoiceAttack` (Voice; the owner's player, #279) | `SpectreGunshipUpdate::setSpecialPowerOverridableDestination` |
 | `ProductionCompleted` + `EntitySpawned` in the same tick | `VoiceCreated` and `UnitSpecificSounds.VoiceCreate` (Voice) | `ProductionUpdate::update` |
 | `ConstructionCompleted` | `VoiceTaskComplete` of the builder (Voice) | `DozerAIUpdate` |
 | `ConstructionStarted` | MiscAudio `MoneyWithdrawSound` (UiSound) | `Money::withdraw` |

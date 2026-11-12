@@ -168,6 +168,12 @@ public enum SimEventKind : byte
     /// beam follows) to the place the event carries (where <see cref="SimEvent.Other"/> stood when the beam was made; it does not follow). Two are raised for one request, as the original makes two.
     /// </summary>
     AssistFeedbackLaser = 95,
+
+    /// <summary>
+    /// <c>SpectreGunshipUpdate::setSpecialPowerOverridableDestination</c>: the gunship <see cref="SimEvent.Entity"/>, not disabled, took a new destination from its player, and "if the
+    /// controlling player is the local player" its <c>VoiceAttack</c> plays at it. The simulation does not know who is local; the client decides. The particle cannon raises nothing.
+    /// </summary>
+    PowerSteered = 96,
 }
 
 /// <summary>The kinds of <see cref="SimEventKind.RadarNotice"/>.</summary>
