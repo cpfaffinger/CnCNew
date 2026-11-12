@@ -129,12 +129,20 @@ static partial class Tests
         {
             var world = NewRealFireWorld(data, rate, computer: false);
             ulong sequence = 0;
-            for (var plant = 0; plant < 3; plant++) SpawnReal(world, ref sequence, "AmericaPowerPlant", 1, 300, 300 + plant * 60);
+            // Every object appears in the first tick of a frame of the original, so the scene is the same game at every rate: an object that appeared in the second tick of a
+            // frame at 60 Hz appeared at another game time than at 30 Hz, and its first look for a victim (the mood check's offset is drawn by the frame) came a frame later (F-169).
+            for (var plant = 0; plant < 3; plant++)
+            {
+                SpawnReal(world, ref sequence, "AmericaPowerPlant", 1, 300, 300 + plant * 60);
+                ToFrameBoundary(world);
+            }
             // Both batteries begin in one tick, so their logic frames of the original begin together at every rate.
             SpawnReal(world, ref sequence, "AmericaPatriotBattery", 1, 400, 400, step: false);
             var two = SpawnReal(world, ref sequence, "AmericaPatriotBattery", 1, 460, 400);
+            ToFrameBoundary(world);
             var one = world.Entities.Where(value => value.Template.Name == "AmericaPatriotBattery" && value != two).Single();
             var victim = SpawnReal(world, ref sequence, "AmericaVehicleDozer", 2, 430, 520);
+            ToFrameBoundary(world);
             var events = new List<SimEvent>();
             BeginAtFrameOf(world, one);
             var start = world.Tick;
@@ -151,9 +159,13 @@ static partial class Tests
             // The delay of 250 ms is 7.5 frames: the machine fires on the 8th. Before F-140 the module fired on the 8th too, but from its own update, a frame or two after the order.
             Check.That(gaps.All(gap => gap == 8), $"{rate}: the assisting shots are eight frames apart: {string.Join(",", gaps)}.");
             Check.That(own.Count > 0 && assists[0] > own[0], $"{rate}: the neighbour's first shot comes after the request (frame {own.FirstOrDefault()}), as the machine aims first ({assists[0]}).");
-            // The neighbour's turret may still be turning when it is asked (an idle scan), which parts the rates by a tick of the turn: the gaps are what is compared.
-            first ??= gaps;
-            Check.That(first.SequenceEqual(gaps), $"{rate}: the same gaps as at 30 Hz.");
+            first ??= [..own, -1, ..assists];
+            Check.That(first.SequenceEqual([..own, -1, ..assists]), $"{rate}: the same frames of both batteries' shots as at 30 Hz.");
         }
+    }
+
+    private static void ToFrameBoundary(SimulationWorld world)
+    {
+        while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
     }
 }
