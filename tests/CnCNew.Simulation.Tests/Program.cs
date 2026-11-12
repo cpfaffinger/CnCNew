@@ -972,6 +972,7 @@ if (contentDirectory is not null) run.Test("Real data (playtest): idle carriers 
 if (contentDirectory is not null) run.Test("Real data (playtest): a computer player saves for the carrier it has lost", () => Tests.RealComputerPlayersReplaceTheirLostCarriers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a broke computer player sells a building for a carrier", () => Tests.RealBrokeComputerPlayerSellsABuildingForACarrier(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#274): a computer player buys no carrier for a center without supplies in reach", () => Tests.RealComputerPlayerBuysNoCarrierForACenterWithoutSupplies(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#300): a GLA worker given a dock order on a supply dock gathers and delivers", () => Tests.RealGlaWorkerGathersAfterADockOrder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the retail reference match gives the same commands in the same frames at 30, 60 and 120 Hz", () => Tests.RealReferenceMatchAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
