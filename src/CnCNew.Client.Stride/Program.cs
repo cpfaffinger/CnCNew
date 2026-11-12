@@ -814,12 +814,9 @@ internal sealed class CnCNewGame(
             var output = outputs.FirstOrDefault(candidate => candidate.DesktopBounds == bounds) ?? outputs[0];
             var modes = output.SupportedDisplayModes.Select(mode => (mode.Width, mode.Height)).Distinct().OrderBy(size => size.Width).ThenBy(size => size.Height).ToArray();
             // The bound of a window's size: the box around every monitor of the adapter (side by side, 2 x 1920x1080 is 3840x1080).
-            var left = outputs.Min(candidate => candidate.DesktopBounds.Left);
-            var top = outputs.Min(candidate => candidate.DesktopBounds.Top);
-            var right = outputs.Max(candidate => candidate.DesktopBounds.Right);
-            var bottom = outputs.Max(candidate => candidate.DesktopBounds.Bottom);
-            Console.WriteLine($"display: desktop {bounds.Width}x{bounds.Height}, all monitors {right - left}x{bottom - top}, {modes.Length} display modes of the adapter");
-            return ((bounds.Width, bounds.Height), modes, (right - left, bottom - top));
+            var all = CnCNew.Ui.Settings.Resolutions.AllMonitors(Monitors(outputs));
+            Console.WriteLine($"display: desktop {bounds.Width}x{bounds.Height}, all monitors {all.Width}x{all.Height} ({outputs.Length}), {modes.Length} display modes of the adapter");
+            return ((bounds.Width, bounds.Height), modes, (all.Width, all.Height));
         }
         catch (Exception exception) when (exception is InvalidOperationException or NullReferenceException or NotSupportedException)
         {
@@ -834,11 +831,12 @@ internal sealed class CnCNewGame(
         var outputs = GraphicsDevice.Adapter.Outputs;
         if (outputs.Length == 0) return null;
         var bounds = Window.ClientBounds;
-        var centre = new global::Stride.Core.Mathematics.Int2(Window.Position.X + bounds.Width / 2, Window.Position.Y + bounds.Height / 2);
-        foreach (var output in outputs)
-            if (output.DesktopBounds.Contains(centre.X, centre.Y)) return output.DesktopBounds;
-        return outputs[0].DesktopBounds;
+        var index = CnCNew.Ui.Settings.Resolutions.MonitorUnder(Window.Position.X + bounds.Width / 2, Window.Position.Y + bounds.Height / 2, Monitors(outputs));
+        return outputs[index].DesktopBounds;
     }
+
+    private static (int Left, int Top, int Right, int Bottom)[] Monitors(IReadOnlyList<global::Stride.Graphics.GraphicsOutput> outputs) =>
+        [.. outputs.Select(output => (output.DesktopBounds.Left, output.DesktopBounds.Top, output.DesktopBounds.Right, output.DesktopBounds.Bottom))];
 
     private void UpdateFrame(GameTime gameTime)
     {

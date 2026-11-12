@@ -105,6 +105,18 @@ public static class Resolutions
         return [.. offered.OrderBy(size => size.Width).ThenBy(size => size.Height)];
     }
 
+    /// <summary>The box around every monitor (desktop coordinates, right and bottom exclusive): side by side, 1920x1080 and 1280x1024 are 3200x1080; none is a zero size.</summary>
+    public static Resolution AllMonitors(IReadOnlyList<(int Left, int Top, int Right, int Bottom)> monitors) =>
+        monitors.Count == 0 ? default : new Resolution(monitors.Max(m => m.Right) - monitors.Min(m => m.Left), monitors.Max(m => m.Bottom) - monitors.Min(m => m.Top));
+
+    /// <summary>The monitor a window is on: the one that holds the window's centre, the first when none does (a window dragged off every screen); -1 without monitors.</summary>
+    public static int MonitorUnder(int centreX, int centreY, IReadOnlyList<(int Left, int Top, int Right, int Bottom)> monitors)
+    {
+        for (var i = 0; i < monitors.Count; i++)
+            if (centreX >= monitors[i].Left && centreX < monitors[i].Right && centreY >= monitors[i].Top && centreY < monitors[i].Bottom) return i;
+        return monitors.Count == 0 ? -1 : 0;
+    }
+
     /// <summary>The bound of the sizes the options offer and a stored size is kept to: a window may reach over all monitors, a full screen stays on the display it is on.</summary>
     public static Resolution ScreenFor(DisplayMode mode, Resolution desktop, Resolution virtualDesktop) =>
         mode is DisplayMode.Windowed or DisplayMode.Borderless && virtualDesktop.Width > 0 && virtualDesktop.Height > 0 ? new Resolution(Math.Max(desktop.Width, virtualDesktop.Width), Math.Max(desktop.Height, virtualDesktop.Height)) : desktop;
