@@ -35,6 +35,8 @@ internal static class HotkeyBindingTests
         foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
             harness.Run($"More options, {skin.Id} skin: a row is rebound by the next key with its modifiers, a taken key is taken over and told, Defaults restores, Accept saves the difference",
                 () => Screen(data, skin));
+        harness.Run("Every key binds - Escape, Delete, Backspace, a modifier alone - and a pair's end is bound to a release; the settings keep it and a match reads it",
+            () => EveryKey(data));
         harness.Run("A rebound force attack begins on the key-down and ends on the key-up of the new key, and no longer on the old one", () => ForceAttack(data));
         harness.Run("A match uses the player's bindings over the shipped ones: select all reacts to the new key and no longer to the old one, also when the settings change while it runs",
             () => Match(data));
@@ -85,19 +87,22 @@ internal static class HotkeyBindingTests
                 $"the key of stop moved to select all, stop is unbound, and the screen says so ({screen.HotkeyStatus})");
             TestHarness.Assert(rows.Any(row => row.Cells[1] == "Unbound"), "the unbound action stays listed as Unbound");
 
-            // Escape gives up; it does not close the screen while a key is awaited.
+            // While a key is awaited Back reads CANCEL and Defaults CLEAR. CANCEL gives up and leaves the screen open.
+            var back = screen.Tree.FindByName("MoreOptions.wnd:ButtonBack")!;
+            var defaults = screen.Tree.FindByName("MoreOptions.wnd:ButtonDefaults")!;
+            var (backText, defaultsText) = (back.Text, defaults.Text);
             screen.SelectHotkey(MetaAction.Stop);
-            Press(shell, KeyCode.Escape);
-            TestHarness.Assert(shell.CurrentScreen == screen && !screen.CapturesKeys && screen.BindingOf(MetaAction.Stop) is null, "Escape cancels the capture and leaves the screen open");
+            TestHarness.Assert(back.Text == UiTextValue.Label(MoreOptionsScreen.CancelLabel) && defaults.Text == UiTextValue.Label(MoreOptionsScreen.ClearLabel),
+                $"a waiting row turns Back into CANCEL and Defaults into CLEAR ({back.Text}, {defaults.Text})");
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonBack");
+            TestHarness.Assert(shell.CurrentScreen == screen && !screen.CapturesKeys && screen.BindingOf(MetaAction.Stop) is null && back.Text == backText && defaults.Text == defaultsText,
+                $"CANCEL ends the wait, leaves the screen open and the buttons as they were ({screen.HotkeyStatus})");
 
-            // Delete while a key is awaited takes the binding away without a conflict, and says so.
-            screen.SelectHotkey(MetaAction.Stop);
-            Press(shell, KeyCode.Delete);
-            TestHarness.Assert(screen.BindingOf(MetaAction.Stop) is null && screen.BindingOf(MetaAction.SelectAll) == stop && screen.HotkeyStatus.Contains("unbound", StringComparison.Ordinal)
-                && !screen.CapturesKeys, $"Delete unbinds the action and nothing else ({screen.HotkeyStatus})");
+            // CLEAR takes the binding away without a conflict, and says so.
             screen.SelectHotkey(MetaAction.Scatter);
-            Press(shell, KeyCode.Backspace);
-            TestHarness.Assert(screen.BindingOf(MetaAction.Scatter) is null && screen.HotkeyStatus.Contains("unbound", StringComparison.Ordinal), "Backspace does too");
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
+            TestHarness.Assert(screen.BindingOf(MetaAction.Scatter) is null && screen.BindingOf(MetaAction.SelectAll) == stop && screen.HotkeyStatus.Contains("unbound", StringComparison.Ordinal)
+                && !screen.CapturesKeys && defaults.Text == defaultsText, $"CLEAR unbinds the action and nothing else ({screen.HotkeyStatus})");
 
             // A pair keeps its transitions and moves together: the force attack begins on a key-down and ends on the key-up of the same key.
             ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
@@ -110,7 +115,7 @@ internal static class HotkeyBindingTests
                 && screen.BindingOf(MetaAction.EndForceAttack) == new KeyBinding(KeyCode.F8, KeyModifiers.Alt, KeyTransition.Up),
                 $"moving the end moves the begin with it and both keep their transitions ({screen.BindingOf(MetaAction.BeginForceAttack)}, {screen.BindingOf(MetaAction.EndForceAttack)})");
             screen.SelectHotkey(MetaAction.BeginForceAttack);
-            Press(shell, KeyCode.Delete);
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
             TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) is null && screen.BindingOf(MetaAction.EndForceAttack) is null, "unbinding one half unbinds the pair");
 
             // Defaults restore the shipped keys.
@@ -130,6 +135,120 @@ internal static class HotkeyBindingTests
             var again = shell.CurrentScreen as MoreOptionsScreen ?? throw new InvalidOperationException("More options did not open again");
             TestHarness.Assert(again.BindingOf(MetaAction.SelectAll) == new KeyBinding(KeyCode.F9, KeyModifiers.Control), "the saved key is shown when the screen opens again");
             TestHarness.Assert(shell.Stack.All(item => item.Tree.UnregisteredCallbacks.Count == 0), "every callback is registered");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void EveryKey(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-hotkey-every-key-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(Width, Height), skin: UiSkin.Modern);
+            ShellTestInput.Click(shell, "MainMenu.wnd:ButtonOptions");
+            ShellTestInput.Click(shell, OptionsScreen.MoreOptionsButton);
+            var screen = shell.CurrentScreen as MoreOptionsScreen ?? throw new InvalidOperationException("More options did not open");
+            var plain = KeyModifiers.None;
+            TestHarness.Assert(screen.BindingOf(MetaAction.Options) == new KeyBinding(KeyCode.Escape, plain) && screen.BindingOf(MetaAction.DeleteBeacon) == new KeyBinding(KeyCode.Delete, plain),
+                "premise: the original opens the options on Escape and deletes a beacon on Delete");
+            var forceBegin = screen.BindingOf(MetaAction.BeginForceAttack) ?? throw new InvalidOperationException("no shipped force attack");
+            var forceEnd = screen.BindingOf(MetaAction.EndForceAttack) ?? throw new InvalidOperationException("no shipped end of force attack");
+            TestHarness.Assert(forceBegin == new KeyBinding(KeyCode.None, KeyModifiers.Control) && forceEnd == new KeyBinding(KeyCode.None, KeyModifiers.Control, KeyTransition.Up),
+                $"premise: the force attack is Ctrl alone, begun on the press and ended on the release ({forceBegin}, {forceEnd})");
+
+            // Escape binds: stop takes it from the options, and the screen stays open.
+            screen.SelectHotkey(MetaAction.Stop);
+            Press(shell, KeyCode.Escape);
+            TestHarness.Assert(shell.CurrentScreen == screen && !screen.CapturesKeys && screen.BindingOf(MetaAction.Stop) == new KeyBinding(KeyCode.Escape, plain)
+                && screen.BindingOf(MetaAction.Options) is null && screen.HotkeyStatus.Contains("taken from", StringComparison.Ordinal),
+                $"Escape is stop's key now and the options lost it ({screen.BindingOf(MetaAction.Stop)}; {screen.HotkeyStatus})");
+
+            // Delete and Backspace bind (with or without a modifier).
+            screen.SelectHotkey(MetaAction.Scatter);
+            Press(shell, KeyCode.Delete);
+            TestHarness.Assert(screen.BindingOf(MetaAction.Scatter) == new KeyBinding(KeyCode.Delete, plain) && screen.BindingOf(MetaAction.DeleteBeacon) is null,
+                $"Delete is scatter's key now ({screen.BindingOf(MetaAction.Scatter)})");
+            screen.SelectHotkey(MetaAction.Options);
+            Press(shell, KeyCode.Backspace, KeyCode.LeftControl);
+            TestHarness.Assert(screen.BindingOf(MetaAction.Options) == new KeyBinding(KeyCode.Backspace, KeyModifiers.Control), $"Ctrl+Backspace opens the options now ({screen.BindingOf(MetaAction.Options)})");
+
+            // A lost focus while a modifier is held binds nothing; the row still waits.
+            screen.SelectHotkey(MetaAction.SelectAll);
+            var selectAll = screen.BindingOf(MetaAction.SelectAll);
+            shell.HandleInput(new KeyEvent(0, KeyCode.LeftAlt, IsDown: true));
+            shell.HandleInput(new FocusLostEvent(0));
+            TestHarness.Assert(screen.CapturesKeys && screen.BindingOf(MetaAction.SelectAll) == selectAll, "a lost focus binds no modifier");
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonBack");
+
+            // A modifier alone: the force attack cleared, then Ctrl pressed and let go alone for its end - the pair is the original's again, the end on the release.
+            screen.SelectHotkey(MetaAction.BeginForceAttack);
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
+            TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) is null && screen.BindingOf(MetaAction.EndForceAttack) is null, "premise: CLEAR took the pair's key");
+            screen.SelectHotkey(MetaAction.EndForceAttack);
+            Press(shell, KeyCode.LeftControl);
+            TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) == forceBegin && screen.BindingOf(MetaAction.EndForceAttack) == forceEnd && !screen.CapturesKeys,
+                $"Ctrl alone binds the pair as the original has it ({screen.BindingOf(MetaAction.BeginForceAttack)}, {screen.BindingOf(MetaAction.EndForceAttack)}; {screen.HotkeyStatus})");
+
+            // A key-up binding created from nothing: the zoom's pair cleared, then F7 for its end - the end fires on the release of F7, the begin on its press.
+            screen.SelectHotkey(MetaAction.EndCameraZoomIn);
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
+            screen.SelectHotkey(MetaAction.EndCameraZoomIn);
+            Press(shell, KeyCode.F7);
+            var zoomEnd = new KeyBinding(KeyCode.F7, plain, KeyTransition.Up);
+            TestHarness.Assert(screen.BindingOf(MetaAction.EndCameraZoomIn) == zoomEnd && screen.BindingOf(MetaAction.BeginCameraZoomIn) == new KeyBinding(KeyCode.F7, plain),
+                $"F7 ends the zoom on its release and begins it on its press ({screen.BindingOf(MetaAction.EndCameraZoomIn)}, {screen.BindingOf(MetaAction.BeginCameraZoomIn)})");
+            TestHarness.Assert(MoreOptionsScreen.KeyText(zoomEnd) == "F7 (on release)", $"the list says it is a release ({MoreOptionsScreen.KeyText(zoomEnd)})");
+
+            // Taking a key from half a pair takes it from the pair: Ctrl alone for select all leaves no lone end of a force attack behind.
+            screen.SelectHotkey(MetaAction.SelectAll);
+            Press(shell, KeyCode.RightControl);
+            TestHarness.Assert(screen.BindingOf(MetaAction.SelectAll) == new KeyBinding(KeyCode.None, KeyModifiers.Control)
+                && screen.BindingOf(MetaAction.BeginForceAttack) is null && screen.BindingOf(MetaAction.EndForceAttack) is null,
+                $"Ctrl alone is select all's and the whole force attack lost it ({screen.HotkeyStatus})");
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonDefaults");
+            screen.SelectHotkey(MetaAction.SelectAll);
+            Press(shell, KeyCode.F9, KeyCode.LeftControl);
+            TestHarness.Assert(screen.BindingOf(MetaAction.BeginForceAttack) == forceBegin, "premise: Defaults (no row waiting) brought the shipped keys back");
+            // Again what the settings are to keep.
+            foreach (var (action, key, held) in new (MetaAction, KeyCode, KeyCode[])[] { (MetaAction.Stop, KeyCode.Escape, []), (MetaAction.Scatter, KeyCode.Delete, []), (MetaAction.Options, KeyCode.Backspace, [KeyCode.LeftControl]) })
+            {
+                screen.SelectHotkey(action);
+                Press(shell, key, held);
+            }
+            screen.SelectHotkey(MetaAction.EndCameraZoomIn);
+            Press(shell, KeyCode.F7);
+            var expected = new Dictionary<MetaAction, KeyBinding?>
+            {
+                [MetaAction.Stop] = new KeyBinding(KeyCode.Escape, plain), [MetaAction.Scatter] = new KeyBinding(KeyCode.Delete, plain),
+                [MetaAction.Options] = new KeyBinding(KeyCode.Backspace, KeyModifiers.Control), [MetaAction.DeleteBeacon] = null,
+                [MetaAction.SelectAll] = new KeyBinding(KeyCode.F9, KeyModifiers.Control),
+                [MetaAction.BeginCameraZoomIn] = new KeyBinding(KeyCode.F7, plain), [MetaAction.EndCameraZoomIn] = zoomEnd,
+                [MetaAction.BeginForceAttack] = forceBegin, [MetaAction.EndForceAttack] = forceEnd,
+            };
+            foreach (var (action, binding) in expected)
+                TestHarness.Assert(screen.BindingOf(action) == binding, $"before Accept: {action} is {binding?.ToString() ?? "unbound"} ({screen.BindingOf(action)})");
+
+            // The settings keep every one of them, the release too, and a match built from them reads them.
+            ShellTestInput.Click(shell, "MoreOptions.wnd:ButtonAccept");
+            var saved = new SettingsStore(directory).Load();
+            var hotkeys = saved.Settings.Controls.Hotkeys;
+            TestHarness.Assert(saved.Issues.IsEmpty, $"the settings load without issues ({string.Join(", ", saved.Issues.Select(issue => issue.Path))})");
+            TestHarness.Assert(hotkeys.GetValueOrDefault("STOP") == new KeyBinding(KeyCode.Escape, plain).ToString() && hotkeys.GetValueOrDefault("DELETE_BEACON") == HotkeyMap.Unbound
+                && hotkeys.GetValueOrDefault("END_CAMERA_ZOOM_IN") == zoomEnd.ToString() && hotkeys.GetValueOrDefault("END_CAMERA_ZOOM_IN")!.EndsWith(" UP", StringComparison.Ordinal)
+                && !hotkeys.ContainsKey("BEGIN_FORCEATTACK") && !hotkeys.ContainsKey("END_FORCEATTACK"),
+                $"the file holds Escape, the unbound beacon key and the release ({string.Join(", ", hotkeys.Select(pair => pair.Key + "=" + pair.Value))})");
+            var map = HotkeyMap.FromGraph(data.Graph).WithEngineDefaults().ApplySettings(hotkeys);
+            TestHarness.Assert(map.Issues.IsEmpty, $"the saved bindings apply without issues ({string.Join(", ", map.Issues.Select(issue => issue.Subject + ": " + issue.Detail))})");
+            foreach (var (action, binding) in expected)
+                TestHarness.Assert((map.TryGetEntry(action, out var entry) ? entry.Binding : (KeyBinding?)null) == binding, $"after loading: {action} is {binding?.ToString() ?? "unbound"}");
+            TestHarness.Assert(map.Resolve(new KeyBinding(KeyCode.Escape, plain), HotkeyContexts.Game).SequenceEqual([MetaAction.Stop]), "Escape stops in a match");
+            TestHarness.Assert(map.Resolve(zoomEnd, HotkeyContexts.Game).SequenceEqual([MetaAction.EndCameraZoomIn]), "the release of F7 ends the zoom in a match");
+
+            ShellTestInput.Click(shell, OptionsScreen.MoreOptionsButton);
+            var again = shell.CurrentScreen as MoreOptionsScreen ?? throw new InvalidOperationException("More options did not open again");
+            foreach (var (action, binding) in expected)
+                TestHarness.Assert(again.BindingOf(action) == binding, $"opened again: {action} is {binding?.ToString() ?? "unbound"} ({again.BindingOf(action)})");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

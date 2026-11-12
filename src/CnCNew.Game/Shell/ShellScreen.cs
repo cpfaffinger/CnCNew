@@ -97,12 +97,19 @@ public abstract class ShellScreen
     public virtual UiDrawList BuildDrawList() => Tree.BuildDrawList();
 
     /// <summary>
-    /// While true the shell hands the screen every key press as a key and the modifiers held (<see cref="OnCapturedKey"/>) instead of to its windows; the screens that
-    /// ask a person for a key (the hotkey bindings of "More options") use it. Modifier keys alone are never delivered.
+    /// While true the shell hands the screen every key press as a key and the modifiers held (<see cref="OnCapturedKey"/>) - Escape, Delete and Backspace too - and every
+    /// change of the modifier keys held (<see cref="OnCapturedModifiers"/>) instead of to its windows; the mouse still reaches the windows. The screens that ask a person
+    /// for a key (the hotkey bindings of "More options") use it.
     /// </summary>
     public virtual bool CapturesKeys => false;
 
     public virtual void OnCapturedKey(CnCNew.Presentation.Input.KeyCode key, CnCNew.Presentation.Input.KeyModifiers modifiers) { }
+
+    /// <summary>
+    /// While <see cref="CapturesKeys"/>: Shift, Ctrl or Alt went down or up, the modifiers held were <paramref name="before"/> and are <paramref name="after"/>.
+    /// <paramref name="focusLost"/> says the window lost the focus, which lets go of every key without a person doing so.
+    /// </summary>
+    public virtual void OnCapturedModifiers(CnCNew.Presentation.Input.KeyModifiers before, CnCNew.Presentation.Input.KeyModifiers after, bool focusLost) { }
 
     /// <summary>Called once when the screen leaves the stack (popped or replaced); default does nothing.</summary>
     public virtual void OnClosed() { }

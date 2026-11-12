@@ -211,7 +211,7 @@ of any; below 800 × 600 it is raised, a smaller desktop gives 800 × 600 with a
 
 ## Phase 64: schema 7 and the hotkeys
 
-**Schema 7** (the owner's playtest of 8 November 2026): `controls.hotkeys` maps an action name to `MODIFIERS KEY TRANSITION` or `UNBOUND` and holds **only what differs from the shipped `CommandMap.ini`**; the migration step 6 to 7 adds an empty object. A non-string entry is reported and dropped. Nothing is written to `game/` or to the installation's `CommandMap.ini`. The match starts from the shipped keys plus these overrides and updates a running match when the settings are saved (`MatchController.ApplyHotkeys`).
+**Schema 7** (the owner's playtest of 8 November 2026): `controls.hotkeys` maps an action name to `MODIFIERS KEY TRANSITION` or `UNBOUND` and holds **only what differs from the shipped `CommandMap.ini`**; the migration step 6 to 7 adds an empty object. A non-string entry is reported and dropped. Nothing is written to `game/` or to the installation's `CommandMap.ini`. The match starts from the shipped keys plus these overrides and updates a running match when the settings are saved (`MatchController.ApplyHotkeys`). A binding of the modifiers alone and one on a key's release are written the same way (`CTRL KEY_NONE DOWN`, `NONE KEY_F7 UP`); binding Escape, Delete, Backspace or a modifier alone in the editor (#278) needed no change of the schema.
 
 ## Phase 65: schema 8
 

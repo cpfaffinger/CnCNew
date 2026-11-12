@@ -9,7 +9,9 @@ namespace CnCNew.Game.Shell.Screens;
 /// <summary>
 /// The second options screen (docs/UI-MODERN.md section 7): what the original's <c>OptionsMenu.wnd</c> does not reach - the interface skin, the display mode, the 3D view in
 /// a wide window, the text size, the sound device - and every hotkey of <c>CommandMap.ini</c>, which a person rebinds here: click a row, press the new key (with Ctrl, Alt
-/// or Shift held when it should have them). A key another action of the same contexts already has is taken away from that action and the screen says so; "Defaults" restores the shipped
+/// or Shift held when it should have them, or Ctrl, Alt or Shift alone). Every key binds, Escape, Delete and Backspace too; while a row waits, Defaults reads CLEAR (the row
+/// loses its key) and Back reads CANCEL (it keeps it). A pair of the original that begins on a press and ends on the release (the force attack, the camera's rotation and
+/// zoom) moves together and keeps both transitions. A key another action of the same contexts already has is taken away from that action and the screen says so; "Defaults" restores the shipped
 /// keys. The bindings are the working settings' <see cref="ControlSettings.Hotkeys"/> (only what differs from the shipped map) and are saved with Accept like the other choices;
 /// the installation's <c>CommandMap.ini</c> is never written. It is opened from the options' "More options" button.
 /// <para>
@@ -71,7 +73,12 @@ public sealed class MoreOptionsScreen : ShellScreen
     private HotkeyMap _hotkeys;
     private ImmutableArray<(MetaAction Action, string Name)> _rows = [];
     private MetaAction? _armed;
+    private KeyModifiers _modifiersAlone;
+    private readonly UiTextValue? _defaultsText, _backText;
     private const string HotkeyHint = "Hotkeys: click, press a key";
+
+    /// <summary>The words of Defaults and Back while a row waits for a key (the original's string table: "CLEAR", "CANCEL").</summary>
+    public const string ClearLabel = "GUI:Clear", CancelLabel = "GUI:Cancel";
 
     public MoreOptionsScreen(GameShell shell) : base(shell, File, shell.Skin.Derive(BuildLayout(shell.Layouts.Get(ShellLayoutNames.OptionsMenu), shell.Layouts.Get(ShellLayoutNames.SkirmishMapSelectMenu)), shell.Layouts.HeaderTemplates))
     {
@@ -84,6 +91,8 @@ public sealed class MoreOptionsScreen : ShellScreen
         W("Title").SetText("More options");
         W("HotkeysLabel").SetText(HotkeyHint);
         W("HotkeysStatus").SetText("");
+        _defaultsText = W("ButtonDefaults").Text;
+        _backText = W("ButtonBack").Text;
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("Skin", SkinChoices.Select(choice => choice.Text));
         Fill("DisplayMode", DisplayModeChoices.Select(choice => choice.Text));
@@ -132,20 +141,36 @@ public sealed class MoreOptionsScreen : ShellScreen
 
     public override bool CapturesKeys => _armed is not null;
 
-    /// <summary>The key a person pressed for the armed row. Escape gives up; every other key (and the modifiers held with it) becomes the binding.</summary>
+    /// <summary>
+    /// The key a person pressed for the armed row, with the modifiers held, becomes its binding - every key, Escape, Delete and Backspace too (the original binds them to
+    /// the options, deleting a beacon and the allies' chat). Giving up and taking the key away are the two buttons below the list while a key is awaited (<see cref="Arm"/>).
+    /// </summary>
     public override void OnCapturedKey(KeyCode key, KeyModifiers modifiers)
     {
+        if (_armed is { } action) Capture(action, key, modifiers);
+    }
+
+    /// <summary>
+    /// Shift, Ctrl or Alt pressed and let go again without another key binds the modifiers alone (<c>KEY_NONE</c>, as the original's force attack, waypoints and prefer
+    /// selection); every modifier held at once belongs to it. A lost focus binds nothing.
+    /// </summary>
+    public override void OnCapturedModifiers(KeyModifiers before, KeyModifiers after, bool focusLost)
+    {
         if (_armed is not { } action) return;
-        var row = _rows.ToList().FindIndex(item => item.Action == action);
-        _armed = null;
-        W("HotkeysLabel").SetText(HotkeyHint);
-        if (key == KeyCode.Escape)
+        if (focusLost)
         {
-            W("HotkeysStatus").SetText($"{ActionName(action)} keeps its key");
+            _modifiersAlone = KeyModifiers.None;
             return;
         }
-        // Delete and Backspace take the binding away without giving it to anything else; they cannot be bound themselves.
-        W("HotkeysStatus").SetText(key is KeyCode.Delete or KeyCode.Backspace ? Unbind(action) : Bind(action, key, modifiers));
+        if ((after & ~before) != KeyModifiers.None) _modifiersAlone |= after;
+        else if (after == KeyModifiers.None && _modifiersAlone != KeyModifiers.None) Capture(action, KeyCode.None, _modifiersAlone);
+    }
+
+    private void Capture(MetaAction action, KeyCode key, KeyModifiers modifiers)
+    {
+        var row = _rows.ToList().FindIndex(item => item.Action == action);
+        Disarm();
+        W("HotkeysStatus").SetText(Bind(action, key, modifiers));
         ShowHotkeys(row);
     }
 
@@ -156,18 +181,23 @@ public sealed class MoreOptionsScreen : ShellScreen
     }
 
     /// <summary>
-    /// Binds <paramref name="action"/> to <paramref name="key"/> with <paramref name="modifiers"/>. Only the key and the modifiers change: the binding keeps its transition (a
-    /// key-up stays a key-up; an action that had no key gets the transition its kind fires on). The partner of a begin/end pair (<see cref="MetaActionNames.TryGetPartner"/>) moves
-    /// to the same key with its own transition, so the pair keeps working. A key another action of overlapping contexts already has is taken from that action - a key does one
-    /// thing at a time. Returns the line the screen shows.
+    /// Binds <paramref name="action"/> to <paramref name="key"/> with <paramref name="modifiers"/> (<see cref="KeyCode.None"/>: the modifiers alone). Only the key and the
+    /// modifiers change: the binding keeps its transition - a key-up stays a key-up -, and an action that has no key now takes the transition of its entry in the shipped
+    /// <c>CommandMap.ini</c> (the <c>END_</c> half of a pair fires on the release), or the one its kind fires on. The partner of a begin/end pair
+    /// (<see cref="MetaActionNames.TryGetPartner"/>) moves to the same key with its own transition, so the pair keeps working: a captured key makes a press and a release. A key
+    /// another action of overlapping contexts already has is taken from that action, and from its partner with it (half a pair does nothing) - a key does one thing at a time.
+    /// Returns the line the screen shows.
     /// </summary>
     public string Bind(MetaAction action, KeyCode key, KeyModifiers modifiers)
     {
+        if (key == KeyCode.None && modifiers == KeyModifiers.None) throw new ArgumentException("A binding needs a key or a modifier.", nameof(modifiers));
         var moved = new List<(MetaAction Action, KeyBinding Binding)>();
         var members = MetaActionNames.TryGetPartner(action, out var partner) ? new[] { action, partner } : [action];
         foreach (var member in members)
         {
-            var transition = _hotkeys.TryGetEntry(member, out var current) ? current.Binding.Transition : MetaActionNames.IsEndOfPair(member) ? KeyTransition.Up : KeyTransition.Down;
+            var transition = _hotkeys.TryGetEntry(member, out var current) ? current.Binding.Transition
+                : _shipped.TryGetEntry(member, out var original) ? original.Binding.Transition
+                : MetaActionNames.IsEndOfPair(member) ? KeyTransition.Up : KeyTransition.Down;
             moved.Add((member, new KeyBinding(key, modifiers, transition)));
         }
         var map = _hotkeys;
@@ -178,8 +208,14 @@ public sealed class MoreOptionsScreen : ShellScreen
             if (!map.TryGetEntry(member, out var mine)) continue;
             foreach (var other in map.Entries.Where(entry => moved.All(item => item.Action != entry.Action) && entry.Binding == binding && (entry.UsableIn & mine.UsableIn) != 0).ToList())
             {
+                if (!map.TryGetEntry(other.Action, out _)) continue;
                 map = map.Unbind(other.Action);
                 taken.Add(ActionName(other.Action));
+                if (MetaActionNames.TryGetPartner(other.Action, out var otherPartner) && moved.All(item => item.Action != otherPartner) && map.TryGetEntry(otherPartner, out _))
+                {
+                    map = map.Unbind(otherPartner);
+                    taken.Add(ActionName(otherPartner));
+                }
             }
         }
         Commit(map);
@@ -205,9 +241,8 @@ public sealed class MoreOptionsScreen : ShellScreen
     /// <summary>The shipped keys of <c>CommandMap.ini</c> again (not saved until Accept).</summary>
     public void RestoreHotkeyDefaults()
     {
-        _armed = null;
+        Disarm();
         Commit(_shipped);
-        W("HotkeysLabel").SetText(HotkeyHint);
         W("HotkeysStatus").SetText("The shipped keys are back");
         ShowHotkeys(selected: -1);
     }
@@ -230,11 +265,52 @@ public sealed class MoreOptionsScreen : ShellScreen
         W("ListHotkeys").SetListSelection(row);
     }
 
+    /// <summary>
+    /// The row waits for a key: every key binds, so giving up and taking the key away are buttons - Defaults reads <c>CLEAR</c> (no key) and Back <c>CANCEL</c> (no change),
+    /// in the original's own words (<c>GUI:Clear</c>, <c>GUI:Cancel</c>), until a key is bound or a button is pressed.
+    /// </summary>
     private void Arm(int row)
     {
         if (ActionAt(row) is not { } action) return;
         _armed = action;
-        W("HotkeysStatus").SetText($"Press a key for {ActionName(action)} (Esc: cancel, Del: unbind)");
+        _modifiersAlone = KeyModifiers.None;
+        W("HotkeysStatus").SetText($"Press a key for {ActionName(action)} (or Ctrl, Alt, Shift alone)");
+        W("ButtonDefaults").SetTextLabel(ClearLabel);
+        W("ButtonBack").SetTextLabel(CancelLabel);
+    }
+
+    private void Disarm()
+    {
+        _armed = null;
+        _modifiersAlone = KeyModifiers.None;
+        W("HotkeysLabel").SetText(HotkeyHint);
+        Restore(W("ButtonDefaults"), _defaultsText);
+        Restore(W("ButtonBack"), _backText);
+    }
+
+    private static void Restore(UiWindow window, UiTextValue? text)
+    {
+        if (text is null) window.SetText("");
+        else if (text.IsLabel) window.SetTextLabel(text.Value);
+        else window.SetText(text.Value);
+    }
+
+    /// <summary>The armed row keeps its key (Back, which reads CANCEL while a key is awaited).</summary>
+    public void CancelCapture()
+    {
+        if (_armed is not { } action) return;
+        Disarm();
+        W("HotkeysStatus").SetText($"{ActionName(action)} keeps its key");
+    }
+
+    /// <summary>The armed row loses its key (Defaults, which reads CLEAR while a key is awaited).</summary>
+    public void ClearCapture()
+    {
+        if (_armed is not { } action) return;
+        var row = _rows.ToList().FindIndex(item => item.Action == action);
+        Disarm();
+        W("HotkeysStatus").SetText(Unbind(action));
+        ShowHotkeys(row);
     }
 
     /// <summary>A key as a person reads it: <c>Ctrl+Alt+F1</c>; a binding of the modifiers alone says so; a binding on the release of a key says that.</summary>
@@ -298,13 +374,21 @@ public sealed class MoreOptionsScreen : ShellScreen
         switch (e.Kind)
         {
             case UiEventKind.ButtonSelected when e.Source == Name("ButtonAccept"): Accept(); break;
-            case UiEventKind.ButtonSelected when e.Source == Name("ButtonDefaults"): Shell.PlaySound(ShellUiSounds.ButtonClick); RestoreHotkeyDefaults(); break;
+            case UiEventKind.ButtonSelected when e.Source == Name("ButtonDefaults"):
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                if (_armed is not null) ClearCapture();
+                else RestoreHotkeyDefaults();
+                break;
             case UiEventKind.ListSelected when e.Source == Name("ListHotkeys"): Arm(e.Value); break;
             case UiEventKind.SliderTrack or UiEventKind.SliderDone when e.Source == Name("SliderBarOpacity"):
                 _working = _working with { Display = _working.Display with { BarOpacityPercent = Math.Clamp(e.Value, OpacityMinimum, OpacityMaximum) } };
                 ShowOpacity();
                 break;
-            case UiEventKind.ButtonSelected when e.Source == Name("ButtonBack"): Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.CloseTop(); break;
+            case UiEventKind.ButtonSelected when e.Source == Name("ButtonBack"):
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                if (_armed is not null) CancelCapture();
+                else Shell.CloseTop();
+                break;
             case UiEventKind.ComboSelected when e.Value >= 0:
                 Choose(e.Source, e.Value);
                 Shell.PlaySound(ShellUiSounds.ComboBoxClick);

@@ -434,10 +434,19 @@ public sealed class GameShell
         switch (evt)
         {
             case KeyEvent { Key: var held } modifierKey when ModifierOf(held) is { } modifier:
+                var before = _heldModifiers;
                 _heldModifiers = modifierKey.IsDown ? _heldModifiers | modifier : _heldModifiers & ~modifier;
+                if (CurrentScreen.CapturesKeys)
+                {
+                    // A modifier alone can be the key a person binds (KEY_NONE with CTRL, as the original's force attack).
+                    if (before != _heldModifiers) CurrentScreen.OnCapturedModifiers(before, _heldModifiers, focusLost: false);
+                    return;
+                }
                 break;
             case FocusLostEvent:
+                var lost = _heldModifiers;
                 _heldModifiers = KeyModifiers.None;
+                if (CurrentScreen.CapturesKeys) CurrentScreen.OnCapturedModifiers(lost, KeyModifiers.None, focusLost: true);
                 break;
             case KeyEvent { IsDown: true, IsRepeat: false } pressed when CurrentScreen.CapturesKeys:
                 CurrentScreen.OnCapturedKey(pressed.Key, _heldModifiers);
