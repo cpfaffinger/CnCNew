@@ -1188,9 +1188,11 @@ public sealed class GameShell
             _ => names.ComputerArmy,
         };
         var computerFirst = setup.Spectator || setup.AutoPlay;
-        rows.Add(new NetLoadRow(computerFirst ? Army(0) : setup.PlayerName ?? names.Player, setup.HumanFaction, setup.DetailsOf(0).Team, 0, computerFirst, setup.DetailsOf(0).Color));
+        // The load screen comes after populateRandomSideAndColor: every row shows the colour its player will have, "???" decided as the match decides it.
+        var colors = CnCNew.Simulation.Skirmish.MatchDescription.ResolveColors([.. Enumerable.Range(0, setup.Opponents.Length + 1).Select(slot => (int?)setup.DetailsOf(slot).Color)]);
+        rows.Add(new NetLoadRow(computerFirst ? Army(0) : setup.PlayerName ?? names.Player, setup.HumanFaction, setup.DetailsOf(0).Team, 0, computerFirst, colors[0]));
         for (var opponent = 0; opponent < setup.Opponents.Length; opponent++)
-            rows.Add(new NetLoadRow(Army(opponent + 1), setup.Opponents[opponent], setup.DetailsOf(opponent + 1).Team, 0, true, setup.DetailsOf(opponent + 1).Color));
+            rows.Add(new NetLoadRow(Army(opponent + 1), setup.Opponents[opponent], setup.DetailsOf(opponent + 1).Team, 0, true, colors[opponent + 1]));
         return rows.ToImmutable();
     }
 

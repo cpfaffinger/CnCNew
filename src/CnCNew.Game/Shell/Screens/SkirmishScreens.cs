@@ -69,7 +69,13 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     // The room of the local game (docs/NETWORK-PROTOCOL.md section 4): what the team and colour boxes of a slot say travels into the match description.
     private readonly int[] _team = new int[Slots];
     private readonly int[] _start = [-1, -1, -1, -1, -1, -1, -1, -1];
-    private readonly int[] _color = new int[Slots];
+    /// <summary>The multiplayer colour of every slot (an index of <c>multiplayer.ini</c>'s <c>MultiplayerColor</c> blocks), -1 for "???" - a free colour chosen at the start.</summary>
+    private readonly int[] _color = [-1, -1, -1, -1, -1, -1, -1, -1];
+    /// <summary>What each row of a slot's colour box stands for: -1 for "???", then the colours no other slot holds (<c>PopulateColorComboBox</c>'s item data).</summary>
+    private readonly List<int>[] _colorRows = [.. Enumerable.Range(0, Slots).Select(_ => new List<int>())];
+    private readonly ImmutableArray<string> _colorNames;
+    private readonly ImmutableArray<WndColor> _colorValues;
+    private readonly string _randomColorName;
 
     public SkirmishSetupScreen(GameShell shell) : base(shell, ShellLayoutNames.SkirmishGameOptionsMenu)
     {
@@ -77,7 +83,9 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             .Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal), "Random"];
         _startMoney = MoneyChoices.Contains(Shell.Settings.Skirmish.LastStartMoney) ? Shell.Settings.Skirmish.LastStartMoney : MoneyChoices[1];
         var names = new ShellSkirmishText(Shell.Data.Graph, Shell.TextSource);
-        var colors = names.ColorNames();
+        _colorNames = names.ColorNames();
+        _colorValues = names.Colors();
+        _randomColorName = names.Label("GUI:???", "???");
 
         Tree.Register("SkirmishGameOptionsMenuSystem", OnSystem);
         Tree.Register("SkirmishGameOptionsMenuInput", OnInput);
@@ -92,10 +100,6 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             var template = W($"ComboBoxPlayerTemplate{slot}");
             foreach (var name in _factionChoices) template.AddComboEntry(name == "Random" ? names.Random : names.Faction(name));
             template.SetComboSelection(0);
-            var color = W($"ComboBoxColor{slot}");
-            foreach (var colorName in colors) color.AddComboEntry(colorName);
-            color.SetComboSelection(Math.Min(slot, colors.Length - 1));
-            _color[slot] = colors.Length == 0 ? -1 : Math.Min(slot, colors.Length - 1);
             var team = W($"ComboBoxTeam{slot}");
             for (var index = 0; index <= 4; index++) team.AddComboEntry(names.Team(index));
             team.SetComboSelection(0);
@@ -117,6 +121,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         // SkirmishGameOptionsMenuInit: the second slot starts as a computer army (the original picks easy, medium or hard by the battle honors; this build starts with medium).
         _computer[1] = true;
         W("ComboBoxPlayer1").SetComboSelection(DefaultArmyEntry);
+        // Every slot starts at "???" (the person's preferred colour is not kept by this port: SkirmishPreferences::getPreferredColor answers -1 without one).
+        PopulateColors();
 
         var money = W("ComboBoxStartingCash");
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
@@ -287,9 +293,54 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             W($"ComboBoxPlayerTemplate{slot}").SetHidden(!visible || _mapPickerOpen);
             W($"ComboBoxColor{slot}").SetHidden(!visible || _mapPickerOpen);
             W($"ComboBoxTeam{slot}").SetHidden(!visible || _mapPickerOpen);
-            if (!visible) _computer[slot] = false;
+            if (!visible)
+            {
+                _computer[slot] = false;
+                _color[slot] = -1;
+            }
+        }
+        PopulateColors();
+    }
+
+    /// <summary>Whether the slot plays: the person's, or an army within the map's places.</summary>
+    private bool TakesPart(int slot) => slot == 0 || slot < _startPositionCount && _computer[slot];
+
+    /// <summary>
+    /// <c>PopulateColorComboBox</c> for every slot, as <c>UpdateSlotList</c> does after each change: "???" in white, then every colour no other slot holds, each written in itself;
+    /// the slot's own colour (or "???") is selected.
+    /// </summary>
+    private void PopulateColors()
+    {
+        for (var slot = 0; slot < Slots; slot++)
+        {
+            var box = W($"ComboBoxColor{slot}");
+            var rows = _colorRows[slot];
+            box.ClearCombo();
+            rows.Clear();
+            box.AddComboEntry(_randomColorName, new WndColor(255, 255, 255, 255));
+            rows.Add(-1);
+            for (var color = 0; color < _colorNames.Length; color++)
+            {
+                if (Enumerable.Range(0, Slots).Any(other => other != slot && TakesPart(other) && _color[other] == color)) continue;
+                box.AddComboEntry(_colorNames[color], color < _colorValues.Length ? _colorValues[color] : WndColor.Undefined);
+                rows.Add(color);
+            }
+            box.SetComboSelection(Math.Max(0, rows.IndexOf(_color[slot])));
         }
     }
+
+    /// <summary><c>handleColorSelection</c>: a colour another slot holds is refused (the box shows the slot's colour again), "???" is always free.</summary>
+    private void SelectColor(int slot, int row)
+    {
+        var rows = _colorRows[slot];
+        var color = row >= 0 && row < rows.Count ? rows[row] : -1;
+        var taken = color >= 0 && Enumerable.Range(0, Slots).Any(other => other != slot && TakesPart(other) && _color[other] == color);
+        if (!taken) _color[slot] = color;
+        PopulateColors();
+    }
+
+    /// <summary>The colour a slot holds (-1 for "???").</summary>
+    public int ColorOf(int slot) => _color[slot];
 
     /// <summary>
     /// <c>SkirmishPreferences::getPreferredMap</c>: the last map when it still is a multiplayer map of the catalog, otherwise <c>getDefaultMap(TRUE)</c> - the first multiplayer map
@@ -406,10 +457,13 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         {
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate{slot}") { _factionIndex[slot] = e.Value; return; }
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxTeam{slot}") { _team[slot] = Math.Clamp(e.Value, 0, 4); return; }
-            if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxColor{slot}") { _color[slot] = e.Value; return; }
+            if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxColor{slot}") { SelectColor(slot, e.Value); return; }
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
+                // GameSlot::setState: a slot that opens, closes or becomes an army gives its colour back; an army that only changes its strength keeps it.
+                if (!(_computer[slot] && e.Value >= ComputerArmyEntry)) _color[slot] = -1;
                 _computer[slot] = e.Value >= ComputerArmyEntry;
+                PopulateColors();
                 // An army entry is a strength (the slot keeps its engine, its profile goes); a profile entry is the new AI with that profile at medium strength.
                 if (e.Value >= ProfileEntry)
                     _ai[slot] = new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, CnCNew.Simulation.Scripting.ScriptDifficulty.Normal,

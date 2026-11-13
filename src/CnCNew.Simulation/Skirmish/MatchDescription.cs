@@ -253,10 +253,9 @@ public sealed record MatchDescription(
             positions[index] = pick;
         }
 
-        var usedColors = new SortedSet<int>(Slots.Where(slot => slot.TakesPart && slot.Color >= 0).Select(slot => slot.Color));
+        var colors = ResolveColors([.. Slots.Select(slot => slot.TakesPart ? slot.Color : (int?)null)]);
         var resolved = ImmutableArray.CreateBuilder<ResolvedSlot>();
         var player = 0;
-        var nextColor = 0;
         for (var index = 0; index < Slots.Length; index++)
         {
             var slot = Slots[index];
@@ -264,17 +263,31 @@ public sealed record MatchDescription(
             if (!Enum.IsDefined((AiStrength)slot.AiStrength) || slot.AiStrength < 0) throw new ArgumentException($"Slot {index} names the unknown AI strength {slot.AiStrength}.");
             if (slot.AiTactics < -1 || slot.AiTactics >= 0 && !Enum.IsDefined((AiTactics)slot.AiTactics)) throw new ArgumentException($"Slot {index} names the unknown tactics profile {slot.AiTactics}.");
             if (slot.AiComposition >= 0 && !Enum.IsDefined((ArmyComposition)slot.AiComposition)) throw new ArgumentException($"Slot {index} names the unknown army composition {slot.AiComposition}.");
-            var color = slot.Color;
-            if (color < 0)
-            {
-                // "Random" colour: the lowest free index. It needs no draw - nothing depends on which colour it is, only that every machine shows the same one.
-                while (usedColors.Contains(nextColor)) nextColor++;
-                color = nextColor;
-                usedColors.Add(color);
-            }
-            resolved.Add(new ResolvedSlot(index, new PlayerId(++player), slot, participants[index]!, positions[index], color));
+            resolved.Add(new ResolvedSlot(index, new PlayerId(++player), slot, participants[index]!, positions[index], colors[index]));
         }
         return new ResolvedMatch(this, resolved.ToImmutable());
+    }
+
+    /// <summary>
+    /// The colour every slot plays (null for a slot that takes no part, which gets -1): <c>checkForDuplicateColors</c> - a colour named by two slots stays with the first, the later
+    /// one becomes "random" -, then every "random" slot the lowest colour nobody holds. It needs no draw (the original draws among the free ones): nothing depends on which colour it
+    /// is, only that every machine shows the same one and no two players share one.
+    /// </summary>
+    public static ImmutableArray<int> ResolveColors(IReadOnlyList<int?> named)
+    {
+        var used = new SortedSet<int>();
+        var colors = new int[named.Count];
+        for (var index = 0; index < named.Count; index++)
+            colors[index] = named[index] is >= 0 and var color && used.Add(color) ? color : -1;
+        var next = 0;
+        for (var index = 0; index < named.Count; index++)
+        {
+            if (named[index] is null || colors[index] >= 0) continue;
+            while (used.Contains(next)) next++;
+            colors[index] = next;
+            used.Add(next);
+        }
+        return [.. colors];
     }
 
     private static void WriteString(BinaryWriter writer, string value)

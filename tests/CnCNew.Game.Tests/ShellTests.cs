@@ -464,7 +464,7 @@ internal static class ShellTests
             TestHarness.Assert(armies.Contains(expected), $"the army list has '{expected}': {string.Join(", ", armies)}");
         TestHarness.Assert(armies.All(name => !name.StartsWith("Faction", StringComparison.Ordinal)), $"no internal template name in the army list: {string.Join(", ", armies)}");
         var colors = Entries("ComboBoxColor0");
-        TestHarness.Assert(colors.Length == 8 && colors.SequenceEqual(["Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are the multiplayer color names in file order: {string.Join(", ", colors)}");
+        TestHarness.Assert(colors.Length == 9 && colors.SequenceEqual(["???", "Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are GUI:??? and the multiplayer color names in file order: {string.Join(", ", colors)}");
         TestHarness.Assert(Entries("ComboBoxTeam0").SequenceEqual(["None", "1", "2", "3", "4"]), "the teams are Team:0..Team:4");
         // SkirmishGameOptionsMenuInit lists GUI:Open, GUI:Closed, GUI:EasyAI, GUI:MediumAI, GUI:HardAI; the built-in AI plays the three armies by its strength (Phase 33,
         // docs/SKIRMISH-AI.md) and adds its three tactics profiles. The second slot starts as the medium army, the name field holds GUI:Player.
@@ -491,7 +491,7 @@ internal static class ShellTests
         }
         // The turtle profile (entry 6): a computer army whose tactics travel into the setup.
         tree.Post(UiEventKind.ComboSelected, slotOne, value: 6);
-        // The room: the team and colour boxes of the two slots travel into the match (phase 25).
+        // The room: the team and colour boxes of the two slots travel into the match (phase 25). The colour box's row 5 is Orange (colour 4) after "???".
         tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxTeam0")!, value: 2);
         tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxTeam1")!, value: 2);
         tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxColor1")!, value: 5);
@@ -504,7 +504,7 @@ internal static class ShellTests
         TestHarness.Assert(started.Setup.Opponents.Length == 1, $"one computer army entry starts one computer player, got {started.Setup.Opponents.Length}");
         TestHarness.Assert(started.Setup.AiOf(1) is { Kind: CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, Difficulty: CnCNew.Simulation.Scripting.ScriptDifficulty.Normal, Tactics: CnCNew.Simulation.Skirmish.AiTactics.Turtle },
             $"the turtle entry is the built-in AI with the turtle profile at medium strength ({started.Setup.AiOf(1)})");
-        TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: 0, StartPosition: -1 } && started.Setup.Details[1] is { Team: 2, Color: 5, StartPosition: -1 },
+        TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: -1, StartPosition: -1 } && started.Setup.Details[1] is { Team: 2, Color: 4, StartPosition: -1 },
             "the setup carries team, colour and start position of every slot that takes part");
 
         shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);

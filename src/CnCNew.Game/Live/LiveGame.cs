@@ -66,8 +66,9 @@ public abstract class LiveGame
         return reader.ReadToEnd();
     }
 
+    /// <param name="houseColors">The colour of each player by id where the match names one (a skirmish slot's multiplayer colour); the others are resolved by <see cref="TeamColors"/>.</param>
     protected LiveGame(GameData data, SimulationWorld world, MapData map, string mapPath, TerrainMap terrain, IEnumerable<PlayerConfiguration> players, PlayerId human,
-        uint fxSeed, Vector2 viewport, Vector2 cameraStart)
+        uint fxSeed, Vector2 viewport, Vector2 cameraStart, IReadOnlyDictionary<int, CnCNew.Data.Definitions.ColorValue>? houseColors = null)
     {
         MapPath = mapPath;
         var graph = data.Graph;
@@ -99,7 +100,7 @@ public abstract class LiveGame
         Fog = FogOfWarGrid.ForVision(world.Vision!, FogSettings.FromDefinitions(graph, 510f));
         var water = renderOptions.Water?.RadarColor ?? new Rgba32(100, 120, 140, 255);
         Minimap = MinimapImage.Build(TerrainModel, Heights, terrain, water, 256, bridges: WorkingBridges(world));
-        Colors = TeamColors.Resolve(players, graph);
+        Colors = TeamColors.Resolve(players, graph, houseColors);
         var scenery = _scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         FogViewer = human;
         _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };

@@ -147,7 +147,7 @@ public sealed class LiveMatch : LiveGame
     private readonly SkirmishMatchSession? _session;
 
     private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain))
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain), SlotColors(data, match))
     {
         Setup = setup;
         Match = match;
@@ -155,12 +155,25 @@ public sealed class LiveMatch : LiveGame
     }
 
     private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, ScriptedSkirmishSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain))
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain), SlotColors(data, match))
     {
         Setup = setup;
         Match = match;
         Scripted = session;
         _scriptedPlayers = session.Players;
+    }
+
+    /// <summary>
+    /// The house colour of every player as its slot names it (<c>GameLogic::startNewGame</c>: <c>TheMultiplayerSettings->getColor(slot->getColor())</c>): the <c>RGBColor</c> of the slot's
+    /// <c>MultiplayerColor</c> of <c>multiplayer.ini</c>. The match description gives every slot its own colour (<see cref="MatchDescription.Resolve"/>), so no two players look alike.
+    /// </summary>
+    private static Dictionary<int, CnCNew.Data.Definitions.ColorValue> SlotColors(GameData data, ResolvedMatch match)
+    {
+        var colors = new CnCNew.Game.Shell.ShellSkirmishText(data.Graph, null).Colors();
+        var result = new Dictionary<int, CnCNew.Data.Definitions.ColorValue>();
+        foreach (var slot in match.Slots)
+            if (slot.Color >= 0 && slot.Color < colors.Length) result[slot.Player.Value] = new CnCNew.Data.Definitions.ColorValue(colors[slot.Color].R, colors[slot.Color].G, colors[slot.Color].B);
+        return result;
     }
 
     /// <summary>Where the local viewer starts to look: the start position of the first slot.</summary>
