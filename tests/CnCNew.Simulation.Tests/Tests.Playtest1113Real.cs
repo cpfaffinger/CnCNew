@@ -80,4 +80,21 @@ static partial class Tests
             Check.That(other.Body!.Health == hurt, $"{rate}: and still not the other tank ({hurt} -> {other.Body!.Health}).");
         }
     }
+
+    /// <summary>
+    /// #311: "the Comanche's guard radius is too large". <c>AIGuardMachine::getStdGuardRange</c> is <c>AI::getAdjustedVisionRangeForObject(OWNERTYPE | MOOD | GUARDINNER)</c>: the
+    /// Comanche's <c>VisionRange</c> 200 times <c>GuardInnerModifierHuman</c> 1.8 for a human player, times <c>GuardInnerModifierAI</c> 1.1 for a computer player (normal mood). The port's
+    /// inner guard range - the radius the guard cursor shows and the one INNER attacks in - is that number.
+    /// </summary>
+    public static void RealComancheGuardRangeIsTheOriginals(string directory)
+    {
+        var real = new RealTargets(directory);
+        foreach (var computer in new[] { false, true })
+        {
+            var world = real.World(SimulationRate.Hz60, withFix: true, computer: computer);
+            var comanche = SpawnReal(world, ("AmericaVehicleComanche", 1, 300, 300)).Single();
+            var expected = Fixed.FromInt(200) * Fixed.FromDecimal(computer ? 1.1m : 1.8m);
+            Check.That(world.StdGuardRange(comanche) == expected, $"computer {computer}: the Comanche's inner guard range is {expected} ({world.StdGuardRange(comanche)}).");
+        }
+    }
 }
