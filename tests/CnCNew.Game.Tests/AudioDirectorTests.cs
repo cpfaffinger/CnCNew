@@ -95,6 +95,7 @@ internal static class AudioDirectorTests
         harness.Run("The in-game menu pauses the music as well (GameLogic::setGamePaused pauses AudioAffect_All)", () => PauseHoldsTheMusic(data));
         harness.Run("The train of Alpine Assault: it runs with its loop and clatters over the joins of its track", () => TrainSounds(data));
         harness.Run("The particle cannon's loops follow its state: unpacked and ready, then firing with the beam's annihilation", () => CannonLoops(data));
+        harness.Run("A launched particle cannon is announced to its own player, and to an enemy in the enemy's form (SpecialPowerModule::aboutToDoSpecialPower)", () => CannonLaunchAnnounced(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
     }
@@ -1005,6 +1006,45 @@ internal static class AudioDirectorTests
         }
         Console.WriteLine($"       cannon loops before the shot: {string.Join(",", before)}; after: {string.Join(",", seen)}");
         TestHarness.Assert(before.SetEquals([2]) && seen.IsSupersetOf([3, 4]), $"ready: the unpacking loop only ({string.Join(",", before)}); fired: the firing loop and the annihilation ({string.Join(",", seen)})");
+    }
+
+    private static LiveScenario CannonScene(GameData data, int owner, params ScenarioUnit[] extra)
+    {
+        var scenario = new DemoScenario("cannon-sound", "cannon-sound", "cannon-sound", 300,
+            [new ScenarioUnit("cannon", "AmericaParticleCannonUplink", owner, -150, 0, 0f), new ScenarioUnit("plant1", "AmericaPowerPlant", owner, -150, 120, 0f), new ScenarioUnit("plant2", "AmericaPowerPlant", owner, -150, -120, 0f),
+                new ScenarioUnit("plant3", "AmericaPowerPlant", owner, -270, 0, 0f), .. extra],
+            [new ScenarioOrder(60, "cannon", ScenarioOrderKind.UsePower, X: 150f, Y: 0f, Template: "SuperweaponParticleUplinkCannon")], 0f, 0f)
+        { PowersReady = true, HumanFaction = "FactionAmerica", OpponentFaction = "FactionChina" };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+        foreach (var module in live.World.FindEntity(live.Tags["cannon"])!.Modules)
+            if (module is CnCNew.Simulation.Modules.ISpecialPowerModule power) power.SetReadyFrame(live.World.Tick);
+        return live;
+    }
+
+    /// <summary>
+    /// <c>SpecialPowerModule::aboutToDoSpecialPower</c>: "all players need to hear these warnings" - <c>EVA_SuperweaponLaunched_Own_ParticleCannon</c> for the player who fired the cannon,
+    /// the ally form for a player who is not his enemy, the enemy form for the others. The port announced no launch at all.
+    /// </summary>
+    private static void CannonLaunchAnnounced(GameData data)
+    {
+        foreach (var (owner, dialog) in new[] { (1, "EvaUSA_ParticleCannonLaunchedOurs"), (2, "EvaUSA_LaunchedParticleCannon") })
+        {
+            var live = CannonScene(data, owner);
+            using var director = AudioDirector.Create(data, new AudioDirectorOptions { Seed = 1, MusicGapSeconds = 0 });
+            var cannon = live.World.FindEntity(live.Tags["cannon"])!;
+            TestHarness.Assert(cannon.Owner == live.Human == (owner == 1), $"setup: the cannon is player {owner}'s, the viewer is player {live.Human.Value}");
+            var module = cannon.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate>().Single();
+            while (!live.IsOver && live.Clock.OriginalFrames < 150)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                director.Update(live, CnCNew.Tests.TestTime.FrameSeconds);
+            }
+            TestHarness.Assert(module.InUse, "the cannon fired");
+            var stats = director.Stats;
+            Console.WriteLine($"       owner {owner}: eva requested {stats.EvaRequested}, played {stats.EvaPlayed}, started {string.Join(",", stats.StartedEvents.Keys.Where(key => key.StartsWith("Eva", StringComparison.Ordinal)))}");
+            TestHarness.Assert(stats.StartedEvents.GetValueOrDefault(dialog) == 1, $"the announcer says {dialog} once ({string.Join(",", stats.StartedEvents.Keys)})");
+        }
     }
 
     /// <summary>

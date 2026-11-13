@@ -463,11 +463,23 @@ public sealed partial class AudioDirector : IDisposable
         switch (cue.Kind)
         {
             case SoundCueKind.Eva:
+            {
                 // An accepted request is neither a start nor a drop of the simulation source: the announcer's own counters (source Eva) continue it.
-                if (cue.Player != view.Human) Drop(AudioSource.Simulation, AudioOutcomes.EvaOtherPlayer);
-                else if (_eva.Request(cue.EventName)) Count(AudioOutcomes.EvaRequested);
+                var name = cue.EventName;
+                var own = $"_{SoundCueDeriver.OwnForm}_";
+                if (cue.Player != view.Human && name.Contains(own, StringComparison.Ordinal))
+                    // SpecialPowerModule::aboutToDoSpecialPower: "all players need to hear these warnings", the own form for the player who launched, the allied form for every player that is not
+                    // his enemy ("counting relationship NEUTRAL as ally"), the enemy form for the others.
+                    name = name.Replace(own, view.RelationshipOf(view.Human, cue.Player) != Relationship.Enemies ? "_Ally_" : "_Enemy_", StringComparison.Ordinal);
+                else if (cue.Player != view.Human)
+                {
+                    Drop(AudioSource.Simulation, AudioOutcomes.EvaOtherPlayer);
+                    return;
+                }
+                if (_eva.Request(name)) Count(AudioOutcomes.EvaRequested);
                 else Drop(AudioSource.Simulation, AudioOutcomes.EvaUnknown);
                 return;
+            }
             case SoundCueKind.Music:
                 Drop(AudioSource.Simulation, AudioOutcomes.MusicCueUnsupported);
                 return;

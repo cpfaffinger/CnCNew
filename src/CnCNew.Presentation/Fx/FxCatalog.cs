@@ -69,7 +69,11 @@ public sealed record DamageFxTable(string Name, ImmutableArray<DamageFxLine> Lin
 }
 
 /// <summary>Sounds of an upgrade (<c>ResearchSound</c>, <c>UnitSpecificSound</c>) or a special power (<c>InitiateSound</c>, <c>InitiateAtLocationSound</c>).</summary>
-public sealed record NamedSounds(string Name, string? Primary, string? Secondary);
+public sealed record NamedSounds(string Name, string? Primary, string? Secondary)
+{
+    /// <summary>The special power's <c>Enum</c> (<c>SpecialPowerType</c>, e.g. <c>SPECIAL_PARTICLE_UPLINK_CANNON</c>); null for an upgrade.</summary>
+    public string? PowerType { get; init; }
+}
 
 /// <summary>The <c>AudioEvent</c> fields a sound cue carries: volume as a ratio and the priority index (LOWEST=0 .. CRITICAL=4).</summary>
 public sealed record AudioEventInfo(string Name, float Volume, int Priority);
@@ -157,7 +161,7 @@ public sealed class FxCatalog
                     upgrades[upgrade.OriginalName] = new NamedSounds(upgrade.OriginalName, Token(upgrade, "ResearchSound"), Token(upgrade, "UnitSpecificSound"));
                     break;
                 case SpecialPowerDefinition power:
-                    powers[power.OriginalName] = new NamedSounds(power.OriginalName, Token(power, "InitiateSound"), Token(power, "InitiateAtLocationSound"));
+                    powers[power.OriginalName] = new NamedSounds(power.OriginalName, Token(power, "InitiateSound"), Token(power, "InitiateAtLocationSound")) { PowerType = Token(power, "Enum") };
                     break;
                 case AudioEventDefinition sound:
                     audio[sound.OriginalName] = ParseAudioEvent(sound);

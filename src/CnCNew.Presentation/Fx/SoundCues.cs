@@ -129,6 +129,9 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
                         Add(output, tick, initiate, SoundCueKind.Effect, source?.Position, simEvent.Entity, source?.Owner ?? simEvent.Player, "SpecialPower.InitiateSound");
                     if (power.Secondary is { } atLocation && view.GetPose(simEvent.Other) is { } target)
                         Add(output, tick, atLocation, SoundCueKind.Effect, target.Position, simEvent.Other, source?.Owner ?? simEvent.Player, "SpecialPower.InitiateAtLocationSound");
+                    if (SuperweaponOf(power.PowerType) is { } superweapon)
+                        Add(output, tick, $"SuperweaponLaunched_{OwnForm}_{superweapon}", SoundCueKind.Eva, source?.Position, simEvent.Entity, source?.Owner ?? simEvent.Player,
+                            "SpecialPowerModule::aboutToDoSpecialPower EVA_SuperweaponLaunched");
                 }
                 break;
             case SimEventKind.EntityContained:
@@ -164,6 +167,23 @@ public sealed partial class SoundCueDeriver(FxCatalog catalog, SimulationTime ti
                 break;
         }
     }
+
+    /// <summary>The part of an announcement's name the audio layer turns into <c>Ally</c> or <c>Enemy</c> for a listener who is not the player the cue is for.</summary>
+    public const string OwnForm = "Own";
+
+    /// <summary>
+    /// <c>SpecialPowerModule::aboutToDoSpecialPower</c>: the powers whose use the announcer reports to every player, own, allied or enemy, by the <c>SpecialPowerType</c> of the power, and the
+    /// last part of the announcement's name; null for every other power.
+    /// </summary>
+    public static string? SuperweaponOf(string? powerType) => powerType switch
+    {
+        "SPECIAL_PARTICLE_UPLINK_CANNON" or "SUPW_SPECIAL_PARTICLE_UPLINK_CANNON" or "LAZR_SPECIAL_PARTICLE_UPLINK_CANNON" => "ParticleCannon",
+        "SPECIAL_NEUTRON_MISSILE" or "NUKE_SPECIAL_NEUTRON_MISSILE" or "SUPW_SPECIAL_NEUTRON_MISSILE" => "Nuke",
+        "SPECIAL_SCUD_STORM" => "ScudStorm",
+        "SPECIAL_GPS_SCRAMBLER" or "SLTH_SPECIAL_GPS_SCRAMBLER" => "GPS_Scrambler",
+        "SPECIAL_SNEAK_ATTACK" => "Sneak_Attack",
+        _ => null,
+    };
 
     private void Upgrade(List<SoundCue> output, SimEvent simEvent, IFxWorldView view)
     {
