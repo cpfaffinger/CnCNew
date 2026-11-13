@@ -119,7 +119,7 @@ internal static class ScoreScreenTests
         TestHarness.Assert(Headline(watched) == ScoreScreenScreen.MatchOver, "somebody who only watched reads Match over");
         var line = Line(ScoreScreenFixture.Result(3, viewerWon: false, endSeconds: 754));
         TestHarness.Assert(line.Contains("Alpine Assault", StringComparison.Ordinal) && line.Contains("12:34", StringComparison.Ordinal) && line.Contains("3 players", StringComparison.Ordinal) && line.Contains("won by Computer 1", StringComparison.Ordinal), $"the line names the map, the time, the players and the winner ({line})");
-        TestHarness.Assert(Line(ScoreScreenFixture.Result(2, withAnalysis: false)).Contains("0:27", StringComparison.Ordinal), "without an analysis the time comes from the match's end tick");
+        TestHarness.Assert(Line(ScoreScreenFixture.Result(2, withAnalysis: false, ticksPerSecond: data.Rate.TicksPerSecond)).Contains("0:27", StringComparison.Ordinal), "without an analysis the time comes from the match's end tick");
     }
 
     private static void Wheel(GameShell shell, UiWindow at, int notches)

@@ -14,8 +14,8 @@ internal static class ScoreScreenFixture
 {
     private static readonly string[] Factions = ["FactionAmerica", "FactionChina", "FactionGLA", "FactionAmericaAirForceGeneral", "FactionChinaTankGeneral", "FactionGLAToxinGeneral", "FactionAmericaLaserGeneral", "FactionChinaNukeGeneral"];
 
-    /// <summary>The result of a match of <paramref name="players"/> players (the first one the viewer) which the viewer <paramref name="viewerWon"/> or lost; <paramref name="withTallies"/> false leaves the counters out.</summary>
-    public static MatchResult Result(int players, bool viewerWon = true, bool withAnalysis = true, bool withTallies = true, long endSeconds = 27, string mapPath = "Maps/Alpine Assault/Alpine Assault.map")
+    /// <summary>The result of a match of <paramref name="players"/> players (the first one the viewer) which the viewer <paramref name="viewerWon"/> or lost; <paramref name="withTallies"/> false leaves the counters out; the end tick is of a world at <paramref name="ticksPerSecond"/>.</summary>
+    public static MatchResult Result(int players, bool viewerWon = true, bool withAnalysis = true, bool withTallies = true, long endSeconds = 27, string mapPath = "Maps/Alpine Assault/Alpine Assault.map", int ticksPerSecond = 60)
     {
         var configurations = Enumerable.Range(0, players).Select(index => new PlayerConfiguration(new PlayerId(index + 1), index == 0 ? "Commander With A Long Name" : $"Computer {index}", Factions[index % Factions.Length], index % 2, index != 0)).ToArray();
         var rows = configurations.Select((player, index) => new MatchResultRow(player, viewerWon ? index == 0 : index == 1, !(viewerWon ? index == 0 : index == 1) && index % 2 == (viewerWon ? 1 : 0),
@@ -28,6 +28,6 @@ internal static class ScoreScreenFixture
             ? new MatchAnalysis(mapPath, 60, "product", 0, endSeconds * 30, winner, "completed", "live", 100, 100, analysisPlayers,
                 [new AnalysisSample(0, 1, 10000, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0), new AnalysisSample(Math.Max(30, endSeconds * 15), 1, 9500, 0, 0, 500, 1200, 3, 1200, 0, 0, 1, 2, 5, 0, 1, 0, 0, 0)], [], [], 0)
             : null;
-        return new MatchResult(rows, endSeconds * 60) { Analysis = analysis };
+        return new MatchResult(rows, endSeconds * ticksPerSecond) { Analysis = analysis };
     }
 }
