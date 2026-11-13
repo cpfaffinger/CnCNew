@@ -477,6 +477,14 @@ public class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateMod
 
     public bool IsFreeToExit => IsReady && EmptySpace() >= 0;
 
+    /// <summary><c>ParkingPlaceBehavior::getExitPosition</c> and <c>getNaturalRallyPoint</c> are both the helipad (<c>HeliPark01</c>), so the rally line runs straight from there.</summary>
+    public virtual bool TryGetRallyLineStart(IWorldServices world, out Point3 exit, out bool hasExit, out Point3 natural)
+    {
+        exit = natural = HeliPark(world);
+        hasExit = true;
+        return true;
+    }
+
     /// <summary><c>hasAvailableSpaceFor</c>: a <c>PRODUCED_AT_HELIPAD</c> object always fits, anything else needs a free space.</summary>
     public bool IsFreeToExitFor(ObjectTemplate produced) => IsReady && (produced.IsKindOf("PRODUCED_AT_HELIPAD") || EmptySpace() >= 0);
 

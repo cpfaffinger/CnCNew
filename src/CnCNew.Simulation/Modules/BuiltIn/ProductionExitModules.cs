@@ -63,6 +63,21 @@ public abstract class ProductionExitBase(ProductionExitData exitData) : SimModul
         return true;
     }
 
+    /// <summary>
+    /// <c>getExitPosition</c> (the transformed <c>UnitCreatePoint</c>) and <c>getNaturalRallyPoint(…, offset = FALSE)</c> (the transformed <c>NaturalRallyPoint</c>, without the push the exit
+    /// path gets) of the three exit modules, for the rally line. Both always answer, as in the original.
+    /// </summary>
+    public bool TryGetRallyLineStart(IWorldServices world, out Point3 exit, out bool hasExit, out Point3 natural)
+    {
+        var cos = FixedTrig.Cos(Entity.Angle);
+        var sin = FixedTrig.Sin(Entity.Angle);
+        Point3 World(Point3 local) => new(Entity.X + local.X * cos - local.Y * sin, Entity.Y + local.X * sin + local.Y * cos, Entity.Z + local.Z);
+        exit = World(Data.UnitCreatePoint);
+        natural = World(Data.NaturalRallyPoint);
+        hasExit = true;
+        return true;
+    }
+
     public virtual bool IsFreeToExit => true;
 
     public virtual bool ForcesSupplyWanting => false;

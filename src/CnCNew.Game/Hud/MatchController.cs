@@ -792,6 +792,7 @@ public sealed partial class MatchController
         var selected = ImmutableArray.CreateBuilder<UnitMarker>();
         var rally = ImmutableArray.CreateBuilder<RallyPointMarker>();
         var rallyPlaces = ImmutableArray.CreateBuilder<Vector3>();
+        var rallyLines = ImmutableArray.CreateBuilder<RallyLineOverlay>();
         var activeKind = Input.Selection.ActiveSubgroupIn(world);
         foreach (var id in Input.Selection.Selected)
         {
@@ -821,6 +822,9 @@ public sealed partial class MatchController
                 {
                     rally.Add(new RallyPointMarker(entity.Id, rallyScreen));
                     rallyPlaces.Add(OnGround(new Vector2((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal())));
+                    // W3DWaypointBuffer::drawWaypoints outside waypoint mode: only the local player's producers show the line.
+                    if (entity.Owner == Match.Human && !Input.Commands.WaypointMode && RallyLineOf(entity, new Vector2((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal())) is { } line)
+                        rallyLines.Add(line);
                 }
             }
         }
@@ -966,9 +970,30 @@ public sealed partial class MatchController
         DrawWorldAnimations(icons);
         var hint = DescribeHint(Input.Hint);
         return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, [..Messages.Log.Lines.Select(line => line.Text)], heals.ToImmutable(),
-            waypointPaths.ToImmutable(), hints.ToImmutable(), ranks.ToImmutable(), icons.ToImmutable(), labels.ToImmutable());
+            waypointPaths.ToImmutable(), hints.ToImmutable(), ranks.ToImmutable(), icons.ToImmutable(), labels.ToImmutable(), rallyLines.ToImmutable());
 
         Vector3 OnGround(Vector2 point) => new(point.X, point.Y, Match.Heights.HeightAt(point.X, point.Y));
+
+        RallyLineOverlay? RallyLineOf(Entity producer, Vector2 rallyPoint)
+        {
+            if (producer.Modules.OfType<CnCNew.Simulation.Modules.IProductionExit>().FirstOrDefault() is not { } exitModule
+                || !exitModule.TryGetRallyLineStart(world, out var exit, out var hasExit, out var natural)) return null;
+            Vector2 Flat(CnCNew.Simulation.Modules.BuiltIn.Point3 point) => new((float)point.X.ToDecimal(), (float)point.Y.ToDecimal());
+            var center = OnGround(new Vector2((float)producer.X.ToDecimal(), (float)producer.Y.ToDecimal()));
+            var shape = RallyLine.Compute(hasExit ? OnGround(Flat(exit)) : center, OnGround(Flat(natural)), OnGround(rallyPoint), center, (float)producer.Angle.ToDecimal(),
+                (float)producer.Template.GeometryMajorRadius.ToDecimal(), (float)producer.Template.GeometryMinorRadius.ToDecimal());
+            var points = ImmutableArray.CreateBuilder<Vector2>();
+            foreach (var point in shape.Points)
+            {
+                if (!view.TryWorldToScreen(OnGround(new Vector2(point.X, point.Y)), out var onScreen)) break;
+                points.Add(onScreen);
+            }
+            if (points.Count < 2) return null;
+            var nodes = ImmutableArray.CreateBuilder<Vector2>();
+            foreach (var node in shape.Nodes)
+                if (view.TryWorldToScreen(OnGround(new Vector2(node.X, node.Y)), out var onScreen)) nodes.Add(onScreen);
+            return new RallyLineOverlay(producer.Id, points.ToImmutable(), nodes.ToImmutable());
+        }
     }
 
     // ------------------------------------------------------------------------------------------------------------ cursor

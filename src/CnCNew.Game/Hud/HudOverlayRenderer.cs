@@ -67,6 +67,15 @@ public static class HudOverlayRenderer
                 for (var index = 1; index < path.Points.Length; index++) WaypointNode(commands, path.Points[index]);
             }
 
+        // The rally line of a selected producer: the same line and node marker as a waypoint path (W3DWaypointBuffer draws both with one style).
+        if (!overlay.RallyLines.IsDefaultOrEmpty)
+            foreach (var line in overlay.RallyLines)
+            {
+                for (var index = 1; index < line.Points.Length; index++)
+                    commands.Add(new UiLineDraw(line.Points[index - 1].X, line.Points[index - 1].Y, line.Points[index].X, line.Points[index].Y, 2f, WaypointColor));
+                foreach (var node in line.Nodes) WaypointNode(commands, node);
+            }
+
         if (!overlay.OrderHints.IsDefaultOrEmpty)
             foreach (var hint in overlay.OrderHints)
                 DrawOrderHint(commands, hint);

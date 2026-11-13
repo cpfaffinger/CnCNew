@@ -58,6 +58,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(HudDisplayOptionsTests), HudDisplayOptionsTests.Run),
     (nameof(ProductSurveyTests), ProductSurveyTests.Run),
     (nameof(FuelAirBombTests), FuelAirBombTests.Run),
+    (nameof(PlaytestNovember13Tests), PlaytestNovember13Tests.Run),
 ];
 
 // --suite is accepted as another spelling of --only.

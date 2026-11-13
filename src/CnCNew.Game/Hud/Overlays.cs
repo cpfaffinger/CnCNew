@@ -71,6 +71,12 @@ public sealed record HealIconMarker(EntityId Entity, Vector2 Anchor, float BarWi
 /// <summary>A producing structure's rally point, projected to screen space.</summary>
 public sealed record RallyPointMarker(EntityId Producer, Vector2 Screen);
 
+/// <summary>
+/// The line from a selected producer of the local player to its rally point (<see cref="RallyLine"/>), in viewport pixels: <see cref="Points"/> from the door over the natural rally point and
+/// the corners it goes round to the rally point, <see cref="Nodes"/> where the original places its <c>SCMNode</c> marker.
+/// </summary>
+public sealed record RallyLineOverlay(EntityId Producer, ImmutableArray<Vector2> Points, ImmutableArray<Vector2> Nodes);
+
 /// <summary>A unit's current order path (move/attack-move/attack), as screen points from the unit to its destination.</summary>
 public sealed record OrderLine(EntityId Unit, ImmutableArray<Vector2> Points, bool IsAttack);
 
@@ -107,7 +113,8 @@ public sealed record HudOverlay(
     ImmutableArray<OrderHintMarker> OrderHints = default,
     ImmutableArray<VeterancyMarker> Ranks = default,
     ImmutableArray<UnitIcon> Icons = default,
-    ImmutableArray<UnitLabel> Labels = default)
+    ImmutableArray<UnitLabel> Labels = default,
+    ImmutableArray<RallyLineOverlay> RallyLines = default)
 {
     public static readonly HudOverlay Empty = new(SelectionBoxOverlay.None, [], [], [], PlacementGhostOverlay.None, null, [], []);
 }

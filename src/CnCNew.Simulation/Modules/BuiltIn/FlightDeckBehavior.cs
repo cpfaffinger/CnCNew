@@ -69,6 +69,14 @@ public sealed class FlightDeckBehavior(FlightDeckData deck) : ParkingPlaceBehavi
 
     public override string ModuleName => "FlightDeckBehavior";
 
+    /// <summary><c>FlightDeckBehavior::getExitPosition</c> and <c>getNaturalRallyPoint</c> answer false: a carrier draws no rally line.</summary>
+    public override bool TryGetRallyLineStart(IWorldServices world, out Point3 exit, out bool hasExit, out Point3 natural)
+    {
+        exit = natural = default;
+        hasExit = false;
+        return false;
+    }
+
     /// <summary>Whether a runway's ramp stands up (<c>m_rampUp</c>), which the model shows as its door.</summary>
     public bool RampIsUp(int runway) => _rampUp[runway];
 

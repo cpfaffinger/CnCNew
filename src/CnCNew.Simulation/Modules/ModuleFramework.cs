@@ -894,6 +894,17 @@ public interface IProductionExit
         return false;
     }
 
+    /// <summary>
+    /// What the rally line of a selected producer starts with (<c>W3DWaypointBuffer::drawWaypoints</c>): <c>ExitInterface::getExitPosition</c> (the door, or false - the line then starts at the
+    /// object) and <c>getNaturalRallyPoint(…, offset = FALSE)</c> in world space; false when the exit has no natural rally point, which draws no line. Read by the presentation only.
+    /// </summary>
+    bool TryGetRallyLineStart(IWorldServices world, out BuiltIn.Point3 exit, out bool hasExit, out BuiltIn.Point3 natural)
+    {
+        exit = natural = default;
+        hasExit = false;
+        return false;
+    }
+
     /// <summary><see cref="IsFreeToExit"/> for a specific product: <c>ParkingPlaceBehavior::hasAvailableSpaceFor</c> needs no parking space for a <c>PRODUCED_AT_HELIPAD</c> object.</summary>
     bool IsFreeToExitFor(ObjectTemplate produced) => IsFreeToExit;
 
