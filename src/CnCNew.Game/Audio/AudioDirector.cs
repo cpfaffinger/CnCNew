@@ -830,7 +830,10 @@ public sealed partial class AudioDirector : IDisposable
             foreach (var (slot, name, position) in view.StateLoops(drawable))
                 if (EventOf(name) is { } loop) Consider(((long)slot << 40) | drawable.Entity.Value, position, loop);
         }
-        candidates.Sort((a, b) => a.Distance != b.Distance ? a.Distance.CompareTo(b.Distance) : a.Key.CompareTo(b.Key));
+        // GameSounds::isInterrupting: a sound of a higher priority takes the voice of a lower one, so the loops rank by their event's priority first (the particle cannon's critical loops
+        // are never pushed out by the hum of a nearer prop), then by distance.
+        candidates.Sort((a, b) => a.Info.Priority != b.Info.Priority ? b.Info.Priority.CompareTo(a.Info.Priority)
+            : a.Distance != b.Distance ? a.Distance.CompareTo(b.Distance) : a.Key.CompareTo(b.Key));
         if (candidates.Count > _options.MaxAmbientVoices) candidates.RemoveRange(_options.MaxAmbientVoices, candidates.Count - _options.MaxAmbientVoices);
 
         var wanted = candidates.Select(value => value.Key).ToHashSet();

@@ -96,6 +96,7 @@ internal static class AudioDirectorTests
         harness.Run("The train of Alpine Assault: it runs with its loop and clatters over the joins of its track", () => TrainSounds(data));
         harness.Run("The particle cannon's loops follow its state: unpacked and ready, then firing, and the annihilation only while the beam stands on the ground", () => CannonLoops(data));
         harness.Run("A launched particle cannon is announced to its own player, and to an enemy in the enemy's form (SpecialPowerModule::aboutToDoSpecialPower)", () => CannonLaunchAnnounced(data));
+        harness.Run("The particle cannon's critical loop takes an ambient voice from a nearer loop of the lowest priority (GameSounds::isInterrupting)", () => CannonLoopOutranksNearerAmbience(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
     }
@@ -1059,6 +1060,30 @@ internal static class AudioDirectorTests
             Console.WriteLine($"       owner {owner}: eva requested {stats.EvaRequested}, played {stats.EvaPlayed}, started {string.Join(",", stats.StartedEvents.Keys.Where(key => key.StartsWith("Eva", StringComparison.Ordinal)))}");
             TestHarness.Assert(stats.StartedEvents.GetValueOrDefault(dialog) == 1, $"the announcer says {dialog} once ({string.Join(",", stats.StartedEvents.Keys)})");
         }
+    }
+
+    /// <summary>
+    /// The ambient voices are few (<see cref="AudioDirectorOptions.MaxAmbientVoices"/>, here one); <c>GameSounds::isInterrupting</c> lets a sound of a higher priority take the voice of a lower
+    /// one, so the cannon's critical loops are heard although a fountain's loop of the lowest priority splashes nearer the listener (the port ranked by distance alone).
+    /// </summary>
+    private static void CannonLoopOutranksNearerAmbience(GameData data)
+    {
+        var live = CannonScene(data, 1, new ScenarioUnit("fountain", "Fountain1", 1, -60, 0, 0f));
+        using var director = AudioDirector.Create(data, new AudioDirectorOptions { Seed = 1, MusicGapSeconds = 0, MaxAmbientVoices = 1 });
+        var fountain = live.World.FindEntity(live.Tags["fountain"])!;
+        var started = new List<string>();
+        while (!live.IsOver && live.Clock.OriginalFrames < 120)
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            live.Camera.CenterOn(new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(fountain.X), CnCNew.Presentation.FixedConvert.ToSingle(fountain.Y)));
+            director.Update(live, CnCNew.Tests.TestTime.FrameSeconds);
+            if (live.Clock.OriginalFrames == 50) started.Add("ready:" + string.Join("+", director.Stats.StartedEvents.Keys));
+        }
+        var stats = director.Stats;
+        Console.WriteLine($"       {string.Join(" ", started)}; at the end {string.Join(",", stats.StartedEvents.Select(pair => $"{pair.Key}={pair.Value}"))}");
+        TestHarness.Assert(started.SequenceEqual(["ready:ParticleUplinkCannon_UnpackToIdleSoundLoop"]), $"the ready cannon's unpacking loop has the one voice, not the nearer fountain ({string.Join(" ", started)})");
+        TestHarness.Assert(stats.StartedEvents.GetValueOrDefault("ParticleUplinkCannon_FiringToPackSoundLoop") == 1 && !stats.StartedEvents.ContainsKey("Amb_WaterFountainLoop"),
+            "and when it fires, its firing loop: the fountain is never heard while a critical loop wants the voice");
     }
 
     /// <summary>
