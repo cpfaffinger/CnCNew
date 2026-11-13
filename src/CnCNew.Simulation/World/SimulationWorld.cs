@@ -698,8 +698,13 @@ public sealed partial class SimulationWorld : IWorldServices
         ReevaluateUpgrades(entity);
     }
 
+    /// <summary>
+    /// <c>Object::updateUpgradeModules</c>: the upgrade modules of an object try the mask of its player's and its own upgrades - when an upgrade completes, when the object is made
+    /// (<c>Object::initObject</c>) and when its construction completes. "No upgrade can run if we are under construction", nor on a destroyed object.
+    /// </summary>
     private void ReevaluateUpgrades(Entity entity)
     {
+        if (entity.HasStatus(ObjectStatusBits.UnderConstruction) || entity.DestroyRequested) return;
         var mask = UpgradeKeyMaskOf(entity);
         foreach (var module in entity.UpgradeModules) module.TryActivate(this, mask);
         MarkDirty(entity);
@@ -2128,6 +2133,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (module is Modules.BuiltIn.DeletionUpdate deletion) deletion.OverrideRange(setup.DeletionTicks, setup.DeletionTicks);
         if (setup.ShroudRange > Fixed.Zero) entity.ShroudRange = setup.ShroudRange;
         foreach (var module in entity.ModuleArray) module.OnSpawn(this);
+        // Object::initObject: "If I have a valid team assigned, I can run through my Upgrade modules with his flags" - an object made after its player's upgrade has it.
+        ReevaluateUpgrades(entity);
         ApplyBattlePlanToEntity(entity);
         if (setup.Producer.IsValid)
             foreach (var module in entity.ModuleArray)

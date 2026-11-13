@@ -30,6 +30,7 @@ internal static class PlaytestHudTests
         harness.Run("A drone in production or carried greys every drone button of a Humvee, alone and in a selection of two, and its order stands in the queue", () => DroneButtons(data));
         harness.Run("Over the own bunker the infantry's pointer is enter, over a building the enemy holds it is attack", () => BuildingCursors(data));
         harness.Run("A ranger with the capture upgrade shows capture over a neutral tech building and takes it by a click, attacks an enemy's and enters a civilian one", () => CaptureCursor(data));
+        harness.Run("A ranger's capture button is enabled once the capture upgrade bought at the barracks is done and the ability has recharged (#314)", () => CaptureButtonAfterPurchase(data));
         harness.Run("A selected unit of a control group shows the group's number at its health bar, one that is not in a group or not selected does not", () => ControlGroupNumber(data));
         harness.Run("A selected supply drop zone shows its countdown on the bar: the share of the delay, the minutes and seconds to the next plane, and a sell button", () => OclTimerWindow(data));
         harness.Run("The clock of the particle cannon stands still while the player is short of power, on the list of superweapons and on the cameo, and runs on when a plant is there", () => BrownOutClock(data));
@@ -498,6 +499,62 @@ internal static class PlaytestHudTests
         for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 60 && live.World.FindEntity(target)!.Owner != live.Human; frame++) Frame();
         TestHarness.Assert(live.World.FindEntity(target)!.Owner == live.Human,
             $"a click with the capture cursor makes the ranger walk over and take the derrick (feedback {feedback}; the ranger from ({fromX}, {fromY}) to ({ranger.X}, {ranger.Y}))");
+    }
+
+    /// <summary>
+    /// The owner's playtest of 13 November 2026 (#314): "I researched capturing buildings, but the ranger has the option greyed out". The upgrade is bought at the barracks as a
+    /// player would (no upgrade granted by the scenario, no power made ready); <c>UnpauseSpecialPowerUpgrade</c> lets the ability's clock run, and after its reload the button is enabled.
+    /// </summary>
+    private static void CaptureButtonAfterPurchase(GameData data)
+    {
+        var scenario = new DemoScenario("hud-capture-buy", "hud-capture-buy", "hud-capture-buy", 30 * 60 * 3,
+            [
+                new ScenarioUnit("barracks", "AmericaBarracks", 1, 0, 0, 0f),
+                new ScenarioUnit("ranger", "AmericaInfantryRanger", 1, 120, 0, 0f),
+            ],
+            [], 0f, 20f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+            StartMoney = 10_000,
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        void Frame()
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        CommandBarButton? Capture()
+        {
+            controller.Input.Selection.Replace([live.Tags["ranger"]]);
+            Frame();
+            return controller.CommandBar.Slots.FirstOrDefault(button => button?.Button.Name == "Command_AmericaRangerCaptureBuilding");
+        }
+        var before = Capture();
+        TestHarness.Assert(before is null or { IsEnabled: false }, $"without the upgrade the capture button is not enabled ({before?.Availability})");
+        var bought = live.Issue(live.Human, (sequence, tick) => new CnCNew.Simulation.Commands.PurchaseUpgradeCommand(live.Human, sequence, tick, "Upgrade_InfantryCaptureBuilding", live.Tags["barracks"]));
+        TestHarness.Assert(bought.Accepted, $"the barracks takes the purchase ({bought.Reason})");
+        var upgrade = live.World.Upgrades.TryGet("Upgrade_InfantryCaptureBuilding", out var info) ? info : throw new InvalidOperationException("no capture upgrade");
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 120 && !live.World.PlayerUpgrades(live.Human).Has(upgrade.Index); frame++) Frame();
+        TestHarness.Assert(live.World.PlayerUpgrades(live.Human).Has(upgrade.Index), "the upgrade is done");
+        // SpecialAbilityRangerCaptureBuilding: ReloadTime 15 s, counted from the unpausing.
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 20; frame++) Frame();
+        var after = Capture();
+        TestHarness.Assert(after is { IsEnabled: true }, $"after the upgrade and the reload the capture button is enabled ({after?.Availability}, {after?.Reason})");
+
+        // A ranger trained after the research has the ability from its start (the player's upgrade reaches an object as it is made).
+        var known = live.World.Entities.Where(entity => entity.Template.Name == "AmericaInfantryRanger").Select(entity => entity.Id).ToHashSet();
+        var queued = live.Issue(live.Human, (sequence, tick) => new CnCNew.Simulation.Commands.QueueProductionCommand(live.Human, sequence, tick, live.Tags["barracks"], "AmericaInfantryRanger"));
+        TestHarness.Assert(queued.Accepted, $"the barracks trains a ranger ({queued.Reason})");
+        CnCNew.Simulation.World.Entity? Trained() => live.World.Entities.FirstOrDefault(entity => entity.Template.Name == "AmericaInfantryRanger" && !known.Contains(entity.Id));
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 60 && Trained() is null; frame++) Frame();
+        var trained = Trained() ?? throw new InvalidOperationException("no ranger was trained");
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 20; frame++) Frame();
+        controller.Input.Selection.Replace([trained.Id]);
+        Frame();
+        var fresh = controller.CommandBar.Slots.FirstOrDefault(button => button?.Button.Name == "Command_AmericaRangerCaptureBuilding");
+        TestHarness.Assert(fresh is { IsEnabled: true }, $"a ranger trained after the research can capture after its reload ({fresh?.Availability}, {fresh?.Reason})");
     }
 
     private static void PowerClick(GameData data)

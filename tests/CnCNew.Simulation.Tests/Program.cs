@@ -443,6 +443,7 @@ run.Test("Vision: the kept hash mixes only the rows that changed", Tests.VisionH
 run.Test("Vision: a random world matches the original computation in every tick", Tests.VisionWorldMatchesTheReferenceComputation);
 run.Test("Construction: a dozer builds a structure over BuildTime ticks", Tests.ConstructionBuildsAStructure);
 run.Test("Construction: cancelling a site refunds it in full", Tests.ConstructionCancelRefunds);
+run.Test("Upgrades: an object made after its player's upgrade has it, a site only when its construction completes (#314)", Tests.AnObjectMadeAfterItsPlayersUpgradeHasIt);
 run.Test("Construction: sale takes 179 ticks and pays SellPercentage", Tests.ConstructionSellTimingAndPayout);
 run.Test("Construction: selling a producer refunds its queue", Tests.ConstructionSellCancelsProduction);
 run.Test("Construction: produced units walk to the rally point", Tests.ConstructionRallyPoint);
@@ -958,6 +959,7 @@ if (contentDirectory is not null) run.Test("Real data (playtest): a Chinook gath
 if (contentDirectory is not null) run.Test("Real data (playtest): a Chinook keeps the center it delivered to last as its home base and a click on a center sets it (rule fix chinook-keeps-gathering)", () => Tests.RealChinookKeepsItsHomeBase(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a computer player of the United States replaces its lost Chinooks", () => Tests.RealUsaComputerPlayersReplaceTheirChinooks(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a human player's Chinook gathers - made by the supply center and ordered to a pile - at every rate", () => Tests.RealHumanChinookGathers(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#312): a Comanche built after the countermeasures research has them and launches flares against Tank Hunter missiles", () => Tests.RealComanchesBuiltAfterTheResearchLaunchFlares(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (issue 298): Comanches ordered to guard a far place fire at the tanks beside their path, rocket pods then cannon, and at a Tank Hunter with the cannon (rule fix guard-engages-on-the-way)", () => Tests.RealComancheGuardEngagesOnTheWay(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): a Ranger ordered to guard a far place fights the enemy beside its path on the way (rule fix guard-engages-on-the-way)", () => Tests.RealGuardEngagesOnTheWay(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): units pick the victim they hurt most and that threatens them most (rule fix target-by-damage-potential)", () => Tests.RealTargetValueChoosesWhatItHurtsMost(contentDirectory));

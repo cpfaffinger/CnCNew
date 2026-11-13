@@ -327,6 +327,8 @@ public sealed partial class SimulationWorld
         var builder = site.BuilderId;
         site.BuilderId = EntityId.Invalid;
         ApplyObjectEnergy(site, site.Owner, true);
+        // DozerAIUpdate: "UnderConstruction just cleared, so update our upgrades".
+        ReevaluateUpgrades(site);
         foreach (var node in site.Updates)
             if (node.Module is Modules.BuiltIn.BuildCompleteModule) WakeAt(site, node.Update, _tick);
         MarkDirty(site);
