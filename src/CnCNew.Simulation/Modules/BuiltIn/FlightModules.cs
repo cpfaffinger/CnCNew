@@ -1208,9 +1208,8 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// (half the beam object's <c>OuterBeamWidth</c>, growing from nothing over <c>WidthGrowTime</c> and shrinking the same way after <c>TotalFiringTime</c>) times <c>DamageRadiusScalar</c>
 /// — and the use ends when the beam has decayed. A computer-controlled owner (and so a scripted use) lets the beam sweep an S curve across the target
 /// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
-/// drives it by clicks (<see cref="Steer"/>, a second click soon after the first drives it fast), and without one the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
-/// stages (presentation, only visible through the power's own readiness), the
-/// sounds and the scorch marks. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
+/// drives it by clicks (<see cref="Steer"/>, a second click soon after the first drives it fast), and without one the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. The antenna/charge
+/// stages and the scorch marks are the presentation's, read from <see cref="StatusAt"/> and <see cref="ScorchMarksMade"/>. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
 /// waypoint at <c>ManualFastDrivingSpeed</c> (the path is followed in order; the reference picks a random link at a fork) and stays at the last one.
 /// </summary>
 public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler, ISteerablePower
@@ -1270,6 +1269,12 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
 
     /// <summary>Where the beam burns right now (valid while <see cref="InUse"/> and the beam is born).</summary>
     public Point3 BeamPosition => _current;
+
+    /// <summary>
+    /// The scorch marks the beam has left since its birth (<c>m_scorchMarksMade</c>: each one also played the <c>GroundHitFX</c> at <see cref="BeamPosition"/>); 0 while no beam is born. The marks
+    /// themselves are client fluff (<c>TheGameClient-&gt;addScorch</c>), drawn by the presentation.
+    /// </summary>
+    public long ScorchMarksMade => _startAttack != 0 && _beam is Beam.Born or Beam.Decaying ? _scorches : 0;
 
     /// <summary>
     /// The width the orbit-to-target laser drawable has now (<c>LaserUpdate::m_currentWidthScalar</c>: growing from nothing over <c>WidthGrowTime</c> from the beam's birth, shrinking the same way once the

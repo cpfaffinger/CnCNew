@@ -183,7 +183,7 @@ public sealed class AttachedEffectCatalog
                                 Key("ConnectorMediumLaserName"), Key("ConnectorIntenseLaserName"),
                                 [Key("OuterNodesLightFlareParticleSystem"), Key("OuterNodesMediumFlareParticleSystem"), Key("OuterNodesIntenseFlareParticleSystem")],
                                 [Key("LaserBaseLightFlareParticleSystemName"), Key("LaserBaseMediumFlareParticleSystemName"), Key("LaserBaseIntenseFlareParticleSystemName")],
-                                [string.Empty, Key("ConnectorMediumFlare"), Key("ConnectorIntenseFlare")]);
+                                [string.Empty, Key("ConnectorMediumFlare"), Key("ConnectorIntenseFlare")]) { ScorchMarkScalar = Amount("ScorchMarkScalar") };
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && !module.Sections.IsDefaultOrEmpty)
                         {
@@ -350,7 +350,11 @@ public sealed class AttachedEffectCatalog
 /// base of the beam and at the connector, each by intensity (light, medium, intense; empty: none).
 /// </summary>
 public sealed record UplinkSpec(string OuterBone, int OuterCount, string ConnectorBone, string FireBone, string BeamLaser, string ConnectorMediumLaser, string ConnectorIntenseLaser,
-    ImmutableArray<string> OuterSystems, ImmutableArray<string> BaseSystems, ImmutableArray<string> ConnectorSystems);
+    ImmutableArray<string> OuterSystems, ImmutableArray<string> BaseSystems, ImmutableArray<string> ConnectorSystems)
+{
+    /// <summary><c>ScorchMarkScalar</c>: a scorch mark of the beam is this many times the beam's current radius (<c>LaserUpdate::getCurrentLaserRadius</c>) wide.</summary>
+    public float ScorchMarkScalar { get; init; }
+}
 
 /// <summary>The beam of a weapon: its picture, the bone it leaves from, and how many frames of the original a shot draws it (the <c>DeletionUpdate</c> of the laser object).</summary>
 public sealed record WeaponLaser(LaserSpec Laser, string Bone, long Frames);
@@ -1001,6 +1005,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         public bool BonesCached;
         public Vector3 Connector, Base;
         public long StatusFrame, OrbitBorn = -1;
+        public long Scorches;
     }
 
     private readonly Dictionary<EntityId, UplinkDrawn> _uplinks = [];
@@ -1035,6 +1040,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             {
                 drawn.OrbitBorn = -1;
             }
+            AddScorches(world, module, spec, drawn, originalFrame);
 
             var status = module.StatusAt(world);
             if (!_current.ContainsKey(entity.Id.Value) || view.GetPose(entity.Id) is not { } pose)
@@ -1103,6 +1109,23 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             Destroy(_uplinks[id].Systems);
             _uplinks.Remove(id);
         }
+    }
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate::update</c>, "Create scorch marks periodically": with each of its <c>TotalScorchMarks</c> the beam burns a scorch (<c>GameClient::addScorch</c>, one of
+    /// SCORCH_1 to SCORCH_4 by the client's random) where it stands, <c>ScorchMarkScalar</c> times its current radius wide - half its <c>OuterBeamWidth</c> scaled as it grows and narrows. The
+    /// marks are left by the logic whatever the viewer sees, and they stay (<c>BaseHeightMapRenderObjClass::addScorch</c>).
+    /// </summary>
+    private void AddScorches(SimulationWorld world, ParticleUplinkCannonUpdate module, UplinkSpec spec, UplinkDrawn drawn, long originalFrame)
+    {
+        var made = module.ScorchMarksMade;
+        if (made < drawn.Scorches) drawn.Scorches = 0;
+        if (made == drawn.Scorches) return;
+        drawn.Scorches = made;
+        if (spec.ScorchMarkScalar <= 0f || !catalog.Lasers.TryGetValue(spec.BeamLaser, out var laser)) return;
+        var scale = module.OrbitBeamWidthScale(world) is { } width ? FixedConvert.ToSingle(width) : 0f;
+        var at = new Vector3(FixedConvert.ToSingle(module.BeamPosition.X), FixedConvert.ToSingle(module.BeamPosition.Y), FixedConvert.ToSingle(module.BeamPosition.Z));
+        fx.Decals.AddScorch(at, laser.OuterWidth * 0.5f * scale * spec.ScorchMarkScalar, _random.NextInt(0, 3), originalFrame);
     }
 
     /// <summary><c>createConnectorLasers</c>/<c>createConnectorFlare</c> by stage: medium from almost ready to ready and after the shot, intense while firing, none otherwise (0).</summary>

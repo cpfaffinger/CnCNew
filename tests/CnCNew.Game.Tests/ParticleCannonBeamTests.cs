@@ -33,6 +33,7 @@ internal static class ParticleCannonBeamTests
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("The cannon launched from the shortcut bar is selected, the pointer is the uplink cannon's and a click drives the beam at the manual speed, a second click fast", () => Steering(data));
         harness.Run("The beam's ground-hit effects (GroundHitFX) burn under the beam, not at the building", () => GroundHitUnderTheBeam(data));
+        harness.Run("The beam burns scorch marks of ScorchMarkScalar times its radius where it stands, and they stay on its path", () => ScorchesAlongThePath(data));
         harness.Run("The beam: the laser from the dish up into the orbit, the connector lasers and the flares while it fires, the laser from the orbit down to the aim point from its birth, narrowing at the end, steered by clicks", () => Beam(data));
         return harness.Failures;
     }
@@ -182,6 +183,39 @@ internal static class ParticleCannonBeamTests
             TestHarness.Assert(hits.Length > 0 && hits.All(at => Vector2.Distance(new Vector2(at.X, at.Y), beam) < 40f),
                 $"{system} burns under the beam ({hits.Length} particles, first {hits.FirstOrDefault()}; the beam at {beam}, the building at {cannonAt})");
         }
+    }
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate::update</c>, "Create scorch marks periodically": <c>TotalScorchMarks</c> times in the beam's life <c>GameClient::addScorch</c> at the beam, <c>ScorchMarkScalar</c>
+    /// times its current radius (<c>LaserUpdate::getCurrentLaserRadius</c>, half the <c>OuterBeamWidth</c> as it grows) wide; the marks stay. The port left none.
+    /// </summary>
+    private static void ScorchesAlongThePath(GameData data)
+    {
+        var scene = FireFromShortcut(data, out _);
+        var (live, module) = (scene.Live, scene.Module);
+        TestHarness.Assert(data.AttachedEffects.Uplinks["AmericaParticleCannonUplink"].ScorchMarkScalar == 2.4f, "the scorch scalar is read");
+        scene.Seconds(1);
+        TestHarness.Assert(live.Fx.Decals.Snapshot().All(decal => decal.Kind != DecalKind.Scorch), "no scorch before the beam is born");
+        scene.Seconds(3);
+        var beam = new Vector2(FixedConvert.ToSingle(module.BeamPosition.X), FixedConvert.ToSingle(module.BeamPosition.Y));
+        var scorches = live.Fx.Decals.Snapshot().Where(decal => decal.Kind == DecalKind.Scorch).ToArray();
+        var full = data.AttachedEffects.Lasers["ParticleUplinkCannon_OrbitalLaser"].OuterWidth * 0.5f * 2.4f;
+        TestHarness.Assert(scorches.Length >= 2 && scorches.All(decal => Vector2.Distance(new Vector2(decal.Position.X, decal.Position.Y), beam) < 1f && decal.Radius <= full + 0.01f)
+            && scorches.Any(decal => decal.Radius > full * 0.5f),
+            $"scorch marks lie where the beam burns, up to 2.4 times its radius of {full / 2.4f} ({string.Join(", ", scorches.Select(decal => $"{decal.Position} r{decal.Radius:F1}"))})");
+
+        // Driven away, the beam leaves its scorches behind; they stay when the shot is over.
+        var far = new Vector2(420, 130);
+        scene.Controller.Process(new MouseMoveEvent(40_000, far));
+        scene.Controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        scene.Controller.Process(new MouseButtonEvent(40_100, MouseButton.Right, true, far));
+        scene.Controller.Process(new MouseButtonEvent(40_150, MouseButton.Right, false, far));
+        scene.Seconds(16);
+        TestHarness.Assert(!module.InUse, "the shot is over");
+        var trail = live.Fx.Decals.Snapshot().Where(decal => decal.Kind == DecalKind.Scorch).ToArray();
+        Console.WriteLine($"       {scorches.Length} scorches while the beam stood, {trail.Length} after the shot");
+        TestHarness.Assert(trail.Length > scorches.Length && trail.Length <= 20 && trail.Select(decal => decal.Position).Distinct().Count() > 3,
+            $"the scorches of TotalScorchMarks (20) lie along the beam's path and stay ({trail.Length}: {string.Join(", ", trail.Select(decal => $"{decal.Position.X:F0},{decal.Position.Y:F0}"))})");
     }
 
     private static void Steering(GameData data)
