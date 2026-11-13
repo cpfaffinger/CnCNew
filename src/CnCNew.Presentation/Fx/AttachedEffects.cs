@@ -540,7 +540,16 @@ public readonly record struct ProjectedEntity(EntityId Entity, ObjectVisual Visu
     float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null);
 
 /// <summary>The turrets of a model as they are drawn: the bones of the state, and the angles with the art's offsets on them.</summary>
-public readonly record struct TurretPose(string? YawBone, float? Yaw, string? PitchBone, float? Pitch, string? AltYawBone, float? AltYaw, string? AltPitchBone, float? AltPitch);
+public readonly record struct TurretPose(string? YawBone, float? Yaw, string? PitchBone, float? Pitch, string? AltYawBone, float? AltYaw, string? AltPitchBone, float? AltPitch)
+{
+    /// <summary>The turrets of a state's model turned by the drawn angles, each with the art's own offset of the state.</summary>
+    public static TurretPose Of(ModelStateSpec state, float? yaw, float? pitch, float? altYaw, float? altPitch)
+    {
+        static float? With(float? angle, decimal artDegrees) => angle is { } radians ? radians + (float)artDegrees * MathF.PI / 180f : null;
+        return new TurretPose(state.Turret.AngleBone, With(yaw, state.Turret.ArtAngleDegrees), state.Turret.PitchBone, With(pitch, state.Turret.ArtPitchDegrees),
+            state.AltTurret.AngleBone, With(altYaw, state.AltTurret.ArtAngleDegrees), state.AltTurret.PitchBone, With(altPitch, state.AltTurret.ArtPitchDegrees));
+    }
+}
 
 /// <summary>Counters of <see cref="AttachedEffects"/>, for tests and the client's report.</summary>
 public sealed record AttachedEffectStats(long ModelStateSystems, long BodySystems, long BoneFxSystems, long BoneFxLists, long TransitionSystems, long TransitionFxLists, long ExhaustSystems,
@@ -1177,12 +1186,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         return found * pose.Transform;
     }
 
-    private static TurretPose TurretsOf(ProjectedEntity item, ModelStateSpec state)
-    {
-        static float? With(float? angle, decimal artDegrees) => angle is { } radians ? radians + (float)artDegrees * MathF.PI / 180f : null;
-        return new TurretPose(state.Turret.AngleBone, With(item.TurretYaw, state.Turret.ArtAngleDegrees), state.Turret.PitchBone, With(item.TurretPitch, state.Turret.ArtPitchDegrees),
-            state.AltTurret.AngleBone, With(item.AltTurretYaw, state.AltTurret.ArtAngleDegrees), state.AltTurret.PitchBone, With(item.AltTurretPitch, state.AltTurret.ArtPitchDegrees));
-    }
+    private static TurretPose TurretsOf(ProjectedEntity item, ModelStateSpec state) => TurretPose.Of(state, item.TurretYaw, item.TurretPitch, item.AltTurretYaw, item.AltTurretPitch);
 
     /// <summary>
     /// The muzzle of the slot the object fires from now (<c>WeaponFireFXBone</c> of the current condition state, its first numbered bone when the name itself is not one), in

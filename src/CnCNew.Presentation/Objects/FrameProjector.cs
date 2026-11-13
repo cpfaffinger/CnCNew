@@ -19,6 +19,12 @@ public sealed record FrameProjectorOptions
     /// <summary>The rest position of a bone of a model, for what hangs on another object; null without a model library.</summary>
     public Func<string, string, Vector3?>? ModelBone { get; init; }
 
+    /// <summary>
+    /// A bone of a model with its turrets turned (<c>Drawable::getCurrentWorldspaceClientBonePositions</c>), for a dependency model on its host's bone; null puts such a model at
+    /// its host's own place.
+    /// </summary>
+    public Func<string, string, Fx.TurretPose, Matrix4x4?>? PosedBone { get; init; }
+
     public bool Night { get; init; }
     public bool Snow { get; init; }
 
@@ -219,13 +225,11 @@ public sealed class FrameProjector
         var ordered = ImmutableArray.CreateBuilder<Capture>(entities.Count);
         foreach (var entity in entities)
         {
-            // A parachute encloses nobody (ParachuteContain::isEnclosingContainerFor is OpenContain's, and its drawable stays on): the rider hangs under it. A fire base
-            // (GarrisonContain with IsEnclosingContainer = No) leaves its riders in the world (OpenContain::addToContain removes only an enclosed rider), standing on its stations
-            // (positionObjectsAtStationGarrisonPoints): their heads show in its slots. Every other rider is inside.
+            // OpenContain::addToContain takes a rider out of the world only when its container encloses it (Enclosure): a parachute's rider hangs under it, a fire base's soldiers
+            // stand on its stations (their heads show in its slots), a Helix's and an Overlord's portable structure rides on its host. Every other rider is inside.
             var carrier = entity.ContainedBy.IsValid ? world.FindEntity(entity.ContainedBy) : null;
             var chute = carrier?.Container is ParachuteContain ? carrier : null;
-            if (entity.DestroyRequested || (entity.ContainedBy.IsValid && chute is null && carrier?.Container is not CnCNew.Simulation.Modules.BuiltIn.GarrisonContain { IsEnclosing: false })
-                || _hiddenBeacons.Contains(entity.Id.Value)) continue;
+            if (entity.DestroyRequested || Enclosure.IsEnclosedAnywhere(world, entity) || _hiddenBeacons.Contains(entity.Id.Value)) continue;
             // StealthUpdate::changeVisualDisguise: a unit in disguise has the model of what it stands for, and the house colour of that player for everybody but its allies.
             var disguise = entity.HasStatus(DisguisedBit) ? entity.Modules.OfType<StealthUpdate>().FirstOrDefault(stealth => stealth.IsDisguised) : null;
             var shown = disguise is not null ? world.Templates[disguise.DisguisedTemplate].Name : entity.Template.Name;
@@ -239,7 +243,7 @@ public sealed class FrameProjector
             ordered.Add(capture);
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
-        _currentOrdered = ordered.ToImmutable();
+        _currentOrdered = PlaceDependencyModels(world, ordered);
         _guns = GarrisonGuns(world);
         observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceCapture);
         if (world.Tick % time.OriginalFrames(PruneIntervalFrames) == 0)
@@ -332,6 +336,64 @@ public sealed class FrameProjector
                 1f, 1f, baseConditions, _scenerySelections[item.Index], null, null, true, false, Fogged: _options.Viewer is not null && _sceneryFogged[item.Index]));
         }
         return new RenderFrame(Tick, alpha, _options.Viewer, drawables.ToImmutable()) { Ahead = ahead };
+    }
+
+    /// <summary>
+    /// <c>W3DDependencyModelDraw</c> (the portable structures: the Avenger's laser turret, the Overlord's and the Helix's gattling cannon, propaganda tower and battle bunker): the model
+    /// is drawn only after its host has been (<c>doDrawModule</c> waits for <c>notifyDrawModuleDependencyCleared</c>), so it is not drawn without a host in view, and
+    /// <c>adjustTransformMtx</c> puts it on the host's <c>AttachToBoneInContainer</c> bone as the host is drawn - its turret turned -, or on the host itself where the model lacks the
+    /// bone. The simulation keeps the structure at its host's place. Not taken over: the tilt of the host's chassis (the drawable has a heading only).
+    /// </summary>
+    private ImmutableArray<Capture> PlaceDependencyModels(SimulationWorld world, ImmutableArray<Capture>.Builder ordered)
+    {
+        var result = ImmutableArray.CreateBuilder<Capture>(ordered.Count);
+        foreach (var capture in ordered)
+        {
+            if (DependencyBone(capture.Visual) is not { } bone)
+            {
+                result.Add(capture);
+                continue;
+            }
+            if (world.FindEntity(new EntityId(capture.Id)) is not { ContainedBy.IsValid: true } rider || !_current.TryGetValue(rider.ContainedBy.Value, out var host))
+            {
+                _current.Remove(capture.Id);
+                continue;
+            }
+            var (position, yaw) = (host.Position, host.Yaw);
+            if (bone.Length > 0 && HostBone(host, bone) is { } local)
+            {
+                var transform = local * Matrix4x4.CreateRotationZ(host.Yaw) * Matrix4x4.CreateTranslation(host.Position);
+                (position, yaw) = (transform.Translation, host.Yaw + MathF.Atan2(local.M12, local.M11));
+            }
+            var placed = capture with { Position = position, Yaw = yaw };
+            _current[capture.Id] = placed;
+            result.Add(placed);
+        }
+        return result.ToImmutable();
+    }
+
+    /// <summary>The <c>AttachToBoneInContainer</c> of a dependency model (empty when it names none), or null for any other object.</summary>
+    private static string? DependencyBone(ObjectVisual visual)
+    {
+        foreach (var draw in visual.Draws)
+            if (draw.ModuleType.Equals("W3DDependencyModelDraw", StringComparison.OrdinalIgnoreCase)) return draw.Setting("AttachToBoneInContainer") ?? string.Empty;
+        return null;
+    }
+
+    /// <summary>A bone of the host's drawn model in the host's space (its scale applied, its turrets turned), the first draw module that has it.</summary>
+    private Matrix4x4? HostBone(Capture host, string bone)
+    {
+        if (_options.PosedBone is not { } posed) return null;
+        for (var module = 0; module < host.Visual.Draws.Length && module < host.Selections.Length; module++)
+        {
+            var selection = host.Selections[module];
+            if (selection.StateIndex < 0 || selection.Model is not { } model) continue;
+            var state = host.Visual.Draws[module].States[selection.StateIndex];
+            if (posed(model, bone, Fx.TurretPose.Of(state, host.TurretYaw, host.TurretPitch, host.AltTurretYaw, host.AltTurretPitch)) is not { } found) continue;
+            found.Translation *= host.Visual.Scale;
+            return found;
+        }
+        return null;
     }
 
     /// <summary>The object the original draws at an occupied garrison point (<c>TheThingFactory->findTemplate("GarrisonGun")</c>).</summary>
@@ -477,7 +539,7 @@ public sealed class FrameProjector
         if (world.Tick % world.Time.OriginalFrames(SceneryFogIntervalFrames) != 0) return;
         foreach (var entity in world.Entities)
         {
-            if (entity.DestroyRequested || entity.ContainedBy.IsValid || _known.Contains(entity.Id.Value) || entity.Owner == viewer || world.IsPlayableSide(entity.Owner)) continue;
+            if (entity.DestroyRequested || Enclosure.IsEnclosedAnywhere(world, entity) || _known.Contains(entity.Id.Value) || entity.Owner == viewer || world.IsPlayableSide(entity.Owner)) continue;
             if (!_catalog.TryGet(entity.Template.Name, out var visual) || !visual.IsStructure) continue;
             if (!world.IsPositionExploredBy(viewer, entity.X, entity.Y) || world.IsPositionVisibleTo(viewer, entity.X, entity.Y)) continue;
             var ghost = CaptureEntity(entity, world, visual, null);

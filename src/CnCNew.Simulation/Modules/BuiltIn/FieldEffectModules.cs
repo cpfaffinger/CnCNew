@@ -53,29 +53,10 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
     public DisabledMask DisabledTypesToProcess => DisabledMask.All;
 
     /// <summary>
-    /// <c>Object::getEnclosingContainedBy</c>: whether any container up the chain encloses the object below it (<c>ContainModuleInterface::isEnclosingContainerFor</c>). A Helix does not
-    /// enclose its portable structure, an Overlord not its first rider, a parachute nothing; every other container encloses. A garrison's <c>IsEnclosingContainer</c> is not typed
-    /// (it is a compatibility value): a garrison counts as enclosing, the original's default - the four shipped garrisons that say No hold infantry only, and no carrier of a tower
-    /// is infantry.
+    /// <c>Object::getEnclosingContainedBy</c>: whether any container up the chain encloses the object below it (<see cref="Enclosure.IsEnclosedAnywhere"/>). The fire bases, which
+    /// enclose nobody, hold infantry only, and no carrier of a tower is infantry.
     /// </summary>
-    private bool EnclosedAnywhere(IWorldServices world)
-    {
-        var child = Entity;
-        for (var depth = 0; depth < 8 && child.ContainedBy.IsValid && world.FindEntity(child.ContainedBy) is { } container; depth++)
-        {
-            var encloses = true;
-            foreach (var module in container.Modules)
-                switch (module)
-                {
-                    case HelixContain helix when helix.PortableStructure == child.Id: encloses = false; break;
-                    case OverlordContain overlord when overlord.FirstRider == child.Id: encloses = false; break;
-                    case ParachuteContain: encloses = false; break;
-                }
-            if (encloses) return true;
-            child = container;
-        }
-        return false;
-    }
+    private bool EnclosedAnywhere(IWorldServices world) => Enclosure.IsEnclosedAnywhere(world, Entity);
 
     private static readonly int EnthusiasticBit = SlaveSupport.WeaponBonusBit("ENTHUSIASTIC");
     private static readonly int SubliminalBit = SlaveSupport.WeaponBonusBit("SUBLIMINAL");

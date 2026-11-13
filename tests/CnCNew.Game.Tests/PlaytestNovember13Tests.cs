@@ -38,6 +38,7 @@ internal static class PlaytestNovember13Tests
         harness.Run("The colour box writes the chosen colour and every row of its list in that colour, in both skins (issue 308)", () => ColorBoxesShowTheirColor(data));
         harness.Run("W with nothing selected takes the aircraft on the screen and nothing else, as the original's SELECT_ALL_AIRCRAFT; Q takes every unit but the dozer (issue 313)", () => SelectAllKeys(data));
         harness.Run("A Fire Base shows the soldiers inside on its four places with their cameos and lets one out by a click (issue 317)", () => FireBaseRiders(data));
+        harness.Run("The portable structures of the Avenger, the Overlord and the Helix are drawn on their hosts' bones, the soldier in an Overlord's bunker is not (issue 322)", () => PortableStructuresDrawn(data));
         harness.Run("The healing icon over a repaired building is the wrench at its own size grown with the screen, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
         return harness.Failures;
     }
@@ -128,6 +129,59 @@ internal static class PlaytestNovember13Tests
         Frame();
         Press(KeyCode.Q);
         TestHarness.Assert(Selected().SequenceEqual(["heli1", "heli2", "ranger", "tank1", "tank2"]), $"Q takes every unit on the screen but the dozer ({string.Join(",", Selected())})");
+    }
+
+    // ------------------------------------------------------------------------------------------------ #322 the portable structures
+
+    private static void PortableStructuresDrawn(GameData data)
+    {
+        var scenario = new DemoScenario("portable-structures", "portable-structures", "portable-structures", 6000,
+            [
+                new ScenarioUnit("avenger", "AmericaTankAvenger", 1, 0, -80, 0f), new ScenarioUnit("overlord", "ChinaTankOverlord", 1, 0, 80, 0f),
+                new ScenarioUnit("bunkered", "ChinaTankOverlord", 1, 160, 80, 0f), new ScenarioUnit("helix", "ChinaVehicleHelix", 1, 160, -80, 0f),
+                new ScenarioUnit("soldier", "ChinaInfantryRedguard", 1, 230, 140, 0f),
+            ], [], 100f, 40f)
+        {
+            StartMoney = 50000,
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        void Frame() => live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+        for (var frame = 0; frame < 10; frame++) Frame();
+        foreach (var (host, upgrade) in new[] { ("overlord", "Upgrade_ChinaOverlordGattlingCannon"), ("bunkered", "Upgrade_ChinaOverlordBattleBunker"), ("helix", "Upgrade_ChinaHelixGattlingCannon") })
+        {
+            var bought = live.Issue(new PlayerId(1), (sequence, tick) => new PurchaseUpgradeCommand(new PlayerId(1), sequence, tick, upgrade, live.Tags[host]));
+            TestHarness.Assert(bought.Accepted, $"the {host} may buy {upgrade} ({bought.Reason})");
+        }
+        CnCNew.Simulation.World.Entity? Rider(string host, string template) =>
+            live.World.Entities.FirstOrDefault(entity => entity.ContainedBy == live.Tags[host] && entity.Template.Name == template);
+        var structures = new[] { ("avenger", "AmericaTankAvengerLaserTurret"), ("overlord", "ChinaTankOverlordGattlingCannon"), ("bunkered", "ChinaTankOverlordBattleBunker"), ("helix", "ChinaHelixGattlingCannon") };
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 90 && structures.Any(pair => Rider(pair.Item1, pair.Item2) is null); frame++) Frame();
+        for (var frame = 0; frame < 3; frame++) Frame();
+        CnCNew.Presentation.Objects.DrawableInstance? Drawn(EntityId id) => live.Frame.Drawables.FirstOrDefault(drawable => drawable.Entity == id);
+        foreach (var (host, template) in structures)
+        {
+            var rider = Rider(host, template);
+            TestHarness.Assert(rider is not null, $"the {host} carries its {template}");
+            var (drawn, carrier) = (Drawn(rider!.Id), Drawn(live.Tags[host]));
+            TestHarness.Assert(drawn is not null && carrier is not null, $"the {template} on the {host} is drawn with it (isEnclosingContainerFor: not its portable structure)");
+            // W3DDependencyModelDraw::adjustTransformMtx: on the host's AttachToBoneInContainer bone - FIREPOINT01 of the Avenger and the Overlord lies on the turret, above the host's
+            // place; the Helix's CHASSISBONE lies at its origin.
+            if (host != "helix")
+                TestHarness.Assert(drawn!.Position.Z > carrier!.Position.Z + 1f, $"the {template} stands on its host's bone, not at its place ({drawn.Position}, host {carrier.Position})");
+        }
+
+        // A soldier in the Overlord's bunker is inside the bunker: drawn by neither.
+        var soldier = live.Tags["soldier"];
+        var entered = live.Issue(new PlayerId(1), (sequence, tick) => new MoveAndEnterCommand(new PlayerId(1), sequence, tick, soldier, live.Tags["bunkered"]));
+        TestHarness.Assert(entered.Accepted, $"the soldier may enter the Overlord ({entered.Reason})");
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 30 && !live.World.FindEntity(soldier)!.ContainedBy.IsValid; frame++) Frame();
+        for (var frame = 0; frame < 3; frame++) Frame();
+        var bunker = Rider("bunkered", "ChinaTankOverlordBattleBunker")!;
+        // The bunker lists the soldier; the port keeps the Overlord as the soldier's container (OverlordContain's redirection), which encloses everybody but its portable structure.
+        TestHarness.Assert(bunker.Container is { } inBunker && inBunker.Contained.Contains(soldier), $"the soldier sits in the bunker ({live.World.FindEntity(live.World.FindEntity(soldier)!.ContainedBy)?.Template.Name})");
+        TestHarness.Assert(Drawn(soldier) is null && Drawn(bunker.Id) is not null, "the bunker is drawn, the soldier in it is not");
     }
 
     // ------------------------------------------------------------------------------------------------ #317 the Fire Base's riders

@@ -43,7 +43,9 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
 
     /// <summary>
     /// <c>Object::isSelectable</c> plus the <c>CanSelectDrawable</c> filters that exist here: <c>ALWAYS_SELECTABLE</c> or <c>SELECTABLE</c> without the
-    /// <c>UNSELECTABLE</c>/<c>MASKED</c> status, alive, not being removed, not inside a container.
+    /// <c>UNSELECTABLE</c>/<c>MASKED</c> status, alive, not being removed, not inside a container. A rider its container leaves in the world (a fire base's soldier, a portable
+    /// structure) is drawn but no more selectable than an enclosed one: the original's selection skips every contained object (<c>SelectionXlat</c>: "we're contained"), and a
+    /// portable structure is <c>CLICK_THROUGH</c> besides.
     /// </summary>
     public static bool IsSelectable(Entity entity)
     {

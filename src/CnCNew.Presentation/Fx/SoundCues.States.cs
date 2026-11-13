@@ -23,7 +23,8 @@ public sealed partial class SoundCueDeriver
     {
         foreach (var entity in world.Entities)
         {
-            if (entity.ContainedBy.IsValid || catalog.FindObject(entity.Template.Name) is not { } info) continue;
+            // What a container takes out of the world is not heard; a fire base's soldiers and a portable structure on its host are in it (Enclosure).
+            if (Enclosure.IsEnclosedAnywhere(world, entity) || catalog.FindObject(entity.Template.Name) is not { } info) continue;
             var body = entity.Body as ActiveBody;
             var now = new Seen(entity.HasMoveTarget, body?.DamageState ?? BodyDamageStates.Pristine, entity.HasStatus(StealthedBit), entity.HasStatus(DetectedBit), false, 0, 0);
             foreach (var module in entity.Modules)

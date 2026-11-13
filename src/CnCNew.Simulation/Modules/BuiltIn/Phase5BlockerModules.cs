@@ -849,23 +849,8 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         return null;
     }
 
-    /// <summary>
-    /// <c>OpenContain::isEnclosingContainerFor</c> of the object's own container: every container encloses its riders but a garrison with <c>IsEnclosingContainer = No</c>, a Helix its
-    /// portable structure, an Overlord its first rider and a parachute.
-    /// </summary>
-    private static bool IsEnclosed(IWorldServices world, World.Entity entity)
-    {
-        if (!entity.ContainedBy.IsValid || world.FindEntity(entity.ContainedBy) is not { } container) return false;
-        foreach (var module in container.Modules)
-            switch (module)
-            {
-                case GarrisonContain { IsEnclosing: false }: return false;
-                case HelixContain helix when helix.PortableStructure == entity.Id: return false;
-                case OverlordContain overlord when overlord.FirstRider == entity.Id: return false;
-                case ParachuteContain: return false;
-            }
-        return container.Container is not null;
-    }
+    /// <summary><c>OpenContain::isEnclosingContainerFor</c> of the object's own container (<see cref="Enclosure.IsEnclosed"/>).</summary>
+    private static bool IsEnclosed(IWorldServices world, World.Entity entity) => Enclosure.IsEnclosed(world, entity);
 
     private static bool HasAnyKind(ObjectTemplate template, ImmutableArray<string> kinds)
     {
