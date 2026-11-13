@@ -183,7 +183,7 @@ public sealed class AttachedEffectCatalog
                                 Key("ConnectorMediumLaserName"), Key("ConnectorIntenseLaserName"),
                                 [Key("OuterNodesLightFlareParticleSystem"), Key("OuterNodesMediumFlareParticleSystem"), Key("OuterNodesIntenseFlareParticleSystem")],
                                 [Key("LaserBaseLightFlareParticleSystemName"), Key("LaserBaseMediumFlareParticleSystemName"), Key("LaserBaseIntenseFlareParticleSystemName")],
-                                [string.Empty, Key("ConnectorMediumFlare"), Key("ConnectorIntenseFlare")]) { ScorchMarkScalar = Amount("ScorchMarkScalar") };
+                                [string.Empty, Key("ConnectorMediumFlare"), Key("ConnectorIntenseFlare")]) { ScorchMarkScalar = Amount("ScorchMarkScalar"), BeamLaunchFx = Key("BeamLaunchFX") };
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && !module.Sections.IsDefaultOrEmpty)
                         {
@@ -354,6 +354,9 @@ public sealed record UplinkSpec(string OuterBone, int OuterCount, string Connect
 {
     /// <summary><c>ScorchMarkScalar</c>: a scorch mark of the beam is this many times the beam's current radius (<c>LaserUpdate::getCurrentLaserRadius</c>) wide.</summary>
     public float ScorchMarkScalar { get; init; }
+
+    /// <summary><c>BeamLaunchFX</c>: the effect list the firing cannon plays again and again at the base of its beam (<c>m_laserOriginPosition</c>, the <see cref="FireBone"/>).</summary>
+    public string BeamLaunchFx { get; init; } = string.Empty;
 }
 
 /// <summary>The beam of a weapon: its picture, the bone it leaves from, and how many frames of the original a shot draws it (the <c>DeletionUpdate</c> of the laser object).</summary>
@@ -1006,9 +1009,20 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         public Vector3 Connector, Base;
         public long StatusFrame, OrbitBorn = -1;
         public long Scorches;
+        public UplinkSpec? Spec;
     }
 
     private readonly Dictionary<EntityId, UplinkDrawn> _uplinks = [];
+
+    /// <summary>
+    /// Where an effect list a cannon asked for plays (<see cref="FxExecutor.RequestPlace"/>): <c>ParticleUplinkCannonUpdate::update</c> plays its <c>BeamLaunchFX</c> with
+    /// <c>FXList::doFXPos</c> at <c>m_laserOriginPosition</c>, the fire bone of the raised dish, which the logic does not know. Null for every other request, and before the dish's bones are known.
+    /// </summary>
+    public Vector3? UplinkLaunchPlace(EntityId entity, string fxList)
+    {
+        if (!_uplinks.TryGetValue(entity, out var drawn) || !drawn.BonesCached || drawn.Spec is not { } spec) return null;
+        return spec.BeamLaunchFx.Length > 0 && spec.BeamLaunchFx.Equals(fxList, StringComparison.OrdinalIgnoreCase) ? drawn.Base : null;
+    }
 
     /// <summary>The systems the particle cannons now have running (the outer nodes, the connector and the base of the beam).</summary>
     public ImmutableArray<int> UplinkSystems => [.. _uplinks.Values.SelectMany(drawn => drawn.Systems)];
@@ -1027,7 +1041,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         {
             if (!catalog.Uplinks.TryGetValue(entity.Template.Name, out var spec) || entity.Modules.OfType<ParticleUplinkCannonUpdate>().FirstOrDefault() is not { } module) continue;
             seen.Add(entity.Id);
-            if (!_uplinks.TryGetValue(entity.Id, out var drawn)) _uplinks[entity.Id] = drawn = new UplinkDrawn();
+            if (!_uplinks.TryGetValue(entity.Id, out var drawn)) _uplinks[entity.Id] = drawn = new UplinkDrawn { Spec = spec };
 
             if (module.OrbitBeamWidthScale(world) is { } orbit && orbit > Simulation.Numerics.Fixed.Zero && catalog.Lasers.TryGetValue(spec.BeamLaser, out var beam))
             {

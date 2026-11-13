@@ -68,6 +68,12 @@ public sealed class FxExecutor
     public Func<ImmutableArray<TracerInstance>>? Ropes { get; set; }
     public ParticleWorld Particles { get; }
     public DecalBuffer Decals { get; }
+
+    /// <summary>
+    /// A place the presentation knows better than the logic for an effect list an object asked for (<see cref="SimEventKind.FxRequested"/>: the object and the list's name), such as a bone of
+    /// its animated model; null keeps the place of the request.
+    /// </summary>
+    public Func<EntityId, string, Vector3?>? RequestPlace { get; set; }
     public FxRandom Random => _random;
     public long Frame => Particles.Frame;
 
@@ -102,6 +108,7 @@ public sealed class FxExecutor
                 // FXListDie and friends: OrientToObject (Value 1) uses the object form, otherwise the position form at the object - or at the place the module named
                 // (FXList::doFXPos with its own position: the particle cannon's GroundHitFX under the beam, a bridge's or a toppling tree's effects at their point).
                 if (simEvent.Value == 1) ExecuteFxListAtEntity(simEvent.Text, simEvent.Entity, simEvent.Other, view);
+                else if (RequestPlace?.Invoke(simEvent.Entity, simEvent.Text) is { } place) ExecuteFxListAtPosition(simEvent.Text, new FxInvocation(place), view);
                 else if (simEvent.HasPosition) ExecuteFxListAtPosition(simEvent.Text, new FxInvocation(new Vector3(FixedConvert.ToSingle(simEvent.X), FixedConvert.ToSingle(simEvent.Y), FixedConvert.ToSingle(simEvent.Z))), view);
                 else if (view.GetPose(simEvent.Entity) is { } pose) ExecuteFxListAtPosition(simEvent.Text, new FxInvocation(pose.Position), view);
                 else Count("fx-request-without-pose");

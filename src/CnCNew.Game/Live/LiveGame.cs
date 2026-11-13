@@ -107,6 +107,7 @@ public abstract class LiveGame
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
         Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed, DeployedBones = data.ModelBones.FindAtFinalFrame };
+        Fx.RequestPlace = Attached.UplinkLaunchPlace;
         Fx.ProjectileStreams = () => Attached.ProjectileStreams;
         Fx.Ropes = () => Attached.Ropes;
         Fx.ObjectDecals = () => Attached.Decals;

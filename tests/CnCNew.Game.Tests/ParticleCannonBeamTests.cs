@@ -34,6 +34,7 @@ internal static class ParticleCannonBeamTests
         harness.Run("The cannon launched from the shortcut bar is selected, the pointer is the uplink cannon's and a click drives the beam at the manual speed, a second click fast", () => Steering(data));
         harness.Run("The beam's ground-hit effects (GroundHitFX) burn under the beam, not at the building", () => GroundHitUnderTheBeam(data));
         harness.Run("The beam burns scorch marks of ScorchMarkScalar times its radius where it stands, and they stay on its path", () => ScorchesAlongThePath(data));
+        harness.Run("The firing cannon's launch flare (BeamLaunchFX) plays at the dish's fire bone", () => LaunchFlareAtTheDish(data));
         harness.Run("The beam: the laser from the dish up into the orbit, the connector lasers and the flares while it fires, the laser from the orbit down to the aim point from its birth, narrowing at the end, steered by clicks", () => Beam(data));
         return harness.Failures;
     }
@@ -216,6 +217,25 @@ internal static class ParticleCannonBeamTests
         Console.WriteLine($"       {scorches.Length} scorches while the beam stood, {trail.Length} after the shot");
         TestHarness.Assert(trail.Length > scorches.Length && trail.Length <= 20 && trail.Select(decal => decal.Position).Distinct().Count() > 3,
             $"the scorches of TotalScorchMarks (20) lie along the beam's path and stay ({trail.Length}: {string.Join(", ", trail.Select(decal => $"{decal.Position.X:F0},{decal.Position.Y:F0}"))})");
+    }
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate::update</c>: while the cannon fires it plays its <c>BeamLaunchFX</c> every <c>DelayBetweenLaunchFX</c> with <c>FXList::doFXPos</c> at
+    /// <c>m_laserOriginPosition</c>, the fire bone of the raised dish (<c>calculateUpBonePositions</c>). The port played it at the building's foot, inside the model.
+    /// </summary>
+    private static void LaunchFlareAtTheDish(GameData data)
+    {
+        var scene = FireFromShortcut(data, out _);
+        var live = scene.Live;
+        TestHarness.Assert(data.AttachedEffects.Uplinks["AmericaParticleCannonUplink"].BeamLaunchFx == "FX_ParticleUplinkCannon_BeamLaunchIteration", "the launch effect is read");
+        var cannonZ = FixedConvert.ToSingle(scene.Cannon.Z);
+        scene.Seconds(1);
+        var dish = live.Attached.UplinkLaunchPlace(scene.Cannon.Id, "FX_ParticleUplinkCannon_BeamLaunchIteration");
+        Console.WriteLine($"       the dish at {dish} (the building's foot at {cannonZ})");
+        TestHarness.Assert(dish is { } known && known.Z > cannonZ + 20f, $"the dish's fire bone is known and high on the building ({dish}; the building stands at {cannonZ})");
+        TestHarness.Assert(live.Attached.UplinkLaunchPlace(scene.Cannon.Id, "FX_ParticleUplinkCannon_BeamHitsGround") is null, "no other effect list of the cannon is moved");
+        var flares = ParticlesOf(scene, "ParticleUplinkCannon_LaunchFlare");
+        TestHarness.Assert(flares.Length > 0 && flares.All(at => Vector3.Distance(at, dish!.Value) < 30f), $"the launch flare plays at the dish ({flares.Length} particles, first {flares.FirstOrDefault()}; the dish at {dish})");
     }
 
     private static void Steering(GameData data)
