@@ -99,8 +99,10 @@ public sealed class FxExecutor
         switch (simEvent.Kind)
         {
             case SimEventKind.FxRequested:
-                // FXListDie and friends: OrientToObject (Value 1) uses the object form, otherwise the position form at the object.
+                // FXListDie and friends: OrientToObject (Value 1) uses the object form, otherwise the position form at the object - or at the place the module named
+                // (FXList::doFXPos with its own position: the particle cannon's GroundHitFX under the beam, a bridge's or a toppling tree's effects at their point).
                 if (simEvent.Value == 1) ExecuteFxListAtEntity(simEvent.Text, simEvent.Entity, simEvent.Other, view);
+                else if (simEvent.HasPosition) ExecuteFxListAtPosition(simEvent.Text, new FxInvocation(new Vector3(FixedConvert.ToSingle(simEvent.X), FixedConvert.ToSingle(simEvent.Y), FixedConvert.ToSingle(simEvent.Z))), view);
                 else if (view.GetPose(simEvent.Entity) is { } pose) ExecuteFxListAtPosition(simEvent.Text, new FxInvocation(pose.Position), view);
                 else Count("fx-request-without-pose");
                 break;

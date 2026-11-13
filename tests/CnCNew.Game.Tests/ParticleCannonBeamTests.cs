@@ -32,6 +32,7 @@ internal static class ParticleCannonBeamTests
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("The cannon launched from the shortcut bar is selected, the pointer is the uplink cannon's and a click drives the beam at the manual speed, a second click fast", () => Steering(data));
+        harness.Run("The beam's ground-hit effects (GroundHitFX) burn under the beam, not at the building", () => GroundHitUnderTheBeam(data));
         harness.Run("The beam: the laser from the dish up into the orbit, the connector lasers and the flares while it fires, the laser from the orbit down to the aim point from its birth, narrowing at the end, steered by clicks", () => Beam(data));
         return harness.Failures;
     }
@@ -151,6 +152,36 @@ internal static class ParticleCannonBeamTests
         scene.Seconds(8);
         TestHarness.Assert(Streams(scene, "EXNoise02").IsEmpty && Streams(scene, "EXLaser").IsEmpty && live.Attached.UplinkSystems.IsEmpty, "when it has packed up no laser and no flare is left");
         TestHarness.Assert(!module.InUse, "and the power is over");
+    }
+
+    /// <summary>The particles of the running systems of a template, by place.</summary>
+    private static Vector3[] ParticlesOf(Scene scene, string template)
+    {
+        var particles = scene.Live.Fx.Particles;
+        return [.. particles.Capture().Particles.Where(particle => template.Equals(particles.TemplateNameOf(particle.SystemId), StringComparison.OrdinalIgnoreCase)).Select(particle => particle.Position)];
+    }
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate::update</c>: with every scorch mark the beam plays its <c>GroundHitFX</c> (magma, sparks, a shock wave, fire and a flare) with <c>FXList::doFXPos</c> at
+    /// <c>m_currentTargetPosition</c>. The port played every effect list a module asked for at the object's own place, so the ground hit burned on the building.
+    /// </summary>
+    private static void GroundHitUnderTheBeam(GameData data)
+    {
+        var scene = FireFromShortcut(data, out _);
+        var (live, module) = (scene.Live, scene.Module);
+        var cannonAt = new Vector2(FixedConvert.ToSingle(scene.Cannon.X), FixedConvert.ToSingle(scene.Cannon.Y));
+        scene.Seconds(1);
+        TestHarness.Assert(ParticlesOf(scene, "ParticleUplinkCannon_Magma").Length == 0, "nothing hits the ground before the beam is born");
+        // The beam is born (BeamTravelTime 2.5 s) and burns for a while.
+        scene.Seconds(3);
+        var beam = new Vector2(FixedConvert.ToSingle(module.BeamPosition.X), FixedConvert.ToSingle(module.BeamPosition.Y));
+        TestHarness.Assert(Vector2.Distance(beam, cannonAt) > 80f, $"setup: the beam burns away from the building ({beam}; the building at {cannonAt})");
+        foreach (var system in new[] { "ParticleUplinkCannon_Magma", "ParticleUplinkCannon_Shockwave", "ParticleCannonUplink_HitFlare" })
+        {
+            var hits = ParticlesOf(scene, system);
+            TestHarness.Assert(hits.Length > 0 && hits.All(at => Vector2.Distance(new Vector2(at.X, at.Y), beam) < 40f),
+                $"{system} burns under the beam ({hits.Length} particles, first {hits.FirstOrDefault()}; the beam at {beam}, the building at {cannonAt})");
+        }
     }
 
     private static void Steering(GameData data)
