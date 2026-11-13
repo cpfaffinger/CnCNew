@@ -119,7 +119,7 @@ static partial class Tests
     /// eight) stood with a supply center, 25 to 700 credits and no carrier until the end of the match. Once a center stands, the price of one carrier stays in the bank, and a missing worker is saved
     /// for. Two assertions over those matches (a player that a raid has left without a carrier and without its price is broke, and nothing can be asked of the AI then):
     /// (1) a player with a finished supply center that could afford a carrier (its price in the bank) is never without one for 90 game seconds;
-    /// (2) the army is never bought with money that takes a player with a finished center below the price of a carrier (the purchase of the carrier itself may).
+    /// (2) the army is never bought with money that takes a player with a finished center that has supplies in reach below the price of a carrier (the purchase of the carrier itself may).
     /// </summary>
     public static void RealComputerPlayersReplaceTheirLostCarriers(string directory)
     {
@@ -154,8 +154,12 @@ static partial class Tests
                     var armyBoughtNow = bought != armyBought[player];
                     armyBought[player] = bought;
                     if (armyBoughtNow) armyChecks[player] = world.Tick + 2;
+                    // A center counts when a stocked supply source lies in its reach (200 units and the two bounding circles): for a center without one no carrier is bought (#274),
+                    // so there is no carrier's price to keep.
                     if (world.Tick == armyChecks[player] && !world.IsPlayerDefeated(id) && world.MoneyOf(id) < prices[player]
-                        && world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE") && !entity.HasStatus(ObjectStatusBits.UnderConstruction)))
+                        && world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE") && !entity.HasStatus(ObjectStatusBits.UnderConstruction)
+                            && world.Entities.Any(source => source.Template.IsKindOf("SUPPLY_SOURCE") && !source.EffectivelyDead && source.WarehouseSupplyBoxes() > 0 && (source.Owner.IsSystem || !world.AreEnemies(id, source.Owner))
+                                && SquaredReach.Of(Fixed.FromInt(200) + entity.Template.BoundingCircleRadius + source.Template.BoundingCircleRadius).Contains((source.X - entity.X) * (source.X - entity.X) + (source.Y - entity.Y) * (source.Y - entity.Y)))))
                         Check.That(false, $"seed {seed}, tick {world.Tick}: {session.Players[player].Faction} bought army units and is left with {world.MoneyOf(id).Floor()} credits, less than a carrier ({prices[player].Floor()}).");
                     if (world.Tick % (rate.TicksPerSecond * 5) != 0) continue;
                     var centre = !world.IsPlayerDefeated(id) && world.Entities.Any(entity => entity.Owner == id && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE")

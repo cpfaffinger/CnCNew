@@ -1719,10 +1719,140 @@ public sealed partial class SkirmishAi
         return best;
     }
 
-    /// <summary>A carrier that has stood idle for a while is sent to the nearest warehouse it knows.</summary>
+    /// <summary>Within this many frames a gatherer is not given another center or warehouse, while the dock order that named one is on its way.</summary>
+    private const long CarrierAssignRetryFrames = 150;
 
+    private static SupplyCarrierAI? CarrierModuleOf(Entity unit)
+    {
+        foreach (var module in unit.ModuleArray)
+            if (module is SupplyCarrierAI carrier) return carrier;
+        return null;
+    }
+
+    /// <summary>
+    /// The supply center a gatherer belongs to (<c>getPreferredDockID</c>): the center its last dock order named, under <c>chinook-keeps-gathering</c> its home base. Invalid, or a warehouse,
+    /// for a gatherer no center has been named to.
+    /// </summary>
+    private static EntityId AssignedCenterOf(SupplyCarrierAI carrier) => carrier.HomeCenter.IsValid ? carrier.HomeCenter : carrier.PreferredDock;
+
+    /// <summary>A carrier that gathers and does not build (the GLA worker is a builder first and is left to its own two brains).</summary>
+    private bool IsGatherer(Entity unit) => (RoleOf(unit.Template) & Role.Carrier) != 0 && (RoleOf(unit.Template) & Role.Builder) == 0;
+
+    /// <summary>A warehouse that is not an enemy's and holds supplies, or null.</summary>
+    private Entity? StockedWarehouse(EntityId id)
+    {
+        if (!id.IsValid || _world.FindEntity(id) is not { } entity || (RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) return null;
+        if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) return null;
+        return Views.EntityPresentationView.WarehouseSupplyBoxes(entity) > 0 ? entity : null;
+    }
+
+    /// <summary>The warehouse lies within <see cref="SupplyCenterCloseDistance"/> plus the two bounding circles of the center (as <see cref="CenterHasStockInReach"/> measures).</summary>
+    private static bool InReach(Entity center, Entity warehouse)
+    {
+        var limit = SupplyCenterCloseDistance + warehouse.Template.BoundingCircleRadius + center.Template.BoundingCircleRadius;
+        return SquaredReach.Of(limit).Contains(DistanceSquared(center.X, center.Y, warehouse.X, warehouse.Y));
+    }
+
+    /// <summary>The stocked warehouse in reach of the center that lies nearest to it (ties by id).</summary>
+    private Entity? StockedWarehouseInReach(Entity center)
+    {
+        Entity? best = null;
+        var bestDistance = Fixed.MaxValue;
+        foreach (var entity in _world.Entities)
+        {
+            if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || StockedWarehouse(entity.Id) is not { } warehouse || !InReach(center, warehouse)) continue;
+            var distance = DistanceSquared(center.X, center.Y, warehouse.X, warehouse.Y);
+            if (distance >= bestDistance) continue;
+            best = warehouse;
+            bestDistance = distance;
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::onUnitProduced</c> and <c>AIPlayer::queueSupplyTruck</c>: every gatherer belongs to one supply center - a new one is docked at a center that has fewer than its share
+    /// (<c>aiDock(center, CMD_FROM_PLAYER)</c>, which makes the center its preferred dock), so it delivers to that center and gathers at the source nearest to it, and the gatherers of two
+    /// centers work the sources beside their own centers (#319: every Chinook of the first center flew to the source of the second one and back once its own source was empty, and the
+    /// new ones were made at the first center and stayed there). A gatherer that works a stocked warehouse in reach of a center is given that center. Beyond the original, a gatherer whose
+    /// center has no stocked source in reach any more is given one that has: the original leaves it with its empty center and it flies the whole way back with every load. And a gatherer
+    /// that keeps a home base and a warehouse apart (<c>chinook-keeps-gathering</c>) and was told to work a warehouse out of its center's reach is told to work the one beside its center.
+    /// Only the finished centers with a stocked source in reach (<see cref="CenterHasStockInReach"/>) take gatherers; with none of them the gatherers keep what they have.
+    /// </summary>
+    private void AssignCarriers(List<Entity> fed)
+    {
+        if (fed.Count == 0) return;
+        var load = new int[fed.Count];
+        List<(Entity Unit, SupplyCarrierAI Carrier)>? loose = null;
+        List<(Entity Unit, SupplyCarrierAI Carrier, Entity Center)>? assigned = null;
+        foreach (var unit in _units)
+        {
+            if (!IsGatherer(unit) || unit.EffectivelyDead || CarrierModuleOf(unit) is not { } carrier) continue;
+            var index = fed.FindIndex(center => center.Id == AssignedCenterOf(carrier));
+            if (index < 0)
+            {
+                (loose ??= []).Add((unit, carrier));
+                continue;
+            }
+            load[index]++;
+            (assigned ??= []).Add((unit, carrier, fed[index]));
+        }
+        foreach (var (unit, carrier) in loose ?? [])
+        {
+            // The center whose reach holds the stocked warehouse it was told to work; else the nearest center that has fewer than its share, else the nearest one (the nearest by the
+            // squared distance, ties by id: fed is in id order).
+            var pick = -1;
+            var pickFull = true;
+            var best = Fixed.MaxValue;
+            var worked = StockedWarehouse(carrier.PreferredDock);
+            for (var index = 0; index < fed.Count; index++)
+            {
+                if (worked is null || !InReach(fed[index], worked)) continue;
+                var distance = DistanceSquared(fed[index].X, fed[index].Y, worked.X, worked.Y);
+                if (pick >= 0 && distance >= best) continue;
+                pick = index;
+                best = distance;
+            }
+            if (pick < 0)
+                for (var index = 0; index < fed.Count; index++)
+                {
+                    var full = load[index] >= _plan.CarriersPerCenter;
+                    var distance = DistanceSquared(fed[index].X, fed[index].Y, unit.X, unit.Y);
+                    if (pick >= 0 && (full && !pickFull || full == pickFull && distance >= best)) continue;
+                    pick = index;
+                    pickFull = full;
+                    best = distance;
+                }
+            if (Backoff(unchecked(0x58000000u + unit.Id.Value), CarrierAssignRetryFrames)) continue;
+            var center = fed[pick].Id;
+            if (!Send(sequence => new DockCommand(_player, sequence, _tick, unit.Id, center)).Accepted) continue;
+            Stats.DockOrders++;
+            load[pick]++;
+        }
+        foreach (var (unit, carrier, center) in assigned ?? [])
+        {
+            if (!carrier.GathersForGood(_world) || StockedWarehouse(carrier.PreferredDock) is not { } worked || InReach(center, worked)) continue;
+            if (StockedWarehouseInReach(center) is not { } beside || Backoff(unchecked(0x58000000u + unit.Id.Value), CarrierAssignRetryFrames)) continue;
+            if (Send(sequence => new DockCommand(_player, sequence, _tick, unit.Id, beside.Id)).Accepted) Stats.DockOrders++;
+        }
+    }
+
+    /// <summary>
+    /// With two supply centers or more the gatherers are given their centers (<see cref="AssignCarriers"/>). A carrier that has stood idle for a while is docked at its center when that one still has supplies in reach
+    /// (<c>queueSupplyTruck</c>: "if not currently ferrying supplies", the dock order again), else sent to the nearest warehouse it knows.
+    /// </summary>
     private void OrderCarriers()
     {
+        // With one center there is nothing to choose: every load goes to it, and a carrier is left to gather as it does.
+        var fed = new List<Entity>();
+        var centers = 0;
+        foreach (var structure in _structures)
+        {
+            if ((RoleOf(structure.Template) & Role.SupplyCenter) == 0 || structure.Template.IsKindOf("REBUILD_HOLE")) continue;
+            centers++;
+            if (CenterHasStockInReach(structure)) fed.Add(structure);
+        }
+        if (centers < 2) fed.Clear();
+        AssignCarriers(fed);
         if (_warehouses.Count == 0)
         {
             ScoutForWarehouses();
@@ -1738,6 +1868,11 @@ public sealed partial class SkirmishAi
             }
             var since = _idleSince.TryGetValue(unit.Id.Value, out var start) ? start : _idleSince[unit.Id.Value] = _tick;
             if (_tick - since < _time.OriginalFrames(CarrierIdleFrames) || Backoff(unchecked(0x60000000u + unit.Id.Value))) continue;
+            if (IsGatherer(unit) && CarrierModuleOf(unit) is { } carrier && fed.Find(center => center.Id == AssignedCenterOf(carrier)) is { } own)
+            {
+                if (Send(sequence => new DockCommand(_player, sequence, _tick, unit.Id, own.Id)).Accepted) Stats.DockOrders++;
+                continue;
+            }
             Remembered? nearest = null;
             var best = Fixed.MaxValue;
             // The nearest warehouse that still holds something (an empty one has nothing to give; the idle carrier stood beside it forever).

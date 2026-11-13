@@ -144,6 +144,7 @@ static partial class Tests
         ("Skirmish/SkirmishAi.cs", "SupplyLookRetryFrames", "passed to Backoff(key, frames), which scales"),
         ("Skirmish/SkirmishAi.cs", "TunnelEvacuationRetryFrames", "passed to Backoff(key, frames), which scales"),
         ("Skirmish/SkirmishAi.cs", "WarehouseScoutRetryFrames", "passed to Backoff(key, frames), which scales"),
+        ("Skirmish/SkirmishAi.cs", "CarrierAssignRetryFrames", "passed to Backoff(key, frames), which scales"),
     ];
 
     /// <summary>The simulation: no floating point at all, no access to anything outside itself.</summary>
