@@ -220,9 +220,11 @@ public sealed partial class UiWindowTree
         /// combo box, <c>drawTextFromStart</c>), 5 pixels below the top (not centered), and is clipped to the window width minus 2 x 5;
         /// text wider than that scrolls in steps of half the width so that its end stays visible.
         /// </summary>
-        private void EditText(UiWindow window, UiTextEditState edit, UiRect area, bool fromStart)
+        private void EditText(UiWindow window, UiTextEditState edit, UiRect area, bool fromStart, WndColor own = default)
         {
             var (color, shadow) = TextColors(window);
+            // A combo box entry with a colour of its own writes the edit box in it while the box is enabled.
+            if (own.IsVisible && window.IsEffectivelyEnabled) color = own;
             // The hilite colour of a field is what the modern skin fills a selection with: a field under the pointer keeps writing in its text colour.
             if (window.Definition.Flat != WndFlatRole.None && StateOf(window) == DrawState.Hilite) color = window.Definition.TextColors.Enabled;
             var measure = tree.Services.TextMeasure;
@@ -316,7 +318,7 @@ public sealed partial class UiWindowTree
                 // The edit box of a read-only combo box is a text entry with drawTextFromStart.
                 var selected = new UiTextEditState(0, false, false, false, false);
                 selected.SetText(combo.Entries[combo.SelectedIndex]);
-                EditText(window, selected, edit, true);
+                EditText(window, selected, edit, true, combo.ColorOf(combo.SelectedIndex));
             }
             DrawBackground(window, Set(window, WndDrawDataKind.ComboBoxDropDownButtonEnabled, state), UiGadgetGeometry.ComboButton(window));
         }
@@ -336,7 +338,7 @@ public sealed partial class UiWindowTree
                 var row = new UiRect(area.X, area.Y + (index - combo.TopIndex) * rowHeight, area.Width, rowHeight);
                 if (index == combo.SelectedIndex) Highlight(window, set, row);
                 if (color.IsVisible)
-                    _commands.Add(new UiTextDraw(combo.Entries[index], null, window.Font, color, shadow,
+                    _commands.Add(new UiTextDraw(combo.Entries[index], null, window.Font, combo.ColorOf(index) is { IsVisible: true } own ? own : color, shadow,
                         UiGadgetGeometry.TextOriginX(window, row), row.Y, UiTextAlignment.Left, row));
             }
             _commands.Add(new UiPopClip());

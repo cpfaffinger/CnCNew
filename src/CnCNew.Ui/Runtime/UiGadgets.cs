@@ -76,23 +76,32 @@ public sealed class UiSliderState(WndSliderData data)
 public sealed class UiComboBoxState(WndComboBoxData data)
 {
     private readonly List<string> _entries = [];
+    private readonly List<WndColor> _colors = [];
 
     public WndComboBoxData Data { get; } = data;
     public IReadOnlyList<string> Entries => _entries;
+
+    /// <summary>
+    /// The text colour of an entry (<c>GadgetComboBoxAddEntry</c>'s colour): the row of the opened list and, once chosen, the edit box write in it (<c>GadgetTextEntrySetTextColor</c>);
+    /// <see cref="WndColor.Undefined"/> for an entry in the window's own text colour.
+    /// </summary>
+    public WndColor ColorOf(int index) => index >= 0 && index < _colors.Count ? _colors[index] : WndColor.Undefined;
     public int SelectedIndex { get; internal set; } = -1;
     public bool IsOpen { get; internal set; }
     public int TopIndex { get; internal set; }
     public UiTextEditState Edit { get; } = new(data.MaxChars, false, false, data.LettersAndNumbersOnly, data.AsciiOnly);
 
-    internal int Add(string entry)
+    internal int Add(string entry, WndColor color)
     {
         _entries.Add(entry);
+        _colors.Add(color);
         return _entries.Count - 1;
     }
 
     internal void Clear()
     {
         _entries.Clear();
+        _colors.Clear();
         SelectedIndex = -1;
         TopIndex = 0;
     }

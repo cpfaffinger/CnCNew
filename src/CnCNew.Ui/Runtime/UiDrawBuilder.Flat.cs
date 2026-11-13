@@ -121,7 +121,7 @@ public sealed partial class UiWindowTree
             {
                 var selected = new UiTextEditState(0, false, false, false, false);
                 selected.SetText(combo.Entries[combo.SelectedIndex]);
-                EditText(window, selected, edit, true);
+                EditText(window, selected, edit, true, combo.ColorOf(combo.SelectedIndex));
             }
             var button = UiGadgetGeometry.ComboButton(window);
             var (color, _) = TextColors(window);
@@ -168,7 +168,7 @@ public sealed partial class UiWindowTree
                 }
                 else if (index == hover) Fill(row, set[2].BorderColor);
                 if (color.IsVisible)
-                    _commands.Add(new UiTextDraw(combo.Entries[index], null, window.Font, color, WndColor.Undefined,
+                    _commands.Add(new UiTextDraw(combo.Entries[index], null, window.Font, combo.ColorOf(index) is { IsVisible: true } own ? own : color, WndColor.Undefined,
                         UiGadgetGeometry.TextOriginX(window, row) + window.Transform.X.Length(3), row.Y + (row.Height - tree.Services.TextMeasure.LineHeight(window.Font)) / 2, UiTextAlignment.Left, row));
             }
             // More entries than rows: a thin bar at the right edge says where the list stands.

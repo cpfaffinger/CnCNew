@@ -181,7 +181,10 @@ public sealed class UiWindow
     /// <summary>Selects a list row without a message (<c>GadgetListBoxSetSelected</c> does not notify either).</summary>
     public void SetListSelection(int row) => (ListBox ?? throw NotA("list box")).Select(row, false);
 
-    public int AddComboEntry(string text) => (ComboBox ?? throw NotA("combo box")).Add(text);
+    public int AddComboEntry(string text) => (ComboBox ?? throw NotA("combo box")).Add(text, WndColor.Undefined);
+
+    /// <summary>An entry written in its own colour (<c>GadgetComboBoxAddEntry</c> with a colour: the multiplayer colours of a setup).</summary>
+    public int AddComboEntry(string text, WndColor color) => (ComboBox ?? throw NotA("combo box")).Add(text, color);
 
     public void ClearCombo() => (ComboBox ?? throw NotA("combo box")).Clear();
 
