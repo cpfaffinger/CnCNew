@@ -94,7 +94,7 @@ internal static class AudioDirectorTests
         harness.Run("State sounds on real data: a unit that moves is heard", () => StateSoundsOnRealData(data));
         harness.Run("The in-game menu pauses the music as well (GameLogic::setGamePaused pauses AudioAffect_All)", () => PauseHoldsTheMusic(data));
         harness.Run("The train of Alpine Assault: it runs with its loop and clatters over the joins of its track", () => TrainSounds(data));
-        harness.Run("The particle cannon's loops follow its state: unpacked and ready, then firing with the beam's annihilation", () => CannonLoops(data));
+        harness.Run("The particle cannon's loops follow its state: unpacked and ready, then firing, and the annihilation only while the beam stands on the ground", () => CannonLoops(data));
         harness.Run("A launched particle cannon is announced to its own player, and to an enemy in the enemy's form (SpecialPowerModule::aboutToDoSpecialPower)", () => CannonLaunchAnnounced(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
@@ -997,15 +997,29 @@ internal static class AudioDirectorTests
             if (module is CnCNew.Simulation.Modules.ISpecialPowerModule power) power.SetReadyFrame(live.World.Tick);
         var seen = new SortedSet<int>();
         var before = new SortedSet<int>();
+        long firstFiring = -1, firstAnnihilation = -1, lastAnnihilation = -1, decay = -1;
+        var uplink = live.World.FindEntity(live.Tags["cannon"])!.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate>().Single();
         while (!live.IsOver)
         {
             live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
             var cannon = live.World.FindEntity(live.Tags["cannon"]);
+            if (decay < 0 && uplink.StatusAt(live.World) == CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.PostFire) decay = live.Clock.OriginalFrames;
             foreach (var drawable in live.Frame.Drawables.Where(drawable => cannon is not null && drawable.Entity == cannon.Id))
-                foreach (var loop in view.StateLoops(drawable)) (live.World.Tick < live.World.Time.OriginalFrames(60) ? before : seen).Add(loop.Slot);
+                foreach (var loop in view.StateLoops(drawable))
+                {
+                    (live.World.Tick < live.World.Time.OriginalFrames(60) ? before : seen).Add(loop.Slot);
+                    if (loop.Slot == 3 && firstFiring < 0) firstFiring = live.Clock.OriginalFrames;
+                    if (loop.Slot != 4) continue;
+                    if (firstAnnihilation < 0) firstAnnihilation = live.Clock.OriginalFrames;
+                    lastAnnihilation = live.Clock.OriginalFrames;
+                }
         }
-        Console.WriteLine($"       cannon loops before the shot: {string.Join(",", before)}; after: {string.Join(",", seen)}");
+        Console.WriteLine($"       cannon loops before the shot: {string.Join(",", before)}; after: {string.Join(",", seen)}; firing from frame {firstFiring}, annihilation {firstAnnihilation} to {lastAnnihilation}, decay from {decay}");
         TestHarness.Assert(before.SetEquals([2]) && seen.IsSupersetOf([3, 4]), $"ready: the unpacking loop only ({string.Join(",", before)}); fired: the firing loop and the annihilation ({string.Join(",", seen)})");
+        // BeamTravelTime 2500 ms (75 frames of the original): createOrbitToTargetLaser starts the annihilation with the beam on the ground; the decay that begins TotalFiringTime after the shot
+        // reaches the beam BeamTravelTime later, and removes the annihilation then.
+        TestHarness.Assert(firstAnnihilation - firstFiring is >= 74 and <= 76, $"the annihilation sounds when the beam reaches the ground, 75 frames after the shot ({firstAnnihilation - firstFiring})");
+        TestHarness.Assert(lastAnnihilation - decay is >= 73 and <= 76, $"and stops when the beam itself begins to decay, 75 frames after the cannon ({lastAnnihilation - decay})");
     }
 
     private static LiveScenario CannonScene(GameData data, int owner, params ScenarioUnit[] extra)

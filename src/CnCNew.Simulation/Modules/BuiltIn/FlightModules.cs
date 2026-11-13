@@ -1209,7 +1209,7 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// — and the use ends when the beam has decayed. A computer-controlled owner (and so a scripted use) lets the beam sweep an S curve across the target
 /// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
 /// drives it by clicks (<see cref="Steer"/>, a second click soon after the first drives it fast), and without one the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. The antenna/charge
-/// stages and the scorch marks are the presentation's, read from <see cref="StatusAt"/> and <see cref="ScorchMarksMade"/>. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
+/// stages, the sounds and the scorch marks are the presentation's, read from <see cref="StatusAt"/>, <see cref="BeamBurning"/> and <see cref="ScorchMarksMade"/>. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
 /// waypoint at <c>ManualFastDrivingSpeed</c> (the path is followed in order; the reference picks a random link at a fork) and stays at the last one.
 /// </summary>
 public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler, ISteerablePower
@@ -1269,6 +1269,12 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
 
     /// <summary>Where the beam burns right now (valid while <see cref="InUse"/> and the beam is born).</summary>
     public Point3 BeamPosition => _current;
+
+    /// <summary>
+    /// The beam stands on the ground and has not begun to decay: from its birth <c>BeamTravelTime</c> after the order to the start of its decay (<c>LASERSTATUS_BORN</c>), the span the reference
+    /// plays the <c>GroundAnnihilationSoundLoop</c> at the beam (<c>createOrbitToTargetLaser</c> starts it, the decaying state removes it).
+    /// </summary>
+    public bool BeamBurning => _startAttack != 0 && _beam == Beam.Born;
 
     /// <summary>
     /// The scorch marks the beam has left since its birth (<c>m_scorchMarksMade</c>: each one also played the <c>GroundHitFX</c> at <see cref="BeamPosition"/>); 0 while no beam is born. The marks

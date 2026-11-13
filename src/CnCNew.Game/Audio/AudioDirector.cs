@@ -77,7 +77,7 @@ public sealed class LiveAudioView(LiveGame live) : IAudioGameView
 
     /// <summary>
     /// <c>ParticleUplinkCannonUpdate::setLogicalStatus</c>: the power-up loop from charging until it is ready to fire, the unpacking loop from preparing until it fires, the firing loop from the shot
-    /// until it is idle again, and the annihilation at the beam while it burns. <c>RailroadBehavior</c>: a locomotive's running sound while it accelerates or runs (removed when it coasts or brakes).
+    /// until it is idle again, and the annihilation at the beam from the moment it reaches the ground until it begins to decay. <c>RailroadBehavior</c>: a locomotive's running sound while it accelerates or runs (removed when it coasts or brakes).
     /// </summary>
     public IEnumerable<(int Slot, string Event, Vector3 Position)> StateLoops(DrawableInstance drawable)
     {
@@ -96,7 +96,8 @@ public sealed class LiveAudioView(LiveGame live) : IAudioGameView
                 if (status is CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Firing or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.PostFire
                     or CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Packing && info.Sound("FiringToPackSoundLoop") is { } firing)
                     yield return (3, firing, drawable.Position);
-                if (status == CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate.UplinkStatus.Firing && info.Sound("GroundAnnihilationSoundLoop") is { } annihilation)
+                // createOrbitToTargetLaser starts the annihilation with the beam on the ground, BeamTravelTime after the shot; the beam's decay removes it.
+                if (cannon.BeamBurning && info.Sound("GroundAnnihilationSoundLoop") is { } annihilation)
                 {
                     var beam = cannon.BeamPosition;
                     yield return (4, annihilation, new Vector3(CnCNew.Presentation.FixedConvert.ToSingle(beam.X), CnCNew.Presentation.FixedConvert.ToSingle(beam.Y), CnCNew.Presentation.FixedConvert.ToSingle(beam.Z)));
