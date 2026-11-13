@@ -242,7 +242,7 @@ draws it, also while the command bar is hidden), in the skirmish to the HUD (`Ma
 | Building site unexplored | `GUI:CantBuildShroud` | `InGameUI::displayCantBuildMessage` (`LBC_SHROUD`) |
 | Building site rejected otherwise | `GUI:CantBuildThere` | ibid. (`LBC_GENERIC_FAILURE`) |
 | Building of the player finished | `DOZER:ConstructionComplete` with the display name (`Object.DisplayName`, otherwise `INI:MissingDisplayName`) | `DozerAIUpdate` (completion of the build task) |
-| upgrade ordered by the player finished | `UPGRADE:UpgradeComplete` with `Upgrade.DisplayName` | `ProductionUpdate::update` |
+| upgrade ordered by the player finished | `UPGRADE:UpgradeComplete` with `Upgrade.DisplayName`, and with the line (only then) the radar event `RADAR_EVENT_UPGRADE` at the producer - a granted upgrade made one too until the radar events were drawn as triangles (#275) and the radar of every command center showed one at the start | `ProductionUpdate::update` |
 | own object damaged by another player | `RADAR:UnitUnderAttack`, `RADAR:HarvesterUnderAttack`, `RADAR:StructureUnderAttack` (buildings with `MP_COUNT_FOR_VICTORY`), otherwise `RADAR:UnderAttack`; at most one line per 250 world units and 10 seconds | `Radar::tryUnderAttackEvent`, `Radar::tryEvent` |
 | Player defeated (skirmish only) | `GUI:PlayerHasBeenDefeated` with the army name | `VictoryConditions::update` (runs only if `RecorderClass::isMultiplayer`) |
 

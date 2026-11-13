@@ -316,12 +316,13 @@ public sealed class HudMessageFeed
                 var upgraded = world.FindEntity(simEvent.Entity);
                 var owner = upgraded?.Owner ?? simEvent.Player;
                 if (owner != human) return;
-                // ProductionUpdate::update: an upgrade finished at its producer is a radar event there.
-                if (upgraded is not null) CreateEvent(EventUpgrade, SimulationQueries.GroundOf(upgraded), simEvent.Tick);
                 if (_orderedUpgrades.GetValueOrDefault(simEvent.Text) is not (> 0 and var ordered)) { Count("upgrade granted, not ordered"); return; }
                 _orderedUpgrades[simEvent.Text] = ordered - 1;
                 if (!_upgradeLabels.TryGetValue(simEvent.Text, out var upgradeLabel)) { Count("upgrade completed without DisplayName"); return; }
                 Message("UPGRADE:UpgradeComplete", _text.Get(upgradeLabel));
+                // ProductionUpdate::update: with the line, "upgrades are a more rare event, play a nifty radar event thingie" at the producer. An upgrade granted at creation
+                // (GrantUpgradeCreate: the radar of a command center) or by a script, and one without a display name, make none.
+                if (upgraded is not null) CreateEvent(EventUpgrade, SimulationQueries.GroundOf(upgraded), simEvent.Tick);
                 return;
             case SimEventKind.BeaconPlaced:
                 // GameLogic::onPlaceBeacon: the player and its allies hear of it, in words and a sound; speech only an ally.

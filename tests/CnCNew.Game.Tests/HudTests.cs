@@ -1531,11 +1531,14 @@ internal static class HudTests
         var upgrade = match.World.Upgrades.Upgrades.First(info => !info.IsEngine && data.Graph.Definitions.Any(definition => definition.Id.Kind == CnCNew.Data.Definitions.DefinitionKind.Upgrade && definition.OriginalName == info.Name
             && definition.Fields.Any(field => field.Name == "DisplayName")));
         var granted = feed.Shown;
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, default, default, human, upgrade.Name, upgrade.Index), match.World, human);
+        var radarEvents = feed.RadarHistoryVersion;
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, center.Id, default, human, upgrade.Name, upgrade.Index), match.World, human);
         TestHarness.Assert(feed.Shown == granted && feed.WithoutLine.GetValueOrDefault("upgrade granted, not ordered") >= 1, "an upgrade nobody ordered (granted at creation or by a script) prints nothing and is counted");
+        TestHarness.Assert(feed.RadarHistoryVersion == radarEvents, "and makes no radar event (ProductionUpdate::update makes it with the line only)");
         feed.ExpectUpgrade(upgrade.Name);
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, default, default, human, upgrade.Name, upgrade.Index), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, center.Id, default, human, upgrade.Name, upgrade.Index), match.World, human);
         TestHarness.Assert(feed.Log.Lines[^1].Text.StartsWith("Upgrade Complete: ", StringComparison.Ordinal) && !feed.Log.Lines[^1].Text.Contains("??", StringComparison.Ordinal), $"the upgrade line carries the upgrade's display name ({feed.Log.Lines[^1].Text})");
+        TestHarness.Assert(feed.RadarHistoryVersion == radarEvents + 1 && feed.LastRadarEvent == SimulationQueries.GroundOf(center), "an ordered upgrade with its line is a radar event at its producer");
         feed.ExpectUpgrade("Upgrade_NoSuchName");
         feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, default, default, human, "Upgrade_NoSuchName", 0), match.World, human);
         TestHarness.Assert(feed.WithoutLine.GetValueOrDefault("upgrade completed without DisplayName") == 1, "an upgrade without a display name prints nothing (as in the original) and is counted");
