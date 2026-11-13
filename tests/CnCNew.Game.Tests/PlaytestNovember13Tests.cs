@@ -36,6 +36,7 @@ internal static class PlaytestNovember13Tests
         harness.Run("The setup's colour boxes start at ???, offer only the colours nobody holds and give a colour back when its slot opens (issue 307)", () => SetupColorBoxes(data));
         harness.Run("A skirmish draws every player in the multiplayer colour of its slot, and two players of one faction's colour or of ??? never look alike (issue 307)", () => MatchHouseColors(data));
         harness.Run("The colour box writes the chosen colour and every row of its list in that colour, in both skins (issue 308)", () => ColorBoxesShowTheirColor(data));
+        harness.Run("W with nothing selected takes the aircraft on the screen and nothing else, as the original's SELECT_ALL_AIRCRAFT; Q takes every unit but the dozer (issue 313)", () => SelectAllKeys(data));
         harness.Run("A Fire Base shows the soldiers inside on its four places with their cameos and lets one out by a click (issue 317)", () => FireBaseRiders(data));
         harness.Run("The healing icon over a repaired building is the wrench at its own size grown with the screen, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
         return harness.Failures;
@@ -82,6 +83,51 @@ internal static class PlaytestNovember13Tests
                 $"{width}x{height}: the wrench over the building is 56 pixels of an 800 x 600 screen ({wrench?.Destination})");
             TestHarness.Assert(cross is not null && cross.Destination.Width == (int)(32 * scale), $"{width}x{height}: the cross over the soldier is 32 pixels of an 800 x 600 screen ({cross?.Destination})");
         }
+    }
+
+    // ------------------------------------------------------------------------------------------------ #313 the W key
+
+    private static void SelectAllKeys(GameData data)
+    {
+        var scenario = new DemoScenario("select-all-keys", "select-all-keys", "select-all-keys", 6000,
+            [
+                new ScenarioUnit("tank1", "AmericaTankCrusader", 1, 0, 0, 0f), new ScenarioUnit("tank2", "AmericaTankCrusader", 1, 40, 0, 0f),
+                new ScenarioUnit("ranger", "AmericaInfantryRanger", 1, 0, 60, 0f), new ScenarioUnit("dozer", "AmericaVehicleDozer", 1, 80, 60, 0f),
+                new ScenarioUnit("heli1", "AmericaVehicleComanche", 1, 60, -60, 0f), new ScenarioUnit("heli2", "AmericaVehicleComanche", 1, 100, -60, 0f),
+            ], [], 40f, 0f, CameraHeight: 330f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, SkinPins.Settings) { StarBlinks = false };
+        void Frame(int count = 1)
+        {
+            for (var frame = 0; frame < count; frame++)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            }
+        }
+        var time = 100_000L;
+        void Press(KeyCode key)
+        {
+            controller.Process(new KeyEvent(time += 16, key, true));
+            controller.Process(new KeyEvent(time += 16, key, false));
+            Frame();
+        }
+        string[] Selected() => [.. controller.Input.Selection.Selected.Select(id => live.Tags.First(pair => pair.Value == id).Key).Order(StringComparer.Ordinal)];
+        Frame(30);
+        controller.Input.Selection.Replace([]);
+        Frame();
+
+        Press(KeyCode.W);
+        TestHarness.Assert(Selected().SequenceEqual(["heli1", "heli2"]), $"W takes the two Comanches only ({string.Join(",", Selected())})");
+
+        controller.Input.Selection.Replace([]);
+        Frame();
+        Press(KeyCode.Q);
+        TestHarness.Assert(Selected().SequenceEqual(["heli1", "heli2", "ranger", "tank1", "tank2"]), $"Q takes every unit on the screen but the dozer ({string.Join(",", Selected())})");
     }
 
     // ------------------------------------------------------------------------------------------------ #317 the Fire Base's riders
