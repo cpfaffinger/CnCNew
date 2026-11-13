@@ -36,6 +36,7 @@ internal static class PlaytestNovember13Tests
         harness.Run("The setup's colour boxes start at ???, offer only the colours nobody holds and give a colour back when its slot opens (issue 307)", () => SetupColorBoxes(data));
         harness.Run("A skirmish draws every player in the multiplayer colour of its slot, and two players of one faction's colour or of ??? never look alike (issue 307)", () => MatchHouseColors(data));
         harness.Run("The colour box writes the chosen colour and every row of its list in that colour, in both skins (issue 308)", () => ColorBoxesShowTheirColor(data));
+        harness.Run("A Fire Base shows the soldiers inside on its four places with their cameos and lets one out by a click (issue 317)", () => FireBaseRiders(data));
         harness.Run("The healing icon over a repaired building is the wrench at its own size grown with the screen, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
         return harness.Failures;
     }
@@ -80,6 +81,92 @@ internal static class PlaytestNovember13Tests
             TestHarness.Assert(wrench is not null && wrench.Destination.Width == (int)(56 * scale) && wrench.Destination.Height == (int)(56 * scale),
                 $"{width}x{height}: the wrench over the building is 56 pixels of an 800 x 600 screen ({wrench?.Destination})");
             TestHarness.Assert(cross is not null && cross.Destination.Width == (int)(32 * scale), $"{width}x{height}: the cross over the soldier is 32 pixels of an 800 x 600 screen ({cross?.Destination})");
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------ #317 the Fire Base's riders
+
+    private static void FireBaseRiders(GameData data)
+    {
+        foreach (var skin in new[] { UiSkinName.Original, UiSkinName.Modern })
+        {
+            var scenario = new DemoScenario("fire-base-riders", "fire-base-riders", "fire-base-riders", 3000,
+                [
+                    new ScenarioUnit("dozer", "AmericaVehicleDozer", 1, 60, -80, 0f), new ScenarioUnit("barracks", "AmericaBarracks", 1, -200, 0, 0f),
+                    new ScenarioUnit("plant", "AmericaPowerPlant", 1, -200, 150, 0f),
+                    new ScenarioUnit("first", "AmericaInfantryRanger", 1, 40, 0, 0f), new ScenarioUnit("second", "AmericaInfantryMissileDefender", 1, 40, 40, 0f),
+                ], [], 100f, 40f)
+            {
+                StartMoney = 20000,
+                HumanFaction = "FactionAmerica",
+                OpponentFaction = "FactionChina",
+            };
+            var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+            var controller = new MatchController(live, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }) { StarBlinks = false };
+            void Frame()
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            }
+            var time = 40_000L;
+            void Click(Vector2 at, MouseButton button)
+            {
+                controller.Process(new MouseMoveEvent(time += 700, at));
+                controller.Process(new MouseButtonEvent(time += 40, button, true, at));
+                controller.Process(new MouseButtonEvent(time += 40, button, false, at));
+                Frame();
+            }
+            Vector2 ScreenOf(EntityId id)
+            {
+                TestHarness.Assert(controller.Input.Selection.Picker.TryProject(live.Camera, live.World.FindEntity(id)!, out var projected), "the object is in view");
+                return projected.Center;
+            }
+            // The person's dozer builds the Fire Base.
+            for (var frame = 0; frame < 10; frame++) Frame();
+            var built = live.Issue(new PlayerId(1), (sequence, tick) => new ConstructCommand(new PlayerId(1), sequence, tick, live.Tags["dozer"], "AmericaFireBase",
+                Fixed.FromDecimal((decimal)(live.Anchor.X + 150)), Fixed.FromDecimal((decimal)(live.Anchor.Y)), Fixed.Zero));
+            TestHarness.Assert(built.Accepted, $"{skin}: the dozer may build a Fire Base ({built.Reason})");
+            CnCNew.Simulation.World.Entity? Base() => live.World.Entities.FirstOrDefault(entity => entity.Owner.Value == 1 && entity.Template.Name == "AmericaFireBase");
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 90 && Base()?.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction) != false; frame++) Frame();
+            TestHarness.Assert(Base() is { } finished && !finished.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction), $"{skin}: the Fire Base stands");
+            var (fireBase, first, second) = (Base()!.Id, live.Tags["first"], live.Tags["second"]);
+            bool Inside(EntityId id) => live.World.FindEntity(id)!.ContainedBy == fireBase;
+            for (var frame = 0; frame < 10; frame++) Frame();
+
+            // As a person does it: the soldiers selected, a right click on the Fire Base, then a click on the Fire Base.
+            controller.Input.Selection.Replace([first, second]);
+            Frame();
+            Click(ScreenOf(fireBase), MouseButton.Right);
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 30 && !(Inside(first) && Inside(second)); frame++) Frame();
+            TestHarness.Assert(Inside(first) && Inside(second), $"{skin}: both soldiers are inside the Fire Base");
+            // The Fire Base encloses nobody (IsEnclosingContainer = No): its soldiers stand on its stations and are drawn there, their heads in its slots.
+            for (var frame = 0; frame < 3; frame++) Frame();
+            foreach (var rider in new[] { first, second })
+            {
+                var drawn = live.Frame.Drawables.FirstOrDefault(drawable => drawable.Entity == rider);
+                var entity = live.World.FindEntity(rider)!;
+                TestHarness.Assert(drawn is not null && Math.Abs(drawn.Position.X - (float)entity.X.ToDecimal()) < 1f && Math.Abs(drawn.Position.Y - (float)entity.Y.ToDecimal()) < 1f,
+                    $"{skin}: the soldier {rider} is drawn at its station of the Fire Base ({drawn?.Position}, {entity.X}, {entity.Y})");
+            }
+            var tank = live.World.Entities.First(entity => entity.Template.Name == "AmericaVehicleDozer");
+            TestHarness.Assert(live.Frame.Drawables.Any(drawable => drawable.Entity == tank.Id), $"{skin}: what stands outside is drawn as before");
+            Click(ScreenOf(fireBase), MouseButton.Left);
+            TestHarness.Assert(controller.Input.Selection.Selected.SequenceEqual([fireBase]), $"{skin}: the click selects the Fire Base");
+
+            var commands = controller.BuildDrawList(1280, 720).Commands;
+            var bar = controller.CommandBar;
+            TestHarness.Assert(bar[1] is { Availability: ButtonAvailability.Available } one && one.Rider == first && bar[2] is { Availability: ButtonAvailability.Available } two && two.Rider == second,
+                $"{skin}: places 1 and 2 hold the soldiers ({bar.Context}, {bar[1]?.Button.Name}/{bar[1]?.Rider}, {bar[2]?.Button.Name}/{bar[2]?.Rider})");
+            TestHarness.Assert(bar[3] is { Availability: ButtonAvailability.Restricted } && bar[4] is { Availability: ButtonAvailability.Restricted }, $"{skin}: places 3 and 4 are free and disabled");
+            foreach (var (slot, template) in new[] { (1, "AmericaInfantryRanger"), (2, "AmericaInfantryMissileDefender") })
+                TestHarness.Assert(live.Data.Visuals.TryGet(template, out var visual) && controller.IsWindowShown($"ControlBar.wnd:ButtonCommand{slot:00}")
+                                   && commands.OfType<UiImageDraw>().Any(image => image.Destination == controller.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}") && image.Image == visual.ButtonImage),
+                    $"{skin}: place {slot} is shown with the {template}'s cameo");
+
+            var rect = controller.WindowRect("ControlBar.wnd:ButtonCommand01")!.Value;
+            Click(new Vector2(rect.CenterX, rect.CenterY), MouseButton.Left);
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 5 && Inside(first); frame++) Frame();
+            TestHarness.Assert(!Inside(first) && Inside(second), $"{skin}: a click on place 1 lets the ranger out, the other stays");
         }
     }
 

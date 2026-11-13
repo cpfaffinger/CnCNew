@@ -219,9 +219,13 @@ public sealed class FrameProjector
         var ordered = ImmutableArray.CreateBuilder<Capture>(entities.Count);
         foreach (var entity in entities)
         {
-            // A parachute encloses nobody (ParachuteContain::isEnclosingContainerFor is OpenContain's, and its drawable stays on): the rider hangs under it. Every other rider is inside.
-            var chute = entity.ContainedBy.IsValid ? world.FindEntity(entity.ContainedBy) : null;
-            if (entity.DestroyRequested || (entity.ContainedBy.IsValid && chute?.Container is not ParachuteContain) || _hiddenBeacons.Contains(entity.Id.Value)) continue;
+            // A parachute encloses nobody (ParachuteContain::isEnclosingContainerFor is OpenContain's, and its drawable stays on): the rider hangs under it. A fire base
+            // (GarrisonContain with IsEnclosingContainer = No) leaves its riders in the world (OpenContain::addToContain removes only an enclosed rider), standing on its stations
+            // (positionObjectsAtStationGarrisonPoints): their heads show in its slots. Every other rider is inside.
+            var carrier = entity.ContainedBy.IsValid ? world.FindEntity(entity.ContainedBy) : null;
+            var chute = carrier?.Container is ParachuteContain ? carrier : null;
+            if (entity.DestroyRequested || (entity.ContainedBy.IsValid && chute is null && carrier?.Container is not CnCNew.Simulation.Modules.BuiltIn.GarrisonContain { IsEnclosing: false })
+                || _hiddenBeacons.Contains(entity.Id.Value)) continue;
             // StealthUpdate::changeVisualDisguise: a unit in disguise has the model of what it stands for, and the house colour of that player for everybody but its allies.
             var disguise = entity.HasStatus(DisguisedBit) ? entity.Modules.OfType<StealthUpdate>().FirstOrDefault(stealth => stealth.IsDisguised) : null;
             var shown = disguise is not null ? world.Templates[disguise.DisguisedTemplate].Name : entity.Template.Name;
