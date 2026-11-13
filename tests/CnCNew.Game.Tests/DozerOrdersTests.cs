@@ -30,7 +30,52 @@ internal static class DozerOrdersTests
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("A dozer at a repair keeps its build buttons, takes a build order from the bar (the repair ends), and a dozer at a building refuses a second", () => BuildWhileRepairing(data));
         harness.Run("A dozer at a repair takes a move order from a right click (the repair ends) and, standing idle again, repairs the hurt structure nearby by itself", () => MoveWhileRepairing(data));
+        harness.Run("A builder at its building is ACTIVELY_CONSTRUCTING: the GLA worker plays its building animation, the USA and China dozers have no art for it and keep their default state (issue 310)", () => ActivelyConstructing(data));
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// <c>DozerActionDoActionState::update</c> sets <c>MODELCONDITION_ACTIVELY_CONSTRUCTING</c> on a dozer or worker at its dock point while it builds (and, "borrowing the constructing animation",
+    /// while it repairs). Which picture follows is the data's: the GLA worker's <c>W3DModelDraw</c> has hammering states for it, the <c>W3DTruckDraw</c> of the USA dozer and the
+    /// <c>W3DTankDraw</c> of the China dozer have none, so <c>findBestInfo</c> keeps their default state - in the original as here. The owner's wish for an animation of the USA dozer
+    /// (issue 310) is not the original's behaviour.
+    /// </summary>
+    private static void ActivelyConstructing(GameData data)
+    {
+        foreach (var (faction, builder, building, animated) in new[]
+        {
+            ("FactionAmerica", "AmericaVehicleDozer", "AmericaPowerPlant", false),
+            ("FactionChina", "ChinaVehicleDozer", "ChinaPowerPlant", false),
+            ("FactionGLA", "GLAInfantryWorker", "GLABarracks", true),
+        })
+        {
+            var scenario = new DemoScenario("constructing", "constructing", "constructing", 900, [new ScenarioUnit("builder", builder, 1, -90, 0, 0f)],
+                [new ScenarioOrder(10, "builder", ScenarioOrderKind.Build, "site", X: 30, Y: -70, Template: building)], 20, -15)
+            {
+                HumanFaction = faction,
+                OpponentFaction = faction == "FactionChina" ? "FactionAmerica" : "FactionChina",
+                StartMoney = 5000,
+            };
+            var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+            CnCNew.Presentation.Objects.DrawableInstance? seen = null;
+            for (var frame = 0; frame < 900 && seen is null; frame++)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                if (!live.Tags.TryGetValue("builder", out var id) || live.World.FindEntity(id) is not { } unit || unit.Modules.OfType<AIUpdateInterface>().FirstOrDefault() is not { IsConstructing: true }) continue;
+                var drawable = live.Frame.Drawables.FirstOrDefault(value => value.Entity == id);
+                if (drawable is not null && drawable.Conditions.Contains(CnCNew.Presentation.Objects.ModelConditions.ActivelyConstructing)) seen = drawable;
+            }
+            TestHarness.Assert(seen is not null, $"{builder} at its {building} is ACTIVELY_CONSTRUCTING");
+            var draw = seen!.Visual.Draws[0];
+            var state = draw.States[seen.Selections[0].StateIndex];
+            var drawsIt = state.Conditions.Any(alternative => alternative.Contains(CnCNew.Presentation.Objects.ModelConditions.ActivelyConstructing));
+            Console.WriteLine($"       {builder}: state {state.Index} of {draw.States.Length} (default {draw.DefaultStateIndex}), {state.Animations.Length} animation(s), for ACTIVELY_CONSTRUCTING: {drawsIt}");
+            if (animated)
+                TestHarness.Assert(drawsIt && !state.Animations.IsDefaultOrEmpty, $"{builder} plays the state its data has for building ({state.Index})");
+            else
+                TestHarness.Assert(!draw.States.Any(value => value.Conditions.Any(alternative => alternative.Contains(CnCNew.Presentation.Objects.ModelConditions.ActivelyConstructing)))
+                    && seen.Selections[0].StateIndex == draw.DefaultStateIndex, $"{builder} has no state for building and keeps its default one ({state.Index}, default {draw.DefaultStateIndex})");
+        }
     }
 
     private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data)
