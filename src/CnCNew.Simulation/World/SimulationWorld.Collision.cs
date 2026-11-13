@@ -123,7 +123,11 @@ public sealed partial class SimulationWorld
         return limit.Raw >= 0 && difference > limit.Raw + ScanSlack;
     }
 
-    /// <summary>A unit that stands in the way: one of <see cref="_mobiles"/> (so it has a locomotor) that is alive, not carried, not the mover or its goal, and neither moving nor ordered to.</summary>
+    /// <summary>
+    /// A unit that stands in the way: one of <see cref="_mobiles"/> (so it has a locomotor) that is alive, not carried, not the mover or its goal, and neither moving nor ordered to.
+    /// An object that is gone this frame (<c>destroyObject</c>: a pilot that has climbed into its vehicle, a crate that was collected) stands in nobody's way: at 30 Hz the earlier
+    /// object's update destroys it before a later mover looks, above 30 Hz the look in the frame's first tick comes before the step that ends in it (#304).
+    /// </summary>
     // The widest bounding circle among the mobile objects this world has seen (as a magnitude, it only grows). With it a scan can drop an object by its position alone, before it
     // reads anything else of it: an object further away on one axis than the mover's radius plus this radius plus the slack fails the exact test with its own, smaller radius too.
     private long _widestMobile;
@@ -134,7 +138,7 @@ public sealed partial class SimulationWorld
     private static bool OnAnotherLevel(Entity a, Entity b) => a.Layer != b.Layer && (a.Z - b.Z).Abs() > CnCNew.Simulation.Terrain.TerrainBridge.LayerCloseEnough;
 
     private static bool StandsStill(Entity other, Entity mover, EntityId goal)
-        => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero || PassesThrough(mover, other));
+        => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid || other.Speed != Fixed.Zero || PassesThrough(mover, other));
 
     /// <summary>
     /// <c>INFANTRY_MOVES_THROUGH_INFANTRY</c> of <c>Pathfinder::checkForMovement</c>: "Infantry can run through infantry", so standing infantry is nothing an infantry's way goes round.
@@ -395,7 +399,7 @@ public sealed partial class SimulationWorld
 
     private bool StandsStillAtFrameEnd(Entity other, Entity mover, EntityId goal)
     {
-        if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || PassesThrough(mover, other)) return false;
+        if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid || PassesThrough(mover, other)) return false;
         if (!other.HasMoveTarget) return other.Speed == Fixed.Zero;
         // Covering the last step of its move: the 30 Hz step has already put it on its target, where it stands.
         return other.AheadTick + TickOrder.Next >= _tick && AiOf(other) is { IsArrivingWithThisFrame: true };

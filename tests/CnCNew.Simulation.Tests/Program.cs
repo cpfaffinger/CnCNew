@@ -82,6 +82,7 @@ run.Test("Lost wake: a battle bus killed in a tick it looks at its hulk in ends"
 run.Test("F-138: an attack order turns a standing unit as much at 60 and 120 Hz as at 30 Hz", Tests.F138AttackOrderTurnsAStandingUnitLikeAt30Hz);
 run.Test("F-170: a moving unit turns to a victim beside it before it fires, and fires at one ahead on its way, at 30, 60 and 120 Hz", Tests.F170AMovingUnitTurnsToItsVictimBeforeItFires);
 run.Test("#303: a rider put out in the frame it boarded walks off as at 30 Hz, at 30, 60 and 120 Hz", Tests.ARiderPutOutInTheFrameItBoardedWalksOffAsAt30Hz);
+run.Test("#304: a unit destroyed in the tick is no standing blocker ahead, at 30, 60 and 120 Hz", Tests.ADestroyedUnitIsNoStandingBlocker);
 run.Test("F-138: a death settles an arrival that only has its angle left", Tests.F138DeathSettlesAnArrivalThatOnlyHasItsAngleLeft);
 run.Test("Tick rate, world: the shroud is refreshed every three logic frames, phase 0", Tests.TickRateWorldVisionKeepsItsRhythm);
 run.Test("Tick rate, world: weapon delays under a bonus are rounded in logic frames", Tests.TickRateWorldWeaponDelaysAreRoundedOnTheOriginalGrid);
