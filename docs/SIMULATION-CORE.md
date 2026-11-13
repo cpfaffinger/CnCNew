@@ -5367,3 +5367,23 @@ Settings **schema 8**: `display.barOpacity` (20 to 100, default 80), `display.ma
 - **Versions:** match description **5**, skirmish save **5**, protocol **10**, settings schema **8**; `CommandTypes.Version` 27, replay 26, `WorldSnapshot` 11, `MissionSnapshot` 4 unchanged (the new state fields are written only while set).
 - **Tests:** the synthetic and the real-data `Simulation.Tests` green on the integration before the last two picks (the Chinook and the interface), the synthetic one at 60 Hz and the source rules after; the whole `Game.Tests` in Release on the final integration: three tests failed, all pinned computer matches that are other games now (`MatchAnalysisTests` score pictures, `ObserverTests` ticker; seed and baselines rewritten in a commit of their own); tier 4 see the closing note in `docs/handoffs/HANDOFF-PHASE65.md`.
 - **Not run:** `scripts/perf-profile.ps1`, the clean room, the campaign checks, a real release; no human has seen, heard or played any of it.
+
+## 90. Phase 66: the owner's playtest of 13 November 2026
+
+Sixteen findings of a skirmish (#306 to #321), each read in the original; the presentation and interface ones are in `docs/GAME-HUD.md`, `docs/GAME-SHELL.md`, `docs/PRESENTATION-OBJECTS.md`, `docs/PRESENTATION-FX.md` and `docs/GAME-AUDIO.md`. **No human has seen, heard or played the fixes.**
+
+### 90.1 An object made after its player's upgrade has it (#314, #312)
+
+`Object::initObject` calls `updateUpgradeModules`, so a unit made after a player upgrade has it from its first frame; the port tried the upgrades only when an upgrade completed. A Ranger trained after the capture research kept its capture ability paused for good (the greyed button of #314), a Comanche built after the countermeasures research had no flares and no countermeasures armour (#312), and so for every player upgrade - the units that stood when the research finished had it, which is why "it worked before". `SimulationWorld.SpawnEntity` now tries a new object's upgrades right after the modules' `OnSpawn`, the upgrade check skips an object under construction or being destroyed as the original's does, and `CompleteConstruction` tries them when a building is finished (`DozerAIUpdate`); before, a site took an upgrade before it stood. Tests at 30, 60 and 120 Hz, synthetic and on real data (a Comanche built after the research launches flares against Tank Hunter missiles), and `PlaytestHudTests` for the Ranger's button; each fails on the code before.
+
+### 90.2 What is the original's (#310, #311, #313, #315, #316, #318)
+
+- **The Comanche's guard radius (#311):** the original has no factor for aircraft; the guard range is the vision range times `GuardInnerModifierHuman`/`GuardOuterModifierHuman` (or the AI's): for the Comanche (vision 200) 360 and 440 for a human player, 220 and about 267 for a computer, a chase of 10 s. The port gives the same numbers on real data (`e31d6316`). What feels large is probably the first walk of rule fix 28 (`docs/GUARD-STATE.md`).
+- **The Comanche's crash (#315):** `HelicopterSlowDeathBehavior::beginSlowDeath` draws only the slow death's values and the blade delay, fixed at 1500 ms for the Comanche; it always spirals left from the least self-spin. More variety would go beyond the original (the owner's decision).
+- **The battle drone (#318):** the drone heals only its master in the original and in the port; a second hurt Crusader beside it is never healed (`78a6ab26`, passes on the code before). The report was not reproduced. A guess not checked: the healing icon shows whenever a unit's health fraction rises, where the original shows it only after `attemptHealing`.
+- **W (#313):** the shipped `CommandMap.ini` binds W to select all aircraft and Q to select all (`becadc0f`).
+- **The USA dozer (#310):** the port sets `ACTIVELY_CONSTRUCTING` on a building builder as the original does; only the GLA worker has art for it (`f71c6545`). **Scorch marks (#316)** never fade in the original. Both stay open as the owner's decisions.
+
+### 90.3 The computer's gatherers and their centres (#319)
+
+`docs/SKIRMISH-AI.md` 7e.

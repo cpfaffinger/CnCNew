@@ -728,3 +728,7 @@ it is `CAPTURABLE`, and one set to `NOT_ON_RADAR` never does. The feed asks it o
 In the shipped data every capturable building and every vehicle a terrorist can take is on the radar, so the test changes nothing there; a civilian monument or a bridge tower
 would defect silently. Not built: the infiltration events of what defects along with a captured building - the aircraft parked on an airfield (`defectAllParkedUnits`) and the
 slaves of a captured spawner (`SlavedUpdate`) - because the simulation reports their change of hands with no event.
+
+## The owner's playtest of 13 November 2026 (#306, #309)
+
+**The rally line (#306):** a selected own producer with a rally point shows the line `W3DWaypointBuffer::drawWaypoints` draws: from its door to the natural rally point, round one or two corners of the building when the point lies behind it, with a node marker at each bend, to the rally point (`RallyLine`); not while the player is in waypoint mode. The original's exception for the listening outpost is not ported. **The healing icon (#309):** the wrench over a repaired building and the cross over a healed unit are drawn at their frame's own size (the wrench 56 px, the cross 32 px on an 800 x 600 screen), scaled by `UiScaler.UniformScale`; the port drew 22 to 40 px.

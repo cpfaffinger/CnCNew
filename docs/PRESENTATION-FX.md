@@ -364,3 +364,7 @@ The Patriot data stream and every other laser object (the Black Lotus hack strea
 ## Phase 65: gunship decals and a state that finishes
 
 The Spectre gunship's `AttackAreaDecal` (200 around the first target) and `TargetingReticleDecal` (25 at the last click) are drawn for the owner with the original's throb (`UpdateGunshipDecals`, `FxExecutor.ObjectDecals`). A draw module whose model state names `WaitForStateToFinishIfPossible` lets the playing animation finish before the next state starts (`StateWaitFollower`, `ModelStateTracker(useTransitions: false)`; only the Chinook names a wait key: its net-lowering clip lasts 13.33 s).
+
+## The particle cannon's beam (#320)
+
+An effect list a module asks for at a place plays at that place (`a802bbc7`; before, every such request played at the asking object - the cannon's `GroundHitFX` burned on the building instead of under the beam, and bridges, toppling trees and projectile detonations were off as well). The beam burns `TotalScorchMarks` scorch marks along its path, each `ScorchMarkScalar` times the beam's current radius, and they stay for the match like every scorch mark (the original keeps up to 500 and drops the oldest; it never fades them, #316). The firing cannon's launch flare plays at the dish's fire bone instead of the building's foot. The cannon's sounds, scorches and antenna stages are presentation, read from `ParticleUplinkCannonUpdate.StatusAt`, `BeamBurning` and `ScorchMarksMade` (no state of their own).

@@ -276,3 +276,7 @@ The victim filter is `getAbleToAttackSpecificObject` with `CMD_FROM_AI`: no `UNA
 ## The first walk (rule fix 28, Phase 65)
 
 In the original the walk to a guard post (`AIGuardReturnState`) looks every 30 frames for enemies within the guard range of the post itself and answers an attacker only in INNER and RETURN, so a unit walks past whatever stands beside its path. With `guard-engages-on-the-way` the first walk after the order (`OnTheWay`) scans at the attack-move rate with the unit's weapon range, fights what it finds in the new guard state `Way` for at most 300 frames and then goes on to the post; after its arrival the normal guard applies. The flag is saved only while set.
+
+## The Comanche's radius (#311)
+
+The original has no guard factor for aircraft: the Comanche (vision 200) guards 360 and 440 around its post for a human player and 220 and about 267 for a computer, and chases for 10 s; the port gives the same numbers on real data (`Simulation.Tests`, "the Comanche's guard range"). The owner's impression of a large radius is probably the first walk of rule fix 28.
