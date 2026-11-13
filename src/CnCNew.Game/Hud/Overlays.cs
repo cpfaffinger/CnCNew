@@ -65,8 +65,11 @@ public sealed record VeterancyMarker(EntityId Entity, Vector2 At, int Level);
 /// <summary>Which of the original's three healing animations (<c>Animation2D.ini</c>: <c>StructureHeal</c> wrench, <c>VehicleHeal</c> wrench, <c>DefaultHeal</c> cross) a healed object shows.</summary>
 public enum HealIconKind { Default, Structure, Vehicle }
 
-/// <summary>The healing icon over an object that was healed within the last three seconds (<c>Drawable::drawHealing</c>): where its health bar would sit, in viewport pixels.</summary>
-public sealed record HealIconMarker(EntityId Entity, Vector2 Anchor, float BarWidth, HealIconKind Kind);
+/// <summary>
+/// The healing icon over an object that was healed within the last three seconds (<c>Drawable::drawHealing</c>): where its health bar would sit, in viewport pixels, and the icon's
+/// side in pixels (0: derived from the bar's width).
+/// </summary>
+public sealed record HealIconMarker(EntityId Entity, Vector2 Anchor, float BarWidth, HealIconKind Kind, int Size = 0);
 
 /// <summary>A producing structure's rally point, projected to screen space.</summary>
 public sealed record RallyPointMarker(EntityId Producer, Vector2 Screen);

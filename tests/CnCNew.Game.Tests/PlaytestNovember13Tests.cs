@@ -36,7 +36,51 @@ internal static class PlaytestNovember13Tests
         harness.Run("The setup's colour boxes start at ???, offer only the colours nobody holds and give a colour back when its slot opens (issue 307)", () => SetupColorBoxes(data));
         harness.Run("A skirmish draws every player in the multiplayer colour of its slot, and two players of one faction's colour or of ??? never look alike (issue 307)", () => MatchHouseColors(data));
         harness.Run("The colour box writes the chosen colour and every row of its list in that colour, in both skins (issue 308)", () => ColorBoxesShowTheirColor(data));
+        harness.Run("The healing icon over a repaired building is the wrench at its own size grown with the screen, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
         return harness.Failures;
+    }
+
+    // ------------------------------------------------------------------------------------------------ #309 the size of the healing icon
+
+    private static void HealIconSize(GameData data)
+    {
+        foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1920, 1080) })
+        {
+            var scenario = new DemoScenario("heal-icon-size", "heal-icon-size", "heal-icon-size", 3000,
+                [new ScenarioUnit("center", "AmericaCommandCenter", 1, 0, 0, 0f), new ScenarioUnit("ranger", "AmericaInfantryRanger", 1, 120, 60, 0f)], [], 40f, 0f, CameraHeight: 330f)
+            {
+                HumanFaction = "FactionAmerica",
+                OpponentFaction = "FactionChina",
+            };
+            var live = LiveScenario.Create(data, scenario, new Vector2(width, height));
+            var controller = new MatchController(live, SkinPins.Settings) { StarBlinks = false };
+            void Frames(int count)
+            {
+                for (var frame = 0; frame < count; frame++)
+                {
+                    live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                    controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+                }
+            }
+            Frames(4 * CnCNew.Tests.TestTime.FramesPerSecond); // Drawable::drawHealing ignores the first three seconds of a game
+            var (center, ranger) = (live.Tags["center"], live.Tags["ranger"]);
+            ulong sequence = 900_000;
+            void Hit(EntityId target, int amount, int type)
+                => live.World.Submit(new DamageCommand(PlayerId.System, ++sequence, live.World.Tick, target, Fixed.FromInt(amount), type, 0));
+            Hit(center, 800, CnCNew.Simulation.World.DamageTypes.Unresistable);
+            Hit(ranger, 60, CnCNew.Simulation.World.DamageTypes.Unresistable);
+            Frames(3);
+            Hit(center, 100, CnCNew.Simulation.World.DamageTypes.Healing);
+            Hit(ranger, 10, CnCNew.Simulation.World.DamageTypes.Healing);
+            Frames(3);
+            var scale = Math.Min(width / 800f, height / 600f);
+            var images = controller.BuildDrawList(width, height).Commands.OfType<UiImageDraw>().ToArray();
+            var wrench = images.FirstOrDefault(image => image.Image.StartsWith("SCPWrench", StringComparison.Ordinal));
+            var cross = images.FirstOrDefault(image => image.Image.StartsWith("SCPCross", StringComparison.Ordinal));
+            TestHarness.Assert(wrench is not null && wrench.Destination.Width == (int)(56 * scale) && wrench.Destination.Height == (int)(56 * scale),
+                $"{width}x{height}: the wrench over the building is 56 pixels of an 800 x 600 screen ({wrench?.Destination})");
+            TestHarness.Assert(cross is not null && cross.Destination.Width == (int)(32 * scale), $"{width}x{height}: the cross over the soldier is 32 pixels of an 800 x 600 screen ({cross?.Destination})");
+        }
     }
 
     // ------------------------------------------------------------------------------------------------ #306 the rally line

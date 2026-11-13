@@ -774,6 +774,19 @@ public sealed partial class MatchController
     /// Which objects the always-shown bars of <see cref="HealthBars"/> are for: what a player can select and shoot at and that is alive - not a prop, a mine, a crate, a projectile or
     /// anything the original keeps out of the interface (<c>IGNORED_IN_GUI</c>, and <c>FORCEATTACKABLE</c> for which <c>Drawable::drawHealthBar</c> returns); an object with no health has no bar.
     /// </summary>
+    /// <summary>
+    /// The side of a healing icon in pixels. <c>Drawable::drawHealing</c> draws the animation's frame at its own size - the scale by the bar's width is compiled out
+    /// (<c>SCALE_ICONS_WITH_ZOOM_ML</c> is not defined): the wrench 56 pixels, the cross 32, on the original's 800 x 600 screen. Here that size grows with the screen as the
+    /// interface does (<see cref="UiScaler.UniformScale"/>), so it covers the same share of it.
+    /// </summary>
+    private int HealIconSize(HealIconKind kind)
+    {
+        var frame = kind == HealIconKind.Default ? "SCPCross000" : "SCPWrench000";
+        if (_tree.Services.Images is not { } images || !images.TryGetSize(frame, out var width, out var height)) return 0;
+        var (numerator, denominator) = UiScaler.UniformScale(_tree.Viewport, UiScaler.DefaultDisplayWidth, UiScaler.DefaultDisplayHeight);
+        return (int)(Math.Max(width, height) * numerator / denominator);
+    }
+
     private static bool ShowsAmbientBar(Entity unit)
         => !unit.EffectivelyDead && unit.Body is { } body && body.MaxHealth.Raw != 0 && body.Health.Raw != 0
            && unit.Template.IsKindOf("SELECTABLE") && !unit.Template.IsKindOf("NO_SELECT") && !unit.Template.IsKindOf("IGNORED_IN_GUI") && !unit.Template.IsKindOf("FORCEATTACKABLE")
@@ -916,7 +929,7 @@ public sealed partial class MatchController
             if (!drawable.ShowsHealing || !drawable.Entity.IsValid || world.FindEntity(drawable.Entity) is not { } healed) continue;
             if (!Input.Selection.Picker.TryProject(view, healed, out var projected)) continue;
             var kind = drawable.IsStructure ? HealIconKind.Structure : drawable.Visual.IsKindOf("VEHICLE") ? HealIconKind.Vehicle : HealIconKind.Default;
-            heals.Add(new HealIconMarker(drawable.Entity, new Vector2(projected.Center.X, projected.Center.Y - projected.Radius), MathF.Max(24f, projected.Radius * 1.8f), kind));
+            heals.Add(new HealIconMarker(drawable.Entity, new Vector2(projected.Center.X, projected.Center.Y - projected.Radius), MathF.Max(24f, projected.Radius * 1.8f), kind, HealIconSize(kind)));
         }
 
         // Drawable::drawIconUI runs for every drawable. The veterancy comes last there, so that it shows over the pips; a construction's percent shows on dead things too.

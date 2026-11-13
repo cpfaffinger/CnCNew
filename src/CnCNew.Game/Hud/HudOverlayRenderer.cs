@@ -367,7 +367,7 @@ public static class HudOverlayRenderer
             ? "SCPCross" + Frame(CrossFrames, clockMilliseconds / 30 + icon.Entity.Value % CrossFrames, pingPong: false).ToString("000", System.Globalization.CultureInfo.InvariantCulture)
             : "SCPWrench" + Frame(WrenchFrames, clockMilliseconds / 60 + icon.Entity.Value % WrenchFrames, pingPong: true).ToString("000", System.Globalization.CultureInfo.InvariantCulture);
         var scale = icon.Kind == HealIconKind.Structure ? 0.33f : 0.7f;
-        var size = (int)Math.Clamp(icon.BarWidth * scale, 22f, 40f);
+        var size = icon.Size > 0 ? icon.Size : (int)Math.Clamp(icon.BarWidth * scale, 22f, 40f);
         var x = (int)MathF.Round(icon.Anchor.X + icon.BarWidth * 0.25f - size / 2f);
         var y = (int)MathF.Round(icon.Anchor.Y - size - 12f);
         commands.Add(new UiImageDraw(name, new UiRect(x, y, size, size), WndColor.White, false, false));
