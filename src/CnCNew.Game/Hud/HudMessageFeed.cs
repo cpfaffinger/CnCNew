@@ -8,6 +8,7 @@ using CnCNew.Presentation.Terrain;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.World;
 using CnCNew.Ui.Text;
@@ -197,6 +198,28 @@ public sealed class HudMessageFeed
         foreach (var gone in _lastPulse.Keys.Where(id => !seen.Contains(id)).ToArray()) _lastPulse.Remove(gone);
     }
 
+    // ThingTemplate's RadarPriority by object template name, where it is set (unset is INVALID).
+    private readonly Dictionary<string, string> _radarPriorities = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The test of <c>Object::defect</c>, <c>friend_getRadarData()</c>: the object is on the radar, as <c>Radar::addObject</c> took it when it was made or last changed hands - its
+    /// <c>Object::getRadarPriority</c> is visible (<c>Radar::isPriorityVisible</c>: not <c>INVALID</c>, not <c>NOT_ON_RADAR</c>). An object whose template sets none (<c>INVALID</c>) is
+    /// on the radar as a structure when its container is garrisonable (<c>ContainModuleInterface::isGarrisonable</c>) or it is <c>CAPTURABLE</c>; one set to <c>NOT_ON_RADAR</c>
+    /// never is. A car bomb shows as a unit, but that status comes after its defection (<c>ConvertToCarBombCrateCollide::executeCrateBehavior</c>), and the radar's object is the
+    /// one added before it, so it is not asked here. An object that died lost its radar data, but nothing defects dead.
+    /// </summary>
+    private bool IsOnRadar(Entity entity)
+    {
+        var priority = _radarPriorities.GetValueOrDefault(entity.Template.Name, "INVALID");
+        if (priority == "INVALID")
+        {
+            if (entity.Modules.OfType<IContainerModule>().FirstOrDefault() is { IsGarrisonable: true }) return true;
+            if (entity.Template.IsKindOf("CAPTURABLE")) return true;
+            return false;
+        }
+        return priority != "NOT_ON_RADAR";
+    }
+
     /// <summary><c>INI::parseDurationUnsignedInt</c>: milliseconds to frames of the original, rounded up.</summary>
     private static long DurationFrames(string text)
         => (long)Math.Ceiling(decimal.Parse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture) * CnCNew.Data.OriginalFrame.PerSecond / 1000m);
@@ -251,6 +274,8 @@ public sealed class HudMessageFeed
                 string Label(string key) => plans.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"') ?? string.Empty;
                 _planMessages[definition.OriginalName] = (Label("BombardmentMessageLabel"), Label("HoldTheLineMessageLabel"), Label("SearchAndDestroyMessageLabel"));
             }
+            if (definition is ObjectDefinition && definition.Fields.LastOrDefault(field => field.Name.Equals("RadarPriority", StringComparison.OrdinalIgnoreCase)) is { } radar)
+                _radarPriorities[definition.OriginalName] = radar.Value.OriginalText.Trim().ToUpperInvariant();
             var label = definition.Fields.FirstOrDefault(field => field.Name.Equals("DisplayName", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
             if (label is { Length: > 0 }) target[definition.OriginalName] = label;
         }
@@ -393,14 +418,16 @@ public sealed class HudMessageFeed
                     TryEvent(EventFake, SimulationQueries.GroundOf(lost), world, simEvent.Tick);
                 return;
             case SimEventKind.ObjectConverted:
-                // ConvertToHijackedVehicleCrateCollide::executeCrateBehavior and Object::defect (a car bomb): the vehicle's old owner is told; a defection needs two real players.
+                // ConvertToHijackedVehicleCrateCollide::executeCrateBehavior (tryInfiltrationEvent, no test) and Object::defect (a car bomb): the vehicle's old owner is told; a defection
+                // needs an object on the radar and two real players.
                 if (new PlayerId((int)simEvent.Value) != human || world.FindEntity(simEvent.Entity) is not { } converted) return;
-                if (simEvent.Text == "CARBOMB" && !(world.IsPlayableSide(human) && world.IsPlayableSide(converted.Owner))) return;
+                if (simEvent.Text == "CARBOMB" && !(IsOnRadar(converted) && world.IsPlayableSide(human) && world.IsPlayableSide(converted.Owner))) return;
                 InfiltrationFeedback(SimulationQueries.GroundOf(converted), simEvent.Tick);
                 return;
             case SimEventKind.StructureCaptured:
-                // Object::defect at the end of a capture: the old owner's building, between two real players.
+                // Object::defect at the end of a capture: the old owner's building, on the radar, between two real players.
                 if (new PlayerId((int)simEvent.Value) != human || !world.IsPlayableSide(human) || !world.IsPlayableSide(simEvent.Player) || world.FindEntity(simEvent.Entity) is not { } captured) return;
+                if (!IsOnRadar(captured)) return;
                 InfiltrationFeedback(SimulationQueries.GroundOf(captured), simEvent.Tick);
                 return;
             case SimEventKind.Sabotaged:

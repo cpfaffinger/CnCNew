@@ -719,3 +719,12 @@ A script's radar event (`RADAR_CREATE_EVENT` and its object and team forms) is d
 original: the frame its drawable was made).
 
 Tests: `RadarEventTests` ("A radar event is a triangle ...", "The radar events to draw ...", real data: "the HUD draws a radar event over the radar ...", "our beacon pulses on the radar ...").
+
+**A defection warns only of an object on the radar** (#276, `HudMessageFeed.IsOnRadar`). `Object::defect` makes its infiltration event, line and sound only
+`if( friend_getRadarData() && ...)`: the object is on the radar as `Radar::addObject` took it when it was made or last changed hands - `Object::getRadarPriority` is visible
+(`Radar::isPriorityVisible`: neither `INVALID` nor `NOT_ON_RADAR`), where an object whose template sets no `RadarPriority` counts as a structure when its container is garrisonable or
+it is `CAPTURABLE`, and one set to `NOT_ON_RADAR` never does. The feed asks it of the two defections the simulation reports, a capture (`StructureCaptured`) and a car bomb
+(`ObjectConverted` `CARBOMB`; the car bomb's own priority of a unit comes after its defection and is not asked); a hijack calls `tryInfiltrationEvent` itself and is not tested.
+In the shipped data every capturable building and every vehicle a terrorist can take is on the radar, so the test changes nothing there; a civilian monument or a bridge tower
+would defect silently. Not built: the infiltration events of what defects along with a captured building - the aircraft parked on an airfield (`defectAllParkedUnits`) and the
+slaves of a captured spawner (`SlavedUpdate`) - because the simulation reports their change of hands with no event.

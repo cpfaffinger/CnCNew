@@ -1,4 +1,5 @@
 using System.Numerics;
+using CnCNew.Data.Definitions;
 using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
@@ -45,6 +46,7 @@ internal static class RadarEventTests
             harness.Run("Real data: the space bar walks back through the history of events, Shift+Space forward, a rest of three seconds or a new event starts at the newest", () => SpaceBarHistory(directory));
             harness.Run("Real data: the HUD draws a radar event over the radar as its turning triangle, the same in frames of the original at every rate (#275)", () => HudDrawsTheTriangle(directory));
             harness.Run("Real data: our beacon pulses on the radar every RadarPulseFrequency for RadarPulseDuration, a hidden one does not (#275)", () => BeaconPulses(directory));
+            harness.Run("Real data: a defection (capture, car bomb) warns only of an object on the radar - its RadarPriority, or garrisonable or capturable without one (#276)", () => DefectNeedsTheRadar(directory));
         }
         return harness.Failures;
     }
@@ -395,6 +397,62 @@ internal static class RadarEventTests
         var hiddenFrom = match.Clock.OriginalFrames;
         for (var tick = 0; tick < 40 * perFrame; tick++) Step(match);
         TestHarness.Assert(!feed.RadarEventsToDraw(match.Clock).Any(item => item.IsBeaconPulse && item.AgeFrames < match.Clock.OriginalFrames - hiddenFrom - 15), "a hidden beacon does not pulse");
+    }
+
+    private static void DefectNeedsTheRadar(string directory)
+    {
+        var data = GameData.Load(directory, rate: CnCNew.Tests.TestRate.Default);
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        var world = match.World;
+        var human = match.Human;
+        var feed = controller.Messages;
+        for (var i = 0; i < (int)world.Time.OriginalFrames(4); i++) match.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+        var enemy = world.Entities.First(entity => entity.Owner != human && !entity.Owner.IsSystem && entity.Template.IsKindOf("COMMANDCENTER"));
+        var center = world.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("COMMANDCENTER"));
+        ulong sequence = 3_100_000;
+        Entity Spawn(string name, int dx)
+        {
+            var known = world.Entities.Select(entity => entity.Id).ToHashSet();
+            TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(PlayerId.System, sequence++, world.Tick, name, human, center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx),
+                center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(300), CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, $"{name} is spawned");
+            for (var i = 0; i < (int)world.Time.OriginalFrames(2); i++) match.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            return world.Entities.First(entity => entity.Template.Name == name && !known.Contains(entity.Id));
+        }
+        string? Priority(string name) => data.Graph.Definitions.First(definition => definition is ObjectDefinition && definition.OriginalName == name).Fields
+            .LastOrDefault(field => field.Name.Equals("RadarPriority", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim();
+        // The premises, read from the data: a plain civilian monument sets no RadarPriority and is neither garrisonable nor capturable; a civilian house sets none either
+        // but is garrisonable; a bridge tower is NOT_ON_RADAR; the command center is a STRUCTURE.
+        TestHarness.Assert(Priority("BaghdadVictoryMemorial01") is null or "INVALID" && Priority("GermanTownHouse1") is null or "INVALID" && Priority("GenericBridgeTower") == "NOT_ON_RADAR" && Priority(center.Template.Name) == "STRUCTURE",
+            $"premise: the four radar priorities of the data (monument {Priority("BaghdadVictoryMemorial01")}, house {Priority("GermanTownHouse1")}, tower {Priority("GenericBridgeTower")}, {center.Template.Name} {Priority(center.Template.Name)})");
+        var monument = Spawn("BaghdadVictoryMemorial01", -300);
+        var house = Spawn("GermanTownHouse1", 0);
+        var tower = Spawn("GenericBridgeTower", 300);
+        TestHarness.Assert(!monument.Template.IsKindOf("CAPTURABLE") && house.Modules.OfType<CnCNew.Simulation.Modules.IContainerModule>().FirstOrDefault() is { IsGarrisonable: true },
+            "premise: the monument is not capturable, the house is garrisonable");
+        SimEvent Captured(Entity entity) => new(default, world.Tick, SimEventKind.StructureCaptured, entity.Id, enemy.Id, enemy.Owner, string.Empty, human.Value);
+        SimEvent CarBomb(Entity entity) => new(default, world.Tick, SimEventKind.ObjectConverted, entity.Id, enemy.Id, default, "CARBOMB", human.Value);
+        var lines = feed.Shown;
+        // Object::defect: "if( friend_getRadarData() && ...)": no radar object, no infiltration event, no line.
+        foreach (var off in new[] { monument, tower })
+        {
+            feed.Observe(Captured(off), world, human);
+            feed.Observe(CarBomb(off), world, human);
+        }
+        TestHarness.Assert(feed.Shown == lines && feed.LastRadarEvent != SimulationQueries.GroundOf(monument) && feed.LastRadarEvent != SimulationQueries.GroundOf(tower),
+            $"an object off the radar (no priority, or NOT_ON_RADAR) defects without a warning ({feed.Shown - lines} lines)");
+        feed.Observe(Captured(house), world, human);
+        TestHarness.Assert(feed.Shown == lines + 1 && feed.LastRadarEvent == SimulationQueries.GroundOf(house), "a garrisonable house without a priority is on the radar as a structure: a warning");
+        feed.Observe(Captured(center), world, human);
+        TestHarness.Assert(feed.Shown == lines + 2 && feed.LastRadarEvent == SimulationQueries.GroundOf(center), "a STRUCTURE: a warning");
+        var vehicle = world.Entities.First(entity => entity.Owner == human && Priority(entity.Template.Name) is "UNIT" or "LOCAL_UNIT_ONLY");
+        feed.Observe(CarBomb(vehicle), world, human);
+        TestHarness.Assert(feed.Shown == lines + 3 && feed.LastRadarEvent == SimulationQueries.GroundOf(vehicle), "a car bomb of an object on the radar as a unit: a warning");
+        // ConvertToHijackedVehicleCrateCollide calls tryInfiltrationEvent itself: no radar test there.
+        feed.Observe(new SimEvent(default, world.Tick, SimEventKind.ObjectConverted, monument.Id, enemy.Id, default, "HIJACKED", human.Value), world, human);
+        TestHarness.Assert(feed.Shown == lines + 4, "a hijack asks no radar");
     }
 
     private static void SpaceBar(string directory)
