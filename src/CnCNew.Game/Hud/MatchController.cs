@@ -397,8 +397,9 @@ public sealed partial class MatchController
     }
 
     /// <summary>
-    /// The camera's footprint on the radar as lines of this frame: the radar's picture is composed four times a second, and the frame must follow the camera, which moves in
-    /// every drawn frame. Drawn over the radar's window; the client's picture no longer holds it.
+    /// The radar events and the camera's footprint on the radar as lines of this frame (<c>W3DRadar::draw</c>: <c>drawEvents</c>, then <c>drawViewBox</c>): the radar's picture is composed
+    /// four times a second, and the events turn and the frame follows the camera in every drawn frame. Drawn over the radar's window, clipped to the drawn radar (<c>ClipLine2D</c>);
+    /// nothing without a radar (<c>Player::hasRadar</c>, <c>isRadarForced</c>), so an event is neither seen nor heard then.
     /// </summary>
     private void AddRadarOutline(ImmutableArray<UiDrawCommand>.Builder commands, UiRect rect)
     {
@@ -409,6 +410,7 @@ public sealed partial class MatchController
         var footprint = Match.Camera.GroundFootprint();
         var thickness = MathF.Max(1f, MathF.Round(rect.Height / 170f));
         commands.Add(new UiPushClip(clip));
+        AddRadarEvents(commands, offset, new Vector2(minimap.Width * scale, minimap.Height * scale), scale, thickness);
         for (var corner = 0; corner < footprint.Length; corner++)
         {
             var from = offset + minimap.WorldToPixel(footprint[corner]) * scale;
@@ -416,6 +418,37 @@ public sealed partial class MatchController
             commands.Add(new UiLineDraw(from.X, from.Y, to.X, to.Y, thickness, WndColor.White));
         }
         commands.Add(new UiPopClip());
+    }
+
+    // A line from the first colour to the second (TheDisplay->drawLine with two colours) as this many pieces of one colour each.
+    private const int RadarEventLinePieces = 4;
+
+    /// <summary>
+    /// <c>W3DRadar::drawEvents</c>: every active radar event as its triangle (<see cref="CnCNew.Presentation.Minimap.RadarEventMarker"/>) at <paramref name="drawnSize"/>, the radar drawn
+    /// at <paramref name="offset"/>; one pixel of the original's layout wide, as the camera's frame.
+    /// </summary>
+    private void AddRadarEvents(ImmutableArray<UiDrawCommand>.Builder commands, Vector2 offset, Vector2 drawnSize, float scale, float thickness)
+    {
+        foreach (var radarEvent in Messages.RadarEventsToDraw(Match.Clock))
+        {
+            var place = Match.Minimap.WorldToPixel(radarEvent.Position) * scale;
+            foreach (var edge in CnCNew.Presentation.Minimap.RadarEventMarker.Edges(place, drawnSize, radarEvent.AgeFrames, radarEvent.LifeFrames, radarEvent.IsBeaconPulse, radarEvent.Color1, radarEvent.Color2))
+            {
+                for (var piece = 0; piece < RadarEventLinePieces; piece++)
+                {
+                    var from = offset + Vector2.Lerp(edge.From, edge.To, piece / (float)RadarEventLinePieces);
+                    var to = offset + Vector2.Lerp(edge.From, edge.To, (piece + 1) / (float)RadarEventLinePieces);
+                    var share = (piece + 0.5f) / RadarEventLinePieces;
+                    commands.Add(new UiLineDraw(from.X, from.Y, to.X, to.Y, thickness, Blend(edge.Start, edge.End, share)));
+                }
+            }
+        }
+
+        static WndColor Blend(CnCNew.Presentation.Terrain.Rgba32 start, CnCNew.Presentation.Terrain.Rgba32 end, float share)
+        {
+            static byte Mix(byte a, byte b, float t) => (byte)Math.Clamp((int)MathF.Round(a + (b - a) * t), 0, 255);
+            return new WndColor(Mix(start.R, end.R, share), Mix(start.G, end.G, share), Mix(start.B, end.B, share), Mix(start.A, end.A, share));
+        }
     }
 
     private void OnInputUiRequest(MetaAction action)
@@ -712,6 +745,8 @@ public sealed partial class MatchController
         }
         // InGameUI::update runs once per original frame: the lines fade on the game clock's 1/30 s grid, not per simulation tick.
         if (OwnsMessageList && Match.Clock.IsOriginalFrameBoundary) Messages.Log.Update(Match.Clock.OriginalFrames);
+        // BeaconClientUpdate::clientUpdate compares logic frames: a beacon's radar pulse is made on the grid of the original's frames.
+        if (Match.Clock.IsOriginalFrameBoundary) Messages.PulseBeacons(Match.World, Match.Human, Match.Clock, Match.IsBeaconHidden);
         // Player::update: once a second the client posts its option when it differs from the player's mode in the world (MSG_ENABLE_RETALIATION_MODE).
         if (Match.Clock.IsOriginalFrameBoundary && Match.Clock.OriginalFrames % CnCNew.Data.OriginalFrame.PerSecond == 0 && !Match.IsOver
             && Match.World.RetaliationEnabled(Match.Human) != Retaliation)

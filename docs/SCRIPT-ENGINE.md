@@ -307,7 +307,7 @@ a camera move) is not represented, no campaign map uses it.
   `DIALOGEVENT:<Name>Subtitle` like `doSpeechPlay` (as a mission caption, 8 s; only if the table has it, it is not empty and does not begin with `*` – the English retail table hides 2,454 of 2,455) and next to it a marked
   placeholder with the event name. What does not start (unknown name, no file) is listed with a reason under "problems".
 - **Movie:** `MOVIE_PLAY_FULLSCREEN`/`MOVIE_PLAY_RADAR` play the movie over everything or in the radar's window; the scripts hear of its end after its length in game time (`docs/CLIENT-VIDEO.md`). A movie the host cannot play, and every movie of a run without a window, is the movie's name as a text placeholder. No shipped map uses either action.
-- **Radar:** `RADAR_CREATE_EVENT`, `OBJECT_/TEAM_CREATE_RADAR_EVENT` are drawn as a white, blinking dot on the minimap (`RadarBlipsForDisplay`, 8 s). In the measurement runs exactly one
+- **Radar:** `RADAR_CREATE_EVENT`, `OBJECT_/TEAM_CREATE_RADAR_EVENT` reach the HUD's feed and are drawn over the radar as the original's turning, shrinking, fading triangle in the colours of their type for four seconds (`W3DRadar::drawEvents`, `docs/GAME-HUD.md` "The radar events on the radar", #275; before, a white, blinking dot of `RadarBlipsForDisplay`, 8 s). In the measurement runs exactly one
   radar event occurred (`MD_USA01`, tick 3,191); it was handed to the minimap, but not specifically checked in the image.
 
 Second session (all output types that campaign maps emit, see the tables below; `Game/Shell/MissionOutputCatalog.cs` keeps state and description/reason per type):
@@ -455,9 +455,9 @@ occur in no campaign map and are only in the catalog):
 | `ZOOM_CAMERA` | camera (`ApplyCameraTo`) | 91 | 17 of 24 |
 | `MAP_SWITCH_BORDER` | camera: map border (`ActiveBoundary`) | 31 | GC_ChinaBoss, MD_CHI01, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05, Training01 |
 | `SCREEN_SHAKE` | camera: shake (`RtsCamera.Shake`) | 96 | MD_CHI01, MD_GLA01, MD_GLA04, MD_USA01, MD_USA03, MD_USA05 |
-| `OBJECT_CREATE_RADAR_EVENT` | minimap (blinking dot) | 152 | GC_ChinaBoss, MD_CHI02, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
-| `RADAR_CREATE_EVENT` | minimap (blinking dot) | 88 | MD_CHI02, MD_CHI04, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA02, MD_USA03, Training01 |
-| `TEAM_CREATE_RADAR_EVENT` | minimap (blinking dot) | 11 | MD_CHI05, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA03, MD_USA04 |
+| `OBJECT_CREATE_RADAR_EVENT` | radar (triangle) | 152 | GC_ChinaBoss, MD_CHI02, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
+| `RADAR_CREATE_EVENT` | radar (triangle) | 88 | MD_CHI02, MD_CHI04, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA02, MD_USA03, Training01 |
+| `TEAM_CREATE_RADAR_EVENT` | radar (triangle) | 11 | MD_CHI05, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA03, MD_USA04 |
 | `NAMED_CUSTOM_COLOR` | object layer (`FrameProjector`) | 198 | GC_LaserGeneral, MD_CHI05, MD_GLA01, MD_GLA03, MD_GLA04, MD_GLA05 |
 | `NAMED_FLASH` | object layer (`FrameProjector`) | 76 | MD_CHI01, MD_CHI02, MD_GLA02, MD_GLA03, MD_USA04, MD_USA05, Training01 |
 | `NAMED_FLASH_WHITE` | object layer (`FrameProjector`) | 32 | MD_GLA01, MD_GLA04, MD_GLA05, MD_USA01, MD_USA04, MD_USA05 |

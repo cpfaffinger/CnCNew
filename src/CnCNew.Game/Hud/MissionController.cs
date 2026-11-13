@@ -166,11 +166,12 @@ public sealed class MissionController : IMissionHudControl
     }
 
     /// <summary>
-    /// The HUD with the mission's on-screen text (caption, subtitle, movie placeholder) appended; radar events are read from
-    /// <see cref="MissionPresentationDirector.RadarBlips"/> by the host, which owns the minimap transform.
+    /// The HUD with the mission's on-screen text (caption, subtitle, movie placeholder) appended. The scripts' radar events reach the HUD's feed (<see cref="HudMessageFeed.NoteRadarEvent"/>)
+    /// and are drawn over the radar with the game's own; drawing the HUD tells the director they are displayed.
     /// </summary>
     public UiDrawList BuildDrawList(int width, int height)
     {
+        _ = Director.RadarBlipsForDisplay();
         var hud = Hud.BuildDrawList(width, height);
         var overlay = Director.BuildOverlayCommands(width, height);
         // CAMERA_LETTERBOX_BEGIN hides the control bar (ScriptActions::doLetterBoxMode: HideControlBar); the in-game menu, when open, stays.

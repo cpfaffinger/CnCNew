@@ -700,15 +700,8 @@ internal sealed class ClientRuntime : IDisposable
             if (_clockMs >= _nextDots)
             {
                 _nextDots = _clockMs + 250;
-                var dots = MinimapDots(running.Host.Match.Frame);
-                // Radar events of the mission scripts: a white dot that blinks at the minimap's refresh rate while the event lives.
-                if (running.Host.Match is LiveMission mission && _clockMs / 250 % 2 == 0)
-                    foreach (var blip in mission.Director.RadarBlipsForDisplay())
-                        dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(new Vector2(blip.X, blip.Y), new CnCNew.Presentation.Terrain.Rgba32(255, 255, 255, 255)));
-                // Radar::createEvent: the events of the game itself blink between their two colours while they live (a mission's script events are drawn above).
-                if (running.Hud is { } radarOwner)
-                    foreach (var (at, red, green, blue) in radarOwner.Messages.RadarEventsToDraw(running.Host.Match.Tick, running.Host.Match.World, _clockMs / 250 % 2 == 1))
-                        dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(at, new CnCNew.Presentation.Terrain.Rgba32(red, green, blue, 255)));                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
+                // The radar events (the game's and the scripts') are lines of the HUD over the radar, drawn in every frame (W3DRadar::drawEvents); the picture holds the objects only.
+                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, MinimapDots(running.Host.Match.Frame));
             }
             FollowTextFocus(input, running.Match?.Net?.ChatOpen == true, fixedSeconds, events);
             if (_shell is not null && running.Host.Match is LiveMatch ordered) GiveStandInOrder(ordered);

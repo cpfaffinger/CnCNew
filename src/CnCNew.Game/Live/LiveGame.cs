@@ -381,6 +381,9 @@ public abstract class LiveGame
     /// <summary>Takes another's beacon out of this machine's picture (<c>FrameProjector.HideBeacon</c>).</summary>
     public void HideBeacon(EntityId beacon) => _projector.HideBeacon(beacon);
 
+    /// <summary>The viewer hid this beacon (<see cref="HideBeacon"/>).</summary>
+    public bool IsBeaconHidden(EntityId beacon) => _projector.IsBeaconHidden(beacon);
+
     /// <summary>A mission script's house colour for one drawable (<c>FrameProjector.SetHouseColor</c>): presentation only.</summary>
     public bool SetDrawableHouseColor(EntityId entity, uint argb) => _projector.SetHouseColor(entity, argb, World);
 

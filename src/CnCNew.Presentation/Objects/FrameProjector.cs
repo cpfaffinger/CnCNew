@@ -184,6 +184,9 @@ public sealed class FrameProjector
     /// <summary><c>BeaconClientUpdate::hideBeacon</c> after a viewer's delete key: another's beacon goes from this machine's picture only.</summary>
     public void HideBeacon(EntityId beacon) => _hiddenBeacons.Add(beacon.Value);
 
+    /// <summary>The viewer hid this beacon (<see cref="HideBeacon"/>): its drawable is hidden, so it makes no radar pulse either (<c>isDrawableEffectivelyHidden</c>).</summary>
+    public bool IsBeaconHidden(EntityId beacon) => _hiddenBeacons.Contains(beacon.Value);
+
     public bool SetHouseColor(EntityId entity, uint argb, SimulationWorld world)
     {
         if (world.FindEntity(entity) is null) return false;

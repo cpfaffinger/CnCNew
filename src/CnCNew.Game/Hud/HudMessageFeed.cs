@@ -1,7 +1,10 @@
 using System.Numerics;
 using CnCNew.Data.Definitions;
 using CnCNew.Game.Shell;
+using CnCNew.Presentation;
 using CnCNew.Presentation.Input;
+using CnCNew.Presentation.Minimap;
+using CnCNew.Presentation.Terrain;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -51,12 +54,13 @@ public sealed class HudMessageFeed
     /// <summary><c>Radar::m_event</c>: the events made so far, oldest first, by type, tick and place. <c>Radar::tryEvent</c> looks at it for a recent one of its kind.</summary>
     private readonly List<RadarEntry> _radarEvents = [];
 
-    private sealed class RadarEntry(int type, long tick, Vector2 position, bool fromScript)
+    private sealed class RadarEntry(int type, long tick, Vector2 position, long lifeFrames)
     {
         public int Type { get; } = type;
         public long Tick { get; } = tick;
         public Vector2 Position { get; } = position;
-        public bool FromScript { get; } = fromScript;
+        /// <summary><c>dieFrame - createFrame</c>: four seconds, a beacon's pulse its <c>RadarPulseDuration</c>.</summary>
+        public long LifeFrames { get; } = lifeFrames;
         /// <summary><c>RadarEvent::soundPlayed</c>.</summary>
         public bool SoundPlayed { get; set; }
     }
@@ -95,12 +99,12 @@ public sealed class HudMessageFeed
     public long RadarHistoryVersion { get; private set; }
 
     /// <summary>A radar event a script made (<c>RADAR_CREATE_EVENT</c>, <c>OBJECT_CREATE_RADAR_EVENT</c>, <c>TEAM_CREATE_RADAR_EVENT</c>: <c>ScriptActions::doRadarCreateEvent</c>), of the raw <c>RadarEventType</c> the script passed.</summary>
-    public void NoteRadarEvent(Vector2 position, int type, long tick) => CreateEvent(type, position, tick, fromScript: true);
+    public void NoteRadarEvent(Vector2 position, int type, long tick) => CreateEvent(type, position, tick);
 
     /// <summary><c>Radar::createEvent</c>: the event is made, whoever it is for; it becomes the last one unless it is a beacon's pulse.</summary>
-    private void CreateEvent(int type, Vector2 position, long tick, bool fromScript = false)
+    private void CreateEvent(int type, Vector2 position, long tick, long lifeFrames = RadarEventMarker.DefaultLifeFrames)
     {
-        _radarEvents.Add(new RadarEntry(type, tick, position, fromScript));
+        _radarEvents.Add(new RadarEntry(type, tick, position, lifeFrames));
         if (_radarEvents.Count > MaxRadarEvents) _radarEvents.RemoveAt(0);
         if (type == EventBeaconPulse) return;
         LastRadarEvent = position;
@@ -122,35 +126,81 @@ public sealed class HudMessageFeed
         return true;
     }
 
-    // Radar.cpp radarColorLookupTable: the two colours an event blinks between on the minimap, by type (a fake event has none).
+    // Radar.cpp radarColorLookupTable: the two colours of an event's lines, by type; a fake event is never drawn.
     private static readonly (byte R, byte G, byte B)[][] EventColours =
     [
         [], [(128, 128, 255), (128, 255, 255)], [(128, 0, 64), (255, 185, 220)], [(255, 0, 0), (255, 128, 128)], [(255, 255, 0), (255, 255, 128)], [(255, 255, 0), (255, 255, 128)],
         [(0, 255, 255), (128, 255, 255)], [(255, 255, 255), (255, 255, 255)], [(0, 255, 0), (0, 128, 0)], [(0, 255, 0), (0, 128, 0)], [],
     ];
 
-    /// <summary>
-    /// The radar events the minimap shows at <paramref name="tick"/>: those made here, not by a script (the director shows those), that are not over (<c>Radar::createEvent</c>'s four seconds), with the
-    /// colour of the blink's <paramref name="phase"/> (<c>radarColorLookupTable</c>). A fake event is not drawn.
-    /// </summary>
-    public IEnumerable<(Vector2 Position, byte R, byte G, byte B)> RadarEventsToDraw(long tick, SimulationWorld world, bool phase)
+    private static readonly (byte R, byte G, byte B) White = (255, 255, 255);
+
+    /// <summary>A radar event the radar shows: its place, its type, its age and life in frames of the original, and the two colours of its lines (<c>RadarEvent::color1</c>, <c>color2</c>).</summary>
+    public readonly record struct RadarEventToDraw(Vector2 Position, int Type, long AgeFrames, long LifeFrames, Rgba32 Color1, Rgba32 Color2)
     {
-        var lifetime = world.Time.OriginalFrames(4 * CnCNew.Data.OriginalFrame.PerSecond);
+        /// <summary><c>RADAR_EVENT_BEACON_PULSE</c>: <c>W3DRadar::drawSingleBeaconEvent</c> draws it, everything else <c>drawSingleGenericEvent</c>.</summary>
+        public bool IsBeaconPulse => Type == EventBeaconPulse;
+    }
+
+    /// <summary>
+    /// <c>W3DRadar::drawEvents</c>: the radar events that are active at <paramref name="clock"/> (from the frame of the original they were made in to their <c>dieFrame</c>), a script's too, but
+    /// not a fake one. An event a script made with a type the table does not know is white (<c>Radar::createEvent</c>'s default colours). Asking is drawing: an event other than a
+    /// beacon's pulse plays <c>RadarEvent</c> the first time it is asked for ("if we haven't played the sound for this event, do it now that we can see it").
+    /// </summary>
+    public IEnumerable<RadarEventToDraw> RadarEventsToDraw(GameClock clock)
+    {
+        var now = clock.OriginalFrames;
         foreach (var entry in _radarEvents.ToArray())
         {
-            var (type, created, position, fromScript) = (entry.Type, entry.Tick, entry.Position, entry.FromScript);
-            if (tick - created >= lifetime) continue;
-            // W3DRadar::drawEvents: "if we haven't played the sound for this event, do it now that we can see it" - every drawn event but a beacon's pulse, a script's included.
-            if (!entry.SoundPlayed && type != EventFake)
+            var age = now - GameClock.OriginalFrameOf(entry.Tick, clock.TicksPerOriginalFrame);
+            if (age < 0 || age > entry.LifeFrames || entry.Type == EventFake) continue;
+            if (!entry.SoundPlayed)
             {
                 entry.SoundPlayed = true;
-                if (type != EventBeaconPulse) RadarSound?.Invoke(new RadarCue(Event: "RadarEvent"));
+                if (entry.Type != EventBeaconPulse) RadarSound?.Invoke(new RadarCue(Event: "RadarEvent"));
             }
-            if (fromScript || type < 0 || type >= EventColours.Length || EventColours[type].Length == 0) continue;
-            var (r, g, b) = EventColours[type][phase ? 1 : 0];
-            yield return (position, r, g, b);
+            var (first, second) = entry.Type > 0 && entry.Type < EventColours.Length && EventColours[entry.Type].Length == 2
+                ? (EventColours[entry.Type][0], EventColours[entry.Type][1])
+                : (White, White);
+            yield return new RadarEventToDraw(entry.Position, entry.Type, age, entry.LifeFrames, new Rgba32(first.Item1, first.Item2, first.Item3, 255), new Rgba32(second.Item1, second.Item2, second.Item3, 255));
         }
     }
+
+    // BeaconClientUpdate's RadarPulseFrequency and RadarPulseDuration by object template name, in frames of the original (defaults 30 and 15).
+    private readonly Dictionary<string, (long Every, long Life)> _beaconPulses = new(StringComparer.OrdinalIgnoreCase);
+    // BeaconClientUpdate::m_lastRadarPulse by beacon id: the frame of the original of its last pulse, or the frame this machine first saw it.
+    private readonly Dictionary<uint, long> _lastPulse = [];
+
+    /// <summary>
+    /// <c>BeaconClientUpdate::clientUpdate</c>, once per frame of the original: a beacon this machine shows (the local player's own or an ally's, not one the viewer hid,
+    /// <paramref name="hidden"/>) makes a <c>RADAR_EVENT_BEACON_PULSE</c> at its place when more than <c>RadarPulseFrequency</c> frames have passed since its last one, living
+    /// <c>RadarPulseDuration</c> frames. The first pulse counts from the frame the beacon was first seen here (the original: the frame its drawable was made).
+    /// </summary>
+    public void PulseBeacons(SimulationWorld world, PlayerId human, GameClock clock, Func<EntityId, bool> hidden)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(hidden);
+        if (_beaconPulses.Count == 0) return;
+        var now = clock.OriginalFrames;
+        var seen = new HashSet<uint>();
+        foreach (var entity in world.Entities)
+        {
+            if (!_beaconPulses.TryGetValue(entity.Template.Name, out var pulse) || !world.IsBeacon(entity)) continue;
+            if (entity.Owner != human && world.RelationshipOf(human, entity.Owner) != Relationship.Allies) continue;
+            if (hidden(entity.Id)) continue;
+            seen.Add(entity.Id.Value);
+            if (!_lastPulse.TryGetValue(entity.Id.Value, out var last)) { _lastPulse[entity.Id.Value] = now; continue; }
+            if (now <= last + pulse.Every) continue;
+            CreateEvent(EventBeaconPulse, SimulationQueries.GroundOf(entity), clock.Tick, pulse.Life);
+            _lastPulse[entity.Id.Value] = now;
+        }
+        foreach (var gone in _lastPulse.Keys.Where(id => !seen.Contains(id)).ToArray()) _lastPulse.Remove(gone);
+    }
+
+    /// <summary><c>INI::parseDurationUnsignedInt</c>: milliseconds to frames of the original, rounded up.</summary>
+    private static long DurationFrames(string text)
+        => (long)Math.Ceiling(decimal.Parse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture) * CnCNew.Data.OriginalFrame.PerSecond / 1000m);
+
     /// <summary><c>Radar::tryInfiltrationEvent</c>: only an infiltration against the local player's own object; a radar event and <c>RADAR:Infiltration</c>.</summary>
     private void Infiltration(Entity? victim, PlayerId human, long tick)
     {
@@ -190,6 +240,11 @@ public sealed class HudMessageFeed
                 string Eva(string key) => stealth.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"') ?? string.Empty;
                 var (enemy, own) = (Eva("EnemyDetectionEvaEvent"), Eva("OwnDetectionEvaEvent"));
                 if (enemy.Length > 0 || own.Length > 0) _detectionEva[definition.OriginalName] = (enemy, own);
+            }
+            if (definition is ObjectDefinition && definition.Modules.FirstOrDefault(module => module.Name.Equals("BeaconClientUpdate", StringComparison.OrdinalIgnoreCase)) is { } beacon)
+            {
+                string? Value(string key) => beacon.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim();
+                _beaconPulses[definition.OriginalName] = (Value("RadarPulseFrequency") is { Length: > 0 } every ? DurationFrames(every) : 30, Value("RadarPulseDuration") is { Length: > 0 } life ? DurationFrames(life) : 15);
             }
             if (definition is ObjectDefinition && definition.Modules.FirstOrDefault(module => module.Name.Equals("BattlePlanUpdate", StringComparison.OrdinalIgnoreCase)) is { } plans)
             {

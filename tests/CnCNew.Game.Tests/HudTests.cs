@@ -281,8 +281,10 @@ internal static class HudTests
         {
             var commands = controller.BuildDrawList(1280, 720).Commands;
             var radar = commands.IndexOf(commands.OfType<UiCustomDraw>().Single(draw => draw.Callback == "W3DLeftHUDDraw"));
-            TestHarness.Assert(commands[radar + 1] is UiPushClip && commands.Skip(radar + 2).Take(4).All(command => command is UiLineDraw) && commands[radar + 6] is UiPopClip, "four lines lie over the radar");
-            var line = (UiLineDraw)commands[radar + 2];
+            // The radar's clip holds the radar events' lines (if any are active) and then the camera's four (drawEvents before drawViewBox).
+            var pop = commands.IndexOf(commands.Skip(radar + 1).First(command => command is UiPopClip));
+            TestHarness.Assert(commands[radar + 1] is UiPushClip && pop - radar - 2 >= 4 && commands.Skip(radar + 2).Take(pop - radar - 2).All(command => command is UiLineDraw), "the camera's four lines lie over the radar, last in its clip");
+            var line = (UiLineDraw)commands[pop - 4];
             return (line.X0, line.Y0);
         }
         var before = FrameCorner();

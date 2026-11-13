@@ -667,7 +667,7 @@ Not built: the buddy page (GameSpy; its two tabs stay hidden), watchers as rows 
 
 **The beacon** (`MatchController.Beacons.cs`): `ButtonPlaceBeacon` is hidden unless the match is a match of a server and the viewer a player (`setControlBarSchemeByPlayer`), and grey at the limit (`ControlBar::update`). The button and the key `PLACE_BEACON` wait for a place (`Command_PlaceBeacon`, cursor `PlaceBeacon`); a click sends `PlaceBeaconCommand`. The key `DELETE_BEACON` sends the selection's beacons, and hides another's on this machine (`FrameProjector.HideBeacon`). `SimEventKind.BeaconPlaced` becomes for the player and its allies the line `GUI:BeaconPlaced` and the sound `BeaconPlaced`, for an ally also the announcer's `BeaconDetected`; `TooManyBeacons` becomes `GUI:TooManyBeacons` and `BeaconPlacementFailed`. A non-ally does not see one (`SimulationWorld.CanPlayerSee`, `docs/SIMULATION-CORE.md` §73).
 
-Not built: the beacon's caption (`MSG_SET_BEACON_TEXT`, `ControlBar.wnd:EditBeaconText`: it needs text in a command, with its bound on the wire), `BeaconClientUpdate`'s radar pulse and smoke, and the radar event of a placed beacon (a skirmish has no radar events yet).
+Not built: the beacon's caption (`MSG_SET_BEACON_TEXT`, `ControlBar.wnd:EditBeaconText`: it needs text in a command, with its bound on the wire) and `BeaconClientUpdate`'s smoke. The radar pulse is built (#275, section "The radar events on the radar" below).
 
 Tests: `HudTests` ("Diplomacy", "Beacons"), `NetHudTests` ("Muting"), `MissionTextTests` ("The briefing history", real data: the mission's window). The button leaves a local game: the HUD draw list hash and the HUD lines of `skin-screens.txt` and `campaign-screens*.txt` moved for it.
 
@@ -698,3 +698,24 @@ A structure group shows each building's queue load "n/limit" (see `docs/PRESENTA
 ## Phase 65: queue cells, markers and health bars, the event history
 
 The queue loads of a structure group are cells (the count over one pip per queue place, a full queue tinted; a "+n" cell when rows run out) in the modern bar's selection plate, in a tray over the bar's edge in the original skin and at 4:3 (`QueueLoadStrip`). **Selection markers:** `original` is `Drawable::drawHealthBar` (the health box only; its outline the colour at half, its colour following the health and the body's damage state; blue to cyan under construction or disabled), `extended` what the port drew before (the green circle and the building brackets), `modern` a thin translucent ring or short brackets and a flat bar in the skin's green, amber and red. A selected or pointed-at object always shows its bar; the other modes add a bar alone for every selectable object in view or only for the damaged ones. **The space bar** walks back through the last 32 radar events (the first press the newest, each further press within 3 s one older; 3 s of rest or a new event puts it on the newest; both ends hold; Shift+Space goes forward, `ENGINE_VIEW_NEWER_RADAR_EVENT`).
+
+## The radar events on the radar (#275)
+
+`W3DRadar::drawEvents` draws every active radar event over the radar as a triangle round its place, not as a dot (`RadarEventMarker`, `MatchController.AddRadarEvents`; before #275 the
+client composed a flat dot into the radar's picture that blinked between the event's two colours four times a second on the wall clock). As `drawSingleGenericEvent` draws it: the
+triangle is largest when the event begins - half the drawn radar's width in screen pixels, but counted in radar cells (128 across the map) and only then scaled to the screen, so on a
+radar drawn wider it begins outside the radar and comes into view as it shrinks - and shrinks to six cells over 1.5 seconds while it turns once round, then keeps turning at that size;
+every edge runs from the event's first colour to its second (`radarColorLookupTable`; the HUD draws an edge as four pieces of one colour each), and over the last half second of its
+four (`secondsBeforeDieToFade`) both colours fade to nothing; the frame after its `dieFrame` it is gone (`Radar::update`). A beacon's pulse (`drawSingleBeaconEvent`) starts at a tenth
+of the width and turns the other way. Time is whole frames of the original since the event was made, so the picture is the same at 30, 60 and 120 Hz. The lines lie in the radar's clip
+before the camera's frame (`drawEvents` before `drawViewBox`), one pixel of the original's layout wide like it; nothing is drawn, and so nothing heard (`RadarEvent` at the first
+drawing), while the player has no radar. Differences: the place is the map position the radar's picture uses instead of the original's whole radar cell, and corners are not rounded
+to whole cells and pixels.
+
+A script's radar event (`RADAR_CREATE_EVENT` and its object and team forms) is drawn the same way with the colours of the type it names, white for a type the table lacks
+(`Radar::createEvent`'s default), for four seconds; the white dot of `RadarBlipsForDisplay` is gone. A fake event (a unit lost) is never drawn. **The beacon's radar pulse**
+(`BeaconClientUpdate::clientUpdate`, `HudMessageFeed.PulseBeacons`): a beacon of the player or an ally that the viewer did not hide makes a `RADAR_EVENT_BEACON_PULSE` when more than
+`RadarPulseFrequency` (1000 ms, 30 frames) have passed since its last, living `RadarPulseDuration` (500 ms); the first counts from the frame this machine first saw the beacon (the
+original: the frame its drawable was made).
+
+Tests: `RadarEventTests` ("A radar event is a triangle ...", "The radar events to draw ...", real data: "the HUD draws a radar event over the radar ...", "our beacon pulses on the radar ...").

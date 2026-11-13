@@ -3,11 +3,16 @@ using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
 using CnCNew.Game.Shell;
+using CnCNew.Presentation;
 using CnCNew.Presentation.Input;
+using CnCNew.Presentation.Minimap;
+using CnCNew.Presentation.Terrain;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.World;
+using CnCNew.Ui.Layout;
+using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Text;
 using static CnCNew.Game.Tests.MissionPresentationTests;
 
@@ -30,12 +35,16 @@ internal static class RadarEventTests
         harness.Run("A stealth object found or lost, a battle plan and an overcharge that gave out are radar events", Notices);
         harness.Run("The sounds of a radar event: under attack, infiltration, stealth found or lost, for the local player only", Sounds);
         harness.Run("A drawn radar event plays RadarEvent once (not a beacon's pulse, not a fake one) (the suite runs at 30, 60 and 120 Hz)", DrawnEventSound);
+        harness.Run("A radar event is a triangle that shrinks over 1.5 s while it turns, fades over its last half second; a beacon's pulse is smaller and turns the other way (#275)", MarkerShape);
+        harness.Run("The radar events to draw: their age in frames of the original at every rate, a script's too and white without a colour of its type, never a fake one (#275)", EventsToDraw);
         var index = Array.IndexOf(args, "--content-dir");
         if (index >= 0 && index + 1 < args.Length)
         {
             var directory = args[index + 1];
             harness.Run("Real data: the space bar looks at the last of the events (a beacon, a captured building, a lost unit)", () => SpaceBar(directory));
             harness.Run("Real data: the space bar walks back through the history of events, Shift+Space forward, a rest of three seconds or a new event starts at the newest", () => SpaceBarHistory(directory));
+            harness.Run("Real data: the HUD draws a radar event over the radar as its turning triangle, the same in frames of the original at every rate (#275)", () => HudDrawsTheTriangle(directory));
+            harness.Run("Real data: our beacon pulses on the radar every RadarPulseFrequency for RadarPulseDuration, a hidden one does not (#275)", () => BeaconPulses(directory));
         }
         return harness.Failures;
     }
@@ -224,18 +233,168 @@ internal static class RadarEventTests
             var (feed, world, _, _) = Fixture();
             var cues = Cues(feed);
             var perFrame = (long)world.Time.OriginalFrames(1);
+            var rate = world.Time.TicksPerSecond;
             feed.NoteRadarEvent(new Vector2(10, 20), 3, 100);
             feed.NoteRadarEvent(new Vector2(30, 40), 5, 100);   // a beacon's pulse
             feed.NoteRadarEvent(new Vector2(50, 60), 10, 100);  // a fake event
-            _ = feed.RadarEventsToDraw(100, world, false).ToList();
+            _ = feed.RadarEventsToDraw(new GameClock(100, rate, 0)).ToList();
             TestHarness.Assert(cues.Count == 1 && cues[0].Event == "RadarEvent", $"the first drawing plays RadarEvent once, a pulse and a fake event are silent ({cues.Count})");
-            _ = feed.RadarEventsToDraw(100 + perFrame, world, true).ToList();
+            _ = feed.RadarEventsToDraw(new GameClock(100 + perFrame, rate, 0)).ToList();
             TestHarness.Assert(cues.Count == 1, "and not again");
             // An event drawn only after its four seconds is over is never seen, so never heard.
             feed.NoteRadarEvent(new Vector2(1, 1), 4, 200);
-            _ = feed.RadarEventsToDraw(200 + (long)world.Time.OriginalFrames(4 * 30), world, false).ToList();
+            _ = feed.RadarEventsToDraw(new GameClock(200 + (long)world.Time.OriginalFrames(4 * 30 + 1), rate, 0)).ToList();
             TestHarness.Assert(cues.Count == 1, "an event that is over before it is drawn is silent");
         }
+    }
+
+    private static void MarkerShape()
+    {
+        var size = new Vector2(256, 128);
+        var place = new Vector2(100, 60);
+        var (red, pink) = (new Rgba32(255, 0, 0, 255), new Rgba32(255, 128, 128, 255));
+        RadarEventEdge[] At(long age, bool beacon = false, long life = RadarEventMarker.DefaultLifeFrames) => RadarEventMarker.Edges(place, size, age, life, beacon, red, pink);
+        static bool Near(Vector2 a, Vector2 b) => Vector2.Distance(a, b) < 0.01f;
+        // A corner at a size in radar cells and an angle on the radar: 256 / 128 pixels a cell across, 128 / 128 down, y up on the radar and down on the screen.
+        Vector2 Corner(float cells, float angle) => place + new Vector2(MathF.Cos(angle) * cells * 2f, -MathF.Sin(angle) * cells * 1f);
+
+        // W3DRadar::drawSingleGenericEvent: the first size is half the drawn width (128 px) in radar cells, scaled to the screen; corner 0 at angle 0.
+        var first = At(0);
+        TestHarness.Assert(first.Length == 3 && first.All(edge => edge.Start == red && edge.End == pink), "three edges from the first colour to the second");
+        TestHarness.Assert(Near(first[0].From, Corner(128, 0)) && Near(first[1].From, Corner(128, 2 * MathF.PI / 3)) && Near(first[2].From, Corner(128, -2 * MathF.PI / 3)),
+            $"at its start the triangle's corners lie half the radar's width in cells away: {first[0].From} {first[1].From} {first[2].From}");
+        TestHarness.Assert(first[0].To == first[1].From && first[2].To == first[0].From, "the edges close the triangle");
+        // Shrinking: REAL_TO_INT of the size; the added angle 2 pi age / 45 is subtracted.
+        var cells = (int)(128 * (1 - 20 / 45f));
+        TestHarness.Assert(Near(At(20)[0].From, Corner(cells, -2 * MathF.PI * 20 / 45f)), $"after 20 frames {cells} cells, turned by 20/45 of a circle: {At(20)[0].From}");
+        // After 1.5 s (45 frames) it is at its smallest, six cells, and has turned once round; it keeps turning at that size.
+        TestHarness.Assert(Near(At(45)[0].From, Corner(6, 0)), $"after 45 frames the smallest size of six cells, one turn done: {At(45)[0].From}");
+        TestHarness.Assert(Near(At(90)[0].From, Corner(6, 0)) && Near(At(60)[0].From, Corner(6, -2 * MathF.PI * 60 / 45f)), "it keeps turning at that size");
+        // The generic event turns clockwise on the radar (corner 0 goes down on the screen first), a beacon's pulse the other way, and starts at a tenth of the width.
+        TestHarness.Assert(At(5)[0].From.Y > place.Y && At(5, beacon: true)[0].From.Y < place.Y, "the event and a beacon's pulse turn opposite ways");
+        TestHarness.Assert(Near(At(0, beacon: true)[0].From, Corner(25, 0)), $"a beacon's pulse starts at a tenth of the width (int 25.6 = 25 cells): {At(0, beacon: true)[0].From}");
+        TestHarness.Assert(Near(At(40, beacon: true)[0].From, Corner(6, 2 * MathF.PI * 40 / 45f)), "and shrinks to the same six cells");
+        // Radar::internalCreateEvent: fadeFrame is half a second before dieFrame; the alpha is the share left, truncated; the frame after dieFrame it is gone.
+        TestHarness.Assert(At(105)[0].Start.A == 255 && At(112)[0].Start.A == (byte)(255 * (1 - 7 / 15f)) && At(112)[0].End.A == At(112)[0].Start.A, "full until 105 frames, then fading");
+        TestHarness.Assert(At(120)[0].Start.A == 0 && At(121).Length == 0 && At(-1).Length == 0, "nothing left at 120 frames, gone after it");
+        TestHarness.Assert(At(0, true, 15)[0].Start.A == 255 && At(5, true, 15)[0].Start.A == (byte)(255 * (1 - 5 / 15f)), "a pulse of 15 frames fades from its first frame");
+    }
+
+    private static void EventsToDraw()
+    {
+        var (feed, world, _, _) = Fixture();
+        var rate = world.Time.TicksPerSecond;
+        var perFrame = rate / 30;
+        // Made in the last tick of an original frame (at 60 Hz the second), it is of that frame, as at 30 Hz.
+        var made = 300L * perFrame + perFrame - 1;
+        feed.NoteRadarEvent(new Vector2(10, 20), 3, made);
+        feed.NoteRadarEvent(new Vector2(30, 40), 0, made);   // RADAR_EVENT_INVALID: not in the table
+        feed.NoteRadarEvent(new Vector2(50, 60), 42, made);  // a script's ordinal past the table
+        feed.NoteRadarEvent(new Vector2(70, 80), 10, made);  // fake
+        var drawn = feed.RadarEventsToDraw(new GameClock(310L * perFrame, rate, 0.5)).ToList();
+        TestHarness.Assert(drawn.Count == 3, $"three of four drawn, not the fake one ({drawn.Count})");
+        TestHarness.Assert(drawn.All(item => item.AgeFrames == 10 && item.LifeFrames == 120), $"ten frames of the original old at {rate} Hz: {string.Join(", ", drawn.Select(item => item.AgeFrames))}");
+        TestHarness.Assert(drawn[0].Color1 == new Rgba32(255, 0, 0, 255) && drawn[0].Color2 == new Rgba32(255, 128, 128, 255), "under attack: red to pink");
+        TestHarness.Assert(drawn.Skip(1).All(item => item.Color1 == new Rgba32(255, 255, 255, 255) && item.Color2 == item.Color1), "a type without colours is white (createEvent's default)");
+        TestHarness.Assert(feed.RadarEventsToDraw(new GameClock(420L * perFrame + perFrame - 1, rate, 0)).Count() == 3 && !feed.RadarEventsToDraw(new GameClock(421L * perFrame, rate, 0)).Any(),
+            "active to its dieFrame (120 frames on), gone in the frame after");
+    }
+
+    private static (LiveMatch Match, MatchController Controller) RadarMatch(string directory)
+    {
+        var data = GameData.Load(directory, rate: CnCNew.Tests.TestRate.Default);
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var america = data.Factions.First(faction => faction.Faction.Name == "FactionAmerica").Faction.Name;
+        var setup = new MatchSetup(mapPath, america, [data.Factions.First(faction => faction.Faction.Name != america).Faction.Name], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        var perFrame = match.World.Time.TicksPerSecond / 30;
+        while (!match.RadarOn && match.World.Tick < 30L * 30 * perFrame)
+        {
+            match.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        }
+        TestHarness.Assert(match.RadarOn, "premise: America's command center gives a radar");
+        // The radar's own upgrade is an event at the command center: let it and every other event of the start die first.
+        var quiet = match.World.Tick + 130L * perFrame;
+        while (match.World.Tick < quiet) Step(match);
+        TestHarness.Assert(!controller.Messages.RadarEventsToDraw(match.Clock).Any(), "premise: no radar event is active");
+        return (match, controller);
+    }
+
+    private static void Step(LiveMatch match) => match.Advance(1.0 / match.World.Time.TicksPerSecond);
+
+    private static void HudDrawsTheTriangle(string directory)
+    {
+        var (match, controller) = RadarMatch(directory);
+        var perFrame = match.World.Time.TicksPerSecond / 30;
+        (List<UiLineDraw> Lines, UiRect Radar) Draw()
+        {
+            var commands = controller.BuildDrawList(1280, 720).Commands;
+            var radar = commands.OfType<UiCustomDraw>().Single(draw => draw.Callback == "W3DLeftHUDDraw");
+            var at = commands.IndexOf(radar);
+            TestHarness.Assert(commands[at + 1] is UiPushClip, "the radar's clip comes first");
+            var end = commands.IndexOf(commands.Skip(at + 1).First(command => command is UiPopClip));
+            return (commands.Skip(at + 2).Take(end - at - 2).OfType<UiLineDraw>().ToList(), radar.Rect);
+        }
+        var outline = Draw().Lines.Count;
+        // An event in the middle of the map, made in the first tick of an original frame; drawn 20 frames of the original later.
+        while (!match.Clock.IsOriginalFrameBoundary) Step(match);
+        var made = match.World.Tick;
+        var middle = match.Minimap.WorldExtent / 2;
+        controller.Messages.NoteRadarEvent(middle, 3, made);
+        while (match.World.Tick < made + 20 * perFrame) Step(match);
+        TestHarness.Assert(match.World.Tick == made + 20 * perFrame, $"premise: twenty frames on ({match.World.Tick - made} ticks)");
+        var (lines, rect) = Draw();
+        TestHarness.Assert(lines.Count == outline + 12, $"the event adds its three edges in four pieces each before the camera's frame ({outline} -> {lines.Count})");
+        var scale = Math.Min(rect.Width / (float)match.Minimap.Width, rect.Height / (float)match.Minimap.Height);
+        var offset = new Vector2(rect.X + (rect.Width - match.Minimap.Width * scale) / 2f, rect.Y + (rect.Height - match.Minimap.Height * scale) / 2f);
+        var edges = RadarEventMarker.Edges(match.Minimap.WorldToPixel(middle) * scale, new Vector2(match.Minimap.Width * scale, match.Minimap.Height * scale), 20, 120, false,
+            new Rgba32(255, 0, 0, 255), new Rgba32(255, 128, 128, 255));
+        var (first, last) = (lines[0], lines[3]);
+        var (from, to) = (offset + edges[0].From, offset + edges[0].To);
+        TestHarness.Assert(Vector2.Distance(new Vector2(first.X0, first.Y0), from) < 0.01f && Vector2.Distance(new Vector2(last.X1, last.Y1), to) < 0.01f,
+            $"the first edge is the marker's at 20 frames of the original, at {match.World.Time.TicksPerSecond} Hz: ({first.X0},{first.Y0})-({last.X1},{last.Y1}) against {from}-{to}");
+        TestHarness.Assert(first.Color.R == 255 && first.Color.G < last.Color.G && first.Color.A == 255, $"shaded from red towards pink ({first.Color} .. {last.Color})");
+        TestHarness.Assert(lines.Skip(12).SequenceEqual(Draw().Lines.Skip(12)), "the camera's frame is drawn after it, unchanged");
+        // Past its dieFrame it is gone.
+        while (match.World.Tick < made + 121 * perFrame) Step(match);
+        TestHarness.Assert(Draw().Lines.Count == outline, "gone after its four seconds");
+    }
+
+    private static void BeaconPulses(string directory)
+    {
+        var (match, controller) = RadarMatch(directory);
+        var world = match.World;
+        var perFrame = world.Time.TicksPerSecond / 30;
+        var feed = controller.Messages;
+        var place = SimulationQueries.GroundOf(world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"))) + new Vector2(60, 60);
+        match.Commands.Issue((sequence, tick) => new CnCNew.Simulation.Commands.PlaceBeaconCommand(match.Human, sequence, tick,
+            CnCNew.Simulation.Numerics.Fixed.FromInt((int)place.X), CnCNew.Simulation.Numerics.Fixed.FromInt((int)place.Y)));
+        Entity? beacon = null;
+        for (var i = 0; i < 20 * perFrame && beacon is null; i++)
+        {
+            Step(match);
+            beacon = world.Entities.FirstOrDefault(entity => entity.Owner == match.Human && world.IsBeacon(entity));
+        }
+        TestHarness.Assert(beacon is not null, "premise: our beacon stands");
+        // The pulses made while the HUD steps on, by the frame of the original they were made in.
+        var frames = new List<long>();
+        var seen = match.Clock.OriginalFrames;
+        var history = feed.RadarHistoryVersion;
+        for (var frame = 0; frame < 100; frame++)
+        {
+            for (var tick = 0; tick < perFrame; tick++) Step(match);
+            var pulses = feed.RadarEventsToDraw(match.Clock).Where(item => item.IsBeaconPulse).ToList();
+            foreach (var pulse in pulses.Where(item => item.AgeFrames == 0)) frames.Add(match.Clock.OriginalFrames - seen);
+            TestHarness.Assert(pulses.All(item => item.LifeFrames == 15 && Vector2.Distance(item.Position, SimulationQueries.GroundOf(beacon!)) < 0.01f), "a pulse lives RadarPulseDuration (500 ms) at the beacon");
+        }
+        TestHarness.Assert(frames.Count == 3 && frames[1] - frames[0] == 31 && frames[2] - frames[1] == 31, $"a pulse every 31 frames (more than RadarPulseFrequency's 30): {string.Join(", ", frames)}");
+        TestHarness.Assert(feed.RadarHistoryVersion == history, "a pulse is no event of the space bar");
+        match.HideBeacon(beacon!.Id);
+        var hiddenFrom = match.Clock.OriginalFrames;
+        for (var tick = 0; tick < 40 * perFrame; tick++) Step(match);
+        TestHarness.Assert(!feed.RadarEventsToDraw(match.Clock).Any(item => item.IsBeaconPulse && item.AgeFrames < match.Clock.OriginalFrames - hiddenFrom - 15), "a hidden beacon does not pulse");
     }
 
     private static void SpaceBar(string directory)
