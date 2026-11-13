@@ -1080,6 +1080,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
             // updates (a missile that kills it, a command) the rider's own update still comes in this tick at every rate, and it decides in this frame (F-164).
             ai.OrderExitContainer(world, Entity, x, y, false);
             if (!(world.UpdatesStillToRun && world.Time.BeginsFrameOf(rider, world.Tick))) ai.BeginMoveWithNextFrame(world);
+            else ai.DecideInThisFrame(world);
         }
         else
         {

@@ -1693,6 +1693,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     }
 
     /// <summary>
+    /// A move given among the updates of the first tick of the object's frame, after the object had left the world in its own update of that tick (it entered a container whose death
+    /// now puts it out): at 30 Hz the woken module runs again in this tick and decides from where its step ended. Above 30 Hz <see cref="SettleFrame"/> held its next decision to the
+    /// frame it was covering would have ended; the object is out again in the same frame, and decides in it as at 30 Hz (#303). Nothing to do at 30 Hz.
+    /// </summary>
+    internal void DecideInThisFrame(IWorldServices world)
+    {
+        if (world.Time.TicksPerOriginalFrame == TickOrder.Next || _moveHoldUntil <= world.Tick || _moveHoldUntil > NextFrameBegin(world)) return;
+        _moveHoldUntil = 0;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>
     /// The AI modules of the object that run before this one in a tick have had their turn when this module's update sets a move target (<c>SimulationWorld.RunUpdates</c> calls this): at 30 Hz they see it in the next tick, which is the
     /// next frame. Above 30 Hz they wait for the object's next frame (<see cref="BeginMoveWithNextFrame"/>) instead of seeing it in the next tick, in the middle of the frame.
     /// </summary>
