@@ -31,6 +31,7 @@ internal static class IdleWorkerTests
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Ctrl+I selects the next idle worker like the button, cycles through the idle ones and does nothing when none is idle; it is a listed, rebindable hotkey that no other binding shares", () => IdleKey(data));
         harness.Run("Workers at a construction or a repair are not idle: the button reaches only the idle ones, and with every worker busy it is disabled", () => BusyWorkers(data));
+        harness.Run("A worker on a supply run and a dozer at a construction or a repair are never idle: the count stays at the one that stands, and the button follows it (#296)", () => GatheringAndDozer(data));
         return harness.Failures;
     }
 
@@ -151,6 +152,37 @@ internal static class IdleWorkerTests
         rig.Selection.Replace([center.Id]);
         rig.PressButton();
         TestHarness.Assert(rig.Selection.Selected.SequenceEqual([center.Id]), $"a press with nobody idle selects nothing ({string.Join(",", rig.Selection.Selected)})");
+    }
+
+    private static void GatheringAndDozer(GameData data)
+    {
+        var rig = new Rig(data, "FactionGLA");
+        var (world, human) = (rig.World, rig.Match.Human);
+        var first = world.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+        var center = world.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var dock = world.Entities.Where(entity => world.WarehouseBoxes(entity.Id) > 0)
+            .OrderBy(entity => (entity.X - first.X).Abs() + (entity.Y - first.Y).Abs()).ThenBy(entity => entity.Id.Value).First();
+        var gatherer = rig.Spawn("GLAInfantryWorker", 80, 80, center);
+        var idler = rig.Spawn("GLAInfantryWorker", 100, 80, center);
+        var site = rig.Build(first, "GLABarracks");
+        TestHarness.Assert(rig.Match.Commands.Issue((sequence, tick) => new DockCommand(human, sequence, tick, gatherer.Id, dock.Id)).Accepted, "the dock order is accepted");
+        var gathererIdle = 0;
+        var builderIdle = 0;
+        var idlerSeen = 0;
+        for (var frame = 0; frame < 60 * 30; frame++)
+        {
+            rig.Advance(1);
+            if (world.IsIdleDozer(gatherer)) gathererIdle++;
+            if (site.HasStatus(ObjectStatusBits.UnderConstruction) && world.IsIdleDozer(first)) builderIdle++;
+            if (world.IsIdleDozer(idler)) idlerSeen++;
+            if (frame % 30 == 0) TestHarness.Assert(rig.ButtonEnabled == (rig.Selection.IdleWorkerCount > 0), "the button is enabled exactly while a worker is idle");
+        }
+        TestHarness.Assert(gathererIdle == 0, $"the worker on a supply run is idle in {gathererIdle} of 1800 frames");
+        TestHarness.Assert(builderIdle == 0, $"the worker at the construction is idle in {builderIdle} frames");
+        TestHarness.Assert(idlerSeen == 1800, $"the worker that stands is idle in all frames ({idlerSeen})");
+        rig.Selection.Replace([center.Id]);
+        rig.PressButton();
+        TestHarness.Assert(rig.Selection.Selected.SequenceEqual([idler.Id]), $"the button selects the one that stands ({string.Join(",", rig.Selection.Selected)})");
     }
 
     private static void IdleKey(GameData data)
