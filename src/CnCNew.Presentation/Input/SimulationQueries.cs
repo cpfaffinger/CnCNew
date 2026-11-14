@@ -96,6 +96,8 @@ public static class SimulationQueries
     {
         // The weapon that would fire at this victim decides, not the longest of the set (the Gattling Tank's anti-air gun reaches 350, its ground gun 150).
         var reach = world.WeaponRangeAgainst(source, target);
+        // No weapon is chosen for a player's attack (a weapon whose AutoChooseSources leave the player out, the boss's Scud Storm): the set's longest range, as before.
+        if (reach == Fixed.Zero) reach = WeaponRange(world, source);
         var dx = target.X - source.X;
         var dy = target.Y - source.Y;
         // A unit that cannot see its victim from here is not in range: it keeps approaching (outOfWeaponRangeObject, F-55).

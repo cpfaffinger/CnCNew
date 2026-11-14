@@ -100,7 +100,11 @@ internal static class SentinelRangeTests
             var source = world.FindEntity(new EntityId(1))!;
             // The weapon of another weapon set (a demo general's upgrade) is not its reach yet.
             if (SimulationQueries.WeaponRange(world, source) <= limit) continue;
-            Assert(SimulationQueries.InRange(world, source, world.FindEntity(new EntityId(2))!), $"{template.Name}: a target 400 units away is in range");
+            // The weapon chosen against the victim decides (#353); with none chosen, the set's longest range. Either way the question must answer without overflow.
+            var victim = world.FindEntity(new EntityId(2))!;
+            var chosen = world.WeaponRangeAgainst(source, victim);
+            var reach = chosen == Fixed.Zero ? SimulationQueries.WeaponRange(world, source) : chosen;
+            Assert(SimulationQueries.InRange(world, source, victim) == (reach >= Fixed.FromInt(400)), $"{template.Name}: a target 400 units away is in range exactly when the weapon chosen against it reaches ({reach})");
             asked.Add(template.Name);
             foreach (var weapon in far) weapons.Add(weapon.Name);
         }
