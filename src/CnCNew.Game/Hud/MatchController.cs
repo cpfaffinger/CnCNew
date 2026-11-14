@@ -1361,7 +1361,15 @@ public sealed partial class MatchController
             SimEventKind.CrateAnimation => new CnCNew.Presentation.Fx.WorldAnimationInfo(ev.Text, (ev.Value & uint.MaxValue) / 1000f, ev.Value >> 32),
             _ => null,
         };
-        if (info is null || info.Name.Length == 0 || info.Seconds <= 0f || Match.World.FindEntity(ev.Entity) is not { } subject) return;
+        if (info is null || info.Name.Length == 0 || info.Seconds <= 0f) return;
+        // The crate that played its animation is gone by now: the event carries the place it stood at.
+        if (ev.Kind == SimEventKind.CrateAnimation && ev.HasPosition)
+        {
+            _worldAnimations.Add((info.Name, new Vector3((float)ev.X.ToDecimal(), (float)ev.Y.ToDecimal(), (float)ev.Z.ToDecimal()), Match.Clock.OriginalFrames, (long)MathF.Ceiling(info.Seconds * CnCNew.Data.OriginalFrame.PerSecond),
+                info.RisePerSecond / CnCNew.Data.OriginalFrame.PerSecond));
+            return;
+        }
+        if (Match.World.FindEntity(ev.Entity) is not { } subject) return;
         // Object::onVeterancyLevelChanged: "hideAnimationForStealth".
         if (ev.Kind == SimEventKind.RankGained && subject.Owner != Match.Human && subject.HasStatus(StealthedStatus) && !subject.HasStatus(DetectedStatus) && !subject.HasStatus(DisguisedStatus)) return;
         var z = (float)subject.Z.ToDecimal() + (ev.Kind == SimEventKind.CrateAnimation ? 0f : (float)subject.Template.GeometryHeight.ToDecimal());

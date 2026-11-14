@@ -143,8 +143,8 @@ public abstract class CrateCollideBase(CrateCollideData crate) : SimModule, ICol
         if (!IsValidToExecute(world, other) || !ExecuteCrateBehavior(world, other)) return;
         if (crate.ExecuteFx.Length > 0) world.Emit(SimEventKind.FxRequested, other.Id, Entity.Id, crate.ExecuteFx, 0);
         world.RequestDestroy(Entity.Id);
-        // Time in the low bits, rise above them: the event has one number.
-        if (crate.ExecuteAnimation.Length > 0) world.Emit(SimEventKind.CrateAnimation, Entity.Id, other.Id, crate.ExecuteAnimation, crate.ExecuteAnimationZRise << 32 | crate.ExecuteAnimationMilliseconds);
+        // Time in the low bits, rise above them: the event has one number. The crate is gone when the presentation reads it, so the event carries its place (CrateCollide::onCollide: getObject()->getPosition()).
+        if (crate.ExecuteAnimation.Length > 0) world.EmitAt(SimEventKind.CrateAnimation, Entity.Id, other.Id, crate.ExecuteAnimation, crate.ExecuteAnimationZRise << 32 | crate.ExecuteAnimationMilliseconds, Entity.X, Entity.Y, Entity.Z);
     }
 
     public bool WouldLikeToCollideWith(IWorldServices world, Entity other) => IsValidToExecute(world, other);

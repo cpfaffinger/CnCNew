@@ -35,6 +35,7 @@ internal static class PlaytestHudTests
         harness.Run("A selected supply drop zone shows its countdown on the bar: the share of the delay, the minutes and seconds to the next plane, and a sell button", () => OclTimerWindow(data));
         harness.Run("The clock of the particle cannon stands still while the player is short of power, on the list of superweapons and on the cameo, and runs on when a plant is there", () => BrownOutClock(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
+        harness.Run("A crate the supply drop zone takes plays its MoneyPickUp animation over the crate (#338)", () => DropZonePickUpAnimation(data));
         return harness.Failures;
     }
 
@@ -672,5 +673,30 @@ internal static class PlaytestHudTests
         TestHarness.Assert(percent is not null, "a building under construction shows its percent");
         // The tallest line of the label font as the screens scale it (12 points bold, up to twice at 1080 lines) lies below the point.
         TestHarness.Assert(percent!.Clip.Y <= percent.Y && percent.Clip.Y + percent.Clip.Height >= percent.Y + 40, $"the clip holds the whole line ({percent})");
+    }
+
+    /// <summary>#338: <c>CrateCollide::onCollide</c> adds the <c>ExecuteAnimation</c> (<c>MoneyPickUp</c>, the dollar sign) as a world animation; the crate is gone in the same tick.</summary>
+    private static void DropZonePickUpAnimation(GameData data)
+    {
+        var scenario = new DemoScenario("hud-drop-anim", "hud-drop-anim", "hud-drop-anim", 30 * 60 * 4,
+            [new ScenarioUnit("zone", "AmericaSupplyDropZone", 1, 0, 0, 0f)], [], 0f, 0f)
+        {
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var controller = new MatchController(live, GameSettings.Default) { StarBlinks = false };
+        var drawn = 0;
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 220; frame++)
+        {
+            live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            if (frame > CnCNew.Tests.TestTime.FramesPerSecond * 115 && frame % 5 == 0)
+            {
+                controller.BuildDrawList(1280, 720);
+                if (controller.Overlay.Icons.Any(icon => icon.Image.StartsWith("SCPDollar", StringComparison.OrdinalIgnoreCase))) drawn++;
+            }
+        }
+        TestHarness.Assert(drawn > 0, "the dollar animation is drawn over the drop zone when a crate is taken");
     }
 }
