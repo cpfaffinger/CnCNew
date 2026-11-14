@@ -555,7 +555,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             _varied = true;
             var lo = Fixed.FromDecimal(0.75m);
             var hi = Fixed.FromDecimal(1.25m);
-            _direction = world.LogicRandom.Range(0, 1) == 0 ? Fixed.One : -Fixed.One;
+            _direction = world.LogicRandom.Range(-Fixed.One, Fixed.One) < Fixed.Zero ? -Fixed.One : Fixed.One;
             _turnFactor = world.LogicRandom.Range(lo, hi);
             _forwardSpeed *= world.LogicRandom.Range(lo, hi);
             _bladeFlyOff *= world.LogicRandom.Range(lo, hi);
