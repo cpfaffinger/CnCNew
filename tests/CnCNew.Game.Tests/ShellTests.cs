@@ -1064,7 +1064,7 @@ internal static class ShellTests
         var tree = shell.CurrentScreen.Tree;
         string[] Entries(string combo) => [.. tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.Entries];
         int Selected(string combo) => tree.FindByName($"DebugOptions.wnd:{combo}")!.ComboBox!.SelectedIndex;
-        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 50 % less build time", "On: 75 % less build time", "On: 90 % less build time"]) && Entries("ComboQuickBuildFor").SequenceEqual(["Everybody", "Human players only"]) && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "800 (rank 2)", "1500 (rank 3)", "2500 (rank 4)", "5000 (rank 5)"]),
+        TestHarness.Assert(Entries("ComboQuickBuild").SequenceEqual(["Off", "On: 50 % less build time", "On: 75 % less build time", "On: 90 % less build time"]) && Entries("ComboQuickBuildFor").SequenceEqual(["Everybody", "Human players only"]) && Entries("ComboRecharge").SequenceEqual(["Off", "On: 50 % less recharge time", "On: 75 % less recharge time", "On: 90 % less recharge time"]) && Entries("ComboGeneralPoints").SequenceEqual(["0 (normal start)", "800 (rank 2)", "1500 (rank 3)", "2500 (rank 4)", "5000 (rank 5)"]),
             $"the choices: {string.Join(" | ", Entries("ComboQuickBuild").Concat(Entries("ComboGeneralPoints")))}");
         TestHarness.Assert(tree.FindByName("DebugOptions.wnd:ComboRespawn") is null && tree.FindByName("DebugOptions.wnd:ComboRespawnAfter") is null
                            && !Enumerable.Range(0, 1).Any(_ => shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Respawn", StringComparison.Ordinal))), "the debug screen no longer has the returning neutral buildings");
@@ -1104,16 +1104,20 @@ internal static class ShellTests
         // Accept of the debug screen keeps the advanced option; the debug screen shows nothing of it. Quick build and 2,500 general points (rank 4).
         Click(shell, DebugButton);
         TestHarness.Assert(!shell.CurrentScreen.Tree.FindByName("DebugOptions.wnd:ComboQuickBuildFor")!.IsEffectivelyEnabled, "while quick build is off its 'for' box is shut");
+        Choose(shell, "ComboRecharge", 2);
+        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("DebugOptions.wnd:ComboQuickBuildFor")!.IsEffectivelyEnabled, "a recharge level opens the 'apply to' box as quick build does");
+        Choose(shell, "ComboRecharge", 0);
         Choose(shell, "ComboQuickBuild", 3);
         Choose(shell, "ComboQuickBuildFor", 1);
+        Choose(shell, "ComboRecharge", 2);
         Choose(shell, "ComboGeneralPoints", 3);
         Click(shell, "DebugOptions.wnd:ButtonAccept");
-        var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 2500, QuickBuildHumansOnly: true);
+        var chosen = new CnCNew.Simulation.Skirmish.MatchDebugOptions(CnCNew.Simulation.Skirmish.MatchDebugOptions.QuickBuildPercent, 120, 2500, QuickBuildHumansOnly: true, RechargePercent: CnCNew.Simulation.Skirmish.MatchDebugOptions.QuarterBuildPercent);
         TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen && setup.DebugOptions == chosen && setup.Tree.FindByName(DebugButton)!.Text!.Value == "Debug (on)" && setup.Tree.FindByName(AdvancedButton)!.Text!.Value == "Advanced (on)",
             $"Accept gives the setup {chosen} and both buttons say so");
         Click(shell, DebugButton);
         tree = shell.CurrentScreen.Tree;
-        TestHarness.Assert(Selected("ComboQuickBuild") == 3 && Selected("ComboQuickBuildFor") == 1 && Selected("ComboGeneralPoints") == 3, "reopened, the debug screen shows what was chosen");
+        TestHarness.Assert(Selected("ComboQuickBuild") == 3 && Selected("ComboQuickBuildFor") == 1 && Selected("ComboRecharge") == 2 && Selected("ComboGeneralPoints") == 3, "reopened, the debug screen shows what was chosen");
         Click(shell, "DebugOptions.wnd:ButtonBack");
         Click(shell, AdvancedButton);
         tree = shell.CurrentScreen.Tree;
@@ -1148,7 +1152,7 @@ internal static class ShellTests
         live.Session.Step();
         live.Session.Step();
         var world = live.Session.World;
-        TestHarness.Assert(world.BuildTimePercent == 10 && world.BuildTimeForHumansOnly && world.NeutralRespawnSeconds == 120 && world.PlaceBuildingsInFog, $"the world plays them ({world.BuildTimePercent} %, {world.NeutralRespawnSeconds} s, fog {world.PlaceBuildingsInFog})");
+        TestHarness.Assert(world.BuildTimePercent == 10 && world.RechargePercent == 25 && world.BuildTimeForHumansOnly && world.NeutralRespawnSeconds == 120 && world.PlaceBuildingsInFog, $"the world plays them ({world.BuildTimePercent} %, {world.NeutralRespawnSeconds} s, fog {world.PlaceBuildingsInFog})");
         var control = LiveMatch.Create(data, started with { Debug = CnCNew.Simulation.Skirmish.MatchDebugOptions.None, Options = started.Options with { MaxTicks = 120 } }, new Vector2(NavWidth, NavHeight));
         control.Session.Step();
         control.Session.Step();

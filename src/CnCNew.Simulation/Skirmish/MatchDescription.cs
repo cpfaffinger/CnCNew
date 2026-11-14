@@ -63,7 +63,7 @@ public sealed record MatchDescription(
     int TickRate, string MapPath, string TerrainFingerprint, string DefinitionFingerprint, uint Seed, uint AiSeed, long MaxTicks, int StartMoney, long GraceFrames,
     long SciencePointIntervalFrames, ImmutableArray<MatchSlotDescription> Slots)
 {
-    /// <summary>6: the debug options state whether quick build is for human players only and whether the money buttons are on. 5: the debug options state whether buildings may be placed in the fog, and the starting general points are skill points. 4: the debug options (<see cref="Debug"/>). 3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
+    /// <summary>6: the debug options state whether quick build is for human players only whether the money buttons are on and the recharge level of special powers. 5: the debug options state whether buildings may be placed in the fog, and the starting general points are skill points. 4: the debug options (<see cref="Debug"/>). 3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
     public const int EncodingVersion = 6;
     private static ReadOnlySpan<byte> Magic => "CNCMATCH"u8;
 
@@ -98,7 +98,7 @@ public sealed record MatchDescription(
 
     /// <summary>
     /// The canonical bytes, little endian: <c>"CNCMATCH"</c>, u32 encoding version, u32 command table version, u32 world state version, string simulation identifier, u32 tick rate, string map path, string terrain
-    /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, i32 build time percent, i32 neutral respawn seconds, i32 starting general points (skill points), u8 place buildings in the fog, u8 quick build for human players only, u8 money buttons, u16 slot count
+    /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, i32 build time percent, i32 neutral respawn seconds, i32 starting general points (skill points), u8 place buildings in the fog, u8 quick build for human players only, u8 money buttons, i32 recharge percent, u16 slot count
     /// (u8 kind, string faction, i32 team, i32 colour, i32 start position, i32 AI strength, i32 AI composition, i32 AI tactics). Strings are u16-length-prefixed UTF-8.
     /// </summary>
     public byte[] Encode()
@@ -127,6 +127,7 @@ public sealed record MatchDescription(
             writer.Write(Debug.PlaceBuildingsInFog);
             writer.Write(Debug.QuickBuildHumansOnly);
             writer.Write(Debug.MoneyButtons);
+            writer.Write(Debug.RechargePercent);
             writer.Write(checked((ushort)Slots.Length));
             foreach (var slot in Slots)
             {
@@ -165,7 +166,7 @@ public sealed record MatchDescription(
             var startMoney = ReadInt32(data, ref position);
             var grace = ReadInt64(data, ref position);
             var science = ReadInt64(data, ref position);
-            var debug = new MatchDebugOptions(ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position), ReadFlag(data, ref position), ReadFlag(data, ref position), ReadFlag(data, ref position));
+            var debug = new MatchDebugOptions(ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position), ReadFlag(data, ref position), ReadFlag(data, ref position), ReadFlag(data, ref position), ReadInt32(data, ref position));
             var count = BinaryPrimitives.ReadUInt16LittleEndian(data.Slice(position, 2));
             position += 2;
             var slots = ImmutableArray.CreateBuilder<MatchSlotDescription>(count);

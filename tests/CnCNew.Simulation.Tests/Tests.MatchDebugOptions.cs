@@ -217,6 +217,8 @@ static partial class Tests
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, QuickBuildHumansOnly: true) },
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.HalfBuildPercent) },
             description with { Debug = new MatchDebugOptions(MoneyButtons: true) },
+            description with { Debug = new MatchDebugOptions(RechargePercent: MatchDebugOptions.QuarterBuildPercent) },
+            description with { Debug = new MatchDebugOptions(RechargePercent: MatchDebugOptions.HalfBuildPercent, QuickBuildHumansOnly: true) },
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuarterBuildPercent) },
         };
         var seen = new HashSet<string>(StringComparer.Ordinal) { description.Fingerprint };
@@ -229,7 +231,8 @@ static partial class Tests
         }
         Check.That(variants[4].Equals(MatchDescription.Decode(variants[4].Encode())) && !variants[4].Equals(variants[0]), "Descriptions with other options are not equal.");
 
-        Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(QuickBuildHumansOnly: true) }).Resolve(fixture.Templates, terrain), "quick build level");
+        Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(QuickBuildHumansOnly: true) }).Resolve(fixture.Templates, terrain), "recharge level");
+        Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(RechargePercent: 5000) }).Resolve(fixture.Templates, terrain), "recharge time");
         var bytes = description.Encode();
         var older = bytes.ToArray();
         older[8] = 4;

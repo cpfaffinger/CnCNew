@@ -147,7 +147,7 @@ public enum EndReason : byte
 public static class Protocol
 {
     /// <summary>
-    /// Version 11: the debug options state whether quick build is for human players only and whether the money buttons are on.
+    /// Version 11: the debug options state whether quick build is for human players only whether the money buttons are on and the recharge level of special powers.
     /// Version 10: the debug options state whether buildings may be placed in the fog; the starting general points are skill points.
     /// Version 9: the debug options of a match in the room's settings (quick building, returning neutral buildings, general points at the start).
     /// Version 8: the rules of the map in the room's settings (the server has no game data; a match on a map with rules of its own states them).
@@ -537,6 +537,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
         writer.Bool(Debug.PlaceBuildingsInFog);
         writer.Bool(Debug.QuickBuildHumansOnly);
         writer.Bool(Debug.MoneyButtons);
+        writer.I32(Debug.RechargePercent);
     }
 
     internal static RoomSettings Read(ref WireReader reader)
@@ -561,7 +562,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             slots.Add(new MatchSlotDescription((MatchSlotKind)kind, reader.Text(Protocol.MaxNameBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32()));
         }
         var rules = reader.Text(Protocol.MaxIdBytes);
-        var debug = new MatchDebugOptions(reader.I32(), reader.I32(), reader.I32(), reader.Bool(), reader.Bool(), reader.Bool());
+        var debug = new MatchDebugOptions(reader.I32(), reader.I32(), reader.I32(), reader.Bool(), reader.Bool(), reader.Bool(), reader.I32());
         if (debug.Problem is { } problem) throw new ProtocolException(problem);
         return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed, rules) { Debug = debug };
     }

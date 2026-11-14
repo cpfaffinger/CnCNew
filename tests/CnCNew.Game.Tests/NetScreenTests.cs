@@ -474,11 +474,12 @@ internal static class NetScreenTests
         Click(shell, DebugButton);
         TestHarness.Assert(shell.CurrentScreen is DebugOptionsScreen, "the button opens the debug options");
         ChooseDebug(shell, "ComboQuickBuild", 3);
+        ChooseDebug(shell, "ComboRecharge", 1);
         ChooseDebug(shell, "ComboQuickBuildFor", 1);
         ChooseDebug(shell, "ComboGeneralPoints", 4);
         TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
         Click(shell, "DebugOptions.wnd:ButtonAccept");
-        var debugOnly = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 0, 5000, QuickBuildHumansOnly: true);
+        var debugOnly = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 0, 5000, QuickBuildHumansOnly: true, RechargePercent: MatchDebugOptions.HalfBuildPercent);
         TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } debugAsked && debugAsked.Debug == debugOnly && debugAsked.MapPath == settings.MapPath && debugAsked.Slots.SequenceEqual(settings.Slots),
             $"Accept asks the server to change the room, and nothing else in it changes ({string.Join("; ", lobby.Calls)})");
         lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);
@@ -494,7 +495,7 @@ internal static class NetScreenTests
         ChooseDebug(shell, "ComboFogBuild", 1, "AdvancedOptions");
         TestHarness.Assert(lobby.Calls.Count == 0, "nothing is asked of the server before Accept");
         Click(shell, "AdvancedOptions.wnd:ButtonAccept");
-        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 5000, PlaceBuildingsInFog: true, QuickBuildHumansOnly: true);
+        var chosen = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 30, 5000, PlaceBuildingsInFog: true, QuickBuildHumansOnly: true, RechargePercent: MatchDebugOptions.HalfBuildPercent);
         TestHarness.Assert(shell.CurrentScreen is NetRoomScreen && lobby.Calls.Count == 1 && lobby.Configured is { } asked && asked.Debug == chosen && asked.MapPath == settings.MapPath && asked.Slots.SequenceEqual(settings.Slots),
             $"Accept asks the server to change the room: the respawn and the fog option are in, the debug options stay, nothing else changes ({string.Join("; ", lobby.Calls)})");
         lobby.Room = new RoomStateMessage(RoomPhase.Room, lobby.Configured!, TwoMembers);

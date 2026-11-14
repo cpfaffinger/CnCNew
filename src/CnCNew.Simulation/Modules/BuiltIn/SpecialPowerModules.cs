@@ -171,7 +171,7 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
     private long SharedReadyFrame(IWorldServices world)
     {
         if (world.TryGetSharedReadyFrame(Entity.Owner, _power, out var frame)) return frame;
-        frame = world.Tick + world.SpecialPowers[_power].ReloadTicks;
+        frame = world.Tick + world.ScaleRechargeTicks(Entity.Owner, world.SpecialPowers[_power].ReloadTicks);
         world.SetSharedReadyFrame(Entity.Owner, _power, frame);
         return frame;
     }
@@ -179,7 +179,7 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
     private void StartRecharge(IWorldServices world)
     {
         var info = world.SpecialPowers[_power];
-        var ready = world.Tick + info.ReloadTicks;
+        var ready = world.Tick + world.ScaleRechargeTicks(Entity.Owner, info.ReloadTicks);
         if (info.SharedSynced) world.SetSharedReadyFrame(Entity.Owner, _power, ready);
         else _availableOnFrame = ready;
         world.MarkDirty(Entity);

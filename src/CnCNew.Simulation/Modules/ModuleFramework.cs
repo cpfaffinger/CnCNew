@@ -483,6 +483,9 @@ public interface IWorldServices
     bool TryGetSharedReadyFrame(PlayerId player, int powerIndex, out long readyFrame);
     void SetSharedReadyFrame(PlayerId player, int powerIndex, long readyFrame);
 
+    /// <inheritdoc cref="SimulationWorld.ScaleRechargeTicks"/>
+    long ScaleRechargeTicks(PlayerId player, long ticks);
+
     /// <summary><c>SpecialAbilityUpdate::triggerAbilityEffect</c> for the capture powers (<c>Object::defect</c> into the capturer's team): <paramref name="target"/> changes to <paramref name="actor"/>'s owner, its power-pool bonus moves with it and <see cref="SimEventKind.StructureCaptured"/> is emitted.</summary>
     void CaptureStructure(Entity actor, Entity target);
 

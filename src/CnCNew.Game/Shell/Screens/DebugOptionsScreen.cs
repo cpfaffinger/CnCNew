@@ -25,7 +25,7 @@ public sealed class DebugOptionsScreen : ShellScreen
     /// <summary>The rows in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
     public static readonly ImmutableArray<(string Row, string Label)> Rows =
     [
-        ("QuickBuild", "Quick build"), ("QuickBuildFor", "Quick build for"), ("GeneralPoints", "General points at start"), ("MoneyButtons", "Money buttons"),
+        ("QuickBuild", "Quick build"), ("Recharge", "Power recharge"), ("QuickBuildFor", "Both apply to"), ("GeneralPoints", "General points at start"), ("MoneyButtons", "Money buttons"),
     ];
 
     /// <summary>Off, or everything built takes half, a quarter or a tenth of its time (<see cref="MatchDebugOptions.BuildTimePercent"/>).</summary>
@@ -35,7 +35,14 @@ public sealed class DebugOptionsScreen : ShellScreen
         (MatchDebugOptions.QuarterBuildPercent, "On: 75 % less build time"), (MatchDebugOptions.QuickBuildPercent, "On: 90 % less build time"),
     ];
 
-    /// <summary>Who the quick build is for: a second box rather than more levels, so that every level can be had for both (<see cref="MatchDebugOptions.QuickBuildHumansOnly"/>).</summary>
+    /// <summary>The recharge of every special power (a superweapon, the supply drop zone, a general's power): the same levels as quick build (<see cref="MatchDebugOptions.RechargePercent"/>).</summary>
+    public static readonly ImmutableArray<(int Percent, string Text)> RechargeChoices =
+    [
+        (MatchDebugOptions.NormalBuildTime, "Off"), (MatchDebugOptions.HalfBuildPercent, "On: 50 % less recharge time"),
+        (MatchDebugOptions.QuarterBuildPercent, "On: 75 % less recharge time"), (MatchDebugOptions.QuickBuildPercent, "On: 90 % less recharge time"),
+    ];
+
+    /// <summary>Who quick build and the faster recharge are for (<see cref="MatchDebugOptions.QuickBuildHumansOnly"/>): a second box rather than more levels, so that every level can be had for both (<see cref="MatchDebugOptions.QuickBuildHumansOnly"/>).</summary>
     public static readonly ImmutableArray<string> QuickBuildForChoices = ["Everybody", "Human players only"];
 
     /// <summary>Off, or two buttons in the in-game menu that give 10,000 credits to the player who presses them or to every player (<see cref="MatchDebugOptions.MoneyButtons"/>, #336).</summary>
@@ -65,6 +72,7 @@ public sealed class DebugOptionsScreen : ShellScreen
         W("NoteLabel").SetText(readOnly ? "For testing. The host chose these rules." : "For testing. Every player plays by these rules.");
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("QuickBuild", QuickBuildChoices.Select(choice => choice.Text));
+        Fill("Recharge", RechargeChoices.Select(choice => choice.Text));
         Fill("QuickBuildFor", QuickBuildForChoices);
         Fill("MoneyButtons", MoneyButtonChoices);
         Fill("GeneralPoints", GeneralPointChoices.Select((points, index) => index == 0 ? "0 (normal start)" : $"{points.ToString(System.Globalization.CultureInfo.InvariantCulture)} (rank {index + 1})"));
@@ -73,7 +81,7 @@ public sealed class DebugOptionsScreen : ShellScreen
     }
 
     /// <summary>Whether a debug option is on: the advanced option of the returning neutral buildings (<see cref="AdvancedOptionsScreen.IsOn"/>) is not one.</summary>
-    public static bool IsOn(MatchDebugOptions options) => options.BuildTimePercent != MatchDebugOptions.NormalBuildTime || options.StartingGeneralPoints > 0 || options.MoneyButtons;
+    public static bool IsOn(MatchDebugOptions options) => options.BuildTimePercent != MatchDebugOptions.NormalBuildTime || options.RechargePercent != MatchDebugOptions.NormalBuildTime || options.StartingGeneralPoints > 0 || options.MoneyButtons;
 
     /// <summary>The caption of the button: it says when something is on (short, because the button stands beside two others in a smaller type).</summary>
     public static string ButtonText(MatchDebugOptions options) => IsOn(options) ? "Debug (on)" : "Debug";
@@ -88,18 +96,21 @@ public sealed class DebugOptionsScreen : ShellScreen
 
     private void Refresh()
     {
-        W("ComboQuickBuild").SetComboSelection(NearestLevel(_working.BuildTimePercent));
+        W("ComboQuickBuild").SetComboSelection(NearestLevel(QuickBuildChoices, _working.BuildTimePercent));
+        W("ComboRecharge").SetComboSelection(NearestLevel(RechargeChoices, _working.RechargePercent));
         W("ComboQuickBuildFor").SetComboSelection(_working.QuickBuildHumansOnly ? 1 : 0);
-        W("ComboQuickBuildFor").SetEnabled(!_readOnly && _working.BuildTimePercent != MatchDebugOptions.NormalBuildTime);
+        W("ComboQuickBuildFor").SetEnabled(!_readOnly && AnyFasterRule(_working));
         W("ComboMoneyButtons").SetComboSelection(_working.MoneyButtons ? 1 : 0);
         W("ComboGeneralPoints").SetComboSelection(NearestPoints(_working.StartingGeneralPoints));
     }
 
-    private static int NearestLevel(int percent)
+    private static bool AnyFasterRule(MatchDebugOptions options) => options.BuildTimePercent != MatchDebugOptions.NormalBuildTime || options.RechargePercent != MatchDebugOptions.NormalBuildTime;
+
+    private static int NearestLevel(ImmutableArray<(int Percent, string Text)> levels, int percent)
     {
         var best = 0;
-        for (var index = 1; index < QuickBuildChoices.Length; index++)
-            if (Math.Abs(QuickBuildChoices[index].Percent - percent) < Math.Abs(QuickBuildChoices[best].Percent - percent)) best = index;
+        for (var index = 1; index < levels.Length; index++)
+            if (Math.Abs(levels[index].Percent - percent) < Math.Abs(levels[best].Percent - percent)) best = index;
         return best;
     }
 
@@ -138,10 +149,15 @@ public sealed class DebugOptionsScreen : ShellScreen
     {
         if (source == Name("ComboQuickBuild") && index < QuickBuildChoices.Length)
         {
-            var percent = QuickBuildChoices[index].Percent;
-            _working = _working with { BuildTimePercent = percent, QuickBuildHumansOnly = percent != MatchDebugOptions.NormalBuildTime && _working.QuickBuildHumansOnly };
+            _working = _working with { BuildTimePercent = QuickBuildChoices[index].Percent };
+            _working = _working with { QuickBuildHumansOnly = AnyFasterRule(_working) && _working.QuickBuildHumansOnly };
         }
-        else if (source == Name("ComboQuickBuildFor") && index < QuickBuildForChoices.Length && _working.BuildTimePercent != MatchDebugOptions.NormalBuildTime)
+        else if (source == Name("ComboRecharge") && index < RechargeChoices.Length)
+        {
+            _working = _working with { RechargePercent = RechargeChoices[index].Percent };
+            _working = _working with { QuickBuildHumansOnly = AnyFasterRule(_working) && _working.QuickBuildHumansOnly };
+        }
+        else if (source == Name("ComboQuickBuildFor") && index < QuickBuildForChoices.Length && AnyFasterRule(_working))
             _working = _working with { QuickBuildHumansOnly = index == 1 };
         else if (source == Name("ComboMoneyButtons") && index < MoneyButtonChoices.Length) _working = _working with { MoneyButtons = index == 1 };
         else if (source == Name("ComboGeneralPoints") && index < GeneralPointChoices.Length) _working = _working with { StartingGeneralPoints = GeneralPointChoices[index] };

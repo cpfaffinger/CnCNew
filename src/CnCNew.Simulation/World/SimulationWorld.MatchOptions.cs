@@ -20,6 +20,9 @@ public sealed partial class SimulationWorld
     /// <summary>Whether <see cref="BuildTimePercent"/> applies to the human players only (a computer player builds in its normal time).</summary>
     public bool BuildTimeForHumansOnly { get; private set; }
 
+    /// <summary>What the recharge of a special power takes of its normal time, in percent (<see cref="ScaleRechargeTicks"/>); 100 is the original.</summary>
+    public int RechargePercent { get; private set; } = NormalBuildTimePercent;
+
     /// <summary>Whether a builder may be ordered to put a structure on ground the player has not explored or does not look at (the debug option; the original refuses it - <see cref="CheckBuildSite"/>).</summary>
     public bool PlaceBuildingsInFog { get; private set; }
 
@@ -54,15 +57,17 @@ public sealed partial class SimulationWorld
     /// one they reach, with the purchase points and sciences of each level, the rank-level limit and the player's skill-point modifier applied); <paramref name="placeBuildingsInFog"/>
     /// takes the shroud rule out of the build site check.
     /// </summary>
-    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0, bool placeBuildingsInFog = false, bool buildTimeForHumansOnly = false, bool debugMoneyButtons = false)
+    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0, bool placeBuildingsInFog = false, bool buildTimeForHumansOnly = false, bool debugMoneyButtons = false, int rechargePercent = 100)
     {
         if (_tick != 0) throw new InvalidOperationException("The debug options of a match are set before its first tick.");
+        if (rechargePercent <= 0) throw new ArgumentOutOfRangeException(nameof(rechargePercent));
         if (buildTimePercent <= 0) throw new ArgumentOutOfRangeException(nameof(buildTimePercent));
         if (neutralRespawnSeconds < 0) throw new ArgumentOutOfRangeException(nameof(neutralRespawnSeconds));
         if (startingSkillPoints < 0) throw new ArgumentOutOfRangeException(nameof(startingSkillPoints));
         BuildTimePercent = buildTimePercent;
         BuildTimeForHumansOnly = buildTimeForHumansOnly;
         DebugMoneyButtons = debugMoneyButtons;
+        RechargePercent = rechargePercent;
         NeutralRespawnSeconds = neutralRespawnSeconds;
         PlaceBuildingsInFog = placeBuildingsInFog;
         if (startingSkillPoints > 0)
@@ -74,11 +79,20 @@ public sealed partial class SimulationWorld
     /// A build time of <paramref name="ticks"/> (whole frames of the original) under <see cref="BuildTimePercent"/> (for a computer player only unless <see cref="BuildTimeForHumansOnly"/>): the frames times the percentage, rounded up, at least one frame.
     /// The normal time stays as it is. <c>calcTimeToBuild</c> and the build time of an upgrade take it before the power-supply ratio is applied.
     /// </summary>
-    public long ScaleBuildTicks(PlayerId player, long ticks)
+    public long ScaleBuildTicks(PlayerId player, long ticks) => ScaleFrames(player, ticks, BuildTimePercent);
+
+    /// <summary>
+    /// The recharge of a special power of <paramref name="player"/> (<c>SpecialPowerTemplate::getReloadTime</c>, every special power of the player: a building's superweapon, the drop zone,
+    /// a unit's ability alike) under <see cref="RechargePercent"/>, in whole frames of the original rounded up, at least one frame; for a computer player only unless
+    /// <see cref="BuildTimeForHumansOnly"/> (the one "for" choice of both options). A recharge of 0 stays 0.
+    /// </summary>
+    public long ScaleRechargeTicks(PlayerId player, long ticks) => ScaleFrames(player, ticks, RechargePercent);
+
+    private long ScaleFrames(PlayerId player, long ticks, int percent)
     {
-        if (BuildTimePercent == NormalBuildTimePercent || ticks <= 0 || BuildTimeForHumansOnly && IsComputerPlayer(player)) return ticks;
+        if (percent == NormalBuildTimePercent || ticks <= 0 || BuildTimeForHumansOnly && IsComputerPlayer(player)) return ticks;
         var frames = Time.FramesIn(ticks);
-        return Time.OriginalFrames(Math.Max(1, (frames * BuildTimePercent + NormalBuildTimePercent - 1) / NormalBuildTimePercent));
+        return Time.OriginalFrames(Math.Max(1, (frames * percent + NormalBuildTimePercent - 1) / NormalBuildTimePercent));
     }
 
     /// <summary>Called when a map object for the neutral player is queued: a building (not rubble from the start) is kept for its return.</summary>
@@ -151,6 +165,7 @@ public sealed partial class SimulationWorld
         if (PlaceBuildingsInFog) writer.Bool("placeBuildingsInFog", true);
         if (BuildTimeForHumansOnly) writer.Bool("buildTimeForHumansOnly", true);
         if (DebugMoneyButtons) writer.Bool("debugMoneyButtons", true);
+        if (RechargePercent != NormalBuildTimePercent) writer.Int("rechargePercent", RechargePercent);
         if (NeutralRespawnSeconds == 0) return;
         writer.Int("neutralRespawnSeconds", NeutralRespawnSeconds);
         writer.BeginArray("neutralBuildings");
@@ -177,6 +192,7 @@ public sealed partial class SimulationWorld
         PlaceBuildingsInFog = state.Has("placeBuildingsInFog") && state.Bool("placeBuildingsInFog");
         BuildTimeForHumansOnly = state.Has("buildTimeForHumansOnly") && state.Bool("buildTimeForHumansOnly");
         DebugMoneyButtons = state.Has("debugMoneyButtons") && state.Bool("debugMoneyButtons");
+        RechargePercent = state.Has("rechargePercent") ? checked((int)state.Int("rechargePercent")) : NormalBuildTimePercent;
         NeutralRespawnSeconds = state.Has("neutralRespawnSeconds") ? checked((int)state.Int("neutralRespawnSeconds")) : 0;
         _neutralBuildings.Clear();
         if (NeutralRespawnSeconds == 0) return;

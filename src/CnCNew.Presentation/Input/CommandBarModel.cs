@@ -676,15 +676,16 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     /// <summary><c>SpecialPowerModule::getPercentReady</c>: the elapsed share of the reload, from the saved ready frame (the shared frame for <c>SharedSyncedTimer</c> powers).</summary>
     private static float ReadyFraction(SimulationWorld world, PlayerId player, SimModule module, Simulation.Templates.SpecialPowerInfo power)
     {
+        var reload = world.ScaleRechargeTicks(player, power.ReloadTicks);
         // A paused power shows the share it had when the pause began (m_pausedPercent; a power that was ready then is not shown as ready).
-        if (!(power.SharedSynced && world.TryGetSharedReadyFrame(player, power.Index, out _)) && module is SpecialPowerModuleBase { IsPaused: true } paused && power.ReloadTicks > 0)
+        if (!(power.SharedSynced && world.TryGetSharedReadyFrame(player, power.Index, out _)) && module is SpecialPowerModuleBase { IsPaused: true } paused && reload > 0)
         {
             var available = SimulationQueries.Describe(module).Int("availableOnFrame");
-            return paused.PausedOnFrame >= available ? 0.99999f : Math.Clamp(1f - (available - paused.PausedOnFrame) / (float)power.ReloadTicks, 0f, 1f);
+            return paused.PausedOnFrame >= available ? 0.99999f : Math.Clamp(1f - (available - paused.PausedOnFrame) / (float)reload, 0f, 1f);
         }
         var readyFrame = ReadyFrameOf(world, player, module, power);
-        if (power.ReloadTicks <= 0) return world.Tick >= readyFrame ? 1f : 0f;
-        return Math.Clamp(1f - (readyFrame - world.Tick) / (float)power.ReloadTicks, 0f, 1f);
+        if (reload <= 0) return world.Tick >= readyFrame ? 1f : 0f;
+        return Math.Clamp(1f - (readyFrame - world.Tick) / (float)reload, 0f, 1f);
     }
 
     private ImmutableArray<QueueEntry> QueueOf(SimulationWorld world, Entity entity, CommandSetInfo set)
