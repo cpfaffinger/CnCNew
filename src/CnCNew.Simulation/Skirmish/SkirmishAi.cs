@@ -51,6 +51,9 @@ public sealed class SkirmishAiStats
     public int Evacuations { get; internal set; }
     /// <summary>Infantry sent into a transport.</summary>
     public int TransportLoads { get; internal set; }
+    /// <summary>Capture orders given to infantry against a neutral tech building, and infantry sent into a garrisonable building.</summary>
+    public int CaptureOrders { get; internal set; }
+    public int GarrisonOrders { get; internal set; }
     public long AttackTicks { get; internal set; }
     public SortedDictionary<CommandRejection, int> RejectionsByReason { get; } = [];
     /// <summary>Army draws by <see cref="ArmyComposition.ExchangeValue"/> that had a sighted enemy to weigh against, and those that fell back to the uniform draw.</summary>
@@ -314,6 +317,8 @@ public sealed partial class SkirmishAi
         CommandArmy();
         UseTunnels();
         UseTransports();
+        CaptureNeutrals();
+        GarrisonBuildings();
         OrderCarriers();
         if (Stats.Commands == before) Stats.IdleThinks++;
         if (_attacking) Stats.AttackTicks += _thinkInterval;
@@ -1100,7 +1105,8 @@ public sealed partial class SkirmishAi
     {
         foreach (var structure in _structures)
         {
-            if (structure.Body is not { } body || body.Health >= body.MaxHealth * RepairBelow) continue;
+            // A building the army took by capture or garrison and that nobody built (a town house, an oil derrick) is no base to mend.
+            if (structure.Template.BuildCost <= Fixed.Zero || structure.Body is not { } body || body.Health >= body.MaxHealth * RepairBelow) continue;
             var builder = PickBuilder([], structure);
             if (builder is null || AiOf(builder) is not { CanRepair: true }) return;
             if (Backoff(unchecked(0x50000000u + structure.Id.Value))) continue;
@@ -1517,6 +1523,125 @@ public sealed partial class SkirmishAi
             _boarding[pick.Id.Value] = _tick + _time.OriginalFrames(BoardingFrames);
             _orders.Remove(pick.Id.Value);
             Stats.TransportLoads++;
+        }
+    }
+
+    private static readonly Fixed NeutralReach = Fixed.FromInt(700);
+    private const long CaptureErrandFrames = 2700;
+    private const long GarrisonErrandFrames = 900;
+    private const long NeutralRetryFrames = 450;
+    private const int GarrisonPerBuilding = 3;
+    private const int GarrisonBuildingsMax = 2;
+
+    private bool NeutralBackoff(uint key, int times = 1)
+    {
+        if (_retryAt.TryGetValue(key, out var until) && until > _tick) return true;
+        _retryAt[key] = _tick + times * _time.OriginalFrames(NeutralRetryFrames);
+        return false;
+    }
+
+    private bool NearOwnStructure(Entity entity, Fixed reach)
+    {
+        var limit = SquaredReach.Of(reach);
+        foreach (var structure in _structures)
+            if (limit.ContainsStrictly(DistanceSquared(structure.X, structure.Y, entity.X, entity.Y))) return true;
+        return false;
+    }
+
+    private bool IsNeutralBuilding(Entity entity)
+        => entity.Template.IsKindOf("STRUCTURE") && entity.Owner != _player && !_world.AreEnemies(_player, entity.Owner) && entity.Owner.IsSystem && !entity.HasStatus(ObjectStatusBits.UnderConstruction);
+
+    private bool IsFreeInfantry(Entity unit, bool allowWave)
+        => unit.Template.IsKindOf("INFANTRY") && (RoleOf(unit.Template) & Role.Army) != 0 && AiOf(unit) is not null && (allowWave || !_wave.Contains(unit.Id.Value))
+           && !(_boarding.TryGetValue(unit.Id.Value, out var until) && until > _tick) && !_enemyTargets.Any(enemy => SquaredReach.Of(EngageRadius).ContainsStrictly(DistanceSquared(enemy.X, enemy.Y, unit.X, unit.Y)));
+
+    /// <summary>
+    /// The skirmish library's "Tech Capture Team" (<c>SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE</c> of the base, <c>AI_PLAYER_BUILD_UPGRADE Upgrade_InfantryCaptureBuilding</c>, then
+    /// <c>TEAM_MOVE_TOWARDS_NEAREST_OBJECT_TYPE</c> and the capture command button): a neutral capturable building near an own structure makes the AI research the capture upgrade
+    /// and send its nearest idle infantry that can capture to the nearest such building that no enemy stands at. The wave is never touched.
+    /// </summary>
+    private void CaptureNeutrals()
+    {
+        Entity? target = null;
+        var best = Fixed.Zero;
+        foreach (var candidate in _visible)
+        {
+            if (candidate.EffectivelyDead || !IsNeutralBuilding(candidate) || !candidate.Template.IsKindOf("CAPTURABLE") || candidate.Template.IsKindOf("IMMUNE_TO_CAPTURE")) continue;
+            if (!NearOwnStructure(candidate, NeutralReach) || _enemyTargets.Any(enemy => SquaredReach.Of(EngageRadius).ContainsStrictly(DistanceSquared(enemy.X, enemy.Y, candidate.X, candidate.Y)))) continue;
+            var distance = _rally is { } rally ? DistanceSquared(rally.X, rally.Y, candidate.X, candidate.Y) : Fixed.Zero;
+            if (target is not null && distance >= best) continue;
+            if (_retryAt.TryGetValue(unchecked(0x84000000u + candidate.Id.Value), out var wait) && wait > _tick) continue;
+            target = candidate;
+            best = distance;
+        }
+        if (target is null) return;
+        Entity? pick = null;
+        var nearest = Fixed.Zero;
+        foreach (var unit in _units)
+        {
+            if (!IsFreeInfantry(unit, true) || !_world.HasCapturePower(unit) || !StagedCaptureRules.CanCapture(_world, unit, target)) continue;
+            var distance = DistanceSquared(unit.X, unit.Y, target.X, target.Y);
+            if (pick is not null && distance >= nearest) continue;
+            pick = unit;
+            nearest = distance;
+        }
+        if (pick is null) return;
+        var chosen = pick;
+        var victim = target;
+        if (NeutralBackoff(unchecked(0x84000000u + victim.Id.Value))) return;
+        var result = Send(sequence => new CaptureCommand(_player, sequence, _tick, chosen.Id, victim.Id));
+        if (!result.Accepted)
+        {
+            // The ability is paused until the upgrade is researched (the library's AI_PLAYER_BUILD_UPGRADE): buy it, the order is given again later.
+            if (result.Reason == CommandRejection.SpecialPowerNotReady && !NeutralBackoff(0x84FFFFFFu, 3))
+                Send(sequence => new PurchaseUpgradeCommand(_player, sequence, _tick, "Upgrade_InfantryCaptureBuilding", null));
+            return;
+        }
+        _boarding[chosen.Id.Value] = _tick + _time.OriginalFrames(CaptureErrandFrames);
+        _wave.Remove(chosen.Id.Value);
+        _orders.Remove(chosen.Id.Value);
+        Stats.CaptureOrders++;
+    }
+
+    /// <summary>
+    /// The skirmish library's garrison teams (<c>TEAM_ENTER_NAMED</c> of a map's garrison buildings, <c>TEAM_GARRISON_NEAREST_BUILDING</c>): idle infantry walks into a neutral or own
+    /// garrisonable building near an own structure and fights from inside. At most <see cref="GarrisonBuildingsMax"/> buildings are manned, <see cref="GarrisonPerBuilding"/> riders each.
+    /// </summary>
+    private void GarrisonBuildings()
+    {
+        var manned = 0;
+        Entity? site = null;
+        var best = Fixed.Zero;
+        foreach (var building in _visible)
+        {
+            if (building.EffectivelyDead || building.Container is not GarrisonContain contain || !building.Template.IsKindOf("STRUCTURE") || building.HasStatus(ObjectStatusBits.UnderConstruction)) continue;
+            if (building.Owner != _player && !IsNeutralBuilding(building)) continue;
+            if (contain.ContainCount > 0) { if (building.Owner == _player || contain.ContainCount >= GarrisonPerBuilding) manned++; if (contain.ContainCount >= GarrisonPerBuilding) continue; }
+            if (!NearOwnStructure(building, NeutralReach)) continue;
+            if (_retryAt.TryGetValue(unchecked(0x85000000u + building.Id.Value), out var wait) && wait > _tick) continue;
+            var distance = _rally is { } rally ? DistanceSquared(rally.X, rally.Y, building.X, building.Y) : Fixed.Zero;
+            if (site is not null && distance >= best) continue;
+            site = building;
+            best = distance;
+        }
+        if (site is null || manned >= GarrisonBuildingsMax || site.Container is not { } garrison) return;
+        var wanted = GarrisonPerBuilding - garrison.ContainCount;
+        var chosen = new List<Entity>();
+        var limit = SquaredReach.Of(NeutralReach);
+        foreach (var unit in _units.Where(unit => IsFreeInfantry(unit, false)).Where(unit => limit.ContainsStrictly(DistanceSquared(unit.X, unit.Y, site.X, site.Y)) && garrison.IsValidContainerFor(_world, unit, true))
+                     .OrderBy(unit => DistanceSquared(unit.X, unit.Y, site.X, site.Y)).ThenBy(unit => unit.Id.Value))
+        {
+            if (chosen.Count >= wanted) break;
+            chosen.Add(unit);
+        }
+        if (chosen.Count == 0 || NeutralBackoff(unchecked(0x85000000u + site.Id.Value))) return;
+        foreach (var unit in chosen)
+        {
+            var mover = unit;
+            if (!Send(sequence => new MoveAndEnterCommand(_player, sequence, _tick, mover.Id, site.Id)).Accepted) continue;
+            _boarding[unit.Id.Value] = _tick + _time.OriginalFrames(GarrisonErrandFrames);
+            _orders.Remove(unit.Id.Value);
+            Stats.GarrisonOrders++;
         }
     }
 

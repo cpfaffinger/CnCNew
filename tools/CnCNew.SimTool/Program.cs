@@ -540,7 +540,7 @@ static int AiMatch(string directory, string[] args)
     {
         var stats = scenario.Ais[index].Stats;
         var final = scenario.Finals[index];
-        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, tunnel entries {stats.TunnelEntries}, transport loads {stats.TransportLoads}, evacuations {stats.Evacuations}, idle thinks {stats.IdleThinks}");
+        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, tunnel entries {stats.TunnelEntries}, transport loads {stats.TransportLoads}, evacuations {stats.Evacuations}, capture orders {stats.CaptureOrders}, garrison orders {stats.GarrisonOrders}, idle thinks {stats.IdleThinks}");
         if (stats.RejectionsByReason.Count > 0) Console.WriteLine($"    rejections: {string.Join(", ", stats.RejectionsByReason.Select(pair => $"{pair.Key}={pair.Value}"))}");
     }
     Console.WriteLine(scenario.Winner is null

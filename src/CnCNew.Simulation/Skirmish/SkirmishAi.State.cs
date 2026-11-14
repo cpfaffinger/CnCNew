@@ -456,6 +456,8 @@ public sealed partial class SkirmishAi
         writer.Int("tunnelEntries", Stats.TunnelEntries);
         writer.Int("evacuations", Stats.Evacuations);
         writer.Int("transportLoads", Stats.TransportLoads);
+        if (Stats.CaptureOrders != 0) writer.Int("captureOrders", Stats.CaptureOrders);
+        if (Stats.GarrisonOrders != 0) writer.Int("garrisonOrders", Stats.GarrisonOrders);
         writer.Int("attackTicks", Stats.AttackTicks);
         writer.Int("informedDraws", Stats.InformedDraws);
         writer.Int("uninformedDraws", Stats.UninformedDraws);
@@ -498,6 +500,8 @@ public sealed partial class SkirmishAi
         Stats.TunnelEntries = checked((int)reader.Int("tunnelEntries"));
         Stats.Evacuations = checked((int)reader.Int("evacuations"));
         Stats.TransportLoads = checked((int)reader.Int("transportLoads"));
+        Stats.CaptureOrders = reader.Has("captureOrders") ? checked((int)reader.Int("captureOrders")) : 0;
+        Stats.GarrisonOrders = reader.Has("garrisonOrders") ? checked((int)reader.Int("garrisonOrders")) : 0;
         Stats.AttackTicks = reader.Int("attackTicks");
         Stats.InformedDraws = checked((int)reader.Int("informedDraws"));
         Stats.UninformedDraws = checked((int)reader.Int("uninformedDraws"));
