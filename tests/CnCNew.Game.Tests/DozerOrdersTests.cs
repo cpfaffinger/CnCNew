@@ -30,6 +30,7 @@ internal static class DozerOrdersTests
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("A dozer at a repair keeps its build buttons, takes a build order from the bar (the repair ends), and a dozer at a building refuses a second", () => BuildWhileRepairing(data));
         harness.Run("A dozer at a repair takes a move order from a right click (the repair ends) and, standing idle again, repairs the hurt structure nearby by itself", () => MoveWhileRepairing(data));
+        harness.Run("A building dozer raises a small cue of smoke, an idle or driving one and the GLA worker do not (issue 310)", () => BuildingCue(data));
         harness.Run("A builder at its building is ACTIVELY_CONSTRUCTING: the GLA worker plays its building animation, the USA and China dozers have no art for it and keep their default state (issue 310)", () => ActivelyConstructing(data));
         return harness.Failures;
     }
@@ -75,6 +76,43 @@ internal static class DozerOrdersTests
             else
                 TestHarness.Assert(!draw.States.Any(value => value.Conditions.Any(alternative => alternative.Contains(CnCNew.Presentation.Objects.ModelConditions.ActivelyConstructing)))
                     && seen.Selections[0].StateIndex == draw.DefaultStateIndex, $"{builder} has no state for building and keeps its default one ({state.Index}, default {draw.DefaultStateIndex})");
+        }
+    }
+
+    /// <summary>#310, beyond the original: a dozer that builds raises a small puff of smoke while it is at its site; an idle one, one that drives to the site, one that has finished and the GLA worker do not.</summary>
+    private static void BuildingCue(GameData data)
+    {
+        foreach (var (faction, builder, building, expectCue) in new[]
+        {
+            ("FactionAmerica", "AmericaVehicleDozer", "AmericaPowerPlant", true),
+            ("FactionChina", "ChinaVehicleDozer", "ChinaPowerPlant", true),
+            ("FactionGLA", "GLAInfantryWorker", "GLABarracks", false),
+        })
+        {
+            var scenario = new DemoScenario("cue", "cue", "cue", 900, [new ScenarioUnit("builder", builder, 1, -90, 0, 0f), new ScenarioUnit("idle", builder, 1, -90, 60, 0f)],
+                [new ScenarioOrder(10, "builder", ScenarioOrderKind.Build, "site", X: 30, Y: -70, Template: building)], 20, -15)
+            {
+                HumanFaction = faction,
+                OpponentFaction = faction == "FactionChina" ? "FactionAmerica" : "FactionChina",
+                StartMoney = 5000,
+            };
+            var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+            long drivingCues = 0, workingCues = 0, afterCues = 0;
+            var working = false;
+            var done = false;
+            for (var frame = 0; frame < 900 && !done; frame++)
+            {
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                if (!live.Tags.TryGetValue("builder", out var id) || live.World.FindEntity(id) is not { } unit || unit.Modules.OfType<AIUpdateInterface>().FirstOrDefault() is not { } ai) continue;
+                var cues = live.Attached.BuildCuesNow;
+                if (ai.IsConstructing) { working = true; workingCues = Math.Max(workingCues, cues); }
+                else if (!working) drivingCues = Math.Max(drivingCues, cues);
+                else { afterCues = Math.Max(afterCues, cues); if (live.Attached.BuildCuesNow == 0) done = true; }
+            }
+            Console.WriteLine($"       {builder}: cues while driving {drivingCues}, while building {workingCues}, after {afterCues}, started {live.Attached.BuildCuesStarted}");
+            TestHarness.Assert(drivingCues == 0, $"{builder}: no cue while it drives to the site, nor for the idle one");
+            if (expectCue) TestHarness.Assert(workingCues == 1 && live.Attached.BuildCuesStarted >= 1 && done, $"{builder}: one cue while it builds, and it ends with the state");
+            else TestHarness.Assert(workingCues == 0 && live.Attached.BuildCuesStarted == 0, $"{builder} has its own animation and gets no cue");
         }
     }
 

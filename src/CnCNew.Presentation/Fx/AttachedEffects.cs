@@ -608,6 +608,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         public readonly List<int>[] TransitionSystems = [[], [], [], []];
         public bool Shown;
         public readonly List<int> MotionSystems = [];
+        public readonly List<int> BuildCueSystems = [];
         public bool Moving;
         public Vector3? LastPosition;
         public long StrafeFrame = -1;
@@ -729,6 +730,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             tracked.Aflame = aflame;
             if (template is not null && !template.BoneFx.IsDefaultOrEmpty) RunBoneFx(item, tracked, template, originalFrame, view, entity);
             UpdateMotion(item, tracked, view);
+            UpdateBuildCue(item, tracked);
             if (catalog.StrafeSystems.TryGetValue(item.Visual.TemplateName, out var strafe) && tracked.StrafeFrame != originalFrame)
             {
                 tracked.StrafeFrame = originalFrame;
@@ -1273,6 +1275,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     {
         tracked.Shown = false;
         Destroy(tracked.MotionSystems);
+        Destroy(tracked.BuildCueSystems);
         tracked.Moving = false;
         tracked.LastPosition = null;
         tracked.StateKey = [];
@@ -1355,6 +1358,42 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
                 _motionSystems++;
             }
     }
+
+    // ---------------------------------------------------------------------------------------------------- a dozer at work
+
+    /// <summary>The particle system of the building cue: the small puffs of smoke the data lets a building raise while it goes up (<c>BuildUpSmoke</c>: 0.5 units growing, two to five puffs every 25 to 75 frames, from a point).</summary>
+    public const string BuildCueSystem = "BuildUpSmoke";
+
+    /// <summary>
+    /// Beyond the original (owner's decision of 14 November 2026, #310): the American and the Chinese dozer have no art for <c>ACTIVELY_CONSTRUCTING</c>, so a player could not tell a dozer
+    /// that builds from one that stands idle. While a vehicle of <c>KindOf DOZER</c> has that model condition it raises <see cref="BuildCueSystem"/>; it ends with the condition. The GLA worker (an
+    /// infantry unit) has its own hammering animation and gets nothing. On by default; there is no settings place for presentation additions yet.
+    /// </summary>
+    public bool BuildCue { get; set; } = true;
+
+    private void UpdateBuildCue(ProjectedEntity item, Tracked tracked)
+    {
+        var wanted = BuildCue && item.Conditions.Contains(ModelConditions.ActivelyConstructing)
+            && fx.Catalog.FindObject(item.Visual.TemplateName) is { } info && info.IsKindOf("DOZER") && info.IsKindOf("VEHICLE");
+        if (!wanted)
+        {
+            Destroy(tracked.BuildCueSystems);
+            return;
+        }
+        if (tracked.BuildCueSystems.Count > 0) return;
+        var system = Spawn(BuildCueSystem, item.Entity, Vector3.Zero);
+        if (system == 0) return;
+        tracked.BuildCueSystems.Add(system);
+        _buildCues++;
+    }
+
+    private long _buildCues;
+
+    /// <summary>The building cues started (<see cref="UpdateBuildCue"/>).</summary>
+    public long BuildCuesStarted => _buildCues;
+
+    /// <summary>The building cues running now.</summary>
+    public int BuildCuesNow => _tracked.Values.Sum(tracked => tracked.BuildCueSystems.Count);
 
     // ---------------------------------------------------------------------------------------------------- ActiveBody fire and smoke
 
