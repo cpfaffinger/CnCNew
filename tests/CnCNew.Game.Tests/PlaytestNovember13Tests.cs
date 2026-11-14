@@ -40,10 +40,43 @@ internal static class PlaytestNovember13Tests
         harness.Run("A Fire Base shows the soldiers inside on its four places with their cameos and lets one out by a click (issue 317)", () => FireBaseRiders(data));
         harness.Run("The portable structures of the Avenger, the Overlord and the Helix are drawn on their hosts' bones, the soldier in an Overlord's bunker is not (issue 322)", () => PortableStructuresDrawn(data));
         harness.Run("The healing icon over a repaired building is the wrench at its own size grown with the screen, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
+        harness.Run("A tank leaves track marks of its draw module's texture while it drives, as wide as the distance of its tread bones, and none while it stands (issue 323)", () => TreadMarksOfATank(data));
         return harness.Failures;
     }
 
     // ------------------------------------------------------------------------------------------------ #309 the size of the healing icon
+
+    // ------------------------------------------------------------------------------------------------ #323 track marks
+
+    private static void TreadMarksOfATank(GameData data)
+    {
+        var scenario = new DemoScenario("tread-marks", "tread-marks", "tread-marks", 6000,
+            [new ScenarioUnit("tank", "AmericaTankCrusader", 1, 0, -80, 0f)], [], 100f, 40f)
+        {
+            StartMoney = 50000,
+            HumanFaction = "FactionAmerica",
+            OpponentFaction = "FactionChina",
+        };
+        var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        void Frame() => live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+        for (var frame = 0; frame < 10; frame++) Frame();
+        TestHarness.Assert(live.Fx.Capture().TreadMarks.IsEmpty, "a tank that stands leaves nothing");
+        var tank = live.Tags["tank"];
+        var home = live.World.FindEntity(tank)!;
+        var ordered = live.Issue(new PlayerId(1), (sequence, tick) => new GroupMoveCommand(new PlayerId(1), sequence, tick, [tank], home.X + Fixed.FromInt(300), home.Y, false));
+        TestHarness.Assert(ordered.Accepted, $"the tank may drive ({ordered.Reason})");
+        for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 12; frame++) Frame();
+        var strips = live.Fx.Capture().TreadMarks;
+        TestHarness.Assert(strips.Length == 1, $"one track of the tank ({strips.Length})");
+        var strip = strips[0];
+        TestHarness.Assert(strip.Texture.Equals("EXTnkTrack.tga", StringComparison.OrdinalIgnoreCase) || strip.Texture.Contains("Track", StringComparison.OrdinalIgnoreCase), $"the texture of its draw module ({strip.Texture})");
+        TestHarness.Assert(strip.Edges.Length >= 5, $"the tank laid edges ({strip.Edges.Length})");
+        var width = (strip.Edges[^1].Left - strip.Edges[^1].Right).Length();
+        TestHarness.Assert(width is > 8f and < 60f, $"the track is as wide as the tank's treads ({width})");
+        var spacing = (strip.Edges[^1].Left - strip.Edges[^2].Left).Length();
+        TestHarness.Assert(spacing is >= 9.9f and < 25f, $"an edge for every ten units travelled ({spacing})");
+        TestHarness.Assert(strip.Edges[^1].Alpha > 0.9f, $"the newest edge is opaque ({strip.Edges[^1].Alpha})");
+    }
 
     private static void HealIconSize(GameData data)
     {

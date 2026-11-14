@@ -69,6 +69,9 @@ public sealed class FxExecutor
     public ParticleWorld Particles { get; }
     public DecalBuffer Decals { get; }
 
+    /// <summary>Who supplies the marks of the vehicles' treads (<see cref="TreadMarks"/>); null: none.</summary>
+    public Func<ImmutableArray<TreadStrip>>? TreadMarks { get; set; }
+
     /// <summary>
     /// A place the presentation knows better than the logic for an effect list an object asked for (<see cref="SimEventKind.FxRequested"/>: the object and the list's name), such as a bone of
     /// its animated model; null keeps the place of the request.
@@ -386,7 +389,7 @@ public sealed class FxExecutor
         var frame = new FxFrame(Frame, Particles.Capture(isVisible),
             [.._tracers.Select(tracer => tracer.ToInstance()), ..Ropes?.Invoke() ?? []],
             [.._lights.Select(light => light.ToInstance())],
-            decals, [.._rays], [.._shakes]) { ProjectileStreams = ProjectileStreams?.Invoke() ?? [] };
+            decals, [.._rays], [.._shakes]) { ProjectileStreams = ProjectileStreams?.Invoke() ?? [], TreadMarks = TreadMarks?.Invoke() ?? [] };
         _rays.Clear();
         _shakes.Clear();
         return frame;

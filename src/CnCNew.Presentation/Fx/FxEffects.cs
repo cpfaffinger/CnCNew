@@ -146,6 +146,9 @@ public sealed record FxFrame(
 {
     /// <summary>The projectile streams (<c>W3DProjectileStreamDraw</c>): textured bands through the flying projectiles of one weapon, oldest first.</summary>
     public ImmutableArray<StreamInstance> ProjectileStreams { get; init; } = [];
+
+    /// <summary>The marks tracked vehicles have left on the ground (<c>TerrainTracksRenderObjClassSystem::flush</c>).</summary>
+    public ImmutableArray<TreadStrip> TreadMarks { get; init; } = [];
 }
 
 /// <summary>

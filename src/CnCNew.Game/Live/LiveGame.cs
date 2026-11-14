@@ -114,6 +114,8 @@ public abstract class LiveGame
         Fx.ProjectileStreams = () => Attached.ProjectileStreams;
         Fx.Ropes = () => Attached.Ropes;
         Fx.ObjectDecals = () => Attached.Decals;
+        Treads = new TreadMarks(new TreadSettings(), data.ModelBones.Find) { Viewer = human };
+        Fx.TreadMarks = Treads.Snapshot;
         Attached.Viewer = human;
         // Bones and muzzles are those of the object's current model (the attached effects know which state every object shows).
         _fxView = new SimulationFxWorldView(world,
@@ -180,6 +182,9 @@ public abstract class LiveGame
 
     /// <summary>The continuous effects of the objects shown: model-state particle systems, the body's fire and smoke, bone effects, damage transitions, missile exhaust.</summary>
     public AttachedEffects Attached { get; }
+
+    /// <summary>The track marks of the vehicles (<c>W3DTerrainTracks</c>).</summary>
+    public TreadMarks Treads { get; }
     public TeamColors Colors { get; }
     public IFxWorldView FxView => _fxView;
 
@@ -208,6 +213,7 @@ public abstract class LiveGame
     {
         if (viewer == FogViewer) return;
         FogViewer = viewer;
+        Treads.Viewer = viewer;
         _projector = new FrameProjector(Data.Visuals, _projectorOptions with { Viewer = viewer }) { PhaseObserver = _phaseObserver };
         _projector.Advance(World);
         if (viewer is { } player) Fog.Update(World.Vision!, World.VisionSlotOf(player));
@@ -477,6 +483,7 @@ public abstract class LiveGame
         _fxView.Refresh();
         if (result.Events is not null) Attached.Observe(result.Events, World);
         Attached.Update(World, _projector.Projected, _fxView, World.Tick / World.Time.TicksPerOriginalFrame);
+        Treads.Update(World, _projector.Projected, _fxView);
         observer?.PhaseEnded(PresentationPhase.FxViewRefresh);
         observer?.PhaseStarted(PresentationPhase.FxExecuteEvents);
         if (result.Events is not null) Fx.ExecuteEvents(result.Events, _fxView);

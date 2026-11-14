@@ -118,6 +118,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         PrepareBatches(batches);
         CollectSmudges(frame.Particles.Particles);
         EmitDecals(frame.Decals, frustum, frame.Frame);
+        EmitTreadMarks(frame.TreadMarks);
         EmitLightPulses(frame.Lights, frustum);
         if (shadowDecals is not null) EmitShadowDecals(shadowDecals);
         if (snow is not null) EmitSnow(snow, seconds, frustum);
@@ -258,6 +259,40 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             EmitDraped(decal, color);
             EndItem(material, first, _view.Far, 0);
             _decals++;
+        }
+    }
+
+    /// <summary>
+    /// <c>TerrainTracksRenderObjClassSystem::flush</c>: every strip is a row of quads between its consecutive edges, alpha blended and laid on the ground, in the terrain's light
+    /// (the original takes the map's ambient plus half its diffuse; here a fixed grey).
+    /// </summary>
+    private void EmitTreadMarks(System.Collections.Immutable.ImmutableArray<TreadStrip> strips)
+    {
+        var light = new Vector3(0.75f);
+        foreach (var strip in strips)
+        {
+            var material = MaterialId(new FxMaterialKey(strip.Texture, FxBlend.Alpha, Ground: true));
+            var first = geometry.QuadCount;
+            for (var index = 1; index < strip.Edges.Length; index++)
+            {
+                var from = strip.Edges[index - 1];
+                var to = strip.Edges[index];
+                var quad = geometry.NextQuad();
+                if (quad.IsEmpty) break;
+                Set(ref quad[0], from.Left, from.LeftUv, from.Alpha);
+                Set(ref quad[1], from.Right, from.RightUv, from.Alpha);
+                Set(ref quad[2], to.Right, to.RightUv, to.Alpha);
+                Set(ref quad[3], to.Left, to.LeftUv, to.Alpha);
+            }
+
+            EndItem(material, first, _view.Far, 0);
+        }
+
+        void Set(ref FxVertex vertex, Vector3 position, Vector2 uv, float alpha)
+        {
+            vertex.Position = position;
+            vertex.Color = Pack(light, alpha);
+            vertex.Uv = uv;
         }
     }
 
