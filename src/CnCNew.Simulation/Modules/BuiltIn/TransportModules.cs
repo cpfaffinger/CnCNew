@@ -513,6 +513,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     private bool _selfSpinTowardsMax;
     private long _lastSelfSpinUpdate;
     private Fixed _bladeFlyOff;
+    /// <summary>The crash's own direction (+1 or -1) and turn-rate factor under <c>helicopter-crash-variance</c>; one and one otherwise, and then not part of the state.</summary>
+    private Fixed _direction = Fixed.One, _turnFactor = Fixed.One;
+    private bool _varied;
     private long _hitGroundTick;
     /// <summary>The base behaviour's midpoint and phases (F-37).</summary>
     private readonly SlowDeathClock _clock = new();
@@ -544,6 +547,19 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _bladeFlyOff = world.LogicRandom.Range(data.MinBladeFlyOffDelay, data.MaxBladeFlyOffDelay);
         _forwardAngle = Entity.Angle;
         _forwardSpeed = data.SpiralOrbitForwardSpeed;
+        _direction = _turnFactor = Fixed.One;
+        _varied = false;
+        if (world.Templates.Rules.Has(Rules.GameFix.HelicopterCrashVariance))
+        {
+            // After the original's own draws: the side, then three factors from 0.75 to 1.25 (turn rate, forward speed, blade delay).
+            _varied = true;
+            var lo = Fixed.FromDecimal(0.75m);
+            var hi = Fixed.FromDecimal(1.25m);
+            _direction = world.LogicRandom.Range(0, 1) == 0 ? Fixed.One : -Fixed.One;
+            _turnFactor = world.LogicRandom.Range(lo, hi);
+            _forwardSpeed *= world.LogicRandom.Range(lo, hi);
+            _bladeFlyOff *= world.LogicRandom.Range(lo, hi);
+        }
         // The wreck keeps the velocity its physics had; the port's locomotors do not move through the physics module, so that is the AI's speed along its heading.
         var flying = world.VelocityOf(Entity);
         _velX = flying.X;
@@ -617,7 +633,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         }
         _velX += _accelX;
         _velY += _accelY;
-        var spin = _selfSpin;
+        var spin = _selfSpin * _direction;
         Entity.Angle = FixedTrig.Normalize(Entity.Angle + spin);
         if (data.SelfSpinUpdateDelay > Fixed.Zero && Fixed.FromInt(world.Time.ToOriginalFrames(world.Tick - _lastSelfSpinUpdate)) > data.SelfSpinUpdateDelay)
         {
@@ -641,7 +657,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         // The motive force: the damped forward speed turned along the orbit, divided by the mass; it moves the wreck in the next frame's physics step.
         _accelX = FixedTrig.Cos(_forwardAngle) * _forwardSpeed / mass;
         _accelY = FixedTrig.Sin(_forwardAngle) * _forwardSpeed / mass;
-        _forwardAngle = FixedTrig.Normalize(_forwardAngle + data.SpiralOrbitTurnRate);
+        _forwardAngle = FixedTrig.Normalize(_forwardAngle + data.SpiralOrbitTurnRate * _direction * _turnFactor);
         _forwardSpeed *= data.SpiralOrbitForwardSpeedDamping;
         BladeCountdown(world);
         _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates) * data.FallHowFast;
@@ -700,6 +716,11 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         writer.Fixed("bladeFlyOff", _bladeFlyOff);
         writer.Int("hitGroundTick", _hitGroundTick);
         writer.Fixed("fallSpeed", _fallSpeed);
+        if (_activated && _varied)
+        {
+            writer.Fixed("direction", _direction);
+            writer.Fixed("turnFactor", _turnFactor);
+        }
         if (_activated)
         {
             writer.Fixed("velX", _velX);
@@ -724,6 +745,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _bladeFlyOff = reader.Fixed("bladeFlyOff");
         _hitGroundTick = reader.Int("hitGroundTick");
         _fallSpeed = reader.Fixed("fallSpeed");
+        _varied = _activated && reader.Has("direction");
+        _direction = _varied ? reader.Fixed("direction") : Fixed.One;
+        _turnFactor = _varied ? reader.Fixed("turnFactor") : Fixed.One;
         if (_activated)
         {
             _velX = reader.Fixed("velX");
