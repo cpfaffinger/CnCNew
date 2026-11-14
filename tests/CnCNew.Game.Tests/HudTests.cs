@@ -14,6 +14,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 using CnCNew.Ui.Settings;
+using CnCNew.Ui.Skins;
 
 namespace CnCNew.Game.Tests;
 
@@ -51,6 +52,7 @@ internal static class HudTests
         harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
         harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
         harness.Run("The money and the power window describe themselves; the power text carries production and consumption", () => MoneyAndPowerTooltips(data));
+        harness.Run("The bar's own controls describe themselves as the original's NonCommand buttons and the experience bar do, in both skins (#335)", () => BarControlTooltips(data));
         // The hash of baselines/hud-drawlist-1280x720.sha256 does not depend on the simulation rate (measured equal at 30, 60 and 120 Hz): the suite's data.
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
@@ -1798,6 +1800,42 @@ internal static class HudTests
         var power = Hover("ControlBar.wnd:PowerWindow");
         TestHarness.Assert(power.StartsWith("Power", StringComparison.Ordinal) && power.Contains($"Current Power: {controller.Hud.EnergyProduction}", StringComparison.Ordinal) && power.Contains($"Required Power: {controller.Hud.EnergyConsumption}", StringComparison.Ordinal),
             $"the power window names production {controller.Hud.EnergyProduction} and consumption {controller.Hud.EnergyConsumption}: {power}");
+    }
+
+    /// <summary>
+    /// #335: <c>ControlBar::init</c> gives the options, idle worker, beacon, general and size buttons the command button popup of their <c>NonCommand_*</c> buttons, and the
+    /// experience bar (<c>GeneralsExp</c>) its own two texts, next to the money, the power and the communicator. Every one answers its hover with its name and description, in both skins
+    /// (the modern bar hides the experience bar and the size button, which then have nothing to hover); the small and medium minimap buttons have none in the original.
+    /// </summary>
+    private static void BarControlTooltips(GameData data)
+    {
+        foreach (var skin in new[] { UiSkin.Original, UiSkin.Modern })
+            SkinPins.With(skin, () =>
+            {
+                var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+                Advance(match, controller, 1);
+                Refresh(controller);
+                var text = controller.Assets.Text;
+                var cases = new (string Window, string Name, string Description)[]
+                {
+                    ("ControlBar.wnd:ButtonOptions", "CONTROLBAR:Options", "CONTROLBAR:OptionsDescription"),
+                    ("ControlBar.wnd:ButtonIdleWorker", "CONTROLBAR:IdleWorker", "CONTROLBAR:IdleWorkerDescription"),
+                    ("ControlBar.wnd:ButtonPlaceBeacon", "CONTROLBAR:Beacon", "CONTROLBAR:BeaconDescription"),
+                    ("ControlBar.wnd:ButtonGeneral", "CONTROLBAR:GeneralsExperienceMenu", "CONTROLBAR:GeneralsExperienceMenuDescription"),
+                    ("ControlBar.wnd:ButtonLarge", "CONTROLBAR:UpDown", "CONTROLBAR:UpDownDescription"),
+                    ("ControlBar.wnd:GeneralsExp", "CONTROLBAR:GeneralsExp", "CONTROLBAR:GeneralsExpDescription"),
+                };
+                foreach (var (window, name, description) in cases)
+                {
+                    var found = controller.Tree.FindByName(window);
+                    TestHarness.Assert(found is not null, $"{skin.Name}: {window} exists");
+                    var tooltip = controller.Tree.TooltipOverride?.Invoke(found!);
+                    TestHarness.Assert(tooltip is not null && tooltip.Contains(text.Get(name).Replace("&", "", StringComparison.Ordinal), StringComparison.Ordinal) && tooltip.Contains(text.Get(description), StringComparison.Ordinal),
+                        $"{skin.Name}: {window} describes itself ({tooltip})");
+                }
+                foreach (var none in new[] { "ControlBar.wnd:ButtonSmall", "ControlBar.wnd:ButtonMedium" })
+                    TestHarness.Assert(controller.Tree.FindByName(none) is not { } minimap || controller.Tree.TooltipOverride?.Invoke(minimap) is null, $"{skin.Name}: {none} has no tooltip, as in the original");
+            });
     }
 
     private static void GoldenDrawListHash(GameData data)

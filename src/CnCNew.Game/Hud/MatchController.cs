@@ -1151,6 +1151,15 @@ public sealed partial class MatchController
     /// it requires (<see cref="CommandButtonDescription"/>); for the money and the power window their two texts. The original shows them in <c>ControlBarPopupDescription.wnd</c>, a
     /// popup with its own draw function above the control bar; here they are the lines of the pointer tooltip.
     /// </summary>
+    private static readonly Dictionary<string, string> NonCommandButtons = new(StringComparer.Ordinal)
+    {
+        ["ControlBar.wnd:ButtonOptions"] = "NonCommand_Options",
+        ["ControlBar.wnd:ButtonIdleWorker"] = "NonCommand_IdleWorker",
+        ["ControlBar.wnd:ButtonPlaceBeacon"] = "NonCommand_Beacon",
+        ["ControlBar.wnd:ButtonGeneral"] = "NonCommand_GeneralsExperience",
+        ["ControlBar.wnd:ButtonLarge"] = "NonCommand_UpDown",
+    };
+
     private string? CommandButtonTooltip(UiWindow window)
     {
         const string prefix = "ControlBar.wnd:ButtonCommand";
@@ -1159,6 +1168,10 @@ public sealed partial class MatchController
         if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
         if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
         if (window.Name == "ControlBar.wnd:PopupCommunicator") return CommunicatorTooltip();
+        if (window.Name == "ControlBar.wnd:GeneralsExp") return _descriptions.GeneralsExp().ToTooltip();
+        // ControlBar::init gives these buttons the same popup through their NonCommand_* command buttons (CommandButton.ini); ButtonSmall and ButtonMedium have none.
+        if (NonCommandButtons.TryGetValue(window.Name, out var nonCommand) && Input.CommandBar!.Catalog.TryGetButton(nonCommand, out var nonCommandInfo))
+            return _descriptions.Plain(nonCommandInfo).ToTooltip() is { Length: > 0 } plain ? plain : null;
         if (window.Name == CancelConstructionWindow) return CancelConstructionInfo is { } cancel ? _descriptions.Plain(cancel).ToTooltip() : null;
         if (GeneralsButton(window.Name) is { } science) return _descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null;
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;

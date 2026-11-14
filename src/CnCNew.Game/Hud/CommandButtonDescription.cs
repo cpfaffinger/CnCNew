@@ -146,6 +146,9 @@ public sealed class CommandButtonDescription
     /// <summary>The money window's popup (<c>CONTROLBAR:Money</c>, <c>CONTROLBAR:MoneyDescription</c>).</summary>
     public CommandButtonTexts Money() => new(_text.Get("CONTROLBAR:Money"), null, _text.Get("CONTROLBAR:MoneyDescription"));
 
+    /// <summary>The popup of the experience bar above the radar (<c>CONTROLBAR:GeneralsExp</c>, <c>CONTROLBAR:GeneralsExpDescription</c>).</summary>
+    public CommandButtonTexts GeneralsExp() => new(_text.Get("CONTROLBAR:GeneralsExp"), null, _text.Get("CONTROLBAR:GeneralsExpDescription"));
+
     /// <summary>The power window's popup: <c>CONTROLBAR:Power</c> and <c>CONTROLBAR:PowerDescription</c> with the player's production and consumption (<c>Energy::getProduction</c>, <c>getConsumption</c>).</summary>
     public CommandButtonTexts Power(int production, int consumption)
         => new(_text.Get("CONTROLBAR:Power"), null, _text.Format("CONTROLBAR:PowerDescription", production, consumption));
