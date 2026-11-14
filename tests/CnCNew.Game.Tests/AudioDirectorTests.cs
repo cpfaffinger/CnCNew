@@ -1077,14 +1077,18 @@ internal static class AudioDirectorTests
             var cannon = live.World.FindEntity(live.Tags["cannon"])!;
             TestHarness.Assert(cannon.Owner == live.Human == (owner == 1), $"setup: the cannon is player {owner}'s, the viewer is player {live.Human.Value}");
             var module = cannon.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ParticleUplinkCannonUpdate>().Single();
-            while (!live.IsOver && live.Clock.OriginalFrames < 150)
+            // The cannon of the scene turns ready and fires at once: the ready line (#324, priority 4) is said first, and the launch waits for the voice (priority 5, expires
+            // after 5 s) - the mixer is rendered so that the ready line ends (Eva::processPlayingMessages waits while m_evaSpeech plays).
+            var block = new float[44100 / CnCNew.Tests.TestTime.FramesPerSecond * 2];
+            while (!live.IsOver && live.Clock.OriginalFrames < 300 && director.Stats.StartedEvents.GetValueOrDefault(dialog) == 0)
             {
                 live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
                 director.Update(live, CnCNew.Tests.TestTime.FrameSeconds);
+                director.Mixer.Render(block);
             }
             TestHarness.Assert(module.InUse, "the cannon fired");
             var stats = director.Stats;
-            Console.WriteLine($"       owner {owner}: eva requested {stats.EvaRequested}, played {stats.EvaPlayed}, started {string.Join(",", stats.StartedEvents.Keys.Where(key => key.StartsWith("Eva", StringComparison.Ordinal)))}");
+            Console.WriteLine($"       owner {owner}: eva requested {stats.EvaRequested}, played {stats.EvaPlayed}, expired {stats.EvaExpired}, frame {live.Clock.OriginalFrames}, started {string.Join(",", stats.StartedEvents.Keys.Where(key => key.StartsWith("Eva", StringComparison.Ordinal)))}");
             TestHarness.Assert(stats.StartedEvents.GetValueOrDefault(dialog) == 1, $"the announcer says {dialog} once ({string.Join(",", stats.StartedEvents.Keys)})");
         }
     }
@@ -1104,7 +1108,7 @@ internal static class AudioDirectorTests
             live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
             live.Camera.CenterOn(new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(fountain.X), CnCNew.Presentation.FixedConvert.ToSingle(fountain.Y)));
             director.Update(live, CnCNew.Tests.TestTime.FrameSeconds);
-            if (live.Clock.OriginalFrames == 50) started.Add("ready:" + string.Join("+", director.Stats.StartedEvents.Keys));
+            if (live.Clock.OriginalFrames == 50) started.Add("ready:" + string.Join("+", director.Stats.StartedEvents.Keys.Where(key => !key.StartsWith("Eva", StringComparison.Ordinal))));
         }
         var stats = director.Stats;
         Console.WriteLine($"       {string.Join(" ", started)}; at the end {string.Join(",", stats.StartedEvents.Select(pair => $"{pair.Key}={pair.Value}"))}");
