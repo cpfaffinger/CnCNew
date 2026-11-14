@@ -528,7 +528,7 @@ static int AiMatch(string directory, string[] args)
                     var dy = (structure.Y - unit.Y).ToDecimal();
                     return (long)Math.Sqrt((double)(dx * dx + dy * dy));
                 });
-                Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} {group.Key} x{group.Count()}: moving {group.Count(unit => unit.HasMoveTarget)}, attack-move {group.Count(world.IsAttackMoving)}, fighting {group.Count(unit => world.AcquiredVictimOf(unit).IsValid)}, contained {group.Count(unit => unit.ContainedBy.IsValid)}, weapon range {(long)group.Max(unit => world.MaxWeaponRange(unit)).Floor()}, nearest enemy structure {group.Min(Nearest)}..{group.Max(Nearest)}");
+                Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} {group.Key} x{group.Count()}: moving {group.Count(unit => unit.HasMoveTarget)}, attack-move {group.Count(world.IsAttackMoving)}, fighting {group.Count(unit => world.AcquiredVictimOf(unit).IsValid)}, contained {group.Count(unit => unit.ContainedBy.IsValid)}, riders aboard {group.Sum(unit => unit.Container?.ContainCount ?? 0)}, weapon range {(long)group.Max(unit => world.MaxWeaponRange(unit)).Floor()}, nearest enemy structure {group.Min(Nearest)}..{group.Max(Nearest)}");
             }
             if (session.Ais[index] is { } ai) Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} AI: {ai.DescribeState()}");
         }
