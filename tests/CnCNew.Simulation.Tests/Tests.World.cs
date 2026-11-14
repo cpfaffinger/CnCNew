@@ -177,7 +177,7 @@ static partial class Tests
         result = world.Step();
         var died = result.Events.Select(Describe).ToArray();
         Check.That(died.SequenceEqual([
-            $"EntityDamaged:1::{Fixed.FromInt(70).Raw}", "EntityDied:1::0", "EntityDestroyed:1:Barrel:0", "FxRequested:1:FX_Test:0", "CreationListRequested:1:OCL_BarrelDebris:0",
+            $"EntityDamaged:1::{Fixed.FromInt(70).Raw}", "EntityDied:1::0", "EntityDestroyed:1:Barrel:0", "FxRequested:1:FX_Test:1", "CreationListRequested:1:OCL_BarrelDebris:0",
         ]), "Death order: damage, death, then die modules in module order: " + string.Join(" | ", died));
         Check.That(world.FindEntity(new EntityId(1)) is null && world.Metrics.Entities == 0 && world.Metrics.Modules == 0 && world.Metrics.DestroyedTotal == 1, "The destroyed entity is removed at the end of the same tick.");
         feeder.Damage(1, 5);

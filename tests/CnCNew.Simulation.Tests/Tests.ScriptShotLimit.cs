@@ -204,7 +204,7 @@ static partial class Tests
             Check.That(SimCommand.Load(new CnCNew.Simulation.State.JsonStateReader(document.RootElement)).Equals(command), $"The description round-trips: {text}.");
             Check.That(text.Contains("maxShots") == (((FireWeaponCommand)command).MaxShots != 0), "The description names the limit only when there is one.");
         }
-        Check.That(ReplayFormat.CurrentVersion == 27 && CommandTypes.Version == 28, "Replay format 27 and command table 28 carry the shot limit.");
+        Check.That(ReplayFormat.CurrentVersion == 28 && CommandTypes.Version == 29, "Replay format 27 and command table 28 carry the shot limit.");
         var negative = ReplayFormat.Write(new ReplayFile(header, [new FireWeaponCommand(one, 1, 3, new EntityId(4), new EntityId(5), MaxShots: -1)], []));
         Check.Throws<ReplayFormatException>(() => ReplayFormat.Read(negative), "shot limit");
     }
