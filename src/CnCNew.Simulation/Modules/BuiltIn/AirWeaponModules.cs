@@ -497,7 +497,7 @@ public sealed record NeutronMissileData(Fixed DistanceBeforeTurning, Fixed MaxTu
 /// <c>ForwardDamping</c> of the velocity; for <c>SpecialSpeedTime</c> after the launch the height follows <c>SpecialSpeedHeight · (SpecialAccelFactor · t)² / SpecialAccelFactor</c> over the
 /// start height instead (<c>t</c> the elapsed share). An armed missile that reaches the ground dies (<c>detonate</c> → <c>kill</c>, so the die modules — <c>HeightDieUpdate</c>,
 /// <c>NeutronMissileSlowDeathBehavior</c> — run). The turn is computed without arc functions: the heading rotates toward the goal in the plane of both vectors by the turn limit
-/// (or snaps when the angle is smaller). Not modeled: the jitter of the model, the exhaust particle system, the delivery decal, collisions with objects.
+/// (or snaps when the angle is smaller). Not modeled: the jitter of the model, collisions with objects; the exhaust particle system and the delivery decal are the presentation's (<c>AttachedEffects</c>).
 /// <para>
 /// The flight runs on the frame grid of the original, on the missile's own phase (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): <c>RelativeSpeed</c> and <c>ForwardDamping</c> are a thrust
 /// and a damping share per logic frame, applied together in one step, so the velocity is a velocity per frame and changes once per frame exactly as at 30 Hz — as do the turn (the
@@ -533,6 +533,12 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
     /// <summary>The elevation of the missile's nose, radians above the horizon.</summary>
     public Fixed FlightPitch => FixedTrig.Atan2(_direction.Z, Fixed.Sqrt(_direction.X * _direction.X + _direction.Y * _direction.Y));
     public bool IsArmed => _armed;
+
+    /// <summary>Where the missile is fired at (its delivery decal stands there); valid once it is fired (<see cref="IsFired"/>).</summary>
+    public Point3 Target => _target;
+
+    /// <summary>Whether the missile was fired (<c>projectileFireAtObjectOrPosition</c>) and has not detonated.</summary>
+    public bool IsFired => _state is MissileState.Launch or MissileState.Attack;
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 

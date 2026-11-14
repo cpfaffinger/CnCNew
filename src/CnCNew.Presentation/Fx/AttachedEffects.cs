@@ -125,6 +125,9 @@ public sealed class AttachedEffectCatalog
     /// <summary><c>AttackAreaDecal</c> and <c>TargetingReticleDecal</c> of a <c>SpectreGunshipUpdate</c>, by the object's template.</summary>
     public ImmutableDictionary<string, GunshipDecalSpec> GunshipDecals { get; private init; } = ImmutableDictionary<string, GunshipDecalSpec>.Empty;
 
+    /// <summary><c>DeliveryDecal</c> and <c>DeliveryDecalRadius</c> of a <c>NeutronMissileUpdate</c>, by the object's template: the circle at the target while the missile flies.</summary>
+    public ImmutableDictionary<string, (RadiusDecalSpec Decal, float Radius)> MissileDecals { get; private init; } = ImmutableDictionary<string, (RadiusDecalSpec Decal, float Radius)>.Empty;
+
     /// <summary>The keys of the <c>ParticleUplinkCannonUpdate</c> that draw the cannon (the lasers and flares of <c>setClientStatus</c>), by the object's template.</summary>
     public ImmutableDictionary<string, UplinkSpec> Uplinks { get; private init; } = ImmutableDictionary<string, UplinkSpec>.Empty;
 
@@ -148,6 +151,7 @@ public sealed class AttachedEffectCatalog
         var abilities = new List<(string Owner, string Object, string Bone)>();
         var strafes = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         var gunshipDecals = ImmutableDictionary.CreateBuilder<string, GunshipDecalSpec>(StringComparer.OrdinalIgnoreCase);
+        var missileDecals = ImmutableDictionary.CreateBuilder<string, (RadiusDecalSpec Decal, float Radius)>(StringComparer.OrdinalIgnoreCase);
         var uplinks = ImmutableDictionary.CreateBuilder<string, UplinkSpec>(StringComparer.OrdinalIgnoreCase);
         var rules = new BodyParticleRule[BodyKeys.Length];
         for (var index = 0; index < rules.Length; index++) rules[index] = new BodyParticleRule(string.Empty, string.Empty, 0);
@@ -186,6 +190,10 @@ public sealed class AttachedEffectCatalog
                                 [Key("LaserBaseLightFlareParticleSystemName"), Key("LaserBaseMediumFlareParticleSystemName"), Key("LaserBaseIntenseFlareParticleSystemName")],
                                 [string.Empty, Key("ConnectorMediumFlare"), Key("ConnectorIntenseFlare")]) { ScorchMarkScalar = Amount("ScorchMarkScalar"), BeamLaunchFx = Key("BeamLaunchFX") };
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && Named(Key("GattlingStrafeFXParticleSystem")) is { } strafe) strafes[obj.OriginalName] = strafe;
+                        if (module.Name.Equals("NeutronMissileUpdate", StringComparison.Ordinal) && !module.Sections.IsDefaultOrEmpty
+                            && module.Sections.LastOrDefault(section => section.Declaration.Split([' ', '	'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Equals("DeliveryDecal", StringComparison.OrdinalIgnoreCase) == true) is { } delivery
+                            && RadiusDecalSpec.Parse(delivery) is { } deliveryDecal && Amount("DeliveryDecalRadius") > 0f)
+                            missileDecals[obj.OriginalName] = (deliveryDecal, Amount("DeliveryDecalRadius"));
                         if (module.Name.Equals("SpectreGunshipUpdate", StringComparison.Ordinal) && !module.Sections.IsDefaultOrEmpty)
                         {
                             RadiusDecalSpec? Decal(string name) => module.Sections.LastOrDefault(section => section.Declaration.Split([' ', '	'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Equals(name, StringComparison.OrdinalIgnoreCase) == true) is { } found ? RadiusDecalSpec.Parse(found) : null;
@@ -246,7 +254,7 @@ public sealed class AttachedEffectCatalog
         var owners = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (owner, made, bone) in abilities)
             if (lasers.ContainsKey(made)) owners[owner] = bone;
-        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), GunshipDecals = gunshipDecals.ToImmutable(), Uplinks = uplinks.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
+        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserFrames = laserLives.Where(pair => lasers.ContainsKey(pair.Key)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase), WeaponLasers = weaponLasers.ToImmutable(), LaserOwners = owners.ToImmutable(), StrafeSystems = strafes.ToImmutable(), GunshipDecals = gunshipDecals.ToImmutable(), MissileDecals = missileDecals.ToImmutable(), Uplinks = uplinks.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
     }
 
     private static string? Named(string token) => token.Length == 0 || token.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : token;
@@ -770,7 +778,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     /// </summary>
     private void UpdateGunshipDecals(SimulationWorld world, long originalFrame)
     {
-        if (catalog.GunshipDecals.IsEmpty) { _decalFrame = []; return; }
+        if (catalog.GunshipDecals.IsEmpty && catalog.MissileDecals.IsEmpty) { _decalFrame = []; return; }
         var decals = ImmutableArray.CreateBuilder<DecalInstance>();
         void Add(RadiusDecalSpec? spec, CnCNew.Simulation.Modules.BuiltIn.Point3 at, Simulation.Numerics.Fixed radius)
         {
@@ -781,6 +789,11 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         }
         foreach (var item in _ordered)
         {
+            // NeutronMissileUpdate::projectileFireAtObjectOrPosition makes the delivery decal at the target; update throbs it, detonate and onDie clear it.
+            if (catalog.MissileDecals.TryGetValue(item.Visual.TemplateName, out var delivery) && world.FindEntity(item.Entity) is { EffectivelyDead: false } missile
+                && (!delivery.Decal.OnlyVisibleToOwningPlayer || Viewer == missile.Owner)
+                && missile.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.NeutronMissileUpdate>().FirstOrDefault() is { IsFired: true } flight)
+                Add(delivery.Decal, flight.Target, Simulation.Numerics.Fixed.FromDecimal((decimal)delivery.Radius));
             if (!catalog.GunshipDecals.TryGetValue(item.Visual.TemplateName, out var spec) || world.FindEntity(item.Entity) is not { } entity || entity.EffectivelyDead) continue;
             foreach (var module in entity.Modules)
             {

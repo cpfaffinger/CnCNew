@@ -36,6 +36,8 @@ internal static class AttachedEffectsTests
         harness.Run("A building set on fire by the flame burns: the body's aflame category and the fire one size up", () => BurningBuilding(data));
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
         harness.Run("An effect projectile with Model = NULL draws no model", () => NullModel(data));
+        harness.Run("The nuclear missile is drawn nose first with its exhaust and the delivery decal, falls in sight, and its blast makes every system of FX_Nuke", () => NuclearMissile(data));
+        harness.Run("A particle of the nuclear fallout grows, glows and fades as RadiationFieldLarge's keys say", () => FalloutParticle(data));
         harness.Run("A moving truck raises dust, a standing one none", () => TreadDebris(data));
         harness.Run("The Spectre's gattling strafes the ground with smoke while the gunship is seen", () => SpectreStrafe(data));
         harness.Run("A muzzle on a turret turns with the turret", () => TurretMuzzle(data));
@@ -381,6 +383,104 @@ internal static class AttachedEffectsTests
             Console.WriteLine($"       frame {at}: {string.Join("; ", bySystem)}");
         }
         TestHarness.Assert(scene.Attached.Stats.BoneFxSystems > 0 && scene.Attached.Stats.BodySystems + scene.Attached.Stats.TransitionSystems > 0, "the scene shows the flame and what burns");
+    }
+
+    /// <summary>
+    /// The owner (14 November 2026) saw no missile come down and the explosion start at once. <c>NeutronMissileUpdate</c> flies the missile from the silo 300 up, over to 500
+    /// above the target and straight down onto it; <c>doAttack</c> builds its matrix from its heading (nose up as it climbs, nose down as it falls), <c>doLaunch</c> attaches the
+    /// weapon's <c>ProjectileExhaust</c> (<c>NeutronMissileExhaust</c> with its lens flare), and <c>projectileFireAtObjectOrPosition</c> puts the delivery decal at the target for
+    /// the owner. <c>HeightDieUpdate</c> kills it 100 above the ground, and its slow death plays <c>FX_Nuke</c> and makes the radiation field.
+    /// </summary>
+    private static void NuclearMissile(GameData data)
+    {
+        var scenario = new DemoScenario("attached-nuke", "attached-nuke", "attached-nuke", 240,
+            [new ScenarioUnit("silo", "ChinaNuclearMissileLauncher", 1, -300f, 0f), new ScenarioUnit("power", "ChinaPowerPlant", 1, -300f, -200f),
+             new ScenarioUnit("power2", "ChinaPowerPlant", 1, -300f, 200f), new ScenarioUnit("target", "AmericaBarracks", 2, 300f, 0f)],
+            [new ScenarioOrder(30, "silo", ScenarioOrderKind.UsePower, X: 300f, Y: 0f, Template: "SuperweaponNeutronMissile")], 0f, 0f)
+        { HumanFaction = "FactionChina", OpponentFaction = "FactionAmerica", PowersReady = true };
+        var scene = LiveScenario.Create(data, scenario, Viewport);
+        var target = new Vector2(scene.Anchor.X + 300f, scene.Anchor.Y);
+        var silo = scene.Tags["silo"];
+        long frame = -1, launched = -1, highest = -1, died = -1, climbingNoseUp = 0, fallingNoseDown = 0, decalFrames = 0, decalAfterDeath = 0;
+        var top = float.MinValue;
+        var exhaust = false;
+        var systems = new SortedSet<string>(StringComparer.Ordinal);
+        while (!scene.IsOver)
+        {
+            scene.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+            var now = scene.World.Tick / scene.World.Time.TicksPerOriginalFrame;
+            if (now == frame) continue;
+            frame = now;
+            // The silo's SpecialPowerCreate starts the power's clock when the silo is complete, after the staging made it ready: ready it again before the order.
+            if (frame == 5 && scene.World.FindEntity(silo) is { } launcher)
+                foreach (var module in launcher.Modules)
+                    if (module is ISpecialPowerModule power) power.SetReadyFrame(scene.World.Tick);
+            foreach (var name in scene.Fx.Particles.RunningTemplates) systems.Add(name);
+            var missile = scene.World.Entities.FirstOrDefault(entity => entity.Template.Name == "NeutronMissile");
+            if (missile is null) continue;
+            if (launched < 0) launched = frame;
+            if (missile.EffectivelyDead)
+            {
+                if (died < 0) died = frame;
+                decalAfterDeath += scene.Attached.Decals.Length;
+                continue;
+            }
+            exhaust |= scene.Fx.Particles.RunningTemplates.Contains("NeutronMissileExhaust");
+            if (scene.Attached.Decals.Any(decal => Vector2.Distance(new Vector2(decal.Position.X, decal.Position.Y), target) < 1f && Math.Abs(decal.Radius - 210f) < 0.5f)) decalFrames++;
+            var z = CnCNew.Presentation.FixedConvert.ToSingle(missile.Z);
+            if (z > top) { top = z; highest = frame; }
+            var drawn = scene.ObjectFrame.Drawables.FirstOrDefault(drawable => drawable.Entity == missile.Id);
+            if (drawn?.PrimaryModel is null) continue;
+            var overTarget = Vector2.Distance(new Vector2(drawn.Position.X, drawn.Position.Y), target) < 5f;
+            if (!overTarget && frame - launched < 50 && drawn.Chassis.Pitch < -1.5f) climbingNoseUp++;
+            if (overTarget && drawn.Chassis.Pitch > 1.5f) fallingNoseDown++;
+        }
+        Console.WriteLine($"       nuke: launched {launched}, highest {top:0} at {highest}, died {died}; climbing nose up {climbingNoseUp}, falling nose down {fallingNoseDown} frames; decal {decalFrames} frames; systems {string.Join(", ", systems)}");
+        TestHarness.Assert(launched > 0 && died > highest && top > 450f, $"the missile was fired, climbed above its target and came down ({launched}, {top:0}, {highest}, {died})");
+        TestHarness.Assert(climbingNoseUp >= 20, $"it climbs from the silo nose up ({climbingNoseUp} frames)");
+        TestHarness.Assert(fallingNoseDown >= 30, $"it is drawn nose down over its target for more than a second before it detonates ({fallingNoseDown} frames)");
+        TestHarness.Assert(exhaust, "it carries its weapon's exhaust (NeutronMissileExhaust) while it flies");
+        TestHarness.Assert(decalFrames >= died - launched - 2 && decalAfterDeath == 0, $"its owner sees the delivery decal at the target while it flies, and not after ({decalFrames} of {died - launched}, {decalAfterDeath})");
+        var nuke = data.Fx.FindFxList("FX_Nuke");
+        TestHarness.Assert(nuke is not null, "FX_Nuke exists");
+        var expected = nuke!.Nuggets.OfType<ParticleSystemFxNugget>().Select(nugget => nugget.Name).Concat(["NeutronMissileExhaust", "NeutronMissleLenzflare", "RadiationFieldLarge"]);
+        foreach (var name in expected) TestHarness.Assert(systems.Contains(name), $"the system {name} was made");
+    }
+
+    /// <summary>
+    /// <c>Particle::update</c> on the fallout's puddles (<c>RadiationFieldLarge</c>, the radiation field's weapon effect): ground-aligned, additive, each living 90 frames - from black
+    /// to orange at frame 50 and back to black at 90 while it grows by <c>SizeRate</c>, damped by <c>SizeRateDamping</c> every frame, and drifts up 0.01 a frame; one to three new
+    /// ones every ten frames at random places of the circle. The field seethes by these puddles appearing, swelling and fading one over the other.
+    /// </summary>
+    private static void FalloutParticle(GameData data)
+    {
+        var template = data.Fx.FindParticleSystem("RadiationFieldLarge");
+        TestHarness.Assert(template is { IsGroundAligned: true, Shader: ParticleShader.Additive }, "the field's puddles lie on the ground and add their light");
+        var world = new ParticleWorld(new ParticleBudget(), new FxRandom(349), data.Fx.FindParticleSystem);
+        world.Spawn(template!, new ParticleSpawn(new Vector3(100f, 100f, 10f)));
+        var trace = new List<ParticleInstance>();
+        var places = new HashSet<(int, int)>();
+        uint? followed = null;
+        var gone = false;
+        for (var step = 0; step < 120; step++)
+        {
+            world.Step();
+            var particles = world.Capture().Particles;
+            foreach (var particle in particles) places.Add(((int)particle.Position.X, (int)particle.Position.Y));
+            followed ??= particles.IsDefaultOrEmpty ? null : particles[0].Personality;
+            if (gone || followed is not { } id) continue;
+            var found = particles.Where(particle => particle.Personality == id).ToArray();
+            if (found.Length == 0) gone = true;
+            else trace.Add(found[0]);
+        }
+        TestHarness.Assert(trace.Count is >= 88 and <= 90, $"a puddle lives its 90 frames ({trace.Count})");
+        TestHarness.Assert(trace.Zip(trace.Skip(1)).All(pair => pair.Second.Size > pair.First.Size) && trace[30].Size > 70f && trace[^1].Size < 131f,
+            $"it swells all its life, fast at first (30 -> {trace[30].Size:0} after a second -> {trace[^1].Size:0})");
+        var brightest = trace.Select((particle, index) => (Index: index, Sum: particle.Color.X + particle.Color.Y + particle.Color.Z)).MaxBy(entry => entry.Sum);
+        TestHarness.Assert(trace[0].Color.X < 0.1f && brightest.Index is >= 40 and <= 60 && trace[brightest.Index].Color.X > 0.75f && trace[^1].Color.X < trace[brightest.Index].Color.X / 2f,
+            $"it glows up from black to orange at frame {brightest.Index} and fades again (red {trace[0].Color.X:0.00} -> {trace[brightest.Index].Color.X:0.00} -> {trace[^1].Color.X:0.00})");
+        TestHarness.Assert(trace[^1].Position.Z - trace[0].Position.Z is > 0.5f and < 1.2f, $"it drifts up 0.01 a frame ({trace[^1].Position.Z - trace[0].Position.Z:0.00})");
+        TestHarness.Assert(places.Count >= 9, $"for the system's 90 frames new puddles keep appearing at other places ({places.Count})");
     }
 
     private static void NullModel(GameData data)
