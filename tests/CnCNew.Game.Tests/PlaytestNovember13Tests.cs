@@ -39,7 +39,7 @@ internal static class PlaytestNovember13Tests
         harness.Run("W with nothing selected takes the aircraft on the screen and nothing else, as the original's SELECT_ALL_AIRCRAFT; Q takes every unit but the dozer (issue 313)", () => SelectAllKeys(data));
         harness.Run("A Fire Base shows the soldiers inside on its four places with their cameos and lets one out by a click (issue 317)", () => FireBaseRiders(data));
         harness.Run("The portable structures of the Avenger, the Overlord and the Helix are drawn on their hosts' bones, the soldier in an Overlord's bunker is not (issue 322)", () => PortableStructuresDrawn(data));
-        harness.Run("The healing icon over a repaired building is the wrench at half its frame grown with the screen, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
+        harness.Run("The healing icon over a repaired building is the wrench at its frame size at every resolution, the cross over a soldier likewise (issue 309)", () => HealIconSize(data));
         harness.Run("A tank leaves track marks of its draw module's texture while it drives, as wide as the distance of its tread bones, and none while it stands (issue 323)", () => TreadMarksOfATank(data));
         return harness.Failures;
     }
@@ -83,7 +83,7 @@ internal static class PlaytestNovember13Tests
         foreach (var (width, height) in new[] { (800, 600), (1280, 720), (1920, 1080) })
         {
             var scenario = new DemoScenario("heal-icon-size", "heal-icon-size", "heal-icon-size", 3000,
-                [new ScenarioUnit("center", "AmericaCommandCenter", 1, 0, 0, 0f), new ScenarioUnit("ranger", "AmericaInfantryRanger", 1, 120, 60, 0f)], [], 40f, 0f, CameraHeight: 330f)
+                [new ScenarioUnit("center", "AmericaCommandCenter", 1, 0, 0, 0f), new ScenarioUnit("ranger", "AmericaInfantryRanger", 1, 120, 60, 0f), new ScenarioUnit("dozer", "AmericaVehicleDozer", 1, -120, 60, 0f)], [], 40f, 0f, CameraHeight: 330f)
             {
                 HumanFaction = "FactionAmerica",
                 OpponentFaction = "FactionChina",
@@ -99,23 +99,26 @@ internal static class PlaytestNovember13Tests
                 }
             }
             Frames(4 * CnCNew.Tests.TestTime.FramesPerSecond); // Drawable::drawHealing ignores the first three seconds of a game
-            var (center, ranger) = (live.Tags["center"], live.Tags["ranger"]);
+            var (center, ranger, dozer) = (live.Tags["center"], live.Tags["ranger"], live.Tags["dozer"]);
             ulong sequence = 900_000;
             void Hit(EntityId target, int amount, int type)
                 => live.World.Submit(new DamageCommand(PlayerId.System, ++sequence, live.World.Tick, target, Fixed.FromInt(amount), type, 0));
             Hit(center, 800, CnCNew.Simulation.World.DamageTypes.Unresistable);
             Hit(ranger, 60, CnCNew.Simulation.World.DamageTypes.Unresistable);
+            Hit(dozer, 100, CnCNew.Simulation.World.DamageTypes.Unresistable);
             Frames(3);
             Hit(center, 100, CnCNew.Simulation.World.DamageTypes.Healing);
             Hit(ranger, 10, CnCNew.Simulation.World.DamageTypes.Healing);
+            Hit(dozer, 10, CnCNew.Simulation.World.DamageTypes.Healing);
             Frames(3);
-            var scale = Math.Min(width / 800f, height / 600f);
             var images = controller.BuildDrawList(width, height).Commands.OfType<UiImageDraw>().ToArray();
             var wrench = images.FirstOrDefault(image => image.Image.StartsWith("SCPWrench", StringComparison.Ordinal));
             var cross = images.FirstOrDefault(image => image.Image.StartsWith("SCPCross", StringComparison.Ordinal));
-            TestHarness.Assert(wrench is not null && wrench.Destination.Width == (int)(28 * scale) && wrench.Destination.Height == (int)(28 * scale),
-                $"{width}x{height}: the wrench over the building is half its frame, 28 pixels of an 800 x 600 screen ({wrench?.Destination})");
-            TestHarness.Assert(cross is not null && cross.Destination.Width == (int)(32 * scale), $"{width}x{height}: the cross over the soldier is 32 pixels of an 800 x 600 screen ({cross?.Destination})");
+            TestHarness.Assert(wrench is not null && wrench.Destination.Width == 56 && wrench.Destination.Height == 56,
+                $"{width}x{height}: the wrench over the building is its frame's 56 pixels at every resolution ({wrench?.Destination})");
+            TestHarness.Assert(images.Count(image => image.Image.StartsWith("SCPWrench", StringComparison.Ordinal)) == 2 && images.Count(image => image.Image.StartsWith("SCPCross", StringComparison.Ordinal)) == 1,
+                $"{width}x{height}: the dozer, a vehicle, wears the wrench, only the soldier the cross");
+            TestHarness.Assert(cross is not null && cross.Destination.Width == 32, $"{width}x{height}: the cross over the soldier is its frame's 32 pixels at every resolution ({cross?.Destination})");
         }
     }
 
