@@ -732,3 +732,7 @@ slaves of a captured spawner (`SlavedUpdate`) - because the simulation reports t
 ## The owner's playtest of 13 November 2026 (#306, #309)
 
 **The rally line (#306):** a selected own producer with a rally point shows the line `W3DWaypointBuffer::drawWaypoints` draws: from its door to the natural rally point, round one or two corners of the building when the point lies behind it, with a node marker at each bend, to the rally point (`RallyLine`); not while the player is in waypoint mode. The original's exception for the listening outpost is not ported. **The healing icon (#309):** the wrench over a repaired building and the cross over a healed unit are drawn at their frame's own size (the wrench 56 px, the cross 32 px on an 800 x 600 screen), scaled by `UiScaler.UniformScale`; the port drew 22 to 40 px.
+
+## The idle worker button on real data (#296)
+
+`IdleWorkerTests` checks on real data that a GLA worker on a supply run and one at a construction are never idle while a standing one is, and that the button is enabled exactly while somebody is idle (the rule of `22edac2c`); the owner's case was not reproduced, and the button shows no count, as the original's.

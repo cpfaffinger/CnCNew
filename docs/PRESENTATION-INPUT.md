@@ -642,3 +642,7 @@ Orders are distributed in the game layer and reach the simulation as the existin
 ## 5c. Phase 65: the gunship, the dozer's buttons
 
 `SelectionModel.SelectNewGunships` selects the Spectre gunship a power makes for the local player (`SpectreGunshipDeploymentUpdate`'s `selectObject`); with it selected the pointer over the map, over objects too, is the override pointer and a click steers it (the right button in the alternate scheme). The construction buttons of a dozer grey only while it has a building in hand (`isTaskPending(DOZER_TASK_BUILD)`, `ButtonReason.BuilderBusy`); a repair is dropped by a new order. A hotkey the user rebound keeps its transition and moves its begin/end partner with it.
+
+## A FIRE_WEAPON button at an object (#302)
+
+A player's `FIRE_WEAPON` button aimed at an object is `MSG_DO_WEAPON_AT_OBJECT` (`Object::doCommandButtonAtObject`): the standing order sends one `FireWeaponCommand` with the button's weapon slot, locked for the attack, and its `MaxShotsToFire` (`NO_MAX_SHOTS_LIMIT` without the key), and the attack then fires its own shots until the limit or the victim is gone (`SimulationWorld.IsLimitedAttackRunning`). Before, the button was the ordinary attack with the best weapon, so the Jarmen Kell's vehicle snipe never fired at a tank. Open: a victim that leaves the range during such an attack is not chased again, and `MaxShotsToFire` of a button is still read as text in the command catalogue.

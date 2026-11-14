@@ -191,3 +191,7 @@ Not verified: the look of the effects at 60 Hz (no human has seen it).
 - `W3DParticleSys.cpp`: handing the streak points to `LineRenderer`, `RGBAArray[0] = 0`.
 - `ParticleSys.cpp` (`Particle::update`, `ParticleSystemTemplate`): additive systems skip the
   alpha keyframe progress; particle size is the full edge length, not the radius.
+
+## Track marks (#323)
+
+The FX layer draws the tread marks of `FxFrame.TreadMarks` as alpha-blended ground quads (`FxBuilder.EmitTreadMarks`); `docs/PRESENTATION-OBJECTS.md` "Track marks".
