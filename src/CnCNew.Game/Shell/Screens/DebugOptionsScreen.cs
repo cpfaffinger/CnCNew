@@ -25,7 +25,7 @@ public sealed class DebugOptionsScreen : ShellScreen
     /// <summary>The rows in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
     public static readonly ImmutableArray<(string Row, string Label)> Rows =
     [
-        ("QuickBuild", "Quick build"), ("QuickBuildFor", "Quick build for"), ("GeneralPoints", "General points at start"),
+        ("QuickBuild", "Quick build"), ("QuickBuildFor", "Quick build for"), ("GeneralPoints", "General points at start"), ("MoneyButtons", "Money buttons"),
     ];
 
     /// <summary>Off, or everything built takes half, a quarter or a tenth of its time (<see cref="MatchDebugOptions.BuildTimePercent"/>).</summary>
@@ -37,6 +37,9 @@ public sealed class DebugOptionsScreen : ShellScreen
 
     /// <summary>Who the quick build is for: a second box rather than more levels, so that every level can be had for both (<see cref="MatchDebugOptions.QuickBuildHumansOnly"/>).</summary>
     public static readonly ImmutableArray<string> QuickBuildForChoices = ["Everybody", "Human players only"];
+
+    /// <summary>Off, or two buttons in the in-game menu that give 10,000 credits to the player who presses them or to every player (<see cref="MatchDebugOptions.MoneyButtons"/>, #336).</summary>
+    public static readonly ImmutableArray<string> MoneyButtonChoices = ["Off", "On: give 10,000 from the in-game menu"];
 
     /// <summary>
     /// The experience (skill points) every player starts with, which gives its general the rank those points reach (<c>Player::addSkillPoints</c>); 0 is the normal start at rank 1. The
@@ -63,13 +66,14 @@ public sealed class DebugOptionsScreen : ShellScreen
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("QuickBuild", QuickBuildChoices.Select(choice => choice.Text));
         Fill("QuickBuildFor", QuickBuildForChoices);
+        Fill("MoneyButtons", MoneyButtonChoices);
         Fill("GeneralPoints", GeneralPointChoices.Select((points, index) => index == 0 ? "0 (normal start)" : $"{points.ToString(System.Globalization.CultureInfo.InvariantCulture)} (rank {index + 1})"));
         if (readOnly) W("ButtonAccept").SetHidden(true);
         Refresh();
     }
 
     /// <summary>Whether a debug option is on: the advanced option of the returning neutral buildings (<see cref="AdvancedOptionsScreen.IsOn"/>) is not one.</summary>
-    public static bool IsOn(MatchDebugOptions options) => options.BuildTimePercent != MatchDebugOptions.NormalBuildTime || options.StartingGeneralPoints > 0;
+    public static bool IsOn(MatchDebugOptions options) => options.BuildTimePercent != MatchDebugOptions.NormalBuildTime || options.StartingGeneralPoints > 0 || options.MoneyButtons;
 
     /// <summary>The caption of the button: it says when something is on (short, because the button stands beside two others in a smaller type).</summary>
     public static string ButtonText(MatchDebugOptions options) => IsOn(options) ? "Debug (on)" : "Debug";
@@ -87,6 +91,7 @@ public sealed class DebugOptionsScreen : ShellScreen
         W("ComboQuickBuild").SetComboSelection(NearestLevel(_working.BuildTimePercent));
         W("ComboQuickBuildFor").SetComboSelection(_working.QuickBuildHumansOnly ? 1 : 0);
         W("ComboQuickBuildFor").SetEnabled(!_readOnly && _working.BuildTimePercent != MatchDebugOptions.NormalBuildTime);
+        W("ComboMoneyButtons").SetComboSelection(_working.MoneyButtons ? 1 : 0);
         W("ComboGeneralPoints").SetComboSelection(NearestPoints(_working.StartingGeneralPoints));
     }
 
@@ -138,6 +143,7 @@ public sealed class DebugOptionsScreen : ShellScreen
         }
         else if (source == Name("ComboQuickBuildFor") && index < QuickBuildForChoices.Length && _working.BuildTimePercent != MatchDebugOptions.NormalBuildTime)
             _working = _working with { QuickBuildHumansOnly = index == 1 };
+        else if (source == Name("ComboMoneyButtons") && index < MoneyButtonChoices.Length) _working = _working with { MoneyButtons = index == 1 };
         else if (source == Name("ComboGeneralPoints") && index < GeneralPointChoices.Length) _working = _working with { StartingGeneralPoints = GeneralPointChoices[index] };
         else return;
         Refresh();

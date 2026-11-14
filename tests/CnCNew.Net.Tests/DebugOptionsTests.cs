@@ -6,12 +6,12 @@ static partial class NetTests
 {
     public static void RoomCarriesTheDebugOptions()
     {
-        var debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 120, 5, PlaceBuildingsInFog: true, QuickBuildHumansOnly: true);
+        var debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 120, 5, PlaceBuildingsInFog: true, QuickBuildHumansOnly: true, MoneyButtons: true);
         var settings = TwoSeats() with { Debug = debug };
 
         // ---- The wire: the options survive the bytes, are part of what the room's settings are compared by, and an out-of-range value is refused as a malformed message.
         var bytes = MessageCodec.Encode(new RoomConfigMessage(settings));
-        Check.That(MessageCodec.TryDecode(bytes, out var decoded, out var error) && decoded is RoomConfigMessage { Settings.Debug: { BuildTimePercent: 10, NeutralRespawnSeconds: 120, StartingGeneralPoints: 5, PlaceBuildingsInFog: true, QuickBuildHumansOnly: true } }, $"the options survive the wire ({error})");
+        Check.That(MessageCodec.TryDecode(bytes, out var decoded, out var error) && decoded is RoomConfigMessage { Settings.Debug: { BuildTimePercent: 10, NeutralRespawnSeconds: 120, StartingGeneralPoints: 5, PlaceBuildingsInFog: true, QuickBuildHumansOnly: true, MoneyButtons: true } }, $"the options survive the wire ({error})");
         Check.That(!settings.SameAs(TwoSeats()) && settings.SameAs(((RoomConfigMessage)decoded!).Settings) && !settings.SameAs(settings with { Debug = debug with { StartingGeneralPoints = 6 } }) && !settings.SameAs(settings with { Debug = debug with { PlaceBuildingsInFog = false } }), "the options count in the comparison of settings");
         Check.That(Protocol.Version == 11 && !MessageCodec.TryDecode(MessageCodec.Encode(new RoomConfigMessage(TwoSeats() with { Debug = new MatchDebugOptions(BuildTimePercent: 0) })), out _, out var refused) && refused.Length > 0, "a build time of 0 % is a malformed message");
         Check.That(!MessageCodec.TryDecode(MessageCodec.Encode(new RoomConfigMessage(TwoSeats() with { Debug = new MatchDebugOptions(NeutralRespawnSeconds: -5) })), out _, out _), "a negative respawn time is a malformed message");

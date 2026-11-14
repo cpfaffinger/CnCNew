@@ -115,10 +115,13 @@ public sealed partial class MatchController
         AddGeneralsWindow();
         AddDiplomacyWindow();
 
-        var quitMenuRoots = _tree.AddLayout(Skin.Derive(_assets.QuitMenu, _assets.HeaderTemplates));
+        var quitMenuLayout = match.World.DebugMoneyButtons ? QuitMenuDebugButtons.Extend(_assets.QuitMenu) : _assets.QuitMenu;
+        var quitMenuRoots = _tree.AddLayout(Skin.Derive(quitMenuLayout, _assets.HeaderTemplates));
         _quitMenuRoot = quitMenuRoots.Single(window => window.Name == "QuitMenu.wnd:QuitMenuParent");
         _quitMenuRoot.SetHidden(true);
         _tree.Register("QuitMenuSystem", OnQuitMenuSystem);
+        _tree.FindByName(QuitMenuDebugButtons.GiveSelf)?.SetText("Give 10,000");
+        _tree.FindByName(QuitMenuDebugButtons.GiveAll)?.SetText("Give all 10,000");
 
         var humanParticipant = match.Data.Factions.FirstOrDefault(
             participant => participant.Faction.Name.Equals(match.HumanFaction, StringComparison.OrdinalIgnoreCase));
@@ -506,6 +509,9 @@ public sealed partial class MatchController
         MenuActionRequested?.Invoke(MenuAction.Resume);
     }
 
+    /// <summary>The debug money button (#336): a player order through the command path, so every client and the replay get it; only a human's menu has the buttons.</summary>
+    private void GiveDebugMoney(bool all) => Match.Commands.Issue((sequence, tick) => new CnCNew.Simulation.Commands.DebugGiveMoneyCommand(Match.Human, sequence, tick, all));
+
     private void OnQuitMenuSystem(UiWindowTree tree, UiEvent uiEvent)
     {
         if (uiEvent.Kind != UiEventKind.ButtonSelected) return;
@@ -517,6 +523,8 @@ public sealed partial class MatchController
             case "QuitMenu.wnd:ButtonSaveLoad": MenuActionRequested?.Invoke(MenuAction.SaveLoad); break;
             case "QuitMenu.wnd:ButtonRestart": MenuActionRequested?.Invoke(MenuAction.Restart); break;
             case "QuitMenu.wnd:ButtonExit": MenuActionRequested?.Invoke(MenuAction.Exit); break;
+            case QuitMenuDebugButtons.GiveSelf: GiveDebugMoney(all: false); break;
+            case QuitMenuDebugButtons.GiveAll: GiveDebugMoney(all: true); break;
         }
     }
 

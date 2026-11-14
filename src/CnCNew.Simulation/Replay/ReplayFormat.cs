@@ -51,7 +51,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 27;
+    public const int CurrentVersion = 28;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -284,6 +284,9 @@ public static class ReplayFormat
             case ExploreMapCommand explore:
                 writer.Write(explore.Target.Value);
                 break;
+            case DebugGiveMoneyCommand debugMoney:
+                writer.Write(debugMoney.All);
+                break;
             case PurchaseUpgradeCommand upgrade:
                 WriteString(writer, upgrade.Upgrade);
                 writer.Write(upgrade.Target?.Value ?? 0u);
@@ -498,6 +501,7 @@ public static class ReplayFormat
             CommandTypes.CancelTimer => new CancelTimerCommand(player, sequence, tick, new TimerId(reader.ReadUInt64())),
             CommandTypes.GiveMoney => new GiveMoneyCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.ExploreMap => new ExploreMapCommand(player, sequence, tick, new PlayerId(reader.ReadInt32())),
+            CommandTypes.DebugGiveMoney => new DebugGiveMoneyCommand(player, sequence, tick, reader.ReadBoolean()),
             CommandTypes.PurchaseUpgrade => ReadPurchaseUpgrade(reader, player, sequence, tick),
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), ReadString(reader)),
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadInt32()),

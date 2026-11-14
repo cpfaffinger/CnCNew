@@ -78,7 +78,7 @@ public static class ReplayRunner
         {
             throw new ReplayRejectedException($"The replay's match description cannot be read: {exception.Message}");
         }
-        if (description is { Debug.IsDefault: false } options) world.ConfigureMatchOptions(options.Debug.BuildTimePercent, options.Debug.NeutralRespawnSeconds, options.Debug.StartingGeneralPoints, options.Debug.PlaceBuildingsInFog, options.Debug.QuickBuildHumansOnly);
+        if (description is { Debug.IsDefault: false } options) world.ConfigureMatchOptions(options.Debug.BuildTimePercent, options.Debug.NeutralRespawnSeconds, options.Debug.StartingGeneralPoints, options.Debug.PlaceBuildingsInFog, options.Debug.QuickBuildHumansOnly, options.Debug.MoneyButtons);
         return world;
     }
 

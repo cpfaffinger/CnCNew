@@ -140,6 +140,67 @@ static partial class Tests
         }
     }
 
+    /// <summary>
+    /// The debug money buttons (#336): the command is refused (named, counted) in a match without the option; with it the player who gives it, or every player, computer included, gets
+    /// 10,000, at 30, 60 and 120 Hz, and the deposit is no income. In a skirmish session the recording replays to the live hashes with the command in it, and the computer player never gives it.
+    /// </summary>
+    public static void DebugMoneyButtonsGiveMoneyOnlyWhenOn()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            SimulationWorld Make(bool on)
+            {
+                var terrain = NavTerrain();
+                var fixture = new SyntheticFixture(rate, files: DebugOptionFiles());
+                ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta", IsComputer: true)];
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+                if (on) world.ConfigureMatchOptions(100, 0, 0, false, false, true);
+                return world;
+            }
+
+            var off = Make(false);
+            var refused = off.Submit(new DebugGiveMoneyCommand(new PlayerId(1), 1, off.Tick, false));
+            Check.That(!refused.Accepted && refused.Reason == CommandRejection.DebugOptionOff && off.Check(new DebugGiveMoneyCommand(new PlayerId(1), 2, off.Tick, true)).Reason == CommandRejection.DebugOptionOff, $"{rate}: refused without the option.");
+            off.Step();
+            Check.That(off.MoneyOf(new PlayerId(1)) == off.MoneyOf(new PlayerId(2)), $"{rate}: nothing was paid without the option.");
+
+            var world = Make(true);
+            var start = world.MoneyOf(new PlayerId(1));
+            Check.That(world.Submit(new DebugGiveMoneyCommand(new PlayerId(1), 1, world.Tick, false)).Accepted, $"{rate}: accepted with the option.");
+            world.Step();
+            Check.That(world.MoneyOf(new PlayerId(1)) == start + Fixed.FromInt(10_000) && world.MoneyOf(new PlayerId(2)) == start, $"{rate}: only the giver is paid ({world.MoneyOf(new PlayerId(1))}, {world.MoneyOf(new PlayerId(2))}).");
+            Check.That(world.Submit(new DebugGiveMoneyCommand(new PlayerId(2), 1, world.Tick, true)).Accepted, $"{rate}: the all button is accepted.");
+            world.Step();
+            Check.That(world.MoneyOf(new PlayerId(1)) == start + Fixed.FromInt(20_000) && world.MoneyOf(new PlayerId(2)) == start + Fixed.FromInt(10_000), $"{rate}: every player is paid, the computer too.");
+            Check.That(!world.Submit(new DebugGiveMoneyCommand(PlayerId.System, 1, world.Tick, true)).Accepted, $"{rate}: the system is no giver.");
+            Check.That(CommandTypes.IsPlayerOrder(CommandTypes.DebugGiveMoney) && CommandTypes.Version == 29 && ReplayFormat.CurrentVersion == 28, $"{rate}: a player order; command table 29, replay 28.");
+            var decoded = ReplayFormat.DecodeCommand(ReplayFormat.EncodeCommand(new DebugGiveMoneyCommand(new PlayerId(1), 3, 9, true)));
+            Check.That(decoded is DebugGiveMoneyCommand { All: true, Sequence: 3, Tick: 9 }, $"{rate}: the command survives the replay codec.");
+        }
+
+        var (fixtureS, terrainS) = (new SyntheticFixture(TestRate.Default, files: DebugSessionFiles()), (TerrainMap?)null);
+        var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
+        terrainS = TerrainMap.Build(map, "skirmish");
+        var participants = ReferenceMatchScenario.Participants(fixtureS.Templates, out _);
+        var plain = SkirmishMatchSession.Describe(new SkirmishMatchOptions(0xC0FFEE06, 7, TestRate.Default.Time.OriginalFrames(900), 60, 500, 500, 0), fixtureS.Templates, fixtureS.Fingerprint, terrainS,
+            [..participants.Select(participant => new SkirmishSlot(participant))], "Maps/Synthetic/Synthetic.map");
+        var human = plain with { Slots = plain.Slots.SetItem(0, plain.Slots[0] with { Kind = MatchSlotKind.Human }), Debug = new MatchDebugOptions(MoneyButtons: true) };
+        var session = SkirmishMatchSession.Start(human, fixtureS.Templates, terrainS, [], definitionFingerprint: fixtureS.Fingerprint);
+        session.Step();
+        var one = new PlayerId(1);
+        var before = (session.World.MoneyOf(one), session.World.MoneyOf(new PlayerId(2)));
+        Check.That(session.Submit(new DebugGiveMoneyCommand(one, 1, session.World.Tick, true)).Accepted, "The session takes the command.");
+        session.Step();
+        Check.That(session.World.MoneyOf(one) >= before.Item1 + Fixed.FromInt(9_000) && session.World.MoneyOf(new PlayerId(2)) >= before.Item2 + Fixed.FromInt(9_000), "Both players got the gift in the session.");
+        while (!session.IsOver) session.Step();
+        Check.That(!session.RecordedCommands.Any(command => command is DebugGiveMoneyCommand && command.Player != one), "The computer player never gave it.");
+        var read = ReplayFormat.Read(ReplayFormat.Write(session.ToReplay()));
+        var bare = ReplayRunner.Run(read, fixtureS.Templates, fixtureS.Fingerprint, terrain: terrainS);
+        Check.That(bare.FinalHash == session.World.StateHash, "The bare replay with the command ends in the live hash.");
+        var played = SkirmishReplay.Play(read, fixtureS.Templates, fixtureS.Fingerprint, terrainS, []);
+        Check.That(played.FirstDeviation is null && played.FinalSessionHash == session.StateHash(), "Played as a match, the replay deviates nowhere.");
+    }
+
     /// <summary>The debug options are in the description's bytes and its fingerprint; out-of-range values and the older encoding are refused.</summary>
     public static void MatchDebugOptionsAreInTheDescription()
     {
@@ -155,6 +216,7 @@ static partial class Tests
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 120, 5, true) },
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, QuickBuildHumansOnly: true) },
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.HalfBuildPercent) },
+            description with { Debug = new MatchDebugOptions(MoneyButtons: true) },
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuarterBuildPercent) },
         };
         var seen = new HashSet<string>(StringComparer.Ordinal) { description.Fingerprint };

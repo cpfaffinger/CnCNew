@@ -32,6 +32,7 @@ internal static class InGameMenuTests
         harness.Run("The in-game menu: Options opens the options over the game and Back returns to the menu, the game stays paused", () => OptionsOverTheGame(data));
         harness.Run("The in-game menu: Save/Load saves the running skirmish under a description, asks before it overwrites, and loads it back into a running game", () => SaveAndLoad(data));
         harness.Run("The in-game menu: Restart asks, No keeps the game, Yes begins the same skirmish again behind the load screen", () => Restart(data));
+        harness.Run("The in-game menu: the debug money buttons are in the menu only when the match turned them on, and a press pays the human 10,000 through the command path", () => MoneyButtons(data));
         harness.Run("The in-game menu: Exit asks, No keeps the game, Yes ends the match and shows the score screen", () => Exit(data));
         return harness.Failures;
     }
@@ -58,12 +59,20 @@ internal static class InGameMenuTests
         expect match paused equals yes
         """;
 
-    private static (Host Host, ShellScript Script, string Directory) Walk(GameData data, string name, string steps)
+    private const string MoneyButtonsOn = """
+        click DebugOptionsButton.wnd:ButtonDebugOptions
+        wait screen DebugOptionsScreen
+        select DebugOptions.wnd:ComboMoneyButtons On
+        click DebugOptions.wnd:ButtonAccept
+        wait screen SkirmishSetupScreen
+        """;
+
+    private static (Host Host, ShellScript Script, string Directory) Walk(GameData data, string name, string steps, string setup = "")
     {
         var directory = Directory(name);
         var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(Width, Height), skin: SkinPins.Current);
         shell.SkirmishMatchSeconds = 60;
-        var script = ShellScript.Parse((ToTheMenu + "\n" + steps).Split('\n'));
+        var script = ShellScript.Parse((ToTheMenu.Replace("click SkirmishGameOptionsMenu.wnd:ButtonStart", setup + "\nclick SkirmishGameOptionsMenu.wnd:ButtonStart", StringComparison.Ordinal) + "\n" + steps).Split('\n'));
         var host = new Host(data, shell, script);
         host.Attach();
         for (var frame = 0; frame < 40_000 && !script.IsFinished; frame++) host.Frame(0.05);
@@ -96,6 +105,32 @@ internal static class InGameMenuTests
             expect match paused equals no
             """);
         TestHarness.Assert(host.Started == 1, "the same match went on through all of it");
+        Done(directory);
+    }
+
+    private static void MoneyButtons(GameData data)
+    {
+        var (without, _, plainDirectory) = Walk(data, "money-off", "");
+        TestHarness.Assert(without.PressablePoint("QuitMenu.wnd:ButtonDebugGiveSelf") is null && without.PressablePoint("QuitMenu.wnd:ButtonDebugGiveAll") is null, "without the option the menu has no money buttons");
+        TestHarness.Assert(without.PressablePoint("QuitMenu.wnd:ButtonExit") is not null, "and its own buttons are there");
+        Done(plainDirectory);
+
+        var (host, _, directory) = Walk(data, "money-on", """
+            expect enabled QuitMenu.wnd:ButtonDebugGiveSelf
+            expect enabled QuitMenu.wnd:ButtonDebugGiveAll
+            click QuitMenu.wnd:ButtonDebugGiveSelf
+            click QuitMenu.wnd:ButtonReturn
+            wait match menu equals closed
+            wait match money atleast 19000
+            key Escape
+            wait match menu equals open
+            click QuitMenu.wnd:ButtonDebugGiveAll
+            click QuitMenu.wnd:ButtonReturn
+            wait match menu equals closed
+            wait match money atleast 29000
+            """, MoneyButtonsOn);
+        TestHarness.Assert(host.LastSetup is { Debug.MoneyButtons: true }, "the setup carried the option into the match");
+        TestHarness.Assert(host.RecordedMoneyCommands == 2, $"both presses went through the command path and were recorded ({host.RecordedMoneyCommands})");
         Done(directory);
     }
 
@@ -192,6 +227,8 @@ internal static class InGameMenuTests
         public long ResumedTick { get; private set; }
         public ulong ResumedHash { get; private set; }
         public long LastMatchTick => _match?.Tick ?? -1;
+        public System.Numerics.Vector2? PressablePoint(string window) => _hud?.PressablePoint(window);
+        public int RecordedMoneyCommands => _match?.RecordedCommands.Count(command => command is CnCNew.Simulation.Commands.DebugGiveMoneyCommand) ?? 0;
         public long LastTickBeforeEnd { get; private set; }
         public long FinishedAtTick { get; private set; } = -1;
         public MatchSetup? FirstSetup { get; private set; }
@@ -207,6 +244,7 @@ internal static class InGameMenuTests
             script.MatchProbe = name => name switch
             {
                 "tick" => _match?.Tick.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "money" => _match?.World.MoneyOf(_match.Human).Floor().ToString(System.Globalization.CultureInfo.InvariantCulture),
                 "menu" => _hud is null ? null : _hud.IsMenuOpen ? "open" : "closed",
                 "paused" => _match is null ? null : _match.Paused ? "yes" : "no",
                 "overlay" => _match is null ? null : shell.HasInGameScreens ? "yes" : "no",

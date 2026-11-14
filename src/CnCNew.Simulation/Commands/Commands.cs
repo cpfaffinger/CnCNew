@@ -11,11 +11,11 @@ namespace CnCNew.Simulation.Commands;
 /// <summary>
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
 /// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
-/// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277).
+/// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277; version 29: the debug money command).
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 28;
+    public const int Version = 29;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -139,7 +139,10 @@ public static class CommandTypes
     /// <summary><c>GameLogic::startNewGame</c>: an object the map places, with the properties <c>updateObjValuesFromMapProperties</c> reads. Only the system gives it.</summary>
     public const ushort PlaceMapObject = 46;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= PlaceMapObject;
+    /// <summary>The debug option "money buttons" (#336): the player who gives it, or every player, gets <see cref="DebugGiveMoneyCommand.Amount"/>. A player order; the world refuses it unless the match option is on.</summary>
+    public const ushort DebugGiveMoney = 47;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= DebugGiveMoney;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -193,6 +196,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.CancelTimer => new CancelTimerCommand(player, sequence, tick, new TimerId(reader.UInt("timer"))),
             CommandTypes.GiveMoney => new GiveMoneyCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), reader.Fixed("amount")),
             CommandTypes.ExploreMap => new ExploreMapCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target")))),
+            CommandTypes.DebugGiveMoney => new DebugGiveMoneyCommand(player, sequence, tick, reader.Int("all") != 0),
             CommandTypes.PurchaseUpgrade => new PurchaseUpgradeCommand(player, sequence, tick, reader.Text("upgrade"),
                 reader.UInt("target") == 0 ? null : new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Text("template")),
@@ -258,6 +262,19 @@ public sealed record ExploreMapCommand(PlayerId Player, ulong Sequence, long Tic
     public override ushort TypeCode => CommandTypes.ExploreMap;
     public override bool RequiresSystem => true;
     protected override void DescribeBody(IStateWriter writer) => writer.Int("target", Target.Value);
+}
+
+/// <summary>
+/// The debug option "money buttons" (#336): the issuing player (<see cref="All"/> false) or every player of the match, computer players included, is paid <see cref="Amount"/> credits, as a
+/// deposit that is no income (it is not counted as collected). Refused with <see cref="CommandRejection.DebugOptionOff"/> unless the match turned the option on.
+/// </summary>
+public sealed record DebugGiveMoneyCommand(PlayerId Player, ulong Sequence, long Tick, bool All) : SimCommand(Player, Sequence, Tick)
+{
+    /// <summary>What one press gives.</summary>
+    public const int Amount = 10_000;
+
+    public override ushort TypeCode => CommandTypes.DebugGiveMoney;
+    protected override void DescribeBody(IStateWriter writer) => writer.Int("all", All ? 1 : 0);
 }
 
 /// <summary>Credits a player's balance directly (fixture/scenario setup and scripted income; not a purchase).</summary>
@@ -843,6 +860,9 @@ public enum CommandRejection : byte
     /// a map's <c>objectEnabled</c> no) or took its power (<c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>: a map's <c>objectPowered</c> no), so it makes nothing.
     /// </summary>
     FactoryIsDisabled = 44,
+
+    /// <summary>A debug command (#336) in a match whose setup did not turn its option on.</summary>
+    DebugOptionOff = 45,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

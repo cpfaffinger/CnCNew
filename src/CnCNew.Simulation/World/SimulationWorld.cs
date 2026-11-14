@@ -67,7 +67,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.FactoryIsDisabled + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.DebugOptionOff + 1];
 
     /// <summary>Size of the rejection table when the state hash first covered it (reasons up to <see cref="CommandRejection.CannotToggleOvercharge"/>); later reasons are hashed only when they occurred.</summary>
     private const int LegacyRejectionEntries = (int)CommandRejection.CannotToggleOvercharge + 1;
@@ -1002,6 +1002,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckAttackPosition(command.Player, place);
             case SetMineClearingCommand clearing:
                 return CheckSetMineClearing(command.Player, clearing);
+            case DebugGiveMoneyCommand:
+                return !DebugMoneyButtons ? CommandRejection.DebugOptionOff : _players.ContainsKey(command.Player.Value) && !command.Player.IsSystem ? 0 : CommandRejection.UnknownPlayer;
             case SteerPowerCommand steer:
                 return CheckSteer(command.Player, steer);
             case ExecuteRailedTransportCommand ferry:
@@ -1493,6 +1495,14 @@ public sealed partial class SimulationWorld : IWorldServices
                 var reason = CheckOwnUnits(command.Player, ferry.Units);
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 ExecuteRailedTransport(ferry);
+                break;
+            }
+            case DebugGiveMoneyCommand gift:
+            {
+                if (!DebugMoneyButtons || !_players.ContainsKey(command.Player.Value)) { RecordRejection(command, DebugMoneyButtons ? CommandRejection.UnknownPlayer : CommandRejection.DebugOptionOff); break; }
+                var amount = Fixed.FromInt(DebugGiveMoneyCommand.Amount);
+                foreach (var state in _playerList)
+                    if (gift.All || state.Id == command.Player) state.Money += amount;
                 break;
             }
             case SetMineClearingCommand clearing:
