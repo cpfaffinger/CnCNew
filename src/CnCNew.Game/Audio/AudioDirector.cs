@@ -512,7 +512,7 @@ public sealed partial class AudioDirector : IDisposable
             if (cue.Position is { } at) position = at;
             else Count(AudioOutcomes.WorldWithoutPosition);
         }
-        if (position is { } where && (info.SoundTypes & SoundTypeFlags.Shrouded) == 0 && view.IsShrouded(where))
+        if (position is { } where && (info.SoundTypes & SoundTypeFlags.Shrouded) != 0 && info.Priority != AudioPriority.Critical && (info.SoundTypes & SoundTypeFlags.Global) == 0 && view.IsShrouded(where))
         {
             Drop(AudioSource.Simulation, AudioOutcomes.Shrouded);
             return;
@@ -816,7 +816,7 @@ public sealed partial class AudioDirector : IDisposable
             var max = global ? _catalog.Settings.GlobalMaxRange : info.MaxRange;
             var distance = Vector3.Distance(position, _listenerPosition);
             if (max > 0f && distance >= max) return;
-            if ((info.SoundTypes & SoundTypeFlags.Shrouded) == 0 && view.IsShrouded(position)) return;
+            if ((info.SoundTypes & SoundTypeFlags.Shrouded) != 0 && !global && info.Priority != AudioPriority.Critical && view.IsShrouded(position)) return;
             candidates.Add((distance, key, position, info));
         }
         foreach (var drawable in drawables)

@@ -75,6 +75,7 @@ internal static class AudioDirectorTests
         harness.Run("Director: a looping fire sound is one voice for a stream of shots", DirectorFireLoop);
         harness.Run("Director: a request that plays only if not playing waits for the voice of the last one; a request carries its own volume", DirectorOnlyIfNotPlayingAndVolume);
         harness.Run("Director: rate limiting, unit voice interruption, missing voice keys", DirectorLimitsAndUnitVoices);
+        harness.Run("Under the shroud only a sound of the shrouded type is culled, never a critical one (#325)", ShroudCullsOnlyShroudedType);
         harness.Run("Wiring: CaptureFlash becomes the MiscAudio DefectorTimerTickSound at the building", CaptureFlashTicksAtTheBuilding);
         harness.Run("Wiring: selection, orders, clicks and refusals reach the director", SelectionOrdersAndClicks);
         harness.Run("Wiring: a missing sound file is counted per source, never replaced", MissingFileIsCounted);
@@ -366,6 +367,15 @@ internal static class AudioDirectorTests
             AudioEvent NoFile
               Type = ui everyone
             End
+            AudioEvent HiddenOnly
+              Sounds = tone
+              Type = world shrouded everyone
+            End
+            AudioEvent CriticalHiddenOnly
+              Sounds = tone
+              Type = world shrouded everyone
+              Priority = critical
+            End
             AudioEvent CaptureTick
               Sounds = tone
               Type = world shrouded everyone
@@ -582,6 +592,23 @@ internal static class AudioDirectorTests
     private static SimEvent Flash(EntityId building, EntityId capturer)
         => new(new EventId(1), 5, SimEventKind.CaptureFlash, building, capturer, PlayerId.System, string.Empty, 0);
 
+    private static void ShroudCullsOnlyShroudedType()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        using var director = NewDirector(catalog, fx);
+        var view = new FakeView { Shrouded = true };
+        var enemy = new PlayerId(3);
+        view.Relations[(enemy.Value, view.Human.Value)] = Relationship.Enemies;
+        void Play(string name) => director.Submit([new Presentation.Fx.SoundCue(1, name, Presentation.Fx.SoundCueKind.Effect, new Vector3(10, 10, 0), EntityId.Invalid, enemy, 1f, 2, "test")], view);
+
+        Play("WorldEveryone");
+        TestHarness.Assert(director.Stats.Count(AudioOutcomes.Played) == 1 && director.Stats.Count(AudioOutcomes.Shrouded) == 0, "a sound without the shrouded type plays under the shroud");
+        Play("HiddenOnly");
+        TestHarness.Assert(director.Stats.Count(AudioOutcomes.Shrouded) == 1, "a sound of the shrouded type is culled under the shroud");
+        Play("CriticalHiddenOnly");
+        TestHarness.Assert(director.Stats.Count(AudioOutcomes.Shrouded) == 1 && director.Stats.Count(AudioOutcomes.Played) == 2, "a critical sound is never culled");
+    }
+
     private static void CaptureFlashTicksAtTheBuilding()
     {
         var (catalog, fx, _) = BuildDirectorFixture();
@@ -601,8 +628,8 @@ internal static class AudioDirectorTests
         TestHarness.Assert(cue.Kind == SoundCueKind.Effect && cue.Position == at && cue.Entity == building, "a world sound at the building being captured, not at the capturing unit");
         TestHarness.Assert(cue.Player.IsSystem, "the reference sets no player index on the tick");
 
-        // The local player is neither owner: the event's EVERYONE type lets the tick through, SHROUDED lets it through fog.
-        director.Submit([..cues], new FakeView { Shrouded = true });
+        // The local player is neither owner: the event's EVERYONE type lets the tick through; the capture fixture is not shrouded here.
+        director.Submit([..cues], new FakeView());
         var stats = director.Stats;
         TestHarness.Assert(stats.StartedEvents.GetValueOrDefault("CaptureTick") == 1, "the director started the tick");
         var source = stats.Sources[nameof(AudioSource.Simulation)];
