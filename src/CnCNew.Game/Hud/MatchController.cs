@@ -777,14 +777,16 @@ public sealed partial class MatchController
     /// <summary>
     /// The side of a healing icon in pixels. <c>Drawable::drawHealing</c> draws the animation's frame at its own size - the scale by the bar's width is compiled out
     /// (<c>SCALE_ICONS_WITH_ZOOM_ML</c> is not defined): the wrench 56 pixels, the cross 32, on the original's 800 x 600 screen. Here that size grows with the screen as the
-    /// interface does (<see cref="UiScaler.UniformScale"/>), so it covers the same share of it.
+    /// interface does (<see cref="UiScaler.UniformScale"/>), so it covers the same share of it. The wrench is drawn at half its frame (28 pixels of 800 x 600): the owner found the
+    /// frame's size too large in play (#309, 14 November 2026), and half was his measure; the cross keeps its frame's size.
     /// </summary>
     private int HealIconSize(HealIconKind kind)
     {
         var frame = kind == HealIconKind.Default ? "SCPCross000" : "SCPWrench000";
         if (_tree.Services.Images is not { } images || !images.TryGetSize(frame, out var width, out var height)) return 0;
         var (numerator, denominator) = UiScaler.UniformScale(_tree.Viewport, UiScaler.DefaultDisplayWidth, UiScaler.DefaultDisplayHeight);
-        return (int)(Math.Max(width, height) * numerator / denominator);
+        var halves = kind == HealIconKind.Default ? 1 : 2;
+        return (int)(Math.Max(width, height) * numerator / ((long)denominator * halves));
     }
 
     private static bool ShowsAmbientBar(Entity unit)
