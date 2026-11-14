@@ -101,6 +101,7 @@ try {
     $proxyLine = Wait-Line 'proxy' ' event=listening ' 30
     if (-not $proxyLine -or $proxyLine -notmatch ' port=(\d+)') { Write-Host 'FAIL: the proxy did not start.'; exit 1 }
     $proxyPort = $Matches[1]
+    Write-Host "== Two game windows (Alice, Bob) open for about three minutes and are closed by this check itself, at the latest after $($MatchSeconds + 600) s; please leave them open."
     Write-Host "== A dedicated server behind 40 ms, 10 ms of jitter and 1 % loss (127.0.0.1:$proxyPort); a match of $MatchSeconds s on $Map (logs in $OutDir)"
 
     $toLobby = @('wait screen MainMenuScreen', 'click MainMenu.wnd:ButtonMultiplayer', 'click MainMenu.wnd:ButtonNetwork', 'wait screen NetworkDirectConnectScreen',
@@ -149,6 +150,13 @@ try {
     foreach ($pair in @(@('alice', $aliceProcess), @('bob', $bobProcess))) {
         if (-not $pair[1].WaitForExit(($MatchSeconds + 600) * 1000)) { $pair[1].Kill($true); Fail "$($pair[0]): the window client did not end in time" }
         elseif ($pair[1].ExitCode -ne 0) { Fail "$($pair[0]): exit code $($pair[1].ExitCode) ($(Log $pair[0] | Where-Object { $_ -cmatch 'FAILED' } | Select-Object -First 1))" }
+    }
+    $unfinished = @('alice', 'bob') | Where-Object { -not (Log $_ | Where-Object { $_ -cmatch 'net-match: end tick' }) }
+    if ($failed -gt 0 -or $unfinished) {
+        # A window client that failed or was closed (a closed window ends with exit code 0) leaves the others without a host:
+        # end them now instead of waiting out their limits.
+        Write-Host 'The window clients did not finish; the clients without a window are stopped.'
+        throw 'stop'
     }
     foreach ($pair in @(@('Dave', $dave), @('Watcher', $watcher), @('Carol', $carol), @('Erin', $erin))) {
         if (-not $pair[1].WaitForExit(90000)) { $pair[1].Kill($true); if ($pair[0] -ne 'Erin') { Fail "$($pair[0]): the client without a window did not end in time" } }
