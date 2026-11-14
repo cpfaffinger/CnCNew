@@ -77,6 +77,9 @@ public sealed class ParticleWorld
     public int ParticleCount => _particleCount;
     public int SystemCount => _systems.Count;
 
+    /// <summary>Live systems whose template name starts with <paramref name="prefix"/> (a probe for tests).</summary>
+    public int SystemsNamed(string prefix) => _systems.Count(system => system.Template.Name.StartsWith(prefix, StringComparison.Ordinal));
+
     public ParticleWorldStats Stats => new(_frame, _systems.Count, _particleCount, _systemsCreated, _particlesCreated, _rejectedPriority,
         _rejectedField, _rejectedBudget, _rejectedPerSystem, _evicted, _rejectedSystems, _missingTemplates);
 

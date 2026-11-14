@@ -58,6 +58,10 @@ internal static class FuelAirBombTests
         var use = live.Commands.Issue((sequence, tick) => new UseSpecialPowerCommand(human, sequence, tick, center.Id, "SuperweaponDaisyCutter", SpecialPowerTargetKind.Location, EntityId.Invalid, enemy.X, enemy.Y));
         TestHarness.Assert(use.Accepted, $"the power is used ({use.Reason})");
         Run(45);
+        // The gas cloud of the bomb's death (DaisyExplosionScatter, AttachToObject) dies with the bomb that carries it: FXListDie's OrientToObject is true by default,
+        // so the effect list is made for the object and attached (FXListDie.h), and a system whose object is gone destroys itself (ParticleSystem::update).
+        Run(10);
+        TestHarness.Assert(live.Fx.Particles.SystemsNamed("Daisy") == 0, $"no gas system is left over the place ({live.Fx.Particles.SystemCount} systems)");
         TestHarness.Assert(blast, "the bomb detonates (the gas's last phase, or the fuel air bomb's weapon)");
         TestHarness.Assert(lowest < maxHealth, $"the command center under it is hurt ({lowest} of {maxHealth} at the lowest)");
     }

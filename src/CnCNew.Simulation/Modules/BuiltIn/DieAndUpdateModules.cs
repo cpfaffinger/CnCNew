@@ -91,7 +91,7 @@ public sealed class CreateObjectDie(CreateObjectDieData data) : DieModuleBase(da
 public sealed record FxListDieData(DieMuxData Mux, string DeathFx, bool OrientToObject, bool StartsActive) : DieData(Mux)
 {
     public static FxListDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
-        ModuleConfigReader.Text(configuration, "DeathFX"), ModuleConfigReader.Bool(configuration, "OrientToObject", false),
+        ModuleConfigReader.Text(configuration, "DeathFX"), ModuleConfigReader.Bool(configuration, "OrientToObject", true),
         // FXListDieModuleData sets m_initiallyActive = TRUE: the reference documents that only one of 847 uses turns it off.
         ModuleConfigReader.Bool(configuration, "StartsActive", true));
 }
