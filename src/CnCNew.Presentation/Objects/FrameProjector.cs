@@ -524,9 +524,11 @@ public sealed class FrameProjector
             travel %= 100000f;
         }
 
-        // Drawable::drawHealing: the icon shows while the object is hurt and was healed (health rose by attemptHealing) within HealingIconFrames; construction progress is not healing.
+        // Drawable::drawHealing: the icon shows while the object is hurt and was healed (attemptHealing) within HealingIconFrames; construction progress is not healing.
         var healedAt = previous?.HealedAtTick ?? -1;
-        if (previous is not null && !entity.HasStatus(ObjectStatusBits.UnderConstruction) && Math.Clamp(health, 0f, 1f) > previous.Health01 + 1e-4f) healedAt = world.Tick;
+        // ActiveBody::attemptHealing alone sets m_lastHealingTimestamp; a rise of the maximum (an upgrade, a rank) or of construction progress is no healing. The body records a heal as its
+        // last damage record, which a later damage replaces, so the projector keeps the tick it has seen.
+        if (entity.LastDamageHealing && entity.LastDamageTick > healedAt) healedAt = entity.LastDamageTick;
         var fired = 0;
         for (var slot = 0; slot < 3; slot++)
             if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= world.Time.OriginalFrames(MuzzleFlashFrames)) fired |= 1 << slot;

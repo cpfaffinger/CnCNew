@@ -4,6 +4,8 @@ using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Input;
 using CnCNew.Ui.Runtime;
+using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.World;
 using CnCNew.Ui.Settings;
 
 namespace CnCNew.Game.Tests;
@@ -36,6 +38,7 @@ internal static class PlaytestHudTests
         harness.Run("The clock of the particle cannon stands still while the player is short of power, on the list of superweapons and on the cameo, and runs on when a plant is there", () => BrownOutClock(data));
         harness.Run("A click on a ready power of the bar presses it, enters its mode and changes the pointer over the ground", () => PowerClick(data));
         harness.Run("A crate the supply drop zone takes plays its MoneyPickUp animation over the crate (#338)", () => DropZonePickUpAnimation(data));
+        harness.Run("The healing icon shows after a heal of a hurt soldier and building, not after a max-health upgrade raised a drone's health (#344)", () => HealingIconOnlyAfterHealing(data));
         return harness.Failures;
     }
 
@@ -698,5 +701,46 @@ internal static class PlaytestHudTests
             }
         }
         TestHarness.Assert(drawn > 0, "the dollar animation is drawn over the drop zone when a crate is taken");
+    }
+
+    /// <summary>#344: <c>Drawable::drawHealing</c> shows the icon when <c>m_lastHealingTimestamp</c> (set by <c>attemptHealing</c> alone) is within three seconds; a rise of the maximum is none.</summary>
+    private static void HealingIconOnlyAfterHealing(GameData data)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        var world = match.World;
+        void Frames(int frames) { for (var i = 0; i < frames; i++) { match.Advance(CnCNew.Tests.TestTime.FrameSeconds); controller.Update(CnCNew.Tests.TestTime.FrameSeconds); } }
+        // The icon is never shown in the first three seconds of a game (Drawable::drawHealing).
+        for (var guard = 0; world.Tick <= world.Time.OriginalFrames(4 * CnCNew.Data.OriginalFrame.PerSecond) && guard < 100_000; guard++) Frames(1);
+        var center = world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        ulong sequence = 1_200_000;
+        Entity Spawn(string name, int dx, int dy)
+        {
+            var known = world.Entities.Select(entity => entity.Id).ToHashSet();
+            TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, name, match.Human, center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(dy), CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, $"{name} is spawned");
+            Frames((int)world.Time.OriginalFrames(2));
+            return world.Entities.First(entity => entity.Template.Name == name && !known.Contains(entity.Id));
+        }
+        bool Shows(Entity entity) => match.Frame.Drawables.Any(drawable => drawable.Entity == entity.Id && drawable.ShowsHealing);
+        void Hurt(Entity entity) => world.Damage(entity.Id, new CnCNew.Simulation.World.DamageInfo(CnCNew.Simulation.Ids.EntityId.Invalid, entity.Body!.MaxHealth / CnCNew.Simulation.Numerics.Fixed.FromInt(2), CnCNew.Simulation.World.DamageTypes.Unresistable, CnCNew.Simulation.World.DeathTypes.None, false));
+        void Heal(Entity entity) => world.Damage(entity.Id, new CnCNew.Simulation.World.DamageInfo(CnCNew.Simulation.Ids.EntityId.Invalid, entity.Body!.MaxHealth / CnCNew.Simulation.Numerics.Fixed.FromInt(10), CnCNew.Simulation.World.DamageTypes.Healing, CnCNew.Simulation.World.DeathTypes.None, false));
+        var ranger = Spawn("AmericaInfantryRanger", 150, 0);
+        var drone = Spawn("AmericaVehicleBattleDrone", 150, 40);
+        foreach (var unit in new[] { ranger, drone, center }) Hurt(unit);
+        Frames(2);
+        TestHarness.Assert(!Shows(ranger) && !Shows(drone) && !Shows(center), "damage alone shows no icon");
+        Heal(ranger);
+        Heal(center);
+        Frames(2);
+        TestHarness.Assert(Shows(ranger), "a healed soldier shows the icon");
+        TestHarness.Assert(Shows(center), "a repaired building shows the icon");
+        var before = drone.Body!.Health;
+        world.CompleteUpgrade(match.Human, drone.Id, "Upgrade_AmericaDroneArmor");
+        Frames(4);
+        TestHarness.Assert(drone.Body!.Health > before, $"the upgrade raised the drone's health ({before} -> {drone.Body.Health})");
+        TestHarness.Assert(!Shows(drone), "a health rise by a max-health upgrade shows no icon");
+        for (var guard = 0; world.Tick <= ranger.LastDamageTick + world.Time.OriginalFrames(4 * CnCNew.Data.OriginalFrame.PerSecond) && guard < 100_000; guard++) Frames(1);
+        TestHarness.Assert(!Shows(ranger), "the icon is gone three seconds after the heal");
     }
 }
