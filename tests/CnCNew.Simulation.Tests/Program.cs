@@ -655,6 +655,7 @@ run.Test("Rate invariance, flight: a countermeasure flare slows down and sinks t
 run.Test("Rate invariance, flight: the uplink beam drives its waypoint path the same at 30, 60 and 120 Hz", Tests.RateFlightUplinkBeamPathIsTheSame);
 run.Test("Rate invariance, flight: a shot-down helicopter spins, spirals, loses its blade and falls the same at 30, 60 and 120 Hz", Tests.RateFlightHelicopterSlowDeathIsTheSame);
 run.Test("Comanche crash spiral: the motive force over the mass and the lateral friction move the wreck as the physics step does, at 30, 60 and 120 Hz", Tests.HelicopterSpiralRadiusFollowsThePhysics);
+run.Test("Rule fix helicopter-crash-variance: crashes differ under the fix, repeat at the same seed and across a save, and stay one crash in the original profile, at 30, 60 and 120 Hz", Tests.HelicopterCrashesVaryUnderTheFix);
 run.Test("Rate invariance, flight: a tunnel heals its rider in the same frames at 30, 60 and 120 Hz", Tests.RateFlightTunnelHealingIsTheSame);
 run.Test("Rate invariance, flight: a Chinook climbs, lands to unload and climbs again the same at 30, 60 and 120 Hz", Tests.RateFlightChinookClimbIsTheSame);
 run.Test("Rate invariance, flight: the Spectre gunship inserts, orbits, fires and departs the same at 30, 60 and 120 Hz", Tests.RateFlightSpectreGunshipIsTheSame);
@@ -961,6 +962,7 @@ if (contentDirectory is not null) run.Test("Real data (playtest): a computer pla
 if (contentDirectory is not null) run.Test("Real data (playtest): a human player's Chinook gathers - made by the supply center and ordered to a pile - at every rate", () => Tests.RealHumanChinookGathers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#312): a Comanche built after the countermeasures research has them and launches flares against Tank Hunter missiles", () => Tests.RealComanchesBuiltAfterTheResearchLaunchFlares(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#318): a battle drone repairs its own master and no other unit", () => Tests.RealBattleDroneRepairsOnlyItsMaster(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#318): twenty Paladins with a battle drone each - every drone repairs its own master only, also across a save, at 30, 60 and 120 Hz", () => Tests.RealDroneGroupRepairsEachOnlyItsOwnMaster(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#311): the Comanche's inner guard range is the original's vision range times the guard factor", () => Tests.RealComancheGuardRangeIsTheOriginals(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (issue 298): Comanches ordered to guard a far place fire at the tanks beside their path, rocket pods then cannon, and at a Tank Hunter with the cannon (rule fix guard-engages-on-the-way)", () => Tests.RealComancheGuardEngagesOnTheWay(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): a Ranger ordered to guard a far place fights the enemy beside its path on the way (rule fix guard-engages-on-the-way)", () => Tests.RealGuardEngagesOnTheWay(contentDirectory));
