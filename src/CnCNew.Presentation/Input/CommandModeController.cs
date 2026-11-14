@@ -818,7 +818,9 @@ public sealed class CommandModeController
                     // ATTACK_OBJECTS_POSITION: the weapon goes to the object's place (MSG_DO_WEAPON_AT_LOCATION).
                     GuiCommandKind.FireWeapon when objectTarget is not null && button.Has(CommandOptions.AttackObjectsPosition)
                         => AttackPlace(sources, EntityPicker.CenterOf(objectTarget), own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
-                    GuiCommandKind.FireWeapon when objectTarget is not null => OrderAttack(world, sources, objectTarget),
+                    // MSG_DO_WEAPON_AT_OBJECT (Object::doCommandButtonAtObject): the button's slot and its shot limit, a button without MaxShotsToFire goes on until the victim dies (#302).
+                    GuiCommandKind.FireWeapon when objectTarget is not null
+                        => OrderAttack(world, sources, objectTarget, button.MaxShotsToFire > 0 ? button.MaxShotsToFire : FireWeaponCommand.NoMaxShotsLimit, button.WeaponSlotIndex),
                     // MSG_SET_MINE_CLEARING_DETAIL, then MSG_DO_WEAPON_AT_LOCATION (ControlBarCommandProcessing.cpp, F-69): the units carry the mine-clearing weapon set and attack the place.
                     GuiCommandKind.FireWeapon when position is { } place && button.Has(CommandOptions.UsesMineClearingWeaponset)
                         => ClearMines(sources, place, button.WeaponSlotIndex, button.MaxShotsToFire),
@@ -865,10 +867,10 @@ public sealed class CommandModeController
         return AttackPlace(ids, place, own: false, slot, shots);
     }
 
-    private bool OrderAttack(SimulationWorld world, ImmutableArray<Entity> units, Entity target)
+    private bool OrderAttack(SimulationWorld world, ImmutableArray<Entity> units, Entity target, int maxShots = 0, int slot = CnCNew.Simulation.Templates.WeaponSlot.Best)
     {
         foreach (var unit in units)
-            Orders.Set(unit.Id, new StandingOrder(StandingOrderKind.Attack, target.Id, SimulationQueries.GroundOf(target), [], world.Tick));
+            Orders.Set(unit.Id, new StandingOrder(StandingOrderKind.Attack, target.Id, SimulationQueries.GroundOf(target), [], world.Tick, maxShots, slot));
         if (!units.IsEmpty) Feedback(FeedbackKind.AttackMarker, world, EntityPicker.CenterOf(target), target.Id, Settings.MarkerFrames);
         return !units.IsEmpty;
     }

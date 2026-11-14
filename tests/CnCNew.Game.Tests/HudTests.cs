@@ -64,6 +64,7 @@ internal static class HudTests
         harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
         harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
+        harness.Run("A FIRE_WEAPON button at an object (#302): the unit attacks with the button's weapon slot, locked, and the attack carries the button's shot limit", () => FireButtonAtObject(data));
         harness.Run("Hack, weapon switch, overcharge, hijack, car bomb, sabotage: a press does what the button says", () => ButtonsOfUnits(data));
         harness.Run("E tells the player what it selected: nothing selected, across the map, and no line for a structure that has no fellows", () => SelectionMessages(data));
         harness.Run("The sneak attack: a press puts the tunnel at the cursor and the power is used where it is put down", () => SneakAttack(data));
@@ -557,6 +558,48 @@ internal static class HudTests
         TestHarness.Assert(commands.Mode != CommandModeKind.Placement, $"it is put down ({string.Join(", ", reasons)})");
         Advance(match, controller, (int)match.World.Time.WholeSecondsToTicks(5));
         TestHarness.Assert(match.World.Entities.Any(entity => entity.Owner == match.Human && entity.Template.Name.Contains("SneakAttack", StringComparison.Ordinal)), $"and the tunnel comes up ({center.Template.Name})");
+    }
+
+    private static void FireButtonAtObject(GameData data)
+    {
+        // Command_GLAInfantryJarmenKellSnipeVehicleAttack: WeaponSlot SECONDARY (the pilot sniper rifle), no MaxShotsToFire (the original's "huge number"), enemy object. Object::doCommandButtonAtObject
+        // locks the slot and attacks until the victim is gone; the best weapon against a tank would be the rifle.
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionGLA", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, SkinPins.Settings) { StarBlinks = false };
+        var world = match.World;
+        Advance(match, controller, (int)world.Time.OriginalFrames(4));
+        var center = world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var enemy = world.Entities.First(entity => entity.Owner != match.Human && entity.Template.IsKindOf("COMMANDCENTER")).Owner;
+        ulong sequence = 1_100_000;
+        Entity Spawn(string name, CnCNew.Simulation.Ids.PlayerId owner, int dx, int dy)
+        {
+            var known = world.Entities.Select(entity => entity.Id).ToHashSet();
+            TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, name, owner, center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(dy), CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, $"{name} is spawned");
+            Advance(match, controller, (int)world.Time.OriginalFrames(2));
+            return world.Entities.First(entity => entity.Template.Name == name && !known.Contains(entity.Id));
+        }
+        var kell = Spawn("GLAInfantryJarmenKell", match.Human, 150, 0);
+        var tank = Spawn("ChinaTankGattling", enemy, 190, 0);
+        controller.Input.Selection.Replace([kell.Id]);
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var button = controller.CommandBar.Slots.FirstOrDefault(slot => slot?.Button.Name == "Command_GLAInfantryJarmenKellSnipeVehicleAttack");
+        TestHarness.Assert(button is { IsEnabled: true }, "the Jarmen Kell shows the vehicle snipe button");
+        var commands = controller.Input.Commands;
+        TestHarness.Assert(commands.Activate(world, button!.Button, [kell]) == ActivationResult.EnteredMode, "the button asks for a target");
+        TestHarness.Assert(commands.CompleteTarget(world, tank, null), "the target is accepted");
+        var slot = button.Button.WeaponSlotIndex;
+        var locked = false;
+        var limited = false;
+        for (var frame = 0; frame < 90 && !(locked && limited); frame++)
+        {
+            Advance(match, controller, 1);
+            locked |= kell.CurrentWeaponSlot == slot && kell.WeaponLock != WeaponLockKind.None;
+            limited |= world.IsLimitedAttackRunning(kell, tank.Id);
+        }
+        TestHarness.Assert(slot != CnCNew.Simulation.Templates.WeaponSlot.Primary && locked, $"the attack uses the button's slot {slot} (current {kell.CurrentWeaponSlot}, lock {kell.WeaponLock})");
+        TestHarness.Assert(limited, "the attack is a limited one: the button without MaxShotsToFire goes on until the victim dies");
     }
 
     private static void ButtonsOfUnits(GameData data)

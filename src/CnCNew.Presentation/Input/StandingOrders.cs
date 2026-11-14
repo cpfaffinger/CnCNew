@@ -19,7 +19,16 @@ public enum StandingOrderKind
     Waypoints,
 }
 
-public sealed record StandingOrder(StandingOrderKind Kind, EntityId Target, Vector2 Destination, ImmutableArray<Vector2> Waypoints, long IssuedTick);
+/// <param name="Kind">What the order is.</param>
+/// <param name="Target">The victim of an attack.</param>
+/// <param name="Destination">The goal of a move.</param>
+/// <param name="Waypoints">The points still to go.</param>
+/// <param name="IssuedTick">The tick the order or its last step was given.</param>
+/// <param name="MaxShots">A <c>FIRE_WEAPON</c> button's shot limit (<c>NO_MAX_SHOTS_LIMIT</c> without the key): the attack is one order of <c>aiAttackObject(victim, maxShots)</c> that fires its own shots; 0 is the ordinary attack the client drives.</param>
+/// <param name="Slot">The button's weapon slot, locked temporarily for the attack.</param>
+/// <param name="Fired">The limited attack has been ordered.</param>
+public sealed record StandingOrder(StandingOrderKind Kind, EntityId Target, Vector2 Destination, ImmutableArray<Vector2> Waypoints, long IssuedTick,
+    int MaxShots = 0, int Slot = WeaponSlot.Best, bool Fired = false);
 
 /// <summary>
 /// The simulation's commands are single steps (move to a point, fire one shot, dock); the original's AI states (attack an object, attack-move,
@@ -162,6 +171,21 @@ public sealed class StandingOrders
             {
                 if (hovers) issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
                 else issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
+            }
+            if (order.MaxShots > 0)
+            {
+                // Object::doCommandButtonAtObject: one order with the button's slot and shot limit; the attack then fires its own shots and ends with the last one.
+                if (order.Fired)
+                {
+                    if (!world.IsLimitedAttackRunning(unit, target.Id) && world.Tick > order.IssuedTick) Clear(unit.Id);
+                    return;
+                }
+                if (SimulationQueries.CanFireAt(world, unit, target, FireOrigin.Player, order.Slot))
+                {
+                    _orders[unit.Id.Value] = order with { Fired = true, IssuedTick = world.Tick };
+                    issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id, order.Slot, FireOrigin.Player, order.MaxShots));
+                }
+                return;
             }
             if (SimulationQueries.CanFireAt(world, unit, target))
             {

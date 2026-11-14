@@ -76,10 +76,10 @@ public static class SimulationQueries
     public static Fixed WeaponRange(SimulationWorld world, Entity entity) => world.MaxWeaponRange(entity);
 
     /// <summary>The <c>FireWeaponCommand</c> preconditions: some weapon may be fired at the target now (<see cref="SimulationWorld.ChooseWeapon"/>, a player's order), the target alive with a body and visible.</summary>
-    public static bool CanFireAt(SimulationWorld world, Entity source, Entity target, FireOrigin origin = FireOrigin.Player)
+    public static bool CanFireAt(SimulationWorld world, Entity source, Entity target, FireOrigin origin = FireOrigin.Player, int slot = CnCNew.Simulation.Templates.WeaponSlot.Best)
     {
         if (target.DestroyRequested || target.Body is null) return false;
-        return world.ChooseWeaponInView(source, target, origin).CanFire
+        return world.ChooseWeaponInView(source, target, origin, slot).CanFire
                && (origin == FireOrigin.Player ? world.CanPlayerForceTarget(source.Owner, target) : world.CanPlayerSee(source.Owner, target));
     }
 
