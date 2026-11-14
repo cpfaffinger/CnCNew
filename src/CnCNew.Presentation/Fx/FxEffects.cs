@@ -31,11 +31,20 @@ public readonly record struct DecalInstance(DecalKind Kind, string Texture, Vect
     long CreatedFrame, long? ExpireFrame, int FadeFrames);
 
 /// <summary>
-/// A capped ring of decals. Scorches follow <c>BaseHeightMapRenderObjClass::addScorch</c>: capacity 500 (<c>MAX_SCORCH_MARKS</c>), the
-/// oldest is dropped when full, and a mark of the same type within a quarter radius in X, Y and radius is a duplicate.
+/// A capped ring of decals. Scorches follow <c>BaseHeightMapRenderObjClass::addScorch</c>: the oldest is dropped when the ring is full
+/// (the original's <c>MAX_SCORCH_MARKS</c> is 500, <see cref="OriginalScorchLimit"/>; marks never fade by time), and a mark of the same type
+/// within a quarter radius in X, Y and radius is a duplicate. This port's default is higher (<see cref="DefaultScorchLimit"/>, owner's
+/// decision of 14 November 2026, #316): a mark is drawn only when its box is in view, a mark costs at most 64 quads of a 65,536-quad
+/// buffer and usually 4 to 16, so 2,000 marks cost the picture only what is on screen, and a match of an hour no longer loses the
+/// damage of its first minutes after 500 shots.
 /// </summary>
-public sealed class DecalBuffer(int capacity = 500)
+public sealed class DecalBuffer(int capacity = DecalBuffer.DefaultScorchLimit)
 {
+    /// <summary>The original's <c>MAX_SCORCH_MARKS</c> (<c>BaseHeightMap.h</c>).</summary>
+    public const int OriginalScorchLimit = 500;
+    /// <summary>The limit this port uses unless a caller names another.</summary>
+    public const int DefaultScorchLimit = 2000;
+
     public const string ScorchTexture = "EXScorch01.tga";
     private readonly List<DecalInstance> _decals = [];
 

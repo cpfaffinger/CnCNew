@@ -784,6 +784,15 @@ public static partial class FxTests
         buffer.Add(new DecalInstance(DecalKind.Fx, "TestDecal.tga", Vector3.Zero, 5f, 0f, Vector4.One, new Vector4(0f, 0f, 1f, 1f), 3, 10, 5));
         buffer.Expire(10);
         Assert(buffer.Snapshot().All(decal => decal.Kind == DecalKind.Scorch), "timed decals expire");
+        var big = new DecalBuffer();
+        for (var index = 0; index < DecalBuffer.DefaultScorchLimit + 300; index++) big.AddScorch(new Vector3(index * 100f, 0f, 0f), 8f, 0, index);
+        var kept = big.Snapshot();
+        Assert(DecalBuffer.DefaultScorchLimit > DecalBuffer.OriginalScorchLimit && DecalBuffer.OriginalScorchLimit == 500, "the default is above the original's 500");
+        Assert(big.Count == DecalBuffer.DefaultScorchLimit && big.Dropped == 300 && kept[0].Position.X == 300 * 100f && kept[^1].Position.X == (DecalBuffer.DefaultScorchLimit + 299) * 100f,
+            "the count never exceeds the limit and the oldest 300 went first");
+        var original = new DecalBuffer(DecalBuffer.OriginalScorchLimit);
+        for (var index = 0; index < 700; index++) original.AddScorch(new Vector3(index * 100f, 0f, 0f), 8f, 0, index);
+        Assert(original.Count == 500 && original.Snapshot()[0].Position.X == 200 * 100f, "with the original's limit 500 stay");
         Assert(DecalBuffer.ScorchUv(4) == new Vector4(1.5f / 4f, 1.5f / 4f, 2.5f / 4f, 2.5f / 4f), "SHADOW_SCORCH is the centre atlas cell");
         Assert(DecalBuffer.ScorchUv(2) == new Vector4(3f / 4f, 0f, 1f, 1f / 4f), "SCORCH_3 is the third cell of the first row");
     }
