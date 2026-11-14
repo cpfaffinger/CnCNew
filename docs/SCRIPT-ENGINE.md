@@ -992,3 +992,7 @@ took a different path; the new army does not lose its mass and needed a rule of 
 Why it takes 14 minutes longer than the earlier run has not been investigated. The ticks of the row "before the AI corrections" deviate from the values of Phase 17 above (`MD_CHI01` @18,492,
 `MD_CHI02` @29,605), because Phase 22 and the factory exit lie in between. **Not measured:** the remaining 21 maps in commands-only mode after the AI corrections (the statement "3 of 24 at
 2,000 s" has not been repeated for the final state – verified are the three maps of the table, of which `MD_CHI02` only with a longer budget). At 60 Hz (published state `39e41df`, `--minutes 34`): `MD_GLA04` victory @2,044, `MD_CHI01` victory @32,056, `MD_CHI02` not reached – the same three outcomes as at 30 Hz with that budget.
+
+## A script's FIRE_WEAPON at an object out of range (#328)
+
+The script's FIRE_WEAPON attack at an object is no longer refused out of range: the limited attack approaches the victim as the original's `AIAttackState` does (`docs/SIMULATION-CORE.md` 90.4).

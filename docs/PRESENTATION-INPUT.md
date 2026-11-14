@@ -646,3 +646,5 @@ Orders are distributed in the game layer and reach the simulation as the existin
 ## A FIRE_WEAPON button at an object (#302)
 
 A player's `FIRE_WEAPON` button aimed at an object is `MSG_DO_WEAPON_AT_OBJECT` (`Object::doCommandButtonAtObject`): the standing order sends one `FireWeaponCommand` with the button's weapon slot, locked for the attack, and its `MaxShotsToFire` (`NO_MAX_SHOTS_LIMIT` without the key), and the attack then fires its own shots until the limit or the victim is gone (`SimulationWorld.IsLimitedAttackRunning`). Before, the button was the ordinary attack with the best weapon, so the Jarmen Kell's vehicle snipe never fired at a tank. Open: a victim that leaves the range during such an attack is not chased again, and `MaxShotsToFire` of a button is still read as text in the command catalogue.
+
+A limited attack approaches its victim itself since #328 (`docs/SIMULATION-CORE.md` 90.4): the standing order sends the one `FireWeaponCommand` also when the victim is out of range and waits for the attack to end.

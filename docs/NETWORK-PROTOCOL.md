@@ -1372,3 +1372,7 @@ comparison of the base data, so a member need not have compiled anything to ente
 ## Phase 65: protocol version 10
 
 `RoomSettings` carries the advanced option "Build in the fog of war" (a flag; the match description is encoding 5 and a skirmish save is version 5). A client of protocol 9 is refused with a version message.
+
+## 27. Protocol 11 (14 November 2026)
+
+The room's debug options carry the quick build and recharge levels, "applies to human players only" and the money buttons (match description 6); `DebugGiveMoneyCommand` (type 47) is a player order the relay passes like any other.

@@ -5387,3 +5387,12 @@ Sixteen findings of a skirmish (#306 to #321), each read in the original; the pr
 ### 90.3 The computer's gatherers and their centres (#319)
 
 `docs/SKIRMISH-AI.md` 7e.
+
+### 90.4 The owner's play of 14 November 2026
+
+- **The Comanche's crash (#315):** rule fix 30 `helicopter-crash-variance` (product profile only, `docs/GGC-FIXES.md`): after the original's draws of `HelicopterSlowDeathBehavior::beginSlowDeath` four more from the logic stream - the spiral's side and factors of 0.75 to 1.25 on the turn rate, the forward speed and the blade delay; the original profile draws nothing more. Test `HelicopterCrashesVaryUnderTheFix` at 30, 60 and 120 Hz.
+- **The battle drone (#318)** was not reproduced: twenty Paladins on real data with a drone each, bought as the command bar sends it for a group, are each repaired only by their own drone (`RealDroneGroupRepairsEachOnlyItsOwnMaster`).
+- **A limited FIRE_WEAPON attack (#328):** a `FireWeaponCommand` with a shot limit is accepted out of reach and begins with the approach (`AIAttackApproachTargetState`), keeping the weapon lock, the shot counter and its grace; it follows a victim that leaves its range. Aircraft that cannot hover are excluded. A script's FIRE_WEAPON at an object out of range approaches instead of being refused.
+- **The death effect's object (#332):** `FXListDie`'s `OrientToObject` defaults to true as in the original (`FXListDie.h`), so the effect list is made for the dying object and an `AttachToObject` system dies with it - the fuel air bomb's `DaisyExplosionScatter` (`SystemLifetime = 0`) emitted its gas for good before.
+- **The Chinook's far pile (#342):** the far-pile fallback of rule fix 29 is taken only when no stocked warehouse lies within the scan distance (or is the preferred dock); a stocked pile without a free approach place is busy, the want fails and the carrier regroups, as in the original. With the map explored from the start every pile counted as seen, and more than five Chinooks at one pile flew to a far corner.
+- **The debug options (#329, #336, #343):** `docs/GAME-SHELL.md` "The debug options of 14 November 2026".
