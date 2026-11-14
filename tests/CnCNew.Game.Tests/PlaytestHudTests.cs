@@ -588,13 +588,20 @@ internal static class PlaytestHudTests
         controller.Process(new MouseMoveEvent(1_000, on));
         controller.Process(new MouseButtonEvent(1_010, MouseButton.Left, true, on));
         Frame();
-        var pressed = controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().Any(image => image.Image == "Cameo_push" && image.Destination == rect);
-        TestHarness.Assert(pressed, "the held button wears Cameo_push");
+        // The original skin lays Cameo_push over the held button; the modern skin draws the bar itself and outlines it in the selected colour (#348).
+        var held = controller.BuildDrawList(1280, 720).Commands;
+        var pressed = controller.Skin.IsModern
+            ? held.OfType<UiBorderRect>().Any(border => border.Rect == rect && border.Color == CnCNew.Ui.Skins.ModernLayout.Palette.Selected)
+            : held.OfType<UiImageDraw>().Any(image => image.Image == "Cameo_push" && image.Destination == rect);
+        TestHarness.Assert(pressed, "the held button shows that it is pressed");
         controller.Process(new MouseButtonEvent(1_090, MouseButton.Left, false, on));
         Frame();
         TestHarness.Assert(controller.Input.Commands.Mode == CnCNew.Presentation.Input.CommandModeKind.ButtonTarget, $"the drop waits for its place after the release ({controller.Input.Commands.Mode})");
-        var hilited = controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().Any(image => image.Image == "Cameo_hilited" && image.Destination == rect);
-        TestHarness.Assert(hilited, "released under the pointer it wears Cameo_hilited");
+        var released = controller.BuildDrawList(1280, 720).Commands;
+        var hilited = controller.Skin.IsModern
+            ? released.OfType<UiBorderRect>().Any(border => border.Rect == rect && border.Color == CnCNew.Ui.Skins.ModernLayout.Palette.Accent)
+            : released.OfType<UiImageDraw>().Any(image => image.Image == "Cameo_hilited" && image.Destination == rect);
+        TestHarness.Assert(hilited, "released under the pointer it shows the pointer over it (Cameo_hilited, the accent outline of the modern skin)");
         controller.Process(new MouseMoveEvent(1_200, new Vector2(640, 360)));
         Frame();
         TestHarness.Assert(controller.Input.Commands.Mode == CnCNew.Presentation.Input.CommandModeKind.ButtonTarget && controller.Cursor.Kind != CnCNew.Presentation.Input.CursorKind.Normal && controller.Cursor.Kind != CnCNew.Presentation.Input.CursorKind.Arrow,

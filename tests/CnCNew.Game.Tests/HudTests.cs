@@ -70,6 +70,9 @@ internal static class HudTests
         harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
         harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
+        harness.Run("#348: a button of the bar of the special powers shows its description under the pointer, in both skins", () => { PowerBarTooltip(data, UiSkinName.Original); PowerBarTooltip(data, UiSkinName.Modern); });
+        harness.Run("#348: the modern skin draws the bar of the special powers itself - trays, states, the recharge strip, a flash when a power becomes ready - and no tray picture", () => ModernPowerBar(data));
+        harness.Run("#348: the flash of a power that has become ready: 60 frames, bright first, switching every 10, at every rate", PowerReadyFlashSchedule);
         harness.Run("A FIRE_WEAPON button at an object (#302): the unit attacks with the button's weapon slot, locked, and the attack carries the button's shot limit", () => FireButtonAtObject(data));
         harness.Run("A limited FIRE_WEAPON attack follows a victim that leaves its range and fires its shots (#328)", () => FireButtonChasesVictim(data));
         harness.Run("Hack, weapon switch, overcharge, hijack, car bomb, sabotage: a press does what the button says", () => ButtonsOfUnits(data));
@@ -785,6 +788,119 @@ internal static class HudTests
             "the paradrop shows once the player has its science, in the order of the set");
         var list = controller.BuildDrawList(1280, 720);
         TestHarness.Assert(list.Commands.OfType<UiImageDraw>().Any(image => image.Image == "SACParatroopers"), "with its cameo");
+    }
+
+    /// <summary>An American player with the command center's scan and the paradrop on the bar of the special powers, in <paramref name="skin"/>.</summary>
+    private static (LiveMatch Match, MatchController Controller) PowerBarMatch(GameData data, UiSkinName skin)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }) { StarBlinks = false };
+        Advance(match, controller, (int)match.World.Time.OriginalFrames(4));
+        match.World.GrantScience(match.Human, "SCIENCE_Paradrop1");
+        Advance(match, controller, 2);
+        controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.Powers.Length == 2, $"{skin}: the bar has the paradrop and the scan ({string.Join(", ", controller.Powers.Select(power => power.Button.Name))})");
+        return (match, controller);
+    }
+
+    /// <summary>
+    /// #348: <c>ControlBar::populateSpecialPowerShortcut</c> gives each button of the bar its command button, and <c>commandButtonTooltip</c> shows its popup
+    /// (<c>populateBuildTooltipLayout</c>: the name and the description) as for any command button. The port showed nothing.
+    /// </summary>
+    private static void PowerBarTooltip(GameData data, UiSkinName skin)
+    {
+        var (match, controller) = PowerBarMatch(data, skin);
+        long time = 10_000;
+        for (var number = 1; number <= controller.Powers.Length; number++)
+        {
+            var power = controller.Powers[number - 1];
+            var rect = controller.PowerButtonRect(number);
+            controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX, rect.CenterY)));
+            Advance(match, controller, 45);
+            var tooltip = controller.Tree.Tooltip;
+            var name = controller.Assets.Text.Get(power.Button.TextLabel);
+            var description = controller.Assets.Text.Get(power.Button.DescriptLabel);
+            TestHarness.Assert(tooltip is not null && name.Length > 0 && tooltip.Text.StartsWith(name, StringComparison.Ordinal) && (description.Length == 0 || tooltip.Text.Contains(description.Split('\n')[0].Trim(), StringComparison.Ordinal)),
+                $"{skin}: the pointer over {power.Button.Name} shows its name and description ({tooltip?.Text ?? "nothing"})");
+            var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains(name, StringComparison.Ordinal));
+            TestHarness.Assert(drawn, $"{skin}: and the tooltip of {power.Button.Name} is drawn");
+        }
+    }
+
+    private static void PowerReadyFlashSchedule()
+    {
+        foreach (var perFrame in new long[] { 1, 2, 4 })
+            for (var frame = 0; frame < 90; frame++)
+                for (var tick = 0L; tick < perFrame; tick++)
+                    TestHarness.Assert(MatchController.PowerReadyFlash(frame * perFrame + tick, perFrame) == (frame < 60 && frame / 10 % 2 == 0), $"{perFrame} ticks a frame, frame {frame}");
+    }
+
+    /// <summary>
+    /// #348: the modern skin draws the trays of the bar of the special powers itself; only the powers' cameos are pictures. The tray pictures (<c>SATraySmall</c>, <c>SNTraySmall</c>,
+    /// <c>SUTraySmall</c>, <c>SATray</c>) and the cameo overlays (<c>Cameo_hilited</c>, <c>Cameo_push</c>) are not drawn there, while the original skin draws its tray (the check bites).
+    /// </summary>
+    private static void ModernPowerBar(GameData data)
+    {
+        string[] art = ["SATraySmall", "SNTraySmall", "SUTraySmall", "SATray", "Cameo_hilited", "Cameo_push"];
+        var (_, original) = PowerBarMatch(data, UiSkinName.Original);
+        TestHarness.Assert(original.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().Any(image => image.Image == "SATraySmall"), "the original skin draws the tray picture (the check bites)");
+
+        var (match, controller) = PowerBarMatch(data, UiSkinName.Modern);
+        var palette = CnCNew.Ui.Skins.ModernLayout.Palette;
+        long time = 10_000;
+        var list = controller.BuildDrawList(1280, 720).Commands;
+        void Draw() => list = controller.BuildDrawList(1280, 720).Commands;
+        void NoArt(string state)
+        {
+            var drawn = list.OfType<UiImageDraw>().Select(image => image.Image).Where(art.Contains).Distinct().ToArray();
+            TestHarness.Assert(drawn.Length == 0, $"{state}: no picture of the bar's chrome ({string.Join(", ", drawn)})");
+        }
+        var tray = controller.Tree.FindByName("GenPowersShortcutBarUS.wnd:ButtonParent1")!.Rect;
+        var cameo = controller.PowerButtonRect(1);
+        NoArt("at rest");
+        TestHarness.Assert(list.OfType<UiFillRect>().Any(fill => fill.Rect == tray && fill.Color == palette.Panel) && list.OfType<UiImageDraw>().Any(image => image.Destination == cameo && image.Image == "SACParatroopers"),
+            "a tray of the palette with the paradrop's cameo");
+        TestHarness.Assert(controller.Powers[0].Availability == ButtonAvailability.Available, "the paradrop is ready at once");
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(cameo.CenterX, cameo.CenterY)));
+        Draw();
+        NoArt("under the pointer");
+        TestHarness.Assert(list.OfType<UiBorderRect>().Any(border => border.Rect == cameo && border.Color == palette.Accent), "an enabled power under the pointer is outlined in the accent");
+        controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, new Vector2(cameo.CenterX, cameo.CenterY)));
+        Draw();
+        NoArt("pressed");
+        TestHarness.Assert(list.OfType<UiBorderRect>().Any(border => border.Rect == cameo && border.Color == palette.Selected), "a pressed power is outlined in the selected colour");
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(640, 200)));
+        controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, false, new Vector2(640, 200)));
+        controller.Input.Commands.Cancel();
+
+        // The scan recharges: its strip fills from the bottom in the accent; when it is ready the strip is the good colour and the tray flashes for 60 frames of the original.
+        var scan = Enumerable.Range(0, controller.Powers.Length).First(index => controller.Powers[index].Button.Name.Contains("SpySatellite", StringComparison.Ordinal));
+        var scanTray = controller.Tree.FindByName($"GenPowersShortcutBarUS.wnd:ButtonParent{scan + 1}")!.Rect;
+        var scanCameo = controller.PowerButtonRect(scan + 1);
+        Draw();
+        bool Strip(CnCNew.Ui.Wnd.WndColor color) => list.OfType<UiFillRect>().Any(fill => fill.Color == color && fill.Rect.X >= scanCameo.Right && fill.Rect.Right <= scanTray.Right && fill.Rect.Bottom == scanCameo.Bottom);
+        bool Flashing() => list.OfType<UiBorderRect>().Any(border => border.Rect == scanTray && border.Color == palette.Accent);
+        TestHarness.Assert(controller.Powers[scan].Availability == ButtonAvailability.NotReady && !Strip(palette.Good) && !Flashing(), $"the scan recharges ({controller.Powers[scan].Availability})");
+        var accentSeen = false;
+        for (var frame = 0; frame < 30 * 60 * 6 && controller.Powers[scan].Availability != ButtonAvailability.Available; frame++)
+        {
+            Advance(match, controller, 1);
+            Draw();
+            if (controller.Powers[scan].Availability == ButtonAvailability.NotReady && Strip(palette.Accent) && !Strip(palette.Good)) accentSeen = true;
+        }
+        TestHarness.Assert(accentSeen, "while it recharges its strip fills from the bottom in the accent");
+        TestHarness.Assert(controller.Powers[scan].Availability == ButtonAvailability.Available && Strip(palette.Good) && Flashing(), $"a ready power: the strip is the good colour and the tray flashes ({controller.Powers[scan].Availability})");
+        NoArt("ready");
+        Advance(match, controller, 10);
+        Draw();
+        TestHarness.Assert(!Flashing(), "ten frames later the flash is dark");
+        Advance(match, controller, 60);
+        Draw();
+        TestHarness.Assert(!Flashing() && Strip(palette.Good), "after 60 frames it no longer flashes; the strip stays the good colour");
+
+        // A press still uses the power.
+        TestHarness.Assert(controller.PressPowerButton(1) && controller.Input.Commands.Mode != CommandModeKind.None, $"a press aims the ready paradrop ({controller.Input.Commands.Mode})");
     }
 
     /// <summary>

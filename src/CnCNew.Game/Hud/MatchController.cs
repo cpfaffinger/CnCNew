@@ -1190,6 +1190,8 @@ public sealed partial class MatchController
         if (NonCommandButtons.TryGetValue(window.Name, out var nonCommand) && Input.CommandBar!.Catalog.TryGetButton(nonCommand, out var nonCommandInfo))
             return _descriptions.Plain(nonCommandInfo).ToTooltip() is { Length: > 0 } plain ? plain : null;
         if (window.Name == CancelConstructionWindow) return CancelConstructionInfo is { } cancel ? _descriptions.Plain(cancel).ToTooltip() : null;
+        // ControlBar::populateSpecialPowerShortcut gives every button of the powers bar its command button, and with it the popup of commandButtonTooltip (#348).
+        if (PowerShortcut(window.Name) is { } shortcut) return _descriptions.Build(shortcut, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } described ? described : null;
         if (GeneralsButton(window.Name) is { } science) return _descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null;
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
         if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;
