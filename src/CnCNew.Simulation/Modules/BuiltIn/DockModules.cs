@@ -202,9 +202,11 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     protected virtual (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker)
     {
         var (x, y) = (Entity.X, Entity.Y);
-        var dx = docker.X - Entity.X;
-        var dy = docker.Y - Entity.Y;
-        var dz = docker.Z - Entity.Z;
+        // The docker where its frame ends (the frame convention: what the dock sees of it at 30 Hz).
+        var (dockerX, dockerY, dockerZ) = docker.FrameEnd(world.Tick);
+        var dx = dockerX - Entity.X;
+        var dy = dockerY - Entity.Y;
+        var dz = dockerZ - Entity.Z;
         var distSq = dx * dx + dy * dy + dz * dz;
         if (distSq != Fixed.Zero)
         {
