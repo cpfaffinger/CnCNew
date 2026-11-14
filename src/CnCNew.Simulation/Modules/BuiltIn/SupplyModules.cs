@@ -380,7 +380,9 @@ internal sealed class SupplyMachine
                 {
                     // chinook-keeps-gathering: nothing within the scan distance, so the nearest stocked warehouse the player has seen; and the regrouping that follows a failure is the
                     // machine's own order (the original's aiMoveToPosition(CMD_FROM_AI)), not the player's last one, which would end it at once and leave the Chinook standing.
-                    if (ai.Boxes == 0) dock = SupplyNetwork.FindSeenWarehouse(world, ai);
+                    // A stocked warehouse within reach that merely has no free approach place is busy, not gone (#342): the gatherer fails and walks home as the original's does, it does not
+                    // fly to the nearest free pile of a map that is explored from the start.
+                    if (ai.Boxes == 0 && !SupplyNetwork.HasStockedWarehouseInReach(world, ai)) dock = SupplyNetwork.FindSeenWarehouse(world, ai);
                     if (dock is null) ai.TakeOverFromPlayer(world);
                 }
                 if (dock is null) return DockStatus.Failure;
@@ -730,6 +732,21 @@ internal static class SupplyNetwork
             }
         }
         return best;
+    }
+
+    /// <summary>A warehouse the carrier may use that holds supplies lies within its scan distance (or is the dock it was told to work), whether or not it has a free approach place.</summary>
+    public static bool HasStockedWarehouseInReach(IWorldServices world, SupplyCarrierAI truck)
+    {
+        var self = truck.Entity;
+        var limit = SquaredReach.Of(truck.WarehouseScanDistance);
+        foreach (var candidate in world.EntitiesWithModule<IDockModule>().AsSpan())
+        {
+            if (candidate.EffectivelyDead || candidate.DestroyRequested || candidate.HasStatus(ObjectStatusBits.UnderConstruction) || candidate.HasStatus(SoldBit)) continue;
+            if (DockModules.DockOf(candidate) is not SupplyWarehouseDockUpdate { Boxes: > 0 } || world.AreEnemies(self.Owner, candidate.Owner)) continue;
+            var (dx, dy, dz) = (candidate.X - self.X, candidate.Y - self.Y, candidate.Z - self.Z);
+            if (candidate.Id == truck.PreferredDock || limit.ContainsStrictly(dx * dx + dy * dy + dz * dz)) return true;
+        }
+        return false;
     }
 
     /// <summary>

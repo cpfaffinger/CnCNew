@@ -50,6 +50,10 @@ static partial class Tests
             return World.Entities.First(entity => !before.Contains(entity.Id.Value));
         }
 
+        public void Explore() => Submit(new ExploreMapCommand(PlayerId.System, ++_sequence, World.Tick, Human));
+
+        public void Rally(Entity producer, int x, int y) => Submit(new SetRallyPointCommand(Human, ++_sequence, World.Tick, producer.Id, Fixed.FromInt(x), Fixed.FromInt(y)));
+
         public void Settle() { for (var step = 0; step < World.Frames(3); step++) World.Step(); }
 
         public void Dock(Entity carrier, Entity dock) => Submit(new DockCommand(Human, ++_sequence, World.Tick, carrier.Id, dock.Id));
@@ -138,5 +142,42 @@ static partial class Tests
             Check.That(clicked.Count >= 3, $"{rate}: after the click it gathers ({clicked.Count} deliveries).");
             Check.That(clicked.Skip(1).All(delivery => delivery.Center == closer.Id.Value), $"{rate}: a click on a center makes it the home base ({string.Join(",", clicked.Select(delivery => delivery.Center))}).");
         }
+    }
+
+    /// <summary>
+    /// Real data (the owner's playtest of 14 November 2026, #342; rule fix <c>chinook-keeps-gathering</c>): a pile beside the center whose approach places are taken is a pile that is busy, not one
+    /// that is gone. The Chinooks that find no place at it do not fly to the nearest free pile of the whole (explored) map, they wait at their center as the original's gatherers do
+    /// (<c>SupplyTruckWantsToPickUpOrDeliverBoxesState</c> fails, the regrouping state walks home) and come back when a place is free.
+    /// </summary>
+    public static void RealChinooksDoNotLeaveForFarPileWhenNearOneIsBusy(string directory)
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+            foreach (var rally in new[] { false, true })
+            {
+                var scene = new GatherWorld(directory, rate);
+                // Seven centers beside one another: each makes its own Chinook (SpawnBehavior), and they all gather from the one pile of five approach places (a rally point in the far corner changes nothing: a supply center's exit sends its Chinook to work).
+                var center = scene.Spawn("AmericaSupplyCenter", scene.Human, 300, 300);
+                for (var other = 1; other < 7; other++) scene.Spawn("AmericaSupplyCenter", scene.Human, 300 + (other % 3) * 120, 300 - (other / 3 + 1) * 110 + (other / 3) * 330);
+                var near = scene.Spawn("SupplyPile", PlayerId.System, 520, 340);
+                var far = scene.Spawn("SupplyPile", PlayerId.System, 1700, 1700);
+                scene.Explore();
+                scene.Settle();
+                if (rally) scene.Rally(center, 1700, 1640);
+                var nearest = Fixed.MaxValue;
+                var steps = scene.World.Frames(30 * 70);
+                for (var step = 0; step < steps; step++)
+                {
+                    scene.World.Step();
+                    if (scene.World.FindEntity(near.Id) is null) break; // the pile is worked off: the next pile is the right target then
+                    foreach (var chinook in scene.World.Entities.Where(entity => entity.Template.Name == "AmericaVehicleChinook"))
+                    {
+                        var (dx, dy) = (chinook.X - far.X, chinook.Y - far.Y);
+                        var distance = dx * dx + dy * dy;
+                        if (distance < nearest) nearest = distance;
+                    }
+                }
+                Check.That(!SquaredReach.Of(Fixed.FromInt(900)).Contains(nearest),
+                    $"{rate} ({(rally ? "rally point in the corner" : "no rally point")}): no Chinook flew to the far pile while the near one was busy (closest approach squared {nearest}).");
+            }
     }
 }
