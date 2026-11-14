@@ -95,11 +95,12 @@ The text shadow of the original (a drop colour at +1, +1) is dropped in the mode
 ## 6. What stays the original's
 
 Kept as the game draws them, loaded at run time: cameos and portraits, map previews, the faction and side logos, the score screen's
-category pictures, the art of the command bar (`ControlBarScheme.ini`), the radar and the minimap, the cursors, every sound and the
+category pictures, the radar and the minimap, the cursors, every sound and the
 timings of the window transitions, and **every text** (the game's string table and this project's own English lines). Drawn by the skin
 instead: full-screen backdrops (an image that covers the whole creation area becomes the Canvas colour), and the chrome of every gadget -
 push buttons, check boxes, radio buttons, sliders, list boxes and their scroll bars, combo boxes and their drop-downs, entry fields,
-progress bars, tab controls - as flat rectangles of the palette by state (enabled, hilited, pressed or selected, disabled). An image of a
+progress bars, tab controls - as flat rectangles of the palette by state (enabled, hilited, pressed or selected, disabled), and since
+#345 and #348 every control of the command bar and the special powers bar (the original skin keeps the art of `ControlBarScheme.ini`). An image of a
 plain window smaller than the screen (a logo, a cameo, a portrait) is a picture and stays.
 
 The screens the game draws itself and the original has no layout for - the analysis pages, the observer HUD and its ticker, the network
@@ -293,3 +294,7 @@ The modern skin is the default for every settings file since schema 6 (`docs/UI-
 ## Phase 64: opened lists, text that does not fit, 16:10, the hotkey editor
 
 An opened drop-down is drawn last, after any picture a screen adds itself (`UiDrawList.DropDownStart`). A label that does not fit its window at 125 % or 150 % text steps its font down one point at a time to its 100 % size in that skin, then wraps where the window has the height, then ends in an ellipsis - never drawn outside its window (`UiTextFit`, used by the draw and the readability check; nothing moves at 100 %); the product survey finds 0 overflows at 150 % in both skins, and two shipped labels of the original skin that do not fit at 100 % are known and kept. The 16:10 sizes 1440 x 900, 1680 x 1050 and 1920 x 1200 are pinned for the main menu, the options and the HUD in both skins in `skin-screens-16x10.txt` (R2b), beside the six fixed sizes. The hotkey list of More options is editable (see `docs/GAME-SHELL.md`).
+
+## Phase 66: the command bar's own controls and the special powers bar (#345, #348)
+
+The owner (14 November 2026): the modern command bar still showed the scheme's pictures. **The bar's controls (#345):** options, idle worker, beacon and communicator were the scheme's art of every side (`SNOptions`, `SNWorker`, `SNBeacon`, `SNChat` and their kin) stretched into the flat band; they are flat cells of the palette with an icon of lines (three bars, a hammer, a flag, a speech bubble), lighter with the accent at the left edge under the pointer, the selected colour when pressed, dark with a disabled icon when disabled; the idle worker button carries the count of idle workers on the accent. The under-attack light is a round lamp in the money's well, lit in the warning colour in the phases of `ControlBar::updateRadarAttackGlow` (150 frames, lit first, toggled every 15) after an under-attack radar event. The general's button blinks with a wash of the accent while points wait. `ApplySchemeImages` gives the modern skin no scheme art at all. **The special powers bar (#348):** its buttons had no tooltip in either skin - `ControlBar::populateSpecialPowerShortcut` gives each its command button, whose popup the pointer now shows (name, description). In the modern skin each tray is a flat panel with the power's cameo, the recharge clock over it, and a status strip where the original has its tab: filling from the bottom in the accent while the power recharges, the good colour when ready, the disabled colour when it cannot be used; a power that has just become ready flashes its tray for 60 frames of the original. The original skin is unchanged (its hashes did not move). What stays the original's in the modern skin: cameos, portraits, map previews, side logos, score pictures, radar and minimap, cursors, sounds, texts. The original skin's under-attack light is #357.

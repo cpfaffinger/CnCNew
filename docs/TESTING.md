@@ -336,3 +336,7 @@ display switched on, and a run without one does not count as tier 4.
 ## Phase 62 additions
 
 `Presentation.Tests` takes `--only <Suite>` (the class name), as `Game.Tests` does. `scripts/check-minimap.ps1` (the on-screen radar against the composed picture, and the fog of an object against its unfogged capture) and `scripts/check-ingame-menu.ps1` are checks of a person's path in the real client; neither is a step of `scripts/test.ps1` yet.
+
+## Checks with windows on the owner's machine (#358)
+
+The window checks (`check-net-acceptance`, `check-net-lobby`, `check-replay-browser`, `check-skins`, `check-ingame-menu`, `check-product-survey`, `check-spectator`) open game windows on the machine's desktop. Each client gets a limit of its own (`--shell-seconds`, `--skirmish-seconds`, `--frames`) and each wait of the script is bounded (`WaitForExit(ms)`, then a kill). A window closed by hand ends with exit code 0, so `check-net-acceptance` asks whether each window reported its match and otherwise stops the clients without a window at once; it says when its two windows open and when they close at the latest.
