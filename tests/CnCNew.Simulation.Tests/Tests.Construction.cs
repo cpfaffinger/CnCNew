@@ -602,7 +602,7 @@ static partial class Tests
         feeder.Spawn(1, "Dozer", x: 0, y: 20);
         world.Step();
         feeder.Construct(1, 1, "Plant", 60, 0);
-        StepUntil(world, 30, () => false);
+        StepUntil(world, 45, () => false);
         var site = ConstructionFind(world, "Plant");
         var workBefore = site.ConstructionWork;
         Check.That(workBefore > 0 && IsSite(site), "The first builder has started working.");
@@ -711,7 +711,7 @@ static partial class Tests
         world.Step();
         feeder.Construct(1, 1, "Tower", 60, 0);
         feeder.Sell(1, 3);
-        StepUntil(world, 30, () => false);
+        StepUntil(world, 45, () => false);
         var site = ConstructionFind(world, "Tower");
         Check.That(IsSite(site) && site.ConstructionWork > 0 && ConstructionFind(world, "Barracks").HasStatus(ObjectStatusBits.Sold), "Snapshot taken mid-construction and mid-sale.");
 

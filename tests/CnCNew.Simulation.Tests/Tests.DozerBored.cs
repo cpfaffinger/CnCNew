@@ -236,7 +236,7 @@ static partial class Tests
             var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
             var feeder = new Feeder(world);
             Check.That(feeder.Spawn(1, "BoredDozer", owner: 1, x: 160, y: 100).Accepted && feeder.Spawn(1, "BoredHut", owner: 1, x: 260, y: 100).Accepted
-                && feeder.Spawn(1, "BoredDozer", owner: 1, x: 262, y: 118).Accepted, "Two dozers and a hut spawn.");
+                && feeder.Spawn(1, "BoredDozer", owner: 1, x: 261, y: 101).Accepted, "Two dozers and a hut spawn.");
             world.Step();
             var first = world.Entities.First(value => value.Template.Name == "BoredDozer");
             var second = world.Entities.Last(value => value.Template.Name == "BoredDozer");

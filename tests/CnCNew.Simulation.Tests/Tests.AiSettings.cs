@@ -49,6 +49,12 @@ static partial class Tests
         }
         long Delay(CnCNew.Simulation.Skirmish.Original.ScriptedSkirmishSession match)
         {
+            // Whether the first team of the base dies by itself depends on when its barracks stand (a builder walks to the place it picks, #337): the measurement does not wait for that,
+            // it ends the soldiers once the barracks stand, and the AI builds its next team.
+            StepFrames(match, 450);
+            ulong sequence = 2_000_000;
+            foreach (var soldier in match.World.Entities.Where(entity => entity.Owner == alpha && entity.Template.Name == "AlphaSoldier").ToArray())
+                Check.That(match.World.Submit(new KillCommand(PlayerId.System, ++sequence, match.World.Tick, soldier.Id)).Accepted, "A soldier is ended.");
             var start = match.Engine.AiTeamReadyTick(alpha);
             for (var frame = 0; frame < 900; frame++)
             {

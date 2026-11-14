@@ -114,6 +114,8 @@ run.Test("Acceptance (UNIT-19): a locomotor reads its lift", Tests.ALocomotorRea
 run.Test("Acceptance (UNIT-19): a jet flares its landing", Tests.AJetFlaresItsLanding);
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
 run.Test("Debug options: a building site in the fog of war is legal when the match allows it", Tests.BuildSiteInTheFogWhenTheOptionIsOn);
+run.Test("#337: a dozer builds from where its approach ends", Tests.DozerBuildsFromWhereItsApproachEnds);
+run.Test("#337: a dozer never gives up a site it cannot reach", Tests.DozerNeverGivesUpAnUnreachableSite);
 run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlliesMakeWayForAHarvester);
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);
 run.Test("Phase 62 (F-147): a bored dozer sees a hurt that came before its update", Tests.BoredDozerSeesAHurtBeforeItsUpdate);
@@ -945,6 +947,7 @@ if (contentDirectory is not null) run.Test("Real data: a production queue holds 
 if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter and the fuel air bomb explode at their target and destroy what stands there", () => Tests.RealDaisyCutterAndFuelAirBomb(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter dropped on a building still blows up (its gas is immobile and meets no building)", () => Tests.RealDaisyCutterOnABuilding(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
+if (contentDirectory is not null) run.Test("#337: real builders build from where their approach ends", () => Tests.RealBuildersBuildFromTheirWall(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a wheeled unit ordered onto a goal inside its turning circle does not circle it for ever", () => Tests.RealWheeledUnitDoesNotCircleItsGoalForEver(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): five Dozers sent to one place settle around it", () => Tests.RealDozersSentToOnePlaceSettleAroundIt(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a reversing Dozer is held up by nobody in front of it", () => Tests.RealReversingDozerIsHeldByNobody(contentDirectory));

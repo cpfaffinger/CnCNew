@@ -869,6 +869,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private BuilderTask _task;
     private EntityId _taskTarget;
     private bool _approaching;
+    // The builder has reached its action place (DozerActionMoveToActionPosState succeeded) and is in DozerActionDoActionState: it works when it is idle, wherever the move ended.
+    private bool _inAction;
+    private Fixed _goalX, _goalY;
     private bool _evacuatePending;
     private bool _exitAfterEvacuate;
     private bool _returning;
@@ -1532,6 +1535,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _task = task;
         _taskTarget = target.Id;
         _approaching = false;
+        _inAction = false;
         _working = false;
         _lastCommandFromPlayer = fromPlayer;
         world.WakeAt(Entity, this, world.Tick);
@@ -1550,6 +1554,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _task = BuilderTask.None;
         _taskTarget = EntityId.Invalid;
         _approaching = false;
+        _inAction = false;
         _working = false;
     }
 
@@ -1601,20 +1606,23 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // Inside a logic frame's step (above 30 Hz) the builder is between two positions of the 30 Hz walk: it measures its reach again when the step is covered.
         if (_frameTicksLeft > 0 && Entity.HasMoveTarget) return;
 
-        var reach = target.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
-        var dx = target.X - Entity.X;
-        var dy = target.Y - Entity.Y;
-        if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy))
+        // DozerActionStateMachine: pick a place round the site, move there, do the work. A move that ends without getting near is picked again, for ever - the task never fails by itself.
+        if (!_inAction)
         {
-            _working = false;
-            if (Entity.HasMoveTarget) { _approaching = true; return; }
-            // The approach ended (blocked or as close as the grid allows) without getting within reach: give up.
-            if (_approaching || !StartInternalMove(target.X, target.Y)) { EndTask(world); return; }
-            _approaching = true;
-            return;
+            if (_approaching && IsNearActionPlace(target)) { _inAction = true; _approaching = false; }
+            else if (_approaching && Entity.HasMoveTarget) return;
+            else
+            {
+                _working = false;
+                if (!PickActionPlace(target)) { EndTask(world); return; }
+                _approaching = true;
+                return;
+            }
         }
-        StopInternalMove();
-        _approaching = false;
+        // DozerActionDoActionState: the work begins when the builder is idle, at the end of the move to its place.
+        if (Entity.HasMoveTarget) return;
+        // Idle is seen when the builder's frame begins: the arrival of a move is a state of the frame it ends in.
+        if (!_working && world.Time.TicksPerOriginalFrame != TickOrder.Next && !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         _working = true;
         if (_task == BuilderTask.Construct)
         {
@@ -1636,6 +1644,31 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         }
         var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.RepairRatePerSecond);
         world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
+    }
+
+    /// <summary>
+    /// <c>DozerActionPickActionPosState::update</c>: the place to go to lies on the circle of the site's bounding sphere, on the side the builder comes from (<c>findPositionAround</c>,
+    /// start angle from the site to the builder), and the move to it is ordered. False when the object has no locomotor.
+    /// </summary>
+    private bool PickActionPlace(Entity target)
+    {
+        var (dx, dy) = (Entity.X - target.X, Entity.Y - target.Y);
+        var distance = Fixed.Sqrt(dx * dx + dy * dy);
+        var radius = target.Template.BoundingSphereRadius;
+        (_goalX, _goalY) = distance > Fixed.Zero ? (target.X + dx * radius / distance, target.Y + dy * radius / distance) : (target.X + radius, target.Y);
+        return StartInternalMove(_goalX, _goalY);
+    }
+
+    /// <summary>
+    /// <c>DozerActionMoveToActionPosState::update</c>: the builder is near enough when the boundary of its bounding circle is within <c>max(MIN_ACTION_TOLERANCE, its bounding sphere + SLOP)</c>
+    /// of the place it picked - 70 units for a Dozer, however far the site's centre is.
+    /// </summary>
+    private bool IsNearActionPlace(Entity target)
+    {
+        var (dx, dy) = (_goalX - Entity.X, _goalY - Entity.Y);
+        var gap = Fixed.Sqrt(dx * dx + dy * dy) - Entity.Template.BoundingCircleRadius;
+        var allowed = Fixed.Max(Fixed.FromInt(70), Entity.Template.BoundingSphereRadius + Fixed.FromInt(15));
+        return gap <= allowed;
     }
 
     /// <summary>The internal move of a state (approach, advance): false when the object has no locomotor.</summary>
@@ -3139,6 +3172,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         writer.UInt("taskTarget", _taskTarget.Value);
         writer.Bool("approaching", _approaching);
         if (_working) writer.Bool("working", true);
+        if (_inAction) writer.Bool("inAction", true);
+        if (_approaching) { writer.Fixed("goalX", _goalX); writer.Fixed("goalY", _goalY); }
         if (_rappelling)
         {
             writer.UInt("rappelBuilding", _rappelBuilding.Value);
@@ -3236,6 +3271,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
         _approaching = reader.Bool("approaching");
         _working = reader.Has("working") && reader.Bool("working");
+        _inAction = reader.Has("inAction") && reader.Bool("inAction");
+        if (_approaching) { _goalX = reader.Fixed("goalX"); _goalY = reader.Fixed("goalY"); }
         _rappelling = reader.Has("rappelRate");
         if (_rappelling)
         {
