@@ -172,7 +172,7 @@ public sealed partial class SimulationWorld
         {
             var other = mobiles[index];
             if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
-            if (!StandsStill(other, mover, goal) || OnAnotherLevel(mover, other)) continue;
+            if (!StandsStill(other, mover, goal) || OnAnotherLevel(mover, other) || CanRunOver(mover, other)) continue;
             var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
             if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
             for (var sample = 0; sample < 4 && !blocked; sample++)
@@ -193,7 +193,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
-            if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around) || OnAnotherLevel(mover, other)) continue;
+            if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around) || OnAnotherLevel(mover, other) || CanRunOver(mover, other)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
             if (!aroundSquared.Contains(ddx * ddx + ddy * ddy)) continue;
@@ -217,7 +217,7 @@ public sealed partial class SimulationWorld
         {
             var other = mobiles[index];
             if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other)) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other) || CanRunOver(mover, other)) continue;
             var limit = moverRadius + CircleRadius(other);
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
@@ -254,9 +254,19 @@ public sealed partial class SimulationWorld
     private static bool IsMovingAwayFrom(Fixed moverX, Fixed moverY, Fixed otherX, Fixed otherY, Fixed otherAngle)
         => (otherX - moverX) * FixedTrig.Cos(otherAngle) + (otherY - moverY) * FixedTrig.Sin(otherAngle) >= Fixed.Zero;
 
-    /// <summary><c>Object::canCrushOrSquish</c> as far as a moving unit needs it: "just run over them".</summary>
+    /// <summary>
+    /// <c>Object::canCrushOrSquish</c> (<c>TEST_CRUSH_OR_SQUISH</c>) as the path search and <c>blockedBy</c> use it: "just run over them". An unmanned vehicle and an ally never; otherwise a crusher
+    /// level above zero and either something with a <see cref="SquishCollide"/> or a crushable level below the crusher's. What can be run over is no obstacle a way goes round.
+    /// </summary>
     private bool CanRunOver(Entity mover, Entity other)
-        => mover.Template.CrusherLevel > other.Template.CrushableLevel && RelationshipOf(mover.Owner, other.Owner) != Relationship.Allies;
+    {
+        var crusher = mover.Template.CrusherLevel;
+        if (crusher == 0 || mover.Unmanned || RelationshipOf(mover.Owner, other.Owner) == Relationship.Allies) return false;
+        if (crusher > other.Template.CrushableLevel) return true;
+        foreach (var module in other.ModuleArray)
+            if (module is SquishCollide) return true;
+        return false;
+    }
 
     /// <summary><c>AIUpdateInterface::hasHigherPathPriority</c>: dozers before vehicles before infantry, then the unit in front, then the lower id.</summary>
     private static bool HasHigherPathPriority(Entity mover, Fixed x, Fixed y, Fixed angle, Entity other, Fixed otherX, Fixed otherY, Fixed otherAngle)
@@ -381,7 +391,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
-            if (other.Id == mover.Id || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other)) continue;
+            if (other.Id == mover.Id || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other) || CanRunOver(mover, other)) continue;
             if (other.Template.Locomotor is { } locomotor && (locomotor.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0) continue;
             var (otherX, otherY, _) = other.FrameEnd(_tick);
             if (FurtherThan(otherX, mover.X, around) || FurtherThan(otherY, mover.Y, around)) continue;
@@ -428,7 +438,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count && !blocked; index++)
         {
             var other = mobiles[index];
-            if (!StandsStillAtFrameEnd(other, mover, goal) || OnAnotherLevel(mover, other)) continue;
+            if (!StandsStillAtFrameEnd(other, mover, goal) || OnAnotherLevel(mover, other) || CanRunOver(mover, other)) continue;
             var (otherX, otherY, _) = other.FrameEnd(tick);
             var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
             if (limit.Raw >= 0 && (otherX.Raw < minX.Raw - limit.Raw - ScanSlack || otherX.Raw > maxX.Raw + limit.Raw + ScanSlack || otherY.Raw < minY.Raw - limit.Raw - ScanSlack || otherY.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
@@ -448,7 +458,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
-            if (!StandsStillAtFrameEnd(other, mover, goal)) continue;
+            if (!StandsStillAtFrameEnd(other, mover, goal) || CanRunOver(mover, other)) continue;
             var (otherX, otherY, _) = other.FrameEnd(tick);
             if (FurtherThan(otherX, mover.X, around) || FurtherThan(otherY, mover.Y, around)) continue;
             var ddx = otherX - mover.X;
@@ -470,7 +480,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other)) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other) || CanRunOver(mover, other)) continue;
             var (otherX, otherY, _) = other.FrameEnd(tick);
             var limit = moverRadius + CircleRadius(other);
             if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
