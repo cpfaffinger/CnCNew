@@ -24,7 +24,8 @@ public sealed record TransitionFxSlot(int State, bool IsParticleSystem, string? 
 
 /// <summary>What an object template carries of the attached effects that are not FX lists of events.</summary>
 /// <param name="HasActiveBody">The body is an <c>ActiveBody</c> or one of its kinds: it shows <c>ActiveBody::updateBodyParticleSystems</c>'s fire and smoke.</param>
-/// <param name="MissileIgnitionFrames">For a projectile with <c>MissileAIUpdate</c> its <c>IgnitionDelay</c> in logic frames of the original (the exhaust starts then); null for every other object.</param>
+/// <param name="MissileIgnitionFrames">For a projectile with <c>MissileAIUpdate</c> its <c>IgnitionDelay</c> in logic frames of the original (the exhaust starts then), for one with
+/// <c>NeutronMissileUpdate</c> one frame (its launch); null for every other object.</param>
 public sealed record AttachedEffectTemplate(ImmutableArray<BoneFxSlot> BoneFx, ImmutableArray<TransitionFxSlot> Transition, bool HasActiveBody, long? MissileIgnitionFrames);
 
 /// <summary>
@@ -273,6 +274,8 @@ public sealed class AttachedEffectCatalog
                 var delay = module.Fields.LastOrDefault(field => field.Name.Equals("IgnitionDelay", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim();
                 ignition = delay is not null && decimal.TryParse(delay, NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds) ? (long)Math.Ceiling(milliseconds * CnCNew.Data.OriginalFrame.PerSecond / 1000) : 0;
             }
+            // NeutronMissileUpdate::doLaunch attaches the weapon's exhaust when it launches, in its first update - a logic frame after the shot.
+            if (module.Name.Equals("NeutronMissileUpdate", StringComparison.Ordinal)) ignition = 1;
             var isBone = module.Name.Equals("BoneFXUpdate", StringComparison.Ordinal);
             var isTransition = module.Name.Equals("TransitionDamageFX", StringComparison.Ordinal);
             if (!isBone && !isTransition) continue;
@@ -584,8 +587,8 @@ public sealed record AttachedEffectStats(long ModelStateSystems, long BodySystem
 /// or again and again; systems are destroyed when the state changes.</item>
 /// <item><c>TransitionDamageFX</c> (<c>onBodyDamageStateChange</c>): on a worse damage state its particle systems at their bone (or a random numbered one, or a location) and its
 /// FX lists; the systems of a state end when the object leaves it.</item>
-/// <item>A missile's exhaust (<c>MissileAIUpdate::doIgnitionState</c>): the launching weapon's <c>ProjectileExhaust</c> of the launcher's veterancy, attached to the projectile
-/// after its ignition delay.</item>
+/// <item>A missile's exhaust (<c>MissileAIUpdate::doIgnitionState</c>, <c>NeutronMissileUpdate::doLaunch</c>): the launching weapon's <c>ProjectileExhaust</c> of the launcher's
+/// veterancy, attached to the projectile after its ignition delay (the neutron missile's at its launch).</item>
 /// </list>
 /// Every system is attached to its object (<see cref="ParticleSpawn.AttachTo"/>, with the bone as <see cref="ParticleSpawn.LocalOffset"/>) and dies with it. Bones are the
 /// rest pose of the state's model (<paramref name="bones"/>: model name, lower-case bone name, model-space position, or null), scaled by the object's scale; bone rotations and
