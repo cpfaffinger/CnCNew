@@ -25,11 +25,18 @@ public sealed class DebugOptionsScreen : ShellScreen
     /// <summary>The rows in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
     public static readonly ImmutableArray<(string Row, string Label)> Rows =
     [
-        ("QuickBuild", "Quick build"), ("GeneralPoints", "General points at start"),
+        ("QuickBuild", "Quick build"), ("QuickBuildFor", "Quick build for"), ("GeneralPoints", "General points at start"),
     ];
 
-    /// <summary>Off, or everything built takes a tenth of its time (<see cref="MatchDebugOptions.QuickBuildPercent"/>).</summary>
-    public static readonly ImmutableArray<(int Percent, string Text)> QuickBuildChoices = [(MatchDebugOptions.NormalBuildTime, "Off"), (MatchDebugOptions.QuickBuildPercent, "On: 90 % less build time")];
+    /// <summary>Off, or everything built takes half, a quarter or a tenth of its time (<see cref="MatchDebugOptions.BuildTimePercent"/>).</summary>
+    public static readonly ImmutableArray<(int Percent, string Text)> QuickBuildChoices =
+    [
+        (MatchDebugOptions.NormalBuildTime, "Off"), (MatchDebugOptions.HalfBuildPercent, "On: 50 % less build time"),
+        (MatchDebugOptions.QuarterBuildPercent, "On: 75 % less build time"), (MatchDebugOptions.QuickBuildPercent, "On: 90 % less build time"),
+    ];
+
+    /// <summary>Who the quick build is for: a second box rather than more levels, so that every level can be had for both (<see cref="MatchDebugOptions.QuickBuildHumansOnly"/>).</summary>
+    public static readonly ImmutableArray<string> QuickBuildForChoices = ["Everybody", "Human players only"];
 
     /// <summary>
     /// The experience (skill points) every player starts with, which gives its general the rank those points reach (<c>Player::addSkillPoints</c>); 0 is the normal start at rank 1. The
@@ -55,6 +62,7 @@ public sealed class DebugOptionsScreen : ShellScreen
         W("NoteLabel").SetText(readOnly ? "For testing. The host chose these rules." : "For testing. Every player plays by these rules.");
         foreach (var (row, label) in Rows) W("Label" + row).SetText(label);
         Fill("QuickBuild", QuickBuildChoices.Select(choice => choice.Text));
+        Fill("QuickBuildFor", QuickBuildForChoices);
         Fill("GeneralPoints", GeneralPointChoices.Select((points, index) => index == 0 ? "0 (normal start)" : $"{points.ToString(System.Globalization.CultureInfo.InvariantCulture)} (rank {index + 1})"));
         if (readOnly) W("ButtonAccept").SetHidden(true);
         Refresh();
@@ -76,8 +84,18 @@ public sealed class DebugOptionsScreen : ShellScreen
 
     private void Refresh()
     {
-        W("ComboQuickBuild").SetComboSelection(_working.BuildTimePercent == MatchDebugOptions.NormalBuildTime ? 0 : 1);
+        W("ComboQuickBuild").SetComboSelection(NearestLevel(_working.BuildTimePercent));
+        W("ComboQuickBuildFor").SetComboSelection(_working.QuickBuildHumansOnly ? 1 : 0);
+        W("ComboQuickBuildFor").SetEnabled(!_readOnly && _working.BuildTimePercent != MatchDebugOptions.NormalBuildTime);
         W("ComboGeneralPoints").SetComboSelection(NearestPoints(_working.StartingGeneralPoints));
+    }
+
+    private static int NearestLevel(int percent)
+    {
+        var best = 0;
+        for (var index = 1; index < QuickBuildChoices.Length; index++)
+            if (Math.Abs(QuickBuildChoices[index].Percent - percent) < Math.Abs(QuickBuildChoices[best].Percent - percent)) best = index;
+        return best;
     }
 
     private static int NearestPoints(int points)
@@ -113,7 +131,13 @@ public sealed class DebugOptionsScreen : ShellScreen
 
     private void Choose(string source, int index)
     {
-        if (source == Name("ComboQuickBuild") && index < QuickBuildChoices.Length) _working = _working with { BuildTimePercent = QuickBuildChoices[index].Percent };
+        if (source == Name("ComboQuickBuild") && index < QuickBuildChoices.Length)
+        {
+            var percent = QuickBuildChoices[index].Percent;
+            _working = _working with { BuildTimePercent = percent, QuickBuildHumansOnly = percent != MatchDebugOptions.NormalBuildTime && _working.QuickBuildHumansOnly };
+        }
+        else if (source == Name("ComboQuickBuildFor") && index < QuickBuildForChoices.Length && _working.BuildTimePercent != MatchDebugOptions.NormalBuildTime)
+            _working = _working with { QuickBuildHumansOnly = index == 1 };
         else if (source == Name("ComboGeneralPoints") && index < GeneralPointChoices.Length) _working = _working with { StartingGeneralPoints = GeneralPointChoices[index] };
         else return;
         Refresh();

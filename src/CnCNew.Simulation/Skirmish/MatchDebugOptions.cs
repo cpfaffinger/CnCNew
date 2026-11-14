@@ -11,7 +11,8 @@ namespace CnCNew.Simulation.Skirmish;
 /// the level those points reach and each level grants its science purchase points and sciences. 0 is the normal start (rank 1).</param>
 /// <param name="PlaceBuildingsInFog">When set, a builder may be ordered to put a structure on ground the player has not explored or does not look at: the build site check leaves out its
 /// shroud rule (<c>SHROUD_REVEALED</c>). The original refuses such a site.</param>
-public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.NormalBuildTime, int NeutralRespawnSeconds = 0, int StartingGeneralPoints = 0, bool PlaceBuildingsInFog = false)
+/// <param name="QuickBuildHumansOnly">When set, <paramref name="BuildTimePercent"/> applies to the human players only; a computer player builds in its normal time. Meaningless (and false) at the normal time.</param>
+public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.NormalBuildTime, int NeutralRespawnSeconds = 0, int StartingGeneralPoints = 0, bool PlaceBuildingsInFog = false, bool QuickBuildHumansOnly = false)
 {
     public const int NormalBuildTime = 100;
     public const int MinimumBuildTimePercent = 1, MaximumBuildTimePercent = 1000;
@@ -23,7 +24,10 @@ public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.
     /// <summary>The build time the setup offers for "quick build": a tenth of the normal time (90 % less).</summary>
     public const int QuickBuildPercent = 10;
 
-    public bool IsDefault => BuildTimePercent == NormalBuildTime && NeutralRespawnSeconds == 0 && StartingGeneralPoints == 0 && !PlaceBuildingsInFog;
+    /// <summary>The other levels of quick build: half the time (50 % less) and a quarter of it (75 % less).</summary>
+    public const int HalfBuildPercent = 50, QuarterBuildPercent = 25;
+
+    public bool IsDefault => BuildTimePercent == NormalBuildTime && NeutralRespawnSeconds == 0 && StartingGeneralPoints == 0 && !PlaceBuildingsInFog && !QuickBuildHumansOnly;
 
     /// <summary>Whether every value is inside its range; <see cref="Problem"/> names the first that is not.</summary>
     public bool IsValid => Problem is null;
@@ -32,5 +36,6 @@ public sealed record MatchDebugOptions(int BuildTimePercent = MatchDebugOptions.
         => BuildTimePercent is < MinimumBuildTimePercent or > MaximumBuildTimePercent ? $"The build time of {BuildTimePercent} % is outside {MinimumBuildTimePercent} to {MaximumBuildTimePercent} %."
             : NeutralRespawnSeconds is < 0 or > MaximumRespawnSeconds ? $"The respawn time of {NeutralRespawnSeconds} s is outside 0 to {MaximumRespawnSeconds} s."
             : StartingGeneralPoints is < 0 or > MaximumStartingGeneralPoints ? $"{StartingGeneralPoints} starting general points are outside 0 to {MaximumStartingGeneralPoints}."
+            : QuickBuildHumansOnly && BuildTimePercent == NormalBuildTime ? "Quick build for human players only needs a quick build level."
             : null;
 }

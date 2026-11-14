@@ -740,6 +740,7 @@ run.Test("Session state: the session hash covers the AI, a save is checked again
 run.Test("Match description: one encoding, every field in the fingerprint", Tests.MatchDescriptionIsCanonicalAndEveryFieldCounts);
 run.Test("Match description: the same bytes build the same match, random choices included", Tests.MatchDescriptionBuildsTheSameMatchEverywhere);
 run.Test("Debug options: they are in the match description, ranges are checked, the older encoding is refused", Tests.MatchDebugOptionsAreInTheDescription);
+run.Test("Debug options: quick build for human players only and the levels 50, 75 and 90 % less take exact frames at 30, 60 and 120 Hz", Tests.QuickBuildForHumanPlayersOnly);
 run.Test("Debug options: quick build takes a tenth of the time of units, upgrades and structures", Tests.QuickBuildTakesATenthOfTheTime);
 run.Test("Debug options: a destroyed neutral building of the map comes back after N seconds", Tests.DestroyedNeutralBuildingsComeBack);
 run.Test("Debug options: a skirmish with all three plays, saves and replays identically", Tests.MatchDebugOptionsPlayInASkirmish);

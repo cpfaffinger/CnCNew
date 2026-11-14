@@ -530,7 +530,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 if (!world.Templates.TryGet(button.Object, out var template)) return State(ButtonAvailability.Restricted, ButtonReason.UnknownReference);
                 var cost = template.BuildCost;
                 // The debug option "quick build" shortens what the tooltip names as well.
-                var ticks = world.ScaleBuildTicks(template.BuildTicks);
+                var ticks = world.ScaleBuildTicks(player, template.BuildTicks);
                 if (template.Buildable.Equals("No", StringComparison.OrdinalIgnoreCase)
                     || template.Buildable.Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !world.IsComputerPlayer(player))
                     return State(ButtonAvailability.Hidden, ButtonReason.NotBuildable, null, cost, ticks);
@@ -556,7 +556,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             case GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade:
             {
                 if (!world.Upgrades.TryGet(button.Upgrade, out var upgrade)) return State(ButtonAvailability.Restricted, ButtonReason.UnknownReference);
-                var upgradeTicks = world.ScaleBuildTicks(upgrade.BuildTicks);
+                var upgradeTicks = world.ScaleBuildTicks(player, upgrade.BuildTicks);
                 // ControlBar::getCommandAvailability (ControlBarCommand.cpp), in its order: a full queue restricts; an upgrade owned or in production (anywhere for a player
                 // upgrade, in this queue for an object upgrade) is shown like one that cannot be afforded; then the money and the sciences.
                 if (production is { HasRoom: false }) return State(ButtonAvailability.Restricted, ButtonReason.QueueFull, null, upgrade.BuildCost, upgradeTicks);

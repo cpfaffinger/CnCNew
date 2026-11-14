@@ -28,7 +28,7 @@ run.Test("Relay, server-paced: ticks close by the injected clock at tick rate ti
 run.Test("Relay: the player is stamped from the connection, intents beyond the limit wait, a flood is dropped", NetTests.StampAndLimits);
 run.Test("Relay: equal hash reports agree on a tick, different ones are a desync sent to everybody", NetTests.HashReports);
 run.Test("Relay (D-24): from three players on the majority of a tick's hashes decides, and the one who differs goes", NetTests.HashMajority);
-run.Test("Room (protocol 10): the debug options travel in the settings and reach every description", NetTests.RoomCarriesTheDebugOptions);
+run.Test("Room (protocol 11): the debug options travel in the settings and reach every description", NetTests.RoomCarriesTheDebugOptions);
 run.Test("Relay (D-23): votes remove a player, end the match, set the speed; one at a time, bounded, decided by a strict majority or by time", NetTests.Votes);
 run.Test("Match of one client and one computer player over the relay equals the session stepped directly (no added delay)", NetTests.OneClientEqualsDirect);
 run.Test("Match of two and three clients with a computer player: session hashes equal in every tick, with and without delay and jitter, the recording replays", NetTests.SeveralClients);

@@ -17,6 +17,9 @@ public sealed partial class SimulationWorld
 
     private const int NormalBuildTimePercent = 100;
 
+    /// <summary>Whether <see cref="BuildTimePercent"/> applies to the human players only (a computer player builds in its normal time).</summary>
+    public bool BuildTimeForHumansOnly { get; private set; }
+
     /// <summary>Whether a builder may be ordered to put a structure on ground the player has not explored or does not look at (the debug option; the original refuses it - <see cref="CheckBuildSite"/>).</summary>
     public bool PlaceBuildingsInFog { get; private set; }
 
@@ -48,13 +51,14 @@ public sealed partial class SimulationWorld
     /// one they reach, with the purchase points and sciences of each level, the rank-level limit and the player's skill-point modifier applied); <paramref name="placeBuildingsInFog"/>
     /// takes the shroud rule out of the build site check.
     /// </summary>
-    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0, bool placeBuildingsInFog = false)
+    public void ConfigureMatchOptions(int buildTimePercent, int neutralRespawnSeconds, int startingSkillPoints = 0, bool placeBuildingsInFog = false, bool buildTimeForHumansOnly = false)
     {
         if (_tick != 0) throw new InvalidOperationException("The debug options of a match are set before its first tick.");
         if (buildTimePercent <= 0) throw new ArgumentOutOfRangeException(nameof(buildTimePercent));
         if (neutralRespawnSeconds < 0) throw new ArgumentOutOfRangeException(nameof(neutralRespawnSeconds));
         if (startingSkillPoints < 0) throw new ArgumentOutOfRangeException(nameof(startingSkillPoints));
         BuildTimePercent = buildTimePercent;
+        BuildTimeForHumansOnly = buildTimeForHumansOnly;
         NeutralRespawnSeconds = neutralRespawnSeconds;
         PlaceBuildingsInFog = placeBuildingsInFog;
         if (startingSkillPoints > 0)
@@ -63,12 +67,12 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// A build time of <paramref name="ticks"/> (whole frames of the original) under <see cref="BuildTimePercent"/>: the frames times the percentage, rounded up, at least one frame.
+    /// A build time of <paramref name="ticks"/> (whole frames of the original) under <see cref="BuildTimePercent"/> (for a computer player only unless <see cref="BuildTimeForHumansOnly"/>): the frames times the percentage, rounded up, at least one frame.
     /// The normal time stays as it is. <c>calcTimeToBuild</c> and the build time of an upgrade take it before the power-supply ratio is applied.
     /// </summary>
-    public long ScaleBuildTicks(long ticks)
+    public long ScaleBuildTicks(PlayerId player, long ticks)
     {
-        if (BuildTimePercent == NormalBuildTimePercent || ticks <= 0) return ticks;
+        if (BuildTimePercent == NormalBuildTimePercent || ticks <= 0 || BuildTimeForHumansOnly && IsComputerPlayer(player)) return ticks;
         var frames = Time.FramesIn(ticks);
         return Time.OriginalFrames(Math.Max(1, (frames * BuildTimePercent + NormalBuildTimePercent - 1) / NormalBuildTimePercent));
     }
@@ -141,6 +145,7 @@ public sealed partial class SimulationWorld
     {
         if (BuildTimePercent != NormalBuildTimePercent) writer.Int("buildTimePercent", BuildTimePercent);
         if (PlaceBuildingsInFog) writer.Bool("placeBuildingsInFog", true);
+        if (BuildTimeForHumansOnly) writer.Bool("buildTimeForHumansOnly", true);
         if (NeutralRespawnSeconds == 0) return;
         writer.Int("neutralRespawnSeconds", NeutralRespawnSeconds);
         writer.BeginArray("neutralBuildings");
@@ -165,6 +170,7 @@ public sealed partial class SimulationWorld
     {
         BuildTimePercent = state.Has("buildTimePercent") ? checked((int)state.Int("buildTimePercent")) : NormalBuildTimePercent;
         PlaceBuildingsInFog = state.Has("placeBuildingsInFog") && state.Bool("placeBuildingsInFog");
+        BuildTimeForHumansOnly = state.Has("buildTimeForHumansOnly") && state.Bool("buildTimeForHumansOnly");
         NeutralRespawnSeconds = state.Has("neutralRespawnSeconds") ? checked((int)state.Int("neutralRespawnSeconds")) : 0;
         _neutralBuildings.Clear();
         if (NeutralRespawnSeconds == 0) return;

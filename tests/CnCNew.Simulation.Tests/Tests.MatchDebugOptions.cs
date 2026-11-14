@@ -90,12 +90,62 @@ static partial class Tests
         return world;
     }
 
+    /// <summary>
+    /// Quick build "for human players only" (and the levels 50, 75 and 90 % less): with a computer player (1) and a human (2) each producing the same 20 s unit, the human's takes the
+    /// scaled time (build times are whole frames of the original; the percentages 50, 25 and 10 of 600 frames are exact: 300, 150, 60), the computer's the normal 600 frames - at 30, 60
+    /// and 120 Hz. For everybody, both are scaled.
+    /// </summary>
+    public static void QuickBuildForHumanPlayersOnly()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            (long Computer, long Human) Frames(int percent, bool humansOnly)
+            {
+                var terrain = NavTerrain();
+                var fixture = new SyntheticFixture(rate, files: DebugOptionFiles());
+                ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", IsComputer: true), new(new PlayerId(2), "Beta")];
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+                var feeder = new Feeder(world);
+                if (percent != 100) world.ConfigureMatchOptions(percent, 0, 0, false, humansOnly);
+                feeder.Spawn(1, "DebugFactory", x: 100, y: 100);
+                feeder.Spawn(2, "DebugFactory", x: 100, y: 150);
+                feeder.GiveMoney(1, 1000);
+                feeder.GiveMoney(2, 1000);
+                world.Step();
+                var factories = world.Entities.Where(value => value.Template.Name == "DebugFactory").ToDictionary(value => value.Owner.Value, value => value.Id.Value);
+                var ordered = world.Tick;
+                feeder.QueueProduction(1, factories[1], "SlowUnit");
+                feeder.QueueProduction(2, factories[2], "SlowUnit");
+                long computer = -1, human = -1;
+                for (var step = 0; step < world.Frames(700) && (computer < 0 || human < 0); step++)
+                {
+                    world.Step();
+                    if (computer < 0 && world.Entities.Any(value => value.Template.Name == "SlowUnit" && value.Owner.Value == 1)) computer = world.InFrames(world.Tick - ordered);
+                    if (human < 0 && world.Entities.Any(value => value.Template.Name == "SlowUnit" && value.Owner.Value == 2)) human = world.InFrames(world.Tick - ordered);
+                }
+                return (computer, human);
+            }
+
+            bool Near(long frames, long expected) => Math.Abs(frames - expected) <= 3;
+            var normal = Frames(100, false);
+            Check.That(Near(normal.Computer, 600) && Near(normal.Human, 600), $"{rate}: both build in 600 frames without the option ({normal}).");
+            foreach (var (percent, expected) in new[] { (MatchDebugOptions.QuickBuildPercent, 60L), (MatchDebugOptions.HalfBuildPercent, 300L), (MatchDebugOptions.QuarterBuildPercent, 150L) })
+            {
+                var everybody = Frames(percent, false);
+                Check.That(Near(everybody.Computer, expected) && Near(everybody.Human, expected), $"{rate}: at {percent} % for everybody both take {expected} frames ({everybody}).");
+                if (rate != SimulationRate.Hz60 && percent != MatchDebugOptions.QuickBuildPercent) continue;
+                var humans = Frames(percent, true);
+                Check.That(Near(humans.Computer, 600) && Near(humans.Human, expected), $"{rate}: at {percent} % for human players only the human takes {expected} frames, the computer 600 ({humans}).");
+            }
+        }
+    }
+
     /// <summary>The debug options are in the description's bytes and its fingerprint; out-of-range values and the older encoding are refused.</summary>
     public static void MatchDebugOptionsAreInTheDescription()
     {
         var (fixture, terrain, _) = StartSyntheticMatch(100);
         var description = SyntheticDescription(fixture, terrain);
-        Check.That(MatchDescription.EncodingVersion == 5 && description.Debug.IsDefault && description.Debug == MatchDebugOptions.None, "A description made without options states the original game (encoding 5).");
+        Check.That(MatchDescription.EncodingVersion == 6 && description.Debug.IsDefault && description.Debug == MatchDebugOptions.None, "A description made without options states the original game (encoding 6).");
         var variants = new[]
         {
             description with { Debug = new MatchDebugOptions(BuildTimePercent: MatchDebugOptions.QuickBuildPercent) },
@@ -103,6 +153,9 @@ static partial class Tests
             description with { Debug = new MatchDebugOptions(StartingGeneralPoints: 5) },
             description with { Debug = new MatchDebugOptions(PlaceBuildingsInFog: true) },
             description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 120, 5, true) },
+            description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, QuickBuildHumansOnly: true) },
+            description with { Debug = new MatchDebugOptions(MatchDebugOptions.HalfBuildPercent) },
+            description with { Debug = new MatchDebugOptions(MatchDebugOptions.QuarterBuildPercent) },
         };
         var seen = new HashSet<string>(StringComparer.Ordinal) { description.Fingerprint };
         foreach (var changed in variants)
@@ -114,6 +167,7 @@ static partial class Tests
         }
         Check.That(variants[4].Equals(MatchDescription.Decode(variants[4].Encode())) && !variants[4].Equals(variants[0]), "Descriptions with other options are not equal.");
 
+        Check.Throws<ArgumentException>(() => (description with { Debug = new MatchDebugOptions(QuickBuildHumansOnly: true) }).Resolve(fixture.Templates, terrain), "quick build level");
         var bytes = description.Encode();
         var older = bytes.ToArray();
         older[8] = 4;
@@ -207,8 +261,8 @@ static partial class Tests
             // The helper itself: at least one frame, whole frames of the original, the normal time left alone.
             var plain = DebugWorld(rate, 100, 0, out _, out _, out _);
             var quickWorld = DebugWorld(rate, MatchDebugOptions.QuickBuildPercent, 0, out _, out _, out _);
-            Check.That(plain.ScaleBuildTicks(plain.Frames(600)) == plain.Frames(600) && quickWorld.ScaleBuildTicks(quickWorld.Frames(600)) == quickWorld.Frames(60)
-                       && quickWorld.ScaleBuildTicks(quickWorld.Frames(1)) == quickWorld.Frames(1) && quickWorld.ScaleBuildTicks(quickWorld.Frames(15)) == quickWorld.Frames(2) && quickWorld.ScaleBuildTicks(0) == 0,
+            Check.That(plain.ScaleBuildTicks(new PlayerId(1), plain.Frames(600)) == plain.Frames(600) && quickWorld.ScaleBuildTicks(new PlayerId(1), quickWorld.Frames(600)) == quickWorld.Frames(60)
+                       && quickWorld.ScaleBuildTicks(new PlayerId(1), quickWorld.Frames(1)) == quickWorld.Frames(1) && quickWorld.ScaleBuildTicks(new PlayerId(1), quickWorld.Frames(15)) == quickWorld.Frames(2) && quickWorld.ScaleBuildTicks(new PlayerId(1), 0) == 0,
                 $"{rate}: the scaling is whole frames, rounded up, at least one.");
 
             // Saved and restored, the option is still on; a world without it writes no new state and has the hash of the original game.

@@ -574,7 +574,7 @@ public sealed partial class SkirmishAi
                 var result = Send(sequence => new QueueProductionCommand(_player, sequence, _tick, producer.Id, template.Name));
                 if (!result.Accepted) continue;
                 _budget -= template.BuildCost;
-                _inFlight.Add((RoleOf(template), _tick + _world.ScaleBuildTicks(template.BuildTicks) + _time.OriginalFrames(InFlightMarginFrames)));
+                _inFlight.Add((RoleOf(template), _tick + _world.ScaleBuildTicks(_player, template.BuildTicks) + _time.OriginalFrames(InFlightMarginFrames)));
                 Stats.Productions++;
                 return Fixed.Zero;
             }
