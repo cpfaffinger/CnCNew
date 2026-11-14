@@ -478,6 +478,17 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
+    /// The range of the weapon <paramref name="source"/> would use against <paramref name="victim"/> (<see cref="AttackSlotIgnoringRange"/>), not the longest range of the set: a Gattling Tank's
+    /// anti-air gun reaches 350, its ground gun 150, and an attack on a structure must walk until the ground gun reaches. Zero when no weapon can hurt the victim.
+    /// </summary>
+    public Fixed WeaponRangeAgainst(Entity source, Entity victim)
+    {
+        var set = ActiveWeaponSet(source);
+        var slot = AttackSlotIgnoringRange(source, victim);
+        return set is null || slot < 0 || !set.HasWeapon(slot) ? Fixed.Zero : _templates.Weapons[set.Weapons[slot]].RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
+    }
+
+    /// <summary>
     /// Whether a persistent aim goes on this tick. Unless the unit pursues the victim, an attack on a victim
     /// that no weapon reaches is given up after <see cref="TurretLoseInterestFrames"/> (the reference's attack state fails there: <c>AIAttackApproachTargetState::onEnter</c> returns failure
     /// for a unit that may not chase, which is every unit the AI sent after a target it acquired itself).

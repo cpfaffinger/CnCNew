@@ -49,6 +49,7 @@ internal static partial class UnitConditionTests
         {
             var directory = args[index + 1];
             t.Run("real data: gattling tank continuous fire", () => RealGattling(directory));
+            t.Run("real data: gattling tanks ordered to attack a structure fire at it (#353)", () => RealGattlingAttacksStructure(directory));
             t.Run("real data: combat bike topples, leans and the car is crushed", () => RealBikeAndCar(directory));
             t.Run("real data: jets and the second life of the battle bus", () => RealJetsAndBus(directory));
         }
@@ -881,6 +882,32 @@ internal static partial class UnitConditionTests
         Assert(stages.SequenceEqual(["none", "MEAN", "FAST", "SLOW", "none"]) || stages.SequenceEqual(["none", "MEAN", "SLOW", "none"]), $"the tank spins up and down ({string.Join(" > ", stages)})");
         Assert(selected.Any(value => value.Contains("CONTINUOUS_FIRE")), $"the model states for the stages are selected ({string.Join(" | ", selected)})");
         Console.WriteLine($"       gattling tank stages: {string.Join(" > ", stages)}; selected: {string.Join(" | ", selected)}");
+    }
+
+    /// <summary>Issue #353: the player's attack order (<see cref="CnCNew.Presentation.Input.StandingOrders"/>) on an enemy structure - the tanks walk into range and fire, and fire faster the longer they do.</summary>
+    private static void RealGattlingAttacksStructure(string directory)
+    {
+        var retail = new Retail(directory);
+        var rig = new Rig(retail);
+        var tanks = Enumerable.Range(0, 4).Select(index => rig.Spawn("ChinaTankGattling", 1, 1000 + index * 30, 1000)).ToArray();
+        var target = rig.Spawn(Environment.GetEnvironmentVariable("CNCNEW_T") ?? "AmericaPowerPlant", 2, 1500, 1000);
+        var sink = new InputTests.WorldSink(rig.World, []);
+        var orders = new CnCNew.Presentation.Input.StandingOrders();
+        foreach (var tank in tanks) orders.Set(tank, new CnCNew.Presentation.Input.StandingOrder(CnCNew.Presentation.Input.StandingOrderKind.Attack, target, new System.Numerics.Vector2(1500, 1000), [], rig.World.Tick));
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 900); tick++)
+        {
+            orders.Update(rig.World, new PlayerId(1), make => sink.Issue(make));
+            rig.Step();
+        }
+        var shots = tanks.Select(tank => rig.Fired.Count(value => value.Entity == tank)).ToArray();
+        var first = rig.Get(tanks[0]);
+        Console.WriteLine($"       gattling at a structure: shots {string.Join(",", shots)}; tank 0 at ({first.X.Raw / Fixed.ScaleRaw},{first.Y.Raw / Fixed.ScaleRaw}); rejections {rig.World.RejectionCounts.Sum()}");
+        Assert(shots.All(count => count > 10), $"every Gattling Tank fires at the structure it was ordered to attack ({string.Join(",", shots)})");
+        // #351: the longer it fires the faster it fires (ContinuousFireOne/Two, WeaponBonus RATE_OF_FIRE): the gaps between its shots shrink to less than half.
+        var ticks = rig.Fired.Where(value => value.Entity == tanks[0]).Select(value => value.Tick).ToArray();
+        var gaps = ticks.Zip(ticks.Skip(1), (a, b) => b - a).ToArray();
+        Console.WriteLine($"       gattling gaps (ticks): {string.Join(",", gaps.Take(16))} ... {string.Join(",", gaps.TakeLast(4))}");
+        Assert(gaps.Length > 12 && gaps.TakeLast(4).Max() * 2 <= gaps.Take(2).Max() + 1, $"the Gattling Tank fires faster the longer it fires ({string.Join(",", gaps.Take(16))})");
     }
 
     private static void RealBikeAndCar(string directory)

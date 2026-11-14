@@ -94,7 +94,8 @@ public static class SimulationQueries
 
     public static bool InRange(SimulationWorld world, Entity source, Entity target)
     {
-        var reach = WeaponRange(world, source);
+        // The weapon that would fire at this victim decides, not the longest of the set (the Gattling Tank's anti-air gun reaches 350, its ground gun 150).
+        var reach = world.WeaponRangeAgainst(source, target);
         var dx = target.X - source.X;
         var dy = target.Y - source.Y;
         // A unit that cannot see its victim from here is not in range: it keeps approaching (outOfWeaponRangeObject, F-55).
