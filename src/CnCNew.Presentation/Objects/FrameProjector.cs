@@ -540,7 +540,7 @@ public sealed class FrameProjector
             chassis = chassis with { Pitch = chassis.Pitch + ToFloat(thrown.Tilt.Pitch), Roll = chassis.Roll + ToFloat(thrown.Tilt.Roll) };
         // A projectile's matrix has its flight in it (the missile's nose, a shell along its path): the simulation keeps the heading on the object and the rest on the module. A
         // chassis pitch is a rotation about y and lowers the nose (Rotate_Y), the flight's pitch raises it.
-        if (entity.Template.IsKindOf("PROJECTILE") && entity.Modules.OfType<CnCNew.Simulation.Modules.IProjectileModule>().FirstOrDefault() is { } projectile)
+        if (FliesByHand(entity.Template) && entity.Modules.OfType<CnCNew.Simulation.Modules.IProjectileModule>().FirstOrDefault() is { } projectile)
             chassis = chassis with { Pitch = chassis.Pitch - ToFloat(projectile.FlightPitch) };
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.
@@ -550,6 +550,20 @@ public sealed class FrameProjector
         return new Capture(entity.Id.Value, visual, owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, selections,
             entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis, AnimationPauses.Of(world, entity), SubObjectOverrides.Of(entity, visual), AnimationDurations.Of(world, entity));
+    }
+
+    private readonly Dictionary<CnCNew.Simulation.Templates.ObjectTemplate, bool> _flightPitched = [];
+
+    /// <summary>
+    /// Whether an object's matrix carries the pitch of its flight: every <c>PROJECTILE</c>, and the neutron missile, which is none (<c>KindOf</c> of <c>NeutronMissile</c> and
+    /// <c>CruiseMissile</c>) but whose <c>NeutronMissileUpdate::doAttack</c> builds its transform from its heading all the same - its nose points up as it climbs and down as it falls.
+    /// </summary>
+    private bool FliesByHand(CnCNew.Simulation.Templates.ObjectTemplate template)
+    {
+        if (template.IsKindOf("PROJECTILE")) return true;
+        if (!_flightPitched.TryGetValue(template, out var pitched))
+            _flightPitched[template] = pitched = template.Modules.Any(module => module.Name == "NeutronMissileUpdate");
+        return pitched;
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
