@@ -1554,9 +1554,11 @@ public sealed partial class MatchController
             // populateInvDataCallback: an exit button wears the cameo and the rank of who sits there.
             var rider = button.Rider.IsValid ? Match.World.FindEntity(button.Rider) : null;
             var cameo = rider is not null && Match.Data.Visuals.TryGet(rider.Template.Name, out var seated) && seated.ButtonImage is { Length: > 0 } own ? own : button.Button.ButtonImage;
-            // W3DGadgetPushButtonImageDraw: a disabled button that is merely not ready keeps its colours under the clock, one the player cannot pay for is dark (0x90), any other grey.
+            // W3DGadgetPushButtonImageDraw: a disabled button that is merely not ready keeps its colours under the clock, one the player cannot pay for is dark (0x90), any other grey -
+            // except a free place of a structure's inventory, which populateStructureInventory marks WIN_STATUS_ALWAYS_COLOR: it is dark (0x90), not grey (#331).
+            var dark = button.Availability == ButtonAvailability.CantAfford || button.Reason == ButtonReason.EmptyPlace;
             if (cameo.Length > 0 && _assets.Images.TryGet(cameo, out _))
-                commands.Add(new UiImageDraw(cameo, rect, button.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false) { Grayscale = button.Availability == ButtonAvailability.Restricted });
+                commands.Add(new UiImageDraw(cameo, rect, dark ? CantAffordTint : WndColor.White, false, false) { Grayscale = button.Availability == ButtonAvailability.Restricted && !dark });
             if (rider is { VeterancyLevel: > 0 and <= 3 } && _assets.Images.TryGet($"SSChevron{rider.VeterancyLevel}L", out _))
                 commands.Add(new UiImageDraw($"SSChevron{rider.VeterancyLevel}L", rect, WndColor.White, false, false));
             // W3DGadgetPushButtonImageDraw: WIN_STATUS_FLASHING lays the pushed overlay over the cameo.

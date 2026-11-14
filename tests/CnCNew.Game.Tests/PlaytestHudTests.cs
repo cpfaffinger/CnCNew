@@ -255,6 +255,9 @@ internal static class PlaytestHudTests
         controller.BuildDrawList(1280, 720);
         TestHarness.Assert(controller.CommandBar is { Context: CommandBarContext.Command } empty && empty[1] is { Availability: ButtonAvailability.Restricted } && empty[12] is { Availability: ButtonAvailability.Restricted },
             $"a neutral building shows its places, disabled ({controller.CommandBar.Context})");
+        // populateStructureInventory marks the places WIN_STATUS_ALWAYS_COLOR: W3DGadgetPushButtonImageDraw draws a free one dark (0x90), not grey at full brightness (#331).
+        var freePlace = controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().FirstOrDefault(image => image.Destination == controller.WindowRect("ControlBar.wnd:ButtonCommand02"));
+        TestHarness.Assert(freePlace is { Grayscale: false } && freePlace.Tint == new CnCNew.Ui.Wnd.WndColor(144, 144, 144, 255), $"a free place is drawn dark, not grey ({freePlace?.Tint}, grey {freePlace?.Grayscale})");
 
         controller.Input.Selection.Replace([house]);
         Frame();
