@@ -120,6 +120,7 @@ public abstract class LiveGame
             (entity, bone) => _fxView!.GetPose(entity) is { } pose ? Attached.BonePosition(entity, bone, pose) : null,
             (entity, _) => _fxView!.GetPose(entity) is { } pose ? Attached.MuzzlePosition(entity, world.FindEntity(entity)?.CurrentWeaponSlot ?? 0, pose) : null,
             (entity, _) => _fxView!.GetPose(entity) is { } pose ? Attached.MuzzleTransform(entity, world.FindEntity(entity)?.CurrentWeaponSlot ?? 0, pose) : null);
+        _fxView.DrawnPlacement = entity => _projector.TryGetDependencyPlacement(entity, out var position, out var yaw) ? (position, yaw) : null;
         Frame = RenderFrame.Empty;
         SyncAfterTick(default);
         Fog.Snap();

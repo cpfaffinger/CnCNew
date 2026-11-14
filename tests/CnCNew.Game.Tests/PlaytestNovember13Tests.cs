@@ -170,6 +170,9 @@ internal static class PlaytestNovember13Tests
             // place; the Helix's CHASSISBONE lies at its origin.
             if (host != "helix")
                 TestHarness.Assert(drawn!.Position.Z > carrier!.Position.Z + 1f, $"the {template} stands on its host's bone, not at its place ({drawn.Position}, host {carrier.Position})");
+            // #326: what starts from the drawable (a laser's start, the bones and the muzzle of an effect) starts where the structure is drawn.
+            var pose = live.FxView.GetPose(rider.Id);
+            TestHarness.Assert(pose is { } p && System.Numerics.Vector3.Distance(p.Position, drawn!.Position) < 0.01f, $"the effects' pose of the {template} is where it is drawn ({pose?.Position}, drawn {drawn!.Position})");
         }
 
         // A soldier in the Overlord's bunker is inside the bunker: drawn by neither.

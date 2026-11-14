@@ -97,6 +97,7 @@ public sealed class FrameProjector
     private readonly HashSet<uint> _known = [];
     private Dictionary<uint, Capture> _previous = [];
     private Dictionary<uint, Capture> _current = [];
+    private readonly Dictionary<uint, (Vector3 Position, float Yaw)> _dependencyDrawn = [];
     private ImmutableArray<Capture> _currentOrdered = [];
     private ImmutableArray<DrawableInstance> _guns = [];
     // The way each garrison gun last faced (GarrisonContain::trackTargets orients it while its rider has a victim), by GarrisonGunIndex.
@@ -209,6 +210,7 @@ public sealed class FrameProjector
         ArgumentNullException.ThrowIfNull(world);
         (_previous, _current) = (_current, _previous);
         _current.Clear();
+        _dependencyDrawn.Clear();
         MissingVisuals = 0;
         Tick = world.Tick - 1;
         var time = world.Time;
@@ -359,17 +361,47 @@ public sealed class FrameProjector
                 _current.Remove(capture.Id);
                 continue;
             }
-            var (position, yaw) = (host.Position, host.Yaw);
-            if (bone.Length > 0 && HostBone(host, bone) is { } local)
-            {
-                var transform = local * Matrix4x4.CreateRotationZ(host.Yaw) * Matrix4x4.CreateTranslation(host.Position);
-                (position, yaw) = (transform.Translation, host.Yaw + MathF.Atan2(local.M12, local.M11));
-            }
-            var placed = capture with { Position = position, Yaw = yaw };
+            // Drawable::applyPhysicsXform puts the host's chassis (lift, pitch, roll) in front of its placement; the bone is in the host's own space.
+            var transform = HostMatrix(host);
+            if (bone.Length > 0 && HostBone(host, bone) is { } local) transform = local * transform;
+            var (position, yaw, chassis) = Decompose(transform);
+            var placed = capture with { Position = position, Yaw = yaw, Chassis = chassis };
             _current[capture.Id] = placed;
+            _dependencyDrawn[capture.Id] = (position, yaw);
             result.Add(placed);
         }
         return result.ToImmutable();
+    }
+
+    /// <summary>The matrix the client draws a host with: its chassis, then its heading and place (row-vector convention, as <c>ObjectLayerCore</c> builds it).</summary>
+    private static Matrix4x4 HostMatrix(Capture host)
+    {
+        var chassis = host.Chassis.IsLevel
+            ? Matrix4x4.Identity
+            : Matrix4x4.CreateRotationX(-host.Chassis.Roll) * Matrix4x4.CreateRotationY(host.Chassis.Pitch) * Matrix4x4.CreateTranslation(0f, 0f, host.Chassis.LiftZ);
+        return chassis * Matrix4x4.CreateRotationZ(host.Yaw) * Matrix4x4.CreateTranslation(host.Position);
+    }
+
+    /// <summary>A world matrix as the client's drawable form: place, heading and the chassis (pitch, roll) it is drawn with, so that <c>Rx(-roll) * Ry(pitch) * Rz(yaw) * T(place)</c> gives the matrix back.</summary>
+    public static (Vector3 Position, float Yaw, ChassisPose Chassis) Decompose(Matrix4x4 matrix)
+    {
+        var yaw = MathF.Atan2(matrix.M12, matrix.M11);
+        var pitch = -MathF.Asin(Math.Clamp(matrix.M13, -1f, 1f));
+        var rest = matrix * Matrix4x4.CreateRotationZ(-yaw) * Matrix4x4.CreateRotationY(-pitch);
+        var roll = -MathF.Atan2(rest.M23, rest.M22);
+        var chassis = MathF.Abs(pitch) < 1e-5f && MathF.Abs(roll) < 1e-5f ? default : new ChassisPose(pitch, roll, 0f, 0f, 0f, 0f, 0f, 0f);
+        return (matrix.Translation, yaw, chassis);
+    }
+
+    /// <summary>
+    /// Where the client draws a portable structure (<see cref="PlaceDependencyModels"/>): on its host's bone, not where the simulation keeps it. What the original reads from the
+    /// drawable's render object - a laser's start, the bones of effects, the muzzle - is there; a projectile's launch is computed from the logic position and is not.
+    /// </summary>
+    public bool TryGetDependencyPlacement(EntityId entity, out Vector3 position, out float yaw)
+    {
+        if (_dependencyDrawn.TryGetValue(entity.Value, out var drawn)) { (position, yaw) = drawn; return true; }
+        (position, yaw) = (default, 0f);
+        return false;
     }
 
     /// <summary>The <c>AttachToBoneInContainer</c> of a dependency model (empty when it names none), or null for any other object.</summary>

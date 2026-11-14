@@ -69,10 +69,20 @@ public sealed class SimulationFxWorldView(
 
     private static float ToFloat(long raw) => FixedConvert.RawToSingle(raw);
 
+    /// <summary>
+    /// Where an entity is drawn when that is not where the simulation keeps it (a portable structure on its host's bone: <c>W3DDependencyModelDraw::adjustTransformMtx</c>), or null.
+    /// Effects that start from the drawable (bones, muzzle, a laser's start) follow it.
+    /// </summary>
+    public Func<EntityId, (Vector3 Position, float Heading)?>? DrawnPlacement { get; set; }
+
     public FxEntityPose? GetPose(EntityId entity)
     {
         if (!entity.IsValid) return null;
-        if (world.FindEntity(entity) is { } live) return PoseOf(live);
+        if (world.FindEntity(entity) is { } live)
+        {
+            var simulated = PoseOf(live);
+            return DrawnPlacement?.Invoke(entity) is { } drawn ? simulated with { Position = drawn.Position, Heading = drawn.Heading } : simulated;
+        }
         if (_current.TryGetValue(entity.Value, out var pose) || _previous.TryGetValue(entity.Value, out pose)) return pose;
         return null;
     }
