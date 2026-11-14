@@ -1038,7 +1038,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (fire.Slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined(fire.Origin) || fire.MaxShots < 0) return CommandRejection.InvalidArguments;
                 if (!TurretsLetAttack(source)) return CommandRejection.NoWeapon;
                 var choice = ChooseWeaponInView(source, fireTarget, fire.Origin, fire.Slot);
-                if (choice.Rejection != 0) return choice.Rejection;
+                if (choice.Rejection != 0 && !FireOrderApproaches(fire, choice, source, fireTarget)) return choice.Rejection;
                 if (!(fire.Origin == FireOrigin.Player ? CanPlayerForceTarget(command.Player, fireTarget) : CanPlayerSee(command.Player, fireTarget))) return CommandRejection.TargetNotVisible;
                 break;
             }
@@ -1572,6 +1572,12 @@ public sealed partial class SimulationWorld : IWorldServices
                 // Object::isAbleToAttack: every weapon on a switched-off turret - the attack state fails at once (F-57).
                 if (!TurretsLetAttack(source)) { RecordRejection(command, CommandRejection.NoWeapon); break; }
                 var choice = ChooseWeaponInView(source, fireTarget, fire.Origin, fire.Slot);
+                // aiAttackObject with maxShotsToFire is accepted at any distance: the attack state approaches first (#328).
+                if (choice.Rejection != 0 && FireOrderApproaches(fire, choice, source, fireTarget))
+                {
+                    OrderFireAttack(source, fireTarget, choice, fire.Origin, fire.Slot, command.Player, fire.MaxShots, approach: true);
+                    break;
+                }
                 if (choice.Rejection != 0) { RecordRejection(command, choice.Rejection); break; }
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
                 if (AiOf(source) is not null)

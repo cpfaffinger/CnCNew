@@ -164,6 +164,22 @@ public sealed class StandingOrders
             issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
             return;
         }
+        if (order.MaxShots > 0)
+        {
+            // Object::doCommandButtonAtObject: one order with the button's slot and shot limit. The attack then fires its own shots and ends with the last one; a victim out of reach is
+            // approached by the attack itself (AIAttackApproachTargetState, #328), which keeps the weapon slot and the shot counter, so this order neither chases nor ends meanwhile.
+            if (order.Fired)
+            {
+                if (!world.IsLimitedAttackRunning(unit, target.Id) && world.Tick > order.IssuedTick) Clear(unit.Id);
+                return;
+            }
+            if (!SimulationQueries.InRange(world, unit, target) && world.LimitedAttackApproaches(unit, target))
+            {
+                _orders[unit.Id.Value] = order with { Fired = true, IssuedTick = world.Tick };
+                issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id, order.Slot, FireOrigin.Player, order.MaxShots));
+                return;
+            }
+        }
         if (SimulationQueries.InRange(world, unit, target))
         {
             // The chase ends where the unit stands; it is still attacking (its turrets stay on the victim while the weapon reloads), so the stop is a pursuit of its own position.
@@ -174,12 +190,6 @@ public sealed class StandingOrders
             }
             if (order.MaxShots > 0)
             {
-                // Object::doCommandButtonAtObject: one order with the button's slot and shot limit; the attack then fires its own shots and ends with the last one.
-                if (order.Fired)
-                {
-                    if (!world.IsLimitedAttackRunning(unit, target.Id) && world.Tick > order.IssuedTick) Clear(unit.Id);
-                    return;
-                }
                 if (SimulationQueries.CanFireAt(world, unit, target, FireOrigin.Player, order.Slot))
                 {
                     _orders[unit.Id.Value] = order with { Fired = true, IssuedTick = world.Tick };

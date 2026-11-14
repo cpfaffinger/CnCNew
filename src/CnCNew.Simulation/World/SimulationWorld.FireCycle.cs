@@ -253,7 +253,7 @@ public sealed partial class SimulationWorld
     /// until they are fired, <see cref="FireWeaponCommand.NoMaxShotsLimit"/> until the victim is gone); 0 is one shot of a command giver's stream, which keeps a limit a running attack on
     /// the same victim has.
     /// </summary>
-    private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter, int shots = 0)
+    private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter, int shots = 0, bool approach = false)
     {
         var begins = source.Acquisition is not { Ordered: true } running || running.Victim != victim.Id;
         NoteOrderedAttack(source, victim, origin);
@@ -272,11 +272,49 @@ public sealed partial class SimulationWorld
             attack.ShotsLeft = 0;
             attack.LockedSlot = -1;
         }
-        if (AttackCycleFires(source, ref attack.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: begins, byOrder: true))
+        // A limited attack on a victim out of range begins with its approach (#328): the attack's own step walks to it and fires when it is in range.
+        if (!approach && AttackCycleFires(source, ref attack.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: begins, byOrder: true))
         {
             attack.ShotPending = false;
             FireCycleShot(source, ref attack.Cycle, choice.Slot, victim, emitter);
         }
+    }
+
+    /// <summary>
+    /// Whether a limited attack order (<c>aiAttackObject</c> with <c>maxShotsToFire</c>) at <paramref name="victim"/> begins with an approach: the victim is out of the weapon's reach, and the unit
+    /// has a locomotor to close in with (<c>AIAttackApproachTargetState</c>; a fixed-wing aircraft cannot stop, its run is another machine).
+    /// </summary>
+    public bool LimitedAttackApproaches(Entity source, Entity victim)
+        => AiOf(source) is not null && source.Template.Locomotor is { } locomotor && (!source.Template.IsKindOf("AIRCRAFT") || locomotor.IsHover)
+           && CanAttack(source, victim, false, out var inRange) && !inRange;
+
+    /// <summary>A limited fire order (<see cref="FireWeaponCommand.MaxShots"/>) whose weapon is out of reach or not ready begins with the approach instead of a rejection (#328).</summary>
+    private bool FireOrderApproaches(FireWeaponCommand fire, WeaponChoice choice, Entity source, Entity victim)
+        => choice.Rejection is CommandRejection.OutOfRange or CommandRejection.WeaponNotReady && fire.MaxShots > 0 && LimitedAttackApproaches(source, victim);
+
+    /// <summary>
+    /// The approach of a limited attack (<c>AIAttackApproachTargetState</c>, the state <c>AIAttackState</c> keeps before its fire states): the unit walks at the victim - or where it can fire from,
+    /// <c>findAttackPath</c> - and refreshes the path while the victim moves; the attack and its shot counter stay, and the order's grace starts again with every step of the walk. False when
+    /// the victim is in reach (the walk ends there) or the unit cannot approach it.
+    /// </summary>
+    private bool ApproachLimitedAttack(Entity entity, AcquisitionState state, Entity victim, long tick)
+    {
+        if (AiOf(entity) is not { } ai || !LimitedAttackApproaches(entity, victim)) return false;
+        AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
+        var (victimX, victimY, _) = victim.FrameEnd(tick);
+        if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
+        {
+            var (goalX, goalY) = FindAttackPosition(entity, victim) ?? (victimX, victimY);
+            if (!ai.StartInternalMove(goalX, goalY)) return false;
+            ai.BeginMoveWithNextFrame(this);
+            WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
+            state.Chasing = true;
+            state.ChaseTick = tick;
+            AimTurretsForAttack(entity, victim, TurretAimOrder.Pursuit);
+        }
+        state.OrderedTick = tick;
+        MarkDirty(entity);
+        return true;
     }
 
     /// <summary>
@@ -336,6 +374,18 @@ public sealed partial class SimulationWorld
             return;
         }
         UpdateWeaponSet(entity);
+        if (state.ShotsLeft > 0)
+        {
+            // The approach comes before the weapon check: with the victim out of reach the chooser names no weapon, which is not a change of the locked one.
+            if ((state.LockedSlot < 0 || entity.CurrentWeaponSlot == state.LockedSlot) && ApproachLimitedAttack(entity, state, victim, _tick)) return;
+            // In reach: the walk ends where the unit stands (AIAttackApproachTargetState succeeds into the aim state).
+            if (state.Chasing && AiOf(entity) is { } walking)
+            {
+                walking.StopInternalMoveAtFrameEnd(this);
+                state.Chasing = false;
+                state.ChaseTick = 0;
+            }
+        }
         var choice = ChooseWeaponInView(entity, victim, state.OrderOrigin);
         // AIAttackState::update: "if we entered with a locked weapon (ie, a special weapon), then we will only keep attacking as long as that weapon remains the cur weapon" - checked in every
         // frame, before the machine runs. A temporary lock is released by the shot that empties its clip, and the chooser may then pick another slot.

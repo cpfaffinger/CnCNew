@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using CnCNew.Data.World;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -42,8 +43,8 @@ static partial class Tests
         Object LimitShooter
           Side = Alpha
           KindOf = SELECTABLE INFANTRY
-          VisionRange = 120.0
-          ShroudClearingRange = 120.0
+          VisionRange = 300.0
+          ShroudClearingRange = 300.0
           Locomotor = SET_NORMAL SkirmishLoco
           Body = ActiveBody Body01
             MaxHealth = 80.0
@@ -118,11 +119,15 @@ static partial class Tests
             Fire("Three", "Three", "Cmd_LimitPrimaryThree", "ThreeVictim"),
             Fire("Locked", "Locked", "Cmd_LimitBig", "LockedVictim"),
             Fire("Weak", "Weak", "Cmd_LimitPrimary", "WeakVictim"),
+            Fire("Far", "Far", "Cmd_LimitPrimaryThree", "FarVictim"),
+            Fire("Flee", "Flee", "Cmd_LimitPrimaryThree", "FleeVictim"),
         ], objects: [
             Placed("LimitShooter", 100m, 80m, "teamA", "Unlimited"), Placed("LimitTarget", 140m, 80m, "teamB", "UnlimitedVictim"),
             Placed("LimitShooter", 100m, 300m, "teamA", "Three"), Placed("LimitTarget", 140m, 300m, "teamB", "ThreeVictim"),
             Placed("LimitShooter", 400m, 80m, "teamA", "Locked"), Placed("LimitTarget", 440m, 80m, "teamB", "LockedVictim"),
             Placed("LimitShooter", 400m, 300m, "teamA", "Weak"), Placed("LimitWeakTarget", 440m, 300m, "teamB", "WeakVictim"),
+            Placed("LimitShooter", 250m, 160m, "teamA", "Far"), Placed("LimitTarget", 360m, 160m, "teamB", "FarVictim"),
+            Placed("LimitShooter", 250m, 250m, "teamA", "Flee"), Placed("LimitTarget", 290m, 250m, "teamB", "FleeVictim"),
         ], extraFiles: ShotLimitFiles);
     }
 
@@ -137,7 +142,18 @@ static partial class Tests
         var options = MissionOptions.Standard with { CombatIntervalTicks = 0 };
         var session = MissionSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map);
         var events = new List<SimEvent>();
-        for (var tick = 0; tick < session.Frames(240) && !session.IsOver; tick++) events.AddRange(session.Step().Events);
+        var fled = false;
+        for (var tick = 0; tick < session.Frames(240) && !session.IsOver; tick++)
+        {
+            events.AddRange(session.Step().Events);
+            // #328: the victim of the "Flee" attack leaves the weapon's range after the first shot; the attack follows it and keeps its shot counter.
+            if (!fled && NamedIn(session, "Flee") is { } fleeing && events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == fleeing.Id) && NamedIn(session, "FleeVictim") is { } runner)
+            {
+                fled = true;
+                Check.That(session.World.Submit(new SetMoveTargetCommand(runner.Owner, 9_000_001, session.World.Tick, runner.Id, runner.X + Fixed.FromInt(95), runner.Y)).Accepted, "The victim is sent away.");
+            }
+        }
+        Check.That(fled, "The Flee attack fired a first shot.");
         int Shots(string shooter, string weapon) => events.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == NamedIn(session, shooter)?.Id && value.Text == weapon);
         string Rejections() => string.Join(",", session.World.RejectionCounts.Select((count, index) => count > 0 ? $"{(CommandRejection)index}={count}" : "").Where(text => text.Length > 0));
         var diagnostics = string.Join("; ", session.Engine.Diagnostics.Keys);
@@ -155,6 +171,11 @@ static partial class Tests
         var weak = Shots("Weak", "LimitClipGun");
         Check.That(NamedIn(session, "WeakVictim") is null && weak == 3, $"An attack without a limit ends with its victim: 30 hit points, three shots ({weak}).");
         Check.That(!session.World.AcquiredVictimOf(NamedIn(session, "Weak")!).IsValid, "...and the shooter has no victim afterwards.");
+
+        var far = Shots("Far", "LimitClipGun");
+        Check.That(far == 3, $"A limited attack on a victim out of range approaches it and fires its three shots ({far}); the script order is not refused (diagnostics: {diagnostics}; rejections: {Rejections()}).");
+        var flee = Shots("Flee", "LimitClipGun");
+        Check.That(flee == 3, $"A victim that leaves the range during a limited attack is followed, and the shot counter survives the walk ({flee} shots).");
 
         // The attacks' shot limits and locked slots are state: a save in the middle of them continues identically.
         var (original, restored, _) = MissionScenario.VerifyContinuation(options, fixture.Templates, fixture.Fingerprint, terrain, map, session.Frames(120));
