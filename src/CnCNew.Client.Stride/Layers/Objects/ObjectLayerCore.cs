@@ -277,7 +277,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         {
             PrepareShadow(drawable, asset!, part, instanceMatrix, frame.Match);
             // A shadow reaches further than its object: an object just outside the view still has to be posed for the part of its shadow inside it.
-            var tip = position + part.ShadowLight * (asset!.Height / MathF.Max(0.05f, -part.ShadowLight.Z));
+            var tip = ShadowSun.Tip(position, part.ShadowLight, asset!.Height, ShadowFloor(drawable, part, frame.Match));
             boxMinimum = Vector3.Min(boxMinimum, tip - new Vector3(radius));
             boxMaximum = Vector3.Max(boxMaximum, tip + new Vector3(radius));
         }

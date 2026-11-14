@@ -22,6 +22,7 @@ internal static class ShadowTests
         harness.Run("A corner under the floor stays where it is", CornerBelowFloor);
         harness.Run("The sun: the first light of the objects, or straight down", SunDirection);
         harness.Run("ShadowSizeX of a volume is the lowest elevation of the sun", ElevationLimit);
+        harness.Run("A thing in the air: its shadow reaches the lowest point of the map, and the visibility box holds that tip", AirborneTip);
         harness.Run("Extrusion: flat ground needs the buffer, a dip takes the floor down", ExtrusionOnTheFlat);
         harness.Run("Extrusion: at a cliff the light is made steeper", ExtrusionAtACliff);
         harness.Run("A decal turns with its object; offset X goes forward, offset Y to the right", DecalPlace);
@@ -157,6 +158,40 @@ internal static class ShadowTests
         TestHarness.Assert(ShadowSun.Limited(low, 0f) == low, "no limit");
         var steep = Vector3.Normalize(new Vector3(0.2f, 0, -1f));
         TestHarness.Assert(ShadowSun.Limited(steep, ShadowSun.LengthScale(45f)) == steep, "a sun above the limit stays");
+    }
+
+    /// <summary>
+    /// A cargo plane at its flight height (100 over a map whose lowest point is 40 under the ground): the shadow of its top reaches the lowest point, and the box that decides whether it is seen
+    /// has to hold that tip - the plane itself can be out of the view while its shadow is in it.
+    /// </summary>
+    private static void AirborneTip()
+    {
+        var light = ShadowSun.Limited(Vector3.Normalize(new Vector3(0.6f, 0, -0.8f)), ShadowSun.LengthScale(89f));
+        var position = new Vector3(100f, 50f, 100f);
+        var floor = -40f - ShadowSun.ExtrusionBuffer;
+        var tip = ShadowSun.Tip(position, light, 27f, floor);
+        TestHarness.Near(floor, tip.Z, 1e-5, "the tip lies on the floor, 140 units under the plane");
+        TestHarness.Near(position.X + light.X * (position.Z + 27f - floor) / -light.Z, tip.X, 1e-3, "along the light");
+        TestHarness.Assert(MathF.Abs(tip.X - position.X) < 5f && MathF.Abs(tip.Y - position.Y) < 5f, "a sun limited to 89 degrees puts the shadow straight under the plane");
+
+        // The sides of its volume really end there: an edge at the plane's height reaches the floor.
+        var mesh = ShadowCasterMesh.Build([new(-50, -5, 0), new(50, -5, 0), new(0, 5, 0)], [(0, 1, 2)])!;
+        var pairs = new int[mesh.EdgeCount * 2];
+        var edges = mesh.Silhouette(light, pairs);
+        var corners = new Vector3[edges * 4];
+        ShadowVolumeWriter.Write(mesh.Vertices, pairs, edges, Matrix4x4.CreateTranslation(position), light, floor, corners);
+        TestHarness.Assert(edges == 3, $"a plate that faces the light casts from its three edges, got {edges}");
+        for (var edge = 0; edge < edges; edge++)
+        {
+            TestHarness.Near(position.Z, corners[edge * 4].Z, 1e-4, "the edge stays at the plane");
+            TestHarness.Near(floor, corners[edge * 4 + 2].Z, 1e-3, "the side reaches the floor");
+            TestHarness.Near(floor, corners[edge * 4 + 3].Z, 1e-3, "the side reaches the floor");
+        }
+
+        // A thing on the ground keeps its short reach: its own height plus the buffer.
+        var ground = ShadowSun.Tip(new Vector3(0, 0, 10f), Vector3.Normalize(new Vector3(1, 0, -1)), 20f, 10f - ShadowSun.ExtrusionBuffer);
+        TestHarness.Near(10f - ShadowSun.ExtrusionBuffer, ground.Z, 1e-5, "on the floor");
+        TestHarness.Near(20.1f, ground.X, 1e-3, "height plus buffer along a 45 degree light");
     }
 
     private static TerrainHeightSampler Field(Func<int, int, byte> heights)

@@ -121,4 +121,15 @@ public static class ShadowSun
 
         return (position.Z - baseHeight + ExtrusionBuffer, scale);
     }
+
+    /// <summary>
+    /// Where the shadow of the top of an object ends: the point on the floor plane its volume reaches (<c>updateMeshVolume</c> extrudes the top corners of the mesh's box down to <paramref name="floorZ"/>).
+    /// A thing in the air reaches down to the lowest point of the map, so its shadow lies far below it, not just its own height: the box that decides whether it is seen has to take that in.
+    /// </summary>
+    public static Vector3 Tip(Vector3 position, Vector3 direction, float height, float floorZ)
+    {
+        var slope = direction.Z < -1e-4f ? 1f / -direction.Z : 0f;
+        var drop = MathF.Max(0f, position.Z + height - floorZ);
+        return new Vector3(position.X + direction.X * drop * slope, position.Y + direction.Y * drop * slope, floorZ);
+    }
 }
