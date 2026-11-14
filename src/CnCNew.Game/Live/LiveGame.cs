@@ -46,6 +46,9 @@ public abstract class LiveGame
     private readonly FrameProjectorOptions _projectorOptions;
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
+
+    /// <summary>The announcer's superweapon detected and ready events (<see cref="CnCNew.Game.Hud.SuperweaponAnnouncer"/>); a mission sets what its scripts hid.</summary>
+    public CnCNew.Game.Hud.SuperweaponAnnouncer SuperweaponAnnouncements { get; } = new();
     private ITickDriver _driver;
     private long _beforeTickDoneFor = -1;
     private double _fraction;
@@ -487,6 +490,9 @@ public abstract class LiveGame
         observer?.PhaseEnded(PresentationPhase.FxUpdate);
         observer?.PhaseStarted(PresentationPhase.DrainSoundCues);
         _soundCues.AddRange(Fx.DrainSoundCues());
+        // The announcer's superweapon events that belong to the objects: a finished structure, a power that turned ready (once per original frame, like the timer list's draw).
+        if (result.Events is not null) SuperweaponAnnouncements.Observe(result.Events, World, _soundCues);
+        if (World.Time.IsOriginalFrameBoundary(World.Tick)) SuperweaponAnnouncements.Update(World, _soundCues);
         observer?.PhaseEnded(PresentationPhase.DrainSoundCues);
         observer?.PhaseStarted(PresentationPhase.FogUpdate);
         if (FogViewer is { } fogViewer && World.Tick % World.VisionInterval == 0) Fog.Update(World.Vision!, World.VisionSlotOf(fogViewer));

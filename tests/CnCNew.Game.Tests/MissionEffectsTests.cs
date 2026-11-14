@@ -90,6 +90,7 @@ internal static class MissionEffectsTests
         harness.Run("A removed command-bar button is gone from the bar of a selected object, and comes back when the script adds it", () => RealCommandBar(data));
         harness.Run("Sciences a script hides or disables are hidden or restricted PurchaseScience buttons; an unselectable object leaves the selection", () => RealScienceAndSelection(data));
         harness.Run("A script's custom house colour and colour flash show in the object layer's frame", () => RealColorsAndFlashes(data));
+        harness.Run("The announcer says a superweapon is detected when its structure is finished and ready when its timer runs out, once (#324)", () => SuperweaponAnnouncements(data));
         harness.Run("The superweapon list shows every public-timer power with its owner's colour, and the scripts' switches hide it", () => RealSuperweaponList(data));
         return harness.Failures;
     }
@@ -728,5 +729,47 @@ internal static class MissionEffectsTests
 
         superweapons.DisplayEnabled = false;
         TestHarness.Assert(superweapons.Collect(live.World, Label).IsEmpty, "DISABLE_SPECIAL_POWER_DISPLAY empties the list");
+    }
+
+    private static void SuperweaponAnnouncements(GameData data)
+    {
+        var (live, controller, _) = LoadMission(data, "Maps/GC_NukeGeneral/GC_NukeGeneral.map");
+        for (var frame = 0; frame < 60; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        var world = live.World;
+        var announcer = new SuperweaponAnnouncer();
+        var launchers = world.Entities.Where(entity => entity.Modules.OfType<CnCNew.Simulation.Modules.ISpecialPowerModule>().Any(module => module.PowerIndex >= 0 && world.SpecialPowers[module.PowerIndex].Type.Contains("NEUTRON", StringComparison.Ordinal)))
+            .OrderBy(entity => entity.Id.Value).ToArray();
+        TestHarness.Assert(launchers.Length >= 1, "the mission has neutron missile launchers");
+        var launcher = launchers[0];
+
+        var cues = new List<CnCNew.Presentation.Fx.SoundCue>();
+        announcer.Observe([new CnCNew.Simulation.Events.SimEvent(new EventId(1), world.Tick, CnCNew.Simulation.Events.SimEventKind.ConstructionCompleted, launcher.Id, EntityId.Invalid, launcher.Owner, string.Empty, 0)], world, cues);
+        TestHarness.Assert(cues.Count == 1 && cues[0].EventName == "SuperweaponDetected_Own_Nuke" && cues[0].Player == launcher.Owner && cues[0].Kind == CnCNew.Presentation.Fx.SoundCueKind.Eva,
+            $"a finished neutron missile launcher is announced to its owner's player as detected ({string.Join(",", cues.Select(cue => cue.EventName))})");
+        cues.Clear();
+        announcer.Observe([new CnCNew.Simulation.Events.SimEvent(new EventId(2), world.Tick, CnCNew.Simulation.Events.SimEventKind.ConstructionCompleted, EntityId.Invalid, EntityId.Invalid, launcher.Owner, string.Empty, 0)], world, cues);
+        TestHarness.Assert(cues.Count == 0, "a structure that is gone says nothing");
+
+        // The timer: ready once per period of readiness, and only where the timer is listed (a script hid these five).
+        announcer.HiddenByScript = _ => true;
+        announcer.Update(world, cues);
+        TestHarness.Assert(cues.Count == 0, "a power a script hid is not announced");
+        announcer.HiddenByScript = null;
+        announcer.Update(world, cues);
+        TestHarness.Assert(cues.Count == 0, "a power that is still reloading is not announced");
+        var module = launcher.Modules.OfType<CnCNew.Simulation.Modules.ISpecialPowerModule>().First();
+        // The mission's script holds the launchers; give this one a short reload so the test sees the edge.
+        var power = (CnCNew.Simulation.Modules.BuiltIn.SpecialPowerModuleBase)module;
+        for (var guard = 0; power.IsPaused && guard < 16; guard++) power.PauseCountdown(world, false);
+        power.SetReadyFrame(world.Tick + 120);
+        world.MarkDirty(launcher);
+        for (var step = 0; step < 2_000 && !module.IsReady(world); step++) world.Step();
+        TestHarness.Assert(module.IsReady(world), "the launcher's reload ends");
+        announcer.Update(world, cues);
+        TestHarness.Assert(cues.Count >= 1 && cues.All(cue => cue.EventName == "SuperweaponReady_Own_Nuke" && cue.Kind == CnCNew.Presentation.Fx.SoundCueKind.Eva) && cues.Any(cue => cue.Entity == launcher.Id && cue.Player == launcher.Owner),
+            $"a power that turned ready is announced to its owner's player ({cues.Count})");
+        var first = cues.Count;
+        announcer.Update(world, cues);
+        TestHarness.Assert(cues.Count == first, "it is announced once, not again while it stays ready");
     }
 }
