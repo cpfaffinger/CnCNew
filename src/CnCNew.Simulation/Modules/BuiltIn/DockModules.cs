@@ -102,9 +102,8 @@ public sealed record CreateNoOpData : ModuleData
 }
 
 /// <summary>
-/// <c>DockUpdate</c>: the approach queue and the active-docker hand-over. The dock carries no bone geometry, so every slot's approach point is
-/// the dock's centre pushed <c>majorRadius / 2</c> towards the docker (the reference's boneless branch of <c>computeApproachPosition</c>,
-/// without <c>findPositionAround</c>). <c>update()</c> makes the owner of the first reached slot the active docker while none is active.
+/// <c>DockUpdate</c>: the approach queue and the active-docker hand-over. The dock carries no bone geometry (the <c>DockWaiting</c> bones are not read), so every slot's approach point is
+/// the reference's boneless branch of <c>computeApproachPosition</c> (see <see cref="ApproachPosition"/>). <c>update()</c> makes the owner of the first reached slot the active docker while none is active.
 /// Slots and the active docker whose entity died or vanished are released (the reference relies on the docker's own machine to do that).
 /// The dock sleeps while no slot and no docker is in use and is woken by the first reservation.
 /// </summary>
@@ -177,7 +176,7 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     private bool Claimed(IWorldServices world, Entity docker, int slot, out int index, out Fixed x, out Fixed y)
     {
         index = slot;
-        (x, y) = ApproachPosition(docker);
+        (x, y) = ApproachPosition(world, docker);
         world.WakeAt(Entity, this, world.Tick);
         return true;
     }
@@ -191,21 +190,35 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
         _owners[index] = EntityId.Invalid;
         _reached[index] = false;
         index--;
-        (x, y) = ApproachPosition(docker);
+        (x, y) = ApproachPosition(world, docker);
         return true;
     }
 
-    /// <summary><c>computeApproachPosition</c> without bones: the dock's centre pushed <c>majorRadius / 2</c> towards the docker; a dock that is itself a mobile blocker overrides it.</summary>
-    protected virtual (Fixed X, Fixed Y) ApproachPosition(Entity docker)
+    /// <summary>
+    /// <c>DockUpdate::computeApproachPosition</c> for a model without <c>DockWaiting</c> bones: the dock's centre pushed <c>majorRadius / 2</c> towards the docker (all three axes in the
+    /// vector's length), then the nearest place <c>findPositionAround</c> finds within 100 units that nothing overlaps - a supply pile's trucks wait at its edge, not on it. A flyer ignores the
+    /// dock itself. A dock that is itself a mobile blocker overrides it.
+    /// </summary>
+    protected virtual (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker)
     {
+        var (x, y) = (Entity.X, Entity.Y);
         var dx = docker.X - Entity.X;
         var dy = docker.Y - Entity.Y;
-        var distSq = dx * dx + dy * dy;
-        if (distSq == Fixed.Zero) return (Entity.X, Entity.Y);
-        var dist = Fixed.Sqrt(distSq);
-        var reach = Entity.Template.GeometryMajorRadius / Fixed.FromInt(2);
-        return (Entity.X + dx / dist * reach, Entity.Y + dy / dist * reach);
+        var dz = docker.Z - Entity.Z;
+        var distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq != Fixed.Zero)
+        {
+            var dist = Fixed.Sqrt(distSq);
+            var reach = Entity.Template.GeometryMajorRadius / Fixed.FromInt(2);
+            x += dx / dist * reach;
+            y += dy / dist * reach;
+        }
+        var flies = CrateModules.UsesAirborneLocomotor(docker);
+        return world.FindPositionAround(x, y, Fixed.Zero, FindPositionRadius, docker, flies ? Entity : null, out var foundX, out var foundY) ? (foundX, foundY) : (x, y);
     }
+
+    /// <summary><c>fpOptions.maxRadius</c> of <c>computeApproachPosition</c>.</summary>
+    private static readonly Fixed FindPositionRadius = Fixed.FromInt(100);
 
     public virtual bool IsClearToEnter(IWorldServices world, EntityId docker) => docker == _activeDocker;
 

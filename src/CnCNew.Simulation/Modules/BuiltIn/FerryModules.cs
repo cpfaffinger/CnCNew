@@ -322,7 +322,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
     /// The waiting spot is just outside the ferry's bounding circle on the docker's side (the reference uses the <c>DOCKWAITING</c> bones beside the pier): the ferry is a mobile object that
     /// the local avoidance of a walking docker steers around, so a spot inside its footprint could never be reached.
     /// </summary>
-    protected override (Fixed X, Fixed Y) ApproachPosition(Entity docker)
+    protected override (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker)
     {
         var dx = docker.X - Entity.X;
         var dy = docker.Y - Entity.Y;

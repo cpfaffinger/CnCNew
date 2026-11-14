@@ -549,6 +549,12 @@ public interface IWorldServices
     /// </summary>
     (Fixed X, Fixed Y) FindFreeGoal(Entity mover, Fixed fromX, Fixed fromY, Fixed x, Fixed y);
 
+    /// <summary>
+    /// <c>PartitionManager::findPositionAround</c> (with <c>tryPosition</c>): the nearest place to the centre, on rings of five units from <paramref name="minRadius"/> to <paramref name="maxRadius"/> from a random angle of the logic stream, that is on no cliff,
+    /// not under water, overlapped by no object (but <paramref name="ignore"/> and <paramref name="forWhom"/>) and, for a ground mover, reached by a path. False, with the centre, when there is none.
+    /// </summary>
+    bool FindPositionAround(Fixed centerX, Fixed centerY, Fixed minRadius, Fixed maxRadius, Entity forWhom, Entity? ignore, out Fixed x, out Fixed y);
+
     /// <summary><c>Pathfinder::moveAllies</c>: a dozer or a harvester that has a new path asks the idle allies at its nodes to make way, when every object has decided its frame.</summary>
     void RequestClearPath(Entity mover);
 
