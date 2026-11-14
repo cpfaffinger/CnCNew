@@ -16,6 +16,11 @@ internal sealed record ModernSelection(string Name, int Count, float Health, Imm
 /// <param name="Share">How far the construction is, 0 to 1.</param>
 internal sealed record ModernConstruction(string Name, string? Cameo, string Text, float Share);
 
+/// <summary>What the modern bar's own controls show that their windows do not carry (docs/UI-MODERN.md section 20).</summary>
+/// <param name="IdleWorkers">How many of the player's workers stand idle: the count on the idle worker button.</param>
+/// <param name="UnderAttack">The status light is lit: the original's under-attack glow is in a bright phase.</param>
+internal readonly record struct ModernBarState(int IdleWorkers, bool UnderAttack);
+
 /// <summary>
 /// The command bar of the modern skin (docs/UI-MODERN.md section 17): a band across the whole width of the window at every aspect ratio. Nothing of it is stretched art. The radar, the
 /// cameos and the portrait keep their proportions at the window's uniform scale; the radar with its buttons stands at the left edge, the portrait and the command buttons at the
@@ -157,8 +162,13 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
         else
             for (var slot = 1; slot <= CnCNew.Presentation.Input.CommandBarModel.GridSlots; slot++)
                 if (tree.FindByName($"{Prefix}ButtonCommand{slot:00}") is { } button) AddWell(commands, button.Rect.Inset(-1), Faded(well), palette.Border);
-        foreach (var name in new[] { "ButtonOptions", "ButtonIdleWorker", "ButtonPlaceBeacon", "PopupCommunicator" })
-            if (tree.FindByName(Prefix + name) is { IsHidden: false } button) AddWell(commands, button.Rect, palette.Control, palette.Border);
+        // The money and the status light share one well: what the player has and whether something of it is under attack.
+        if (tree.FindByName(Prefix + "MoneyDisplay") is { IsHidden: false } moneyWindow)
+        {
+            var money = moneyWindow.Rect;
+            var light = tree.FindByName(Prefix + "WinUAttack") is { IsHidden: false } lamp ? lamp.Rect : money;
+            AddWell(commands, UiRect.FromEdges(Math.Min(light.X, money.X) - Scale(2), Math.Min(light.Y, money.Y), money.Right, Math.Max(light.Bottom, money.Bottom)), Faded(well), palette.Border);
+        }
         if (HasPlate) AddWell(commands, _plate, Faded(well), palette.Border);
         return commands.ToImmutable();
     }
@@ -221,21 +231,94 @@ internal sealed class ModernControlBar(UiWindowTree tree, UiWindow root, UiSkin 
     }
 
     /// <summary>
-    /// The general's button in the skin's own cell: the rank in words, under it the way to the next rank (the experience bar of the original's art). <paramref name="attention"/>: points wait to be spent.
+    /// The general's button in the skin's own cell: the rank in words, under it the way to the next rank (the experience bar of the original's art). <paramref name="attention"/>: points wait to be spent
+    /// (the outline and the rank in the accent); <paramref name="blink"/>: the bright half of the blink the original's star image makes then (<c>ControlBar::getStarImage</c>), a wash of the accent.
     /// </summary>
-    public ImmutableArray<UiDrawCommand> General(string rank, int progressPercent, bool attention, IUiTextMeasure measure, decimal textScale)
+    public ImmutableArray<UiDrawCommand> General(string rank, int progressPercent, bool attention, IUiTextMeasure measure, decimal textScale, bool blink = false)
     {
         if (tree.FindByName(Prefix + "ButtonGeneral") is not { IsHidden: false } button) return [];
         var palette = skin.Style.Palette;
         var font = skin.Style.Font(UiTypeStep.Body, tree.Viewport, textScale);
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        commands.Add(new UiFillRect(button.Rect, button.IsHilited ? palette.Hover : palette.Control));
-        commands.Add(new UiBorderRect(button.Rect, attention ? palette.Accent : palette.Border));
+        var enabled = button.IsEnabled;
+        commands.Add(new UiFillRect(button.Rect, !enabled ? palette.Panel : button.IsSelected ? palette.Selected : button.IsHilited ? palette.Hover : palette.Control));
+        if (enabled && attention && blink) commands.Add(new UiFillRect(button.Rect, AccentWash));
+        commands.Add(new UiBorderRect(button.Rect, enabled && attention ? palette.Accent : palette.Border));
         var bar = UiRect.FromEdges(button.Rect.X + 1, button.Rect.Bottom - Math.Max(2, Scale(4)), button.Rect.Right - 1, button.Rect.Bottom - 1);
-        commands.Add(new UiFillRect(bar with { Width = bar.Width * Math.Clamp(progressPercent, 0, 100) / 100 }, palette.Accent));
-        commands.Add(new UiTextDraw(rank, null, font, attention ? palette.Accent : palette.Text, WndColor.Undefined, button.Rect.X + (button.Rect.Width - measure.MeasureWidth(rank, font)) / 2,
+        commands.Add(new UiFillRect(bar with { Width = bar.Width * Math.Clamp(progressPercent, 0, 100) / 100 }, enabled ? palette.Accent : palette.Disabled));
+        var color = !enabled ? palette.Disabled : attention && !blink ? palette.Accent : palette.Text;
+        commands.Add(new UiTextDraw(rank, null, font, color, WndColor.Undefined, button.Rect.X + (button.Rect.Width - measure.MeasureWidth(rank, font)) / 2,
             button.Rect.Y + (bar.Y - button.Rect.Y - measure.LineHeight(font)) / 2, UiTextAlignment.Left, button.Rect));
         return commands.ToImmutable();
+    }
+
+    /// <summary>The accent laid thinly over a control: a flashing button's bright half, the halo of the lit status light.</summary>
+    private static readonly WndColor AccentWash = new(242, 179, 61, 64);
+
+    /// <summary>The bar's four small buttons beside the radar, each with the icon the skin draws for it.</summary>
+    private static readonly ImmutableArray<(string Window, ModernBarIcon Icon)> SmallButtons =
+        [("ButtonOptions", ModernBarIcon.Options), ("ButtonIdleWorker", ModernBarIcon.IdleWorker), ("ButtonPlaceBeacon", ModernBarIcon.Beacon), ("PopupCommunicator", ModernBarIcon.Chat)];
+
+    /// <summary>
+    /// The bar's own controls, drawn by the skin and not from the scheme's art (docs/UI-MODERN.md section 20): the four small buttons beside the radar with an icon each, the idle
+    /// workers' count on their button, and the status light beside the money, which is lit in the phases the original's under-attack glow is (<c>ControlBar::updateRadarAttackGlow</c>).
+    /// Every state of a window keeps its meaning: hilited (the pointer is over it), pressed, disabled (the idle worker button with nobody idle, the beacon button at the limit).
+    /// </summary>
+    public ImmutableArray<UiDrawCommand> Controls(ModernBarState state, IUiTextMeasure measure, decimal textScale)
+    {
+        var palette = skin.Style.Palette;
+        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        foreach (var (name, icon) in SmallButtons)
+        {
+            if (tree.FindByName(Prefix + name) is not { IsHidden: false } button) continue;
+            var rect = button.Rect;
+            var enabled = button.IsEnabled;
+            var pressed = enabled && button.IsSelected;
+            var hover = enabled && button.IsHilited;
+            commands.Add(new UiFillRect(rect, !enabled ? palette.Panel : pressed ? palette.Selected : hover ? palette.Hover : palette.Control));
+            commands.Add(new UiBorderRect(rect, palette.Border));
+            // The hilited or pressed button carries the accent as a bar at its left edge, as every flat button of the skin does.
+            if (hover || pressed) commands.Add(new UiFillRect(new UiRect(rect.X, rect.Y, Math.Max(2, Scale(2)), rect.Height), palette.Accent));
+            var side = Math.Min(rect.Width, rect.Height) * 0.62f;
+            var left = rect.X + (rect.Width - side) / 2f;
+            var top = rect.Y + (rect.Height - side) / 2f + (pressed ? 1 : 0);
+            ModernBarIcons.Draw(commands, icon, left, top, side, enabled ? palette.Text : palette.Disabled);
+            if (icon == ModernBarIcon.IdleWorker && enabled && state.IdleWorkers > 0) AddBadge(commands, rect, state.IdleWorkers, measure, textScale);
+        }
+        if (tree.FindByName(Prefix + "WinUAttack") is { IsHidden: false } lamp) AddStatusLight(commands, lamp.Rect, state.UnderAttack);
+        return commands.ToImmutable();
+    }
+
+    /// <summary>How many workers stand idle, on a plate of the accent at the bottom right of the button (the original keeps this count and does not show it: <c>InGameUI::showIdleWorkerLayout</c>).</summary>
+    private void AddBadge(ImmutableArray<UiDrawCommand>.Builder commands, UiRect button, int count, IUiTextMeasure measure, decimal textScale)
+    {
+        var palette = skin.Style.Palette;
+        var font = skin.Style.Font(UiTypeStep.Caption, tree.Viewport, textScale);
+        var label = count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var height = Math.Min(measure.LineHeight(font), button.Height);
+        var width = Math.Min(button.Width, Math.Max(height, measure.MeasureWidth(label, font) + Scale(4)));
+        var plate = new UiRect(button.Right - width, button.Bottom - height, width, height);
+        commands.Add(new UiFillRect(plate, palette.Accent));
+        commands.Add(new UiTextDraw(label, null, font, palette.Canvas, WndColor.Undefined, plate.X + (plate.Width - measure.MeasureWidth(label, font)) / 2, plate.Y, UiTextAlignment.Left, plate));
+    }
+
+    /// <summary>A round lamp in the middle of the light's window: dark with a ring at rest, the skin's warning colour with a halo while lit.</summary>
+    private void AddStatusLight(ImmutableArray<UiDrawCommand>.Builder commands, UiRect window, bool lit)
+    {
+        var palette = skin.Style.Palette;
+        var diameter = Math.Max(4, Math.Min(window.Width, window.Height) * 7 / 10);
+        var (cx, cy) = (window.X + window.Width / 2, window.Y + window.Height / 2);
+        if (lit)
+        {
+            var halo = Math.Min(Math.Min(window.Width, window.Height), diameter * 3 / 2);
+            ModernBarIcons.Disc(commands, cx, cy, halo, palette.Bad with { A = 90 });
+            ModernBarIcons.Disc(commands, cx, cy, diameter, palette.Bad);
+        }
+        else
+        {
+            ModernBarIcons.Disc(commands, cx, cy, diameter, palette.Border);
+            ModernBarIcons.Disc(commands, cx, cy, Math.Max(2, diameter - 2 * Math.Max(1, Scale(1))), palette.Control);
+        }
     }
 
     /// <summary>The selection plate: what the extra width of the window shows. One object: its name and its health; several: their kinds with a count each.</summary>

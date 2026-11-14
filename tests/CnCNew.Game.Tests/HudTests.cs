@@ -62,6 +62,10 @@ internal static class HudTests
         harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
         harness.Run("Diplomacy: the communicator button shows the players of a skirmish, with side, team and state", () => DiplomacyWindow(data));
         harness.Run("Beacons: the button of a match of a server, a place, the limit, the delete key, and nothing for an enemy", () => BeaconButton(data));
+        // #345: the modern skin draws the bar's own controls itself; they still answer clicks and keys as in the original skin.
+        harness.Run("Modern skin: the general's window through the star", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => GeneralsWindow(data)));
+        harness.Run("Modern skin: diplomacy through the communicator button, the options button opens the menu", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => DiplomacyWindow(data)));
+        harness.Run("Modern skin: the beacon button and its keys", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => BeaconButton(data)));
         harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
         harness.Run("A drag while a building is placed turns it and draws no selection box; a drag of the plain pointer does", () => NoSelectionBoxWhilePlacing(data));
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));

@@ -46,6 +46,8 @@ internal static class SkinTests
         harness.Run("R2b: the main menu, the options and the HUD at the 16:10 sizes (1440x900, 1680x1050, 1920x1200) in both skins", () => SixteenByTenLayout(data, updating));
         harness.Run("The settings choose the skin, the run's --skin is kept until the person chooses, and More options writes what it shows", () => SettingsChooseTheSkin(data));
         harness.Run("The modern command bar fills the width at every aspect ratio; its pictures keep their proportions and the width goes to the selection plate", () => ModernBarFillsTheWidth(data));
+        harness.Run("#345: the modern bar draws its own controls - no scheme art, an icon and every state per button, the idle count, the status light, the general's blink; clicks and keys still work", () => ModernBarDrawsItsOwnControls(data));
+        harness.Run("#345: the status light follows the original's under-attack glow: 150 frames, lit first, switching every 15, at every rate", UnderAttackGlowSchedule);
         harness.Run("More options offers windowed fullscreen (borderless) as a display mode and hands it to the host without a resolution of its own", () => WindowedFullscreen(data));
         harness.Run("The options cover the main menu, a text field asks the host for characters, and the score screen's panel says what the match was", () => ShellDefectsOfTheAcceptance(data));
         harness.Run("R4: a person by script switches to the modern skin in the options and walks skirmish, score, analysis and the replay list with its playback", () => PersonSwitchesTheSkin(data));
@@ -224,6 +226,185 @@ internal static class SkinTests
             TestHarness.Assert(name == width * 3 > height * 4, $"{width}x{height}: the selection plate takes what the width adds beyond 4:3");
             TestHarness.Assert(hud.Tree.HitTest(width / 2, height - 2) is not null, $"{width}x{height}: the band takes the pointer over its whole width");
             TestHarness.Assert(hud.Tree.InputTarget(width / 2, band.Y - 3) is null, $"{width}x{height}: above the band the world takes it");
+        }
+    }
+
+    /// <summary>Every image of the control bar schemes that belongs to the bar itself, not to its content: the art parts and the state images of the bar's own controls.</summary>
+    private static HashSet<string> SchemeArt(MatchController hud)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var scheme in hud.Assets.Schemes.Schemes)
+        {
+            foreach (var images in new[] { scheme.OptionsImages, scheme.WorkerImages, scheme.BeaconImages, scheme.ChatImages, scheme.GeneralImages, scheme.ToggleDownImages, scheme.UnderAttackImages })
+                foreach (var name in new[] { images.Enabled, images.Hilited, images.Pushed, images.Disabled })
+                    if (name.Length > 0) names.Add(name);
+            foreach (var name in new[] { scheme.ExpBarForegroundImage, scheme.QueueButtonImage }) if (name.Length > 0) names.Add(name);
+            foreach (var part in scheme.ImageParts) names.Add(part.ImageName);
+        }
+        return names;
+    }
+
+    private static void UnderAttackGlowSchedule()
+    {
+        foreach (var perFrame in new long[] { 1, 2, 4 })
+            for (var frame = 0; frame < 200; frame++)
+            {
+                var lit = frame < 150 && (frame / 15) % 2 == 0;
+                for (var tick = 0L; tick < perFrame; tick++)
+                    TestHarness.Assert(MatchController.UnderAttackGlowLit(frame * perFrame + tick, perFrame) == lit, $"{perFrame} ticks a frame, frame {frame}: lit {lit}");
+            }
+        TestHarness.Assert(!MatchController.UnderAttackGlowLit(-1, 2), "nothing before the trigger");
+    }
+
+    /// <summary>
+    /// #345: the owner saw the modern bar's small buttons and its status light in the scheme's art, stretched. In the modern skin every control of the bar itself is the skin's own
+    /// drawing: no image of any scheme (the art parts and the state images of options, idle worker, beacon, chat, general, under-attack glow, the toggle, the experience bar, the
+    /// queue place - <c>SNOptions</c>, <c>SNWorker</c>, <c>SNBeacon</c>, <c>SNChat</c>, <c>SNGeneral</c>, <c>SNUAttackI</c> and their kin of every side) is drawn, while the original
+    /// skin draws them (the check bites). The states keep their meaning.
+    /// </summary>
+    private static void ModernBarDrawsItsOwnControls(GameData data)
+    {
+        var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var palette = ModernLayout.Palette;
+        const int width = 1280, height = 720;
+        foreach (var faction in new[] { "FactionChina", "FactionAmerica", "FactionGLA" })
+        {
+            MatchController Hud(UiSkinName skin, out LiveMatch live)
+            {
+                var setup = new MatchSetup(map, faction, [faction == "FactionChina" ? "FactionAmerica" : "FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = 3 };
+                live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
+                var made = new MatchController(live, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }) { StarBlinks = false, BeaconsEnabled = true };
+                for (var step = 0; step < 8; step++) live.Advance(0.25);
+                made.Update(0.25);
+                return made;
+            }
+            var original = Hud(UiSkinName.Original, out _);
+            var art = SchemeArt(original);
+            var originalImages = original.BuildDrawList(width, height).Commands.OfType<UiImageDraw>().Select(draw => draw.Image).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            TestHarness.Assert(art.Overlaps(originalImages) && original.Assets.Schemes.Schemes.Any(scheme => originalImages.Contains(scheme.OptionsImages.Enabled)), $"{faction}: the original skin draws the scheme's art and its options button (the check bites)");
+
+            var hud = Hud(UiSkinName.Modern, out var match);
+            long time = 10_000;
+            var list = hud.BuildDrawList(width, height).Commands;
+            void Draw() => list = hud.BuildDrawList(width, height).Commands;
+            void NoArt(string state)
+            {
+                var drawn = list.OfType<UiImageDraw>().Select(draw => draw.Image).Where(art.Contains).Distinct().ToArray();
+                TestHarness.Assert(drawn.Length == 0, $"{faction}, {state}: the modern bar draws no scheme art ({string.Join(", ", drawn)})");
+            }
+            UiRect Rect(string name) => hud.WindowRect("ControlBar.wnd:" + name) ?? throw new InvalidOperationException(name);
+            bool Filled(UiRect rect, CnCNew.Ui.Wnd.WndColor color) => list.OfType<UiFillRect>().Any(fill => fill.Rect == rect && fill.Color == color);
+            int LinesIn(UiRect rect, CnCNew.Ui.Wnd.WndColor color)
+                => list.OfType<UiLineDraw>().Count(line => line.Color == color && line.X0 >= rect.X && line.X0 <= rect.Right && line.Y0 >= rect.Y && line.Y0 <= rect.Bottom);
+            NoArt("at rest");
+
+            foreach (var name in new[] { "ButtonOptions", "PopupCommunicator", "ButtonPlaceBeacon" })
+            {
+                var rect = Rect(name);
+                TestHarness.Assert(Filled(rect, palette.Control) && LinesIn(rect, palette.Text) >= 3, $"{faction}: {name} is a flat cell of the palette with an icon of lines");
+                hud.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX, rect.CenterY)));
+                Draw();
+                TestHarness.Assert(Filled(rect, palette.Hover) && list.OfType<UiFillRect>().Any(fill => fill.Color == palette.Accent && fill.Rect.X == rect.X && fill.Rect.Height == rect.Height),
+                    $"{faction}: {name} under the pointer is lighter, with the accent at its left edge");
+                NoArt(name + " hilited");
+                hud.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, new Vector2(rect.CenterX, rect.CenterY)));
+                Draw();
+                TestHarness.Assert(Filled(rect, palette.Selected), $"{faction}: {name} pressed is the selected colour");
+                NoArt(name + " pressed");
+                // Leaving the button lets it go without a click.
+                hud.Process(new MouseMoveEvent(time += 16, new Vector2(width / 2f, height / 3f)));
+                hud.Process(new MouseButtonEvent(time += 16, MouseButton.Left, false, new Vector2(width / 2f, height / 3f)));
+                Draw();
+            }
+
+            // The status light: dark at rest, lit in the warning colour while the under-attack glow is.
+            var lamp = Rect("WinUAttack");
+            bool LampLit() => list.OfType<UiFillRect>().Any(fill => fill.Color == palette.Bad && lamp.Contains(fill.Rect.X, fill.Rect.Y));
+            TestHarness.Assert(!LampLit() && list.OfType<UiFillRect>().Any(fill => fill.Color == palette.Border && lamp.Contains(fill.Rect.X, fill.Rect.Y)), $"{faction}: the light is dark at rest ({lamp}: {string.Join(" ", list.OfType<UiFillRect>().Where(fill => lamp.Contains(fill.Rect.X, fill.Rect.Y)).Select(fill => fill.Color + "@" + fill.Rect))})");
+            var own = match.World.Entities.First(entity => entity.Owner == match.Human && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE"));
+            var enemy = match.World.Entities.First(entity => entity.Owner != match.Human && match.World.AreEnemies(match.Human, entity.Owner));
+            hud.Messages.Observe(new CnCNew.Simulation.Events.SimEvent(default, match.World.Tick, CnCNew.Simulation.Events.SimEventKind.EntityDamaged, own.Id, enemy.Id, default, string.Empty, 5), match.World, match.Human);
+            Draw();
+            TestHarness.Assert(hud.UnderAttackLightLit && LampLit(), $"{faction}: an attack lights it");
+            NoArt("light lit");
+            for (var step = 0; step < 24; step++) match.Advance(0.25);
+            hud.Update(0.25);
+            Draw();
+            TestHarness.Assert(!hud.UnderAttackLightLit && !LampLit(), $"{faction}: after six seconds it is dark again");
+
+            // The idle worker button: enabled with its count while a worker stands idle, disabled and grey without one (InGameUI::updateIdleWorker).
+            var idle = Rect("ButtonIdleWorker");
+            var count = hud.Input.Selection.IdleWorkerCount;
+            TestHarness.Assert(count > 0 && hud.IsWindowEnabled("ControlBar.wnd:ButtonIdleWorker"), $"{faction}: the builder stands idle at the start ({count})");
+            var label = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var badge = list.OfType<UiTextDraw>().FirstOrDefault(text => text.Text == label && idle.Contains(text.X, text.Y));
+            TestHarness.Assert(badge is not null && badge.Color == palette.Canvas && ModernLayout.Contrast(palette.Canvas, palette.Accent) >= 4.5 && LinesIn(idle, palette.Text) >= 2,
+                $"{faction}: the idle button shows its hammer and the count on the accent");
+            // R3 of docs/UI-MODERN.md: the count is text of the skin's type scale, at least 16 pixels at 1280 x 720; and the bar's own windows have no label too wide for them.
+            TestHarness.Assert(CnCNew.Ui.Rendering.UiFontPolicy.PixelSize(badge!.Font.Size) >= 16, $"{faction}: the count is readable ({CnCNew.Ui.Rendering.UiFontPolicy.PixelSize(badge.Font.Size)} px)");
+            var overflows = UiReadability.Audit(hud.Tree, hud.BuildDrawList(width, height)).Overflows
+                .Where(overflow => overflow.TooWide && new[] { "ButtonOptions", "ButtonIdleWorker", "ButtonPlaceBeacon", "PopupCommunicator", "ButtonGeneral", "WinUAttack", "MoneyDisplay" }.Any(name => overflow.Window == "ControlBar.wnd:" + name)).ToArray();
+            TestHarness.Assert(overflows.Length == 0, $"{faction}: no label of the bar's controls is too wide ({string.Join("; ", overflows.Select(overflow => overflow.Window + " " + overflow.Measure))})");
+            foreach (var worker in match.World.Entities.Where(entity => entity.Owner == match.Human && (entity.Template.IsKindOf("DOZER") || entity.Template.IsKindOf("HARVESTER"))).ToArray()) match.World.Kill(worker.Id);
+            match.Advance(0.25);
+            hud.Update(0.25);
+            Draw();
+            TestHarness.Assert(hud.Input.Selection.IdleWorkerCount == 0 && !hud.IsWindowEnabled("ControlBar.wnd:ButtonIdleWorker") && Filled(idle, palette.Panel) && LinesIn(idle, palette.Disabled) >= 2 && LinesIn(idle, palette.Text) == 0,
+                $"{faction}: with nobody idle the button is disabled, dark, its icon in the disabled colour, without a count");
+            NoArt("idle worker disabled");
+
+            // The general's button blinks while points wait: a wash of the accent in one half of every second.
+            hud.StarBlinks = true;
+            var general = Rect("ButtonGeneral");
+            var washes = 0;
+            for (var step = 0; step < 4; step++)
+            {
+                hud.Update(0.25);
+                Draw();
+                if (list.OfType<UiFillRect>().Any(fill => fill.Rect == general && fill.Color.A == 64 && fill.Color.R == palette.Accent.R)) washes++;
+                TestHarness.Assert(list.OfType<UiBorderRect>().Any(border => border.Rect == general && border.Color == palette.Accent), $"{faction}: the general's button has the accent while a point waits");
+                NoArt("general blinking");
+            }
+            TestHarness.Assert(washes == 2, $"{faction}: the general's button is bright in half of the frames of a second ({washes} of 4)");
+            hud.StarBlinks = false;
+
+            // Clicks and keys still reach the controls.
+            void Click(string name)
+            {
+                var rect = Rect(name);
+                var at = new Vector2(rect.CenterX, rect.CenterY);
+                hud.Process(new MouseMoveEvent(time += 16, at));
+                hud.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, at));
+                hud.Process(new MouseButtonEvent(time += 60, MouseButton.Left, false, at));
+                match.Advance(0.05);
+                hud.Update(0.05);
+            }
+            void Key(MetaAction action)
+            {
+                var binding = hud.Input.Hotkeys.Entries.First(entry => entry.Action == action).Binding;
+                var held = new List<KeyCode>();
+                if (binding.Modifiers.HasFlag(KeyModifiers.Control)) held.Add(KeyCode.LeftControl);
+                if (binding.Modifiers.HasFlag(KeyModifiers.Shift)) held.Add(KeyCode.LeftShift);
+                if (binding.Modifiers.HasFlag(KeyModifiers.Alt)) held.Add(KeyCode.LeftAlt);
+                foreach (var modifier in held) hud.Process(new KeyEvent(time += 16, modifier, true));
+                hud.Process(new KeyEvent(time += 16, binding.Key, true));
+                hud.Process(new KeyEvent(time += 16, binding.Key, false));
+                foreach (var modifier in held) hud.Process(new KeyEvent(time += 16, modifier, false));
+                hud.Update(0.05);
+            }
+            Click("ButtonGeneral");
+            TestHarness.Assert(hud.IsGeneralsWindowOpen, $"{faction}: a click on the general's button opens the general's window");
+            Click("ButtonGeneral");
+            Click("PopupCommunicator");
+            TestHarness.Assert(hud.IsDiplomacyOpen, $"{faction}: a click on the communicator opens the players' page");
+            Key(MetaAction.Diplomacy);
+            TestHarness.Assert(!hud.IsDiplomacyOpen, $"{faction}: its key closes it");
+            Key(MetaAction.Diplomacy);
+            TestHarness.Assert(hud.IsDiplomacyOpen, $"{faction}: and opens it again");
+            Click("ButtonOptions");
+            TestHarness.Assert(hud.IsMenuOpen && !hud.IsDiplomacyOpen, $"{faction}: a click on the options button opens the game's menu");
+            Draw();
+            NoArt("menu open");
         }
     }
 

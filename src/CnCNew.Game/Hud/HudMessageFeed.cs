@@ -88,6 +88,9 @@ public sealed class HudMessageFeed
     /// </summary>
     public Vector2? LastRadarEvent { get; private set; }
 
+    /// <summary>The tick of the last under-attack radar event that was made (<c>Radar::tryUnderAttackEvent</c> then calls <c>ControlBar::triggerRadarAttackGlow</c>); null before the first.</summary>
+    public long? LastUnderAttackTick { get; private set; }
+
     /// <summary>How many radar events the space bar can walk back through (this build's extension of <c>getLastEventLoc</c>, which remembers only the last).</summary>
     public const int MaxRadarHistory = 32;
 
@@ -455,6 +458,7 @@ public sealed class HudMessageFeed
         if (world.FindEntity(simEvent.Other) is { } attacker && attacker.Owner == human) return;
         var position = SimulationQueries.GroundOf(victim);
         if (!TryEvent(EventUnderAttack, position, world, simEvent.Tick)) return;
+        LastUnderAttackTick = simEvent.Tick;
         var template = victim.Template;
         if (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE"))
         {

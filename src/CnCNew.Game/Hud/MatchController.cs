@@ -1115,6 +1115,23 @@ public sealed partial class MatchController
         return baseList with { Commands = commands };
     }
 
+    /// <summary>
+    /// <c>ControlBar::updateRadarAttackGlow</c>: an under-attack radar event (<c>Radar::tryUnderAttackEvent</c>, <see cref="HudMessageFeed.LastUnderAttackTick"/>) makes the glow
+    /// blink for 150 frames of the original, its state switching every 15 frames, lit first: five bright phases. The modern skin's status light shows these phases.
+    /// </summary>
+    public bool UnderAttackLightLit => Messages.LastUnderAttackTick is { } since && UnderAttackGlowLit(Match.World.Tick - since, Match.World.Time.OriginalFrames(1));
+
+    /// <summary>
+    /// Whether the glow is lit <paramref name="elapsedTicks"/> after its trigger at a rate of <paramref name="ticksPerOriginalFrame"/>: <c>RADAR_ATTACK_GLOW_FRAMES</c> (150) frames,
+    /// the window disabled (the lit image) first and toggled whenever the remaining frames are a multiple of <c>RADAR_ATTACK_GLOW_NUM_TIMES</c> (15).
+    /// </summary>
+    public static bool UnderAttackGlowLit(long elapsedTicks, long ticksPerOriginalFrame)
+    {
+        if (ticksPerOriginalFrame <= 0 || elapsedTicks < 0) return false;
+        var frames = elapsedTicks / ticksPerOriginalFrame;
+        return frames < 150 && frames / 15 % 2 == 0;
+    }
+
     /// <summary>The band of the modern skin under the bar's windows (<see cref="ModernControlBar"/>); nothing while a mission has hidden the bar, and nothing in the original skin, whose art the marker windows draw.</summary>
     private ImmutableArray<UiDrawCommand> BarChrome() => _modernBar is { } bar && !_controlBarRoot.IsHidden ? bar.Chrome() : [];
 
@@ -1252,11 +1269,13 @@ public sealed partial class MatchController
             window.SetDrawImage(WndDrawDataKind.Hilite, 1, SchemeImage(images.Pushed));
             if (withDisabled) window.SetDrawImage(WndDrawDataKind.Disabled, 0, SchemeImage(images.Disabled));
         }
+        // The modern skin draws the bar's own controls itself (ModernControlBar.Controls, docs/UI-MODERN.md section 20): none of them gets the scheme's art there.
+        if (_modernBar is not null) return;
         Button("ControlBar.wnd:ButtonOptions", scheme.OptionsImages);
         Button("ControlBar.wnd:ButtonIdleWorker", scheme.WorkerImages);
         Button("ControlBar.wnd:ButtonPlaceBeacon", scheme.BeaconImages);
         Button("ControlBar.wnd:PopupCommunicator", scheme.ChatImages);
-        if (_modernBar is null) Button("ControlBar.wnd:ButtonGeneral", scheme.GeneralImages);
+        Button("ControlBar.wnd:ButtonGeneral", scheme.GeneralImages);
         // ControlBar::setUpDownImages: the toggle of a control bar that is up shows the "down" images; it has no disabled image.
         Button("ControlBar.wnd:ButtonLarge", scheme.ToggleDownImages, withDisabled: false);
         if (_tree.FindByName("ControlBar.wnd:WinUAttack") is { } glow)
@@ -1500,7 +1519,7 @@ public sealed partial class MatchController
 
         // ControlBar::populateBuildQueue: a place of the queue nothing stands in is a disabled button, which shows the scheme's QueueButtonImage; without a scheme image the
         // place stays hidden as before (a disabled button of the layout has no picture of its own).
-        var emptyPlaces = _scheme is { } queueScheme && SchemeImage(queueScheme.QueueButtonImage) is not null;
+        var emptyPlaces = _modernBar is null && _scheme is { } queueScheme && SchemeImage(queueScheme.QueueButtonImage) is not null;
         _tree.FindByName("ControlBar.wnd:ProductionQueueWindow")!.SetHidden(view.Queue.IsEmpty);
         for (var index = 0; index < CommandBarModel.MaxQueueButtons; index++)
         {
@@ -1611,7 +1630,10 @@ public sealed partial class MatchController
                 commands.AddRange(modern.ConstructionOverlay(_textMeasure, _scaleOptions.TextScale));
                 commands.AddRange(modern.Power(Hud.EnergyProduction, Hud.EnergyConsumption, _textMeasure, _scaleOptions.TextScale));
                 commands.AddRange(modern.Selection(SelectionForPlate(), _textMeasure, _scaleOptions.TextScale, CommandBar.GroupQueues));
-                if (Generals is { } general) commands.AddRange(modern.General(_assets.Text.Get("SCIENCE:Rank" + general.RankLevel.ToString(CultureInfo.InvariantCulture)), general.ProgressPercent, StarBlinks && _starFlash, _textMeasure, _scaleOptions.TextScale));
+                if (Generals is { } general)
+                    commands.AddRange(modern.General(_assets.Text.Get("SCIENCE:Rank" + general.RankLevel.ToString(CultureInfo.InvariantCulture)), general.ProgressPercent, StarBlinks && _starFlash, _textMeasure, _scaleOptions.TextScale,
+                        blink: StarBlinks && _starFlash && _clockMs % 1000 >= 500));
+                commands.AddRange(modern.Controls(new ModernBarState(Input.Selection.IdleWorkerCount, UnderAttackLightLit), _textMeasure, _scaleOptions.TextScale));
             }
         }
         else if (_scheme is { } scheme)
