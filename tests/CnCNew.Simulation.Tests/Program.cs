@@ -996,6 +996,7 @@ if (contentDirectory is not null) run.Test("Real data: retail reference match, d
 if (contentDirectory is not null) run.Test("Real data: the retail reference match gives the same commands in the same frames at 30, 60 and 120 Hz", () => Tests.RealReferenceMatchAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon objects and the Gattling Tank's weapon choice", () => Tests.RealWeaponSlots(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the Gattling Tank fires faster the longer it fires (#351)", () => Tests.RealGattlingSpinsUp(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel and Black Lotus capture a barracks in the stages of their data", () => Tests.RealStagedCapture(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));

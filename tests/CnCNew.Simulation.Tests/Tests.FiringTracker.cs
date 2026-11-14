@@ -1,3 +1,4 @@
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Snapshots;
@@ -270,5 +271,44 @@ static partial class Tests
         scriptFeeder.Spawn(2, "TurretTarget", owner: 2, x: 0, y: 100);
         scripted.Step();
         Check.That(TicksUntilScriptShot(scripted, scriptFeeder, IdOf(scripted, "WindupTank"), IdOf(scripted, "TurretTarget")) == scripted.Frames(15), "A script command button winds up like any attack order and fires after 15 frames.");
+    }
+}
+static partial class Tests
+{
+    /// <summary>
+    /// Retail data, issue #351: the Gattling Tank at a building fires faster the longer it fires (the delay of 400 ms drops to 200 ms after ContinuousFireOne and to 133 ms after ContinuousFireTwo
+    /// shots, and returns after the coast), at a fire order repeated every tick.
+    /// </summary>
+    public static void RealGattlingSpinsUp(string directory)
+    {
+        var content = CnCNew.Content.ContentFileSystem.Open(directory);
+        var options = CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = CnCNew.Data.Compilation.MapOverlayMode.Exclude };
+        var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new RealSource(content), CnCNew.Data.Registry.ModuleRegistry.Default, options);
+        var catalog = TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        var players = System.Collections.Immutable.ImmutableArray.Create(new PlayerConfiguration(new CnCNew.Simulation.Ids.PlayerId(1), "East"), new PlayerConfiguration(new CnCNew.Simulation.Ids.PlayerId(2), "West"));
+
+        foreach (var ordered in new[] { true })
+        {
+            var world = new SimulationWorld(new WorldConfiguration(new CnCNew.Simulation.Ids.WorldId(1), TestRate.Default, 5, players, "gattling", fingerprint), catalog);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "ChinaTankGattling", owner: 1, x: 1000, y: 1000);
+            feeder.Spawn(2, "AmericaCommandCenter", owner: 2, x: 1100, y: 1000);
+            world.Step();
+            var tank = world.Entities.First(value => value.Template.Name == "ChinaTankGattling");
+            var target = world.Entities.First(value => value.Template.Name == "AmericaCommandCenter");
+            var shots = new List<long>();
+            var stages = new List<ContinuousFireStage>();
+            for (var i = 0; i < world.Frames(450); i++)
+            {
+                if (ordered) feeder.FireWeapon(1, tank.Id.Value, target.Id.Value);
+                var result = world.Step();
+                foreach (var value in result.Events)
+                    if (value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id) { shots.Add(result.Tick); stages.Add(SimulationWorld.ContinuousFireOf(tank)); }
+            }
+            var gaps = shots.Zip(shots.Skip(1), (a, b) => b - a).ToArray();
+            Check.That(shots.Count > 20 && gaps.Length > 10, "The Gattling Tank fires on.");
+            Check.That(gaps.Skip(10).Min() * 2 <= gaps.Take(2).Max() + 1, $"The Gattling Tank's shots come faster the longer it fires ({string.Join(",", gaps)}).");
+        }
     }
 }
