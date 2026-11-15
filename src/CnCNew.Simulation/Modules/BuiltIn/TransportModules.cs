@@ -374,6 +374,19 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     }
 
     /// <summary>
+    /// <c>TAKEOFF_AND_EXIT</c> (<c>ChinookTakeoffOrLandingState</c>, taking off): after an evacuation with exit the Chinook rises straight up where it stands, to its preferred height
+    /// over the highest surface below it, and heads off the map (<c>ChinookHeadOffMapState</c>) only once its state's update finds it within 3 units of that place - the frame
+    /// after the climb that brought it there (#378). Asked once per logic frame of the original of the Chinook, when the climb of its last frame is flown.
+    /// </summary>
+    protected override bool ReadyToExit(IWorldServices world)
+    {
+        if (_climb.TicksLeft > 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return false;
+        var surface = world.HighestLayerFor(Entity.X, Entity.Y, Entity.Z, onlyHealthyBridges: true);
+        var target = world.LayerHeightAt(Entity.X, Entity.Y, surface) + (Entity.Template.Locomotor?.PreferredHeight ?? Fixed.Zero);
+        return (Entity.Z - target).Abs() <= Fixed.FromInt(3);
+    }
+
+    /// <summary>
     /// <c>ChinookHeadOffMapState::update</c>, once the move back has ended (arrived, or its 20 seconds up): the Chinook is destroyed only beyond the map with its border
     /// (<c>getExtentIncludingBorder</c>). Above 30 Hz it is asked when the step of its last frame is covered, where it stands at 30 Hz; inside the border it hovers on in that
     /// state - not idle - and is asked again (#376).

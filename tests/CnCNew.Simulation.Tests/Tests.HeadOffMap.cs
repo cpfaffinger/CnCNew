@@ -214,4 +214,55 @@ static partial class Tests
             Check.That(gone == reference, $"{rate}: it is deleted in frame {gone} after the order (30 Hz: {reference}).");
         }
     }
+
+    /// <summary>
+    /// #378: <c>TAKEOFF_AND_EXIT</c> - a Chinook that has unloaded with exit rises straight up where it landed, to its preferred height (100), and sets off home only then, the frame
+    /// after the climb that brought it within 3 units of it (<c>ChinookTakeoffOrLandingState::update</c>). In the same frames at 30, 60 and 120 Hz, also from a save taken during the climb.
+    /// </summary>
+    public static void AChinookTakesOffStraightUpBeforeItHeadsHome()
+    {
+        (int Landed, int Leaves)? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: TransportFiles());
+            var terrain = HeadOffMapTerrain();
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "Rotorcraft", owner: 1, x: -80, y: 250);
+            world.Step();
+            var chinook = world.Entities.Single(value => value.Template.Name == "Rotorcraft");
+            while (world.Tick < world.Time.OriginalFrames(25)) world.Step();
+            var ai = chinook.Modules.OfType<AIUpdateInterface>().First();
+            ai.OrderEvacuate(world, true, Fixed.FromInt(300), Fixed.FromInt(250), thenExit: true);
+            var frames = new List<(Fixed X, Fixed Y, Fixed Z, bool Idle)>();
+            SimulationWorld? restored = null;
+            for (var frame = 0; frame < 1500 && world.FindEntity(chinook.Id) is not null; frame++)
+            {
+                for (var tick = 0; tick < factor; tick++)
+                {
+                    var hash = world.Step().StateHash;
+                    if (restored is not null) Check.That(restored.Step().StateHash == hash, $"{rate}: the restored world follows the original (frame {frame}).");
+                }
+                frames.Add((chinook.X, chinook.Y, chinook.Z, ai.IsIdle));
+                // A save in the middle of the climb: the takeoff survives it.
+                if (restored is null && frames.Count > 2 && frames[^1].X == Fixed.FromInt(300) && frames[^1].Z > Fixed.FromInt(40) && frames[^2].Z < frames[^1].Z)
+                {
+                    restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
+                    Check.That(restored.StateHash == world.StateHash, $"{rate}: the climbing Chinook restores to the same hash.");
+                }
+            }
+            var landed = frames.FindIndex(value => value.X == Fixed.FromInt(300) && value.Z == Fixed.Zero);
+            Check.That(landed > 0 && restored is not null, $"{rate}: setup - the Chinook lands at the drop zone (frame {landed}) and a save is taken while it climbs.");
+            var leaves = frames.FindIndex(landed, value => value.X != Fixed.FromInt(300));
+            Check.That(leaves > landed, $"{rate}: it sets off home (frame {leaves}).");
+            Check.That(frames.Skip(landed).Take(leaves - landed).All(value => value.Y == Fixed.FromInt(250) && !value.Idle),
+                $"{rate}: it rises where it landed, not idle.");
+            Check.That((frames[leaves - 1].Z - Fixed.FromInt(100)).Abs() <= Fixed.FromInt(3) && frames[leaves - 2].Z == frames[leaves - 1].Z,
+                $"{rate}: it sets off only once it has climbed to its preferred height, a frame after the climb (frames before: {frames[leaves - 2].Z.ToDecimal()}, {frames[leaves - 1].Z.ToDecimal()}).");
+            Check.That(frames.Skip(leaves).All(value => (value.Z - Fixed.FromInt(100)).Abs() <= Fixed.FromInt(3)), $"{rate}: it flies home at its height.");
+            Check.That(world.FindEntity(chinook.Id) is null, $"{rate}: it is destroyed beyond the border.");
+            reference ??= (landed, leaves);
+            Check.That((landed, leaves) == reference, $"{rate}: it lands in frame {landed} and sets off in frame {leaves} (30 Hz: {reference}).");
+        }
+    }
 }

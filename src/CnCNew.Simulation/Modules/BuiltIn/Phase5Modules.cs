@@ -889,7 +889,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private enum BuilderTask : byte { None, Construct, Repair }
 
     /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
-    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning && Entity.Guard is null && Entity.AttackPlace is null && Entity.Roam is null;
+    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_exitAfterEvacuate && !_returning && Entity.Guard is null && Entity.AttackPlace is null && Entity.Roam is null;
 
     /// <summary>
     /// The AI is in a state of its own that <see cref="IsIdle"/> does not see: the <c>isIdle</c> overrides of <c>HackInternetAIUpdate</c> and <c>ChinookAIUpdate</c> ("scripting relies on
@@ -1518,6 +1518,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// </summary>
     protected virtual bool ReturnEnds(IWorldServices world) => !CoveringFrameStep;
 
+    /// <summary>
+    /// After the evacuation of an evacuation with exit: whether the transport sets off back now. A transport that is not ready waits where it is - not idle - and is asked
+    /// again in every tick (the Chinook takes off first, <c>TAKEOFF_AND_EXIT</c>).
+    /// </summary>
+    protected virtual bool ReadyToExit(IWorldServices world) => true;
+
     /// <summary>The evacuation itself, once the object stands still and is ready: every passenger is told to leave (<c>AI_EVACUATE</c>, <c>orderAllPassengersToExit</c>).</summary>
     protected virtual void Unload(IWorldServices world) => world.EvacuateContainer(Entity);
 
@@ -1884,19 +1890,24 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_enterTarget.IsValid) UpdateEnter(world);
         if (_goal.IsValid) UpdateGoal(world);
         if (_pursued.IsValid) UpdatePursuit(world);
+        var evacuated = false;
         if (_evacuatePending && !Entity.HasMoveTarget && _dock is null && ReadyToUnload(world))
         {
             _evacuatePending = false;
+            evacuated = true;
             // The passengers get out where the move ended: above 30 Hz the object is put there first (it is still covering the last step).
             if (_frameTicksLeft > 0) SettleFrame(world.Tick);
             Unload(world);
-            if (_exitAfterEvacuate)
-            {
-                // AIMoveAndDeleteState: back to where the order was given, then deleted.
-                _exitAfterEvacuate = false;
-                _returning = StartInternalMove(_exitX, _exitY);
-                if (!_returning) world.RequestDestroy(Entity.Id);
-            }
+        }
+        if (_exitAfterEvacuate && !_evacuatePending && ReadyToExit(world))
+        {
+            // AIMoveAndDeleteState: back to where the order was given, then deleted.
+            _exitAfterEvacuate = false;
+            _returning = StartInternalMove(_exitX, _exitY);
+            if (!_returning) world.RequestDestroy(Entity.Id);
+            // A transport that waited after its evacuation (a Chinook taking off) sets off when it is ready, after its move code of this tick: its first step is the one of its
+            // next logic frame of the original, as at 30 Hz, not the next tick's.
+            else if (!evacuated) BeginMoveWithNextFrame(world);
         }
         else if (_returning && !Entity.HasMoveTarget && ReturnEnds(world))
         {
@@ -1909,7 +1920,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             _exitFrom = EntityId.Invalid;
             world.MarkDirty(Entity);
         }
-        return _dock is not null || Entity.HasMoveTarget || _frameTicksLeft > 0 || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid || _exitRallyPending || _enterTarget.IsValid ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget || _frameTicksLeft > 0 || _task != BuilderTask.None || _evacuatePending || _exitAfterEvacuate || _returning || _goal.IsValid || _exitRallyPending || _enterTarget.IsValid ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
@@ -2602,7 +2613,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private bool GoalSpotCheckDue(IWorldServices world)
     {
         // Not on the way out of a factory either: the first leg ends at the place the exit path chose, and the rally point is adjusted when the second leg is ordered.
-        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitRallyPending || _viaPending || _exitFrom.IsValid) return false;
+        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitAfterEvacuate || _exitRallyPending || _viaPending || _exitFrom.IsValid) return false;
         if ((world.Time.FramesIn(world.Tick) + Entity.Id.Value) % GoalSpotCheckFrames != 0) return false;
         // A slave or mob member is sent onto its master's place by its own module, again and again: it keeps the goal it is given.
         _follows ??= Entity.Modules.Any(module => module is ISlavedModule);

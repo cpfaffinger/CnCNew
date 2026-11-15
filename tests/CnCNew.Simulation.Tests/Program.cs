@@ -300,6 +300,7 @@ run.Test("#374: a delivery plane leaves the map beyond its border, at 30, 60 and
 run.Test("#376: a departing Spectre gunship leaves the map beyond its border, at 30, 60 and 120 Hz", Tests.ASpectreGunshipDepartsBeyondTheBorder);
 run.Test("#376: a Chinook heading off the map after an evacuation with exit is destroyed only beyond its border, at 30, 60 and 120 Hz", Tests.AChinookHeadsOffTheMapBeyondTheBorder);
 run.Test("#377: a transport sent home with exit is deleted where its frame ends, at 30, 60 and 120 Hz", Tests.ATransportSentHomeIsDeletedWhereItsFrameEnds);
+run.Test("#378: a Chinook leaving after an evacuation with exit takes off straight up first, at 30, 60 and 120 Hz", Tests.AChinookTakesOffStraightUpBeforeItHeadsHome);
 run.Test("#374: a delivery plane turned off its exit blows up, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneTurnedOffItsExitBlowsUp);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);
@@ -976,7 +977,7 @@ if (contentDirectory is not null) run.Test("Real data: instantiate compiled ship
 if (contentDirectory is not null) run.Test("Real data: word descriptions of every shipped object equal the sequential hash, every update moves the description", () => Tests.HashWorkOnRealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
-if (contentDirectory is not null) run.Test("#376 real data: the Spectre gunship and the Chinook leave the map only beyond its border", () => Tests.RealHeadOffMapBeyondTheBorder(contentDirectory));
+if (contentDirectory is not null) run.Test("#376, #378 real data: the Spectre gunship and the Chinook leave the map only beyond its border, the Chinook after it took off straight up", () => Tests.RealHeadOffMapBeyondTheBorder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every airfield takes as many aircraft as it has spaces (#347)", () => Tests.RealAirfieldsTakeAsManyAircraftAsTheyHaveSpaces(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the nuclear missile needs a propaganda center (#346)", () => Tests.RealNuclearMissileNeedsAPropagandaCenter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: helicopters take goals of their own at the rally point and at one ordered point", () => Tests.RealHelicoptersTakeGoalsOfTheirOwn(contentDirectory));

@@ -14,7 +14,7 @@ using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 
-/// <summary>#376 on the retail data: the real Spectre gunship and the real Chinook leave the map only beyond its border.</summary>
+/// <summary>#376 on the retail data: the real Spectre gunship and the real Chinook leave the map only beyond its border; #378: the real Chinook takes off straight up first.</summary>
 static partial class Tests
 {
     /// <summary>
@@ -82,12 +82,23 @@ static partial class Tests
             var ai = chinook.Modules.OfType<AIUpdateInterface>().First();
             ai.OrderEvacuate(world, true, Fixed.FromInt(700), Fixed.FromInt(500), thenExit: true);
             var landed = false;
+            var landedAt = (X: Fixed.Zero, Y: Fixed.Zero);
+            Fixed? leavesAtHeight = null;
             for (var tick = 0; tick < world.Frames(5400) && world.FindEntity(chinook.Id) is not null; tick++)
             {
+                var height = chinook.Z - world.GroundHeightAt(chinook.X, chinook.Y);
                 world.Step();
-                landed |= chinook.Z <= world.GroundHeightAt(chinook.X, chinook.Y) && chinook.Y > Fixed.FromInt(400);
+                if (!landed && chinook.Z <= world.GroundHeightAt(chinook.X, chinook.Y) && chinook.Y > Fixed.FromInt(400))
+                {
+                    landed = true;
+                    landedAt = (chinook.X, chinook.Y);
+                }
+                // #378: TAKEOFF_AND_EXIT - after the evacuation it rises straight up where it landed and sets off only at its preferred height (100).
+                else if (landed && leavesAtHeight is null && (chinook.X != landedAt.X || chinook.Y != landedAt.Y)) leavesAtHeight = height;
             }
             Check.That(landed, $"origin {originY}: the real Chinook landed at the drop zone.");
+            Check.That(leavesAtHeight is { } h && (h - Fixed.FromInt(100)).Abs() <= Fixed.FromInt(3),
+                $"origin {originY}: the real Chinook takes off straight up and sets off home at its preferred height (height when it set off: {leavesAtHeight?.ToDecimal()}).");
             if (gone)
                 Check.That(world.FindEntity(chinook.Id) is null && OffBorder(chinook.X, chinook.Y), $"origin {originY}: back beyond the border, the real Chinook is destroyed ({chinook.X}, {chinook.Y}).");
             else
