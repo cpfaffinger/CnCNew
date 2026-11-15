@@ -213,7 +213,13 @@ internal sealed class ShadowVolumeRenderer : IDisposable
     {
         var material = Material.New(_services.GraphicsDevice, new MaterialDescriptor
         {
-            Attributes = { Emissive = new MaterialEmissiveMapFeature(color) { UseAlpha = true }, CullMode = CullMode.None },
+            // Drawn by the pass in display values: the fill encodes its colour after shading, so the multiplication keeps its strength; the volumes write no colour.
+            Attributes =
+            {
+                Emissive = new MaterialEmissiveMapFeature(color) { UseAlpha = true },
+                Occlusion = role == ShadowStencilRole.Fill ? DisplayValueOutput.ForBlendedPass() : null,
+                CullMode = CullMode.None,
+            },
         });
         var pass = material.Passes[0];
         pass.CullMode = CullMode.None;

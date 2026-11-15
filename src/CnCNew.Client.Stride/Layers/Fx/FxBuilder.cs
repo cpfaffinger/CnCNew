@@ -939,8 +939,8 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             return;
         }
 
-        // The vertices carry the particle's colour as it is; a run drawn in a linear-light pass decodes it, since the hardware decodes its sRGB texture but not the vertex colour.
-        if (linearColorSpace && material >= 0 && !_materials[material].InGammaPass)
+        // The vertices carry the particle's colour as it is; a run drawn with the linear-light world (alpha test) decodes it, since the hardware decodes its sRGB texture but not the vertex colour.
+        if (linearColorSpace && material >= 0 && !_materials[material].DisplayValues)
         {
             foreach (ref var vertex in geometry.Vertices(firstQuad, count))
             {

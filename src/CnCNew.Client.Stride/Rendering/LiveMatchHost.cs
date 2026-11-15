@@ -19,6 +19,7 @@ internal sealed class LiveMatchHost : IDisposable
     {
         Match = match;
         Scene = new Scene();
+        DisplayValueOutput.Register(game.EffectSystem, game.GraphicsDevice);
         Services = new RenderServices(game.GraphicsDevice, game.GraphicsContext, Scene, data);
         game.SceneSystem.GraphicsCompositor = Services.CreateCompositor();
 

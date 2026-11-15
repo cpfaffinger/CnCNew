@@ -7,10 +7,15 @@ using Stride.Rendering.Materials.ComputeColors;
 
 namespace CnCNew.Client.Stride;
 
+/// <param name="displayValueBlending">
+/// The passes that blend are drawn by <see cref="Rendering.DisplayValuePass"/> (the world of a match): they encode their shaded colour to display values (<see cref="Rendering.DisplayValueOutput"/>),
+/// so they keep their look and blend on the bytes as the original's frame buffer does. Off for the model viewer, whose compositor blends in linear light.
+/// </param>
 internal sealed class W3dMaterialFactory(
     GraphicsDevice graphicsDevice,
     W3dTextureCache textures,
-    Dictionary<MaterialPass, bool> depthWrites)
+    Dictionary<MaterialPass, bool> depthWrites,
+    bool displayValueBlending = false)
 {
     /// <summary>
     /// Factor on the light of every material created while it is below one (fogged objects: <c>RTS3DScene</c> draws objects through the shroud texture, the terrain layer squares
@@ -113,6 +118,7 @@ internal sealed class W3dMaterialFactory(
         {
             Diffuse = new MaterialDiffuseMapFeature(surface),
             DiffuseModel = new MaterialDiffuseLambertModelFeature(),
+            Occlusion = (!opaque || translucent) && displayValueBlending ? Rendering.DisplayValueOutput.ForBlendedPass() : null,
             CullMode = mesh.IsTwoSided ? CullMode.None : CullMode.Back,
         };
         if (shader?.AlphaTestEnabled == true)

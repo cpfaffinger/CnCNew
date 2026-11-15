@@ -31,17 +31,24 @@ internal enum FxBlend
 internal readonly record struct FxMaterialKey(string? Texture, FxBlend Blend, bool Ground = false)
 {
     /// <summary>
-    /// Drawn by <see cref="GammaEffectsRenderer"/>, which blends in display values as the original's frame buffer does (<see cref="CnCNew.Presentation.Fx.FrameBufferBlend"/>): every blended
-    /// sprite, streak, tracer and band. The ground layers keep their place under the stencil shadows, and an alpha-tested sprite is opaque, so its colour does not depend on the blend.
+    /// Drawn by <see cref="DisplayValuePass"/>, which blends in display values as the original's frame buffer does (<see cref="CnCNew.Presentation.Fx.FrameBufferBlend"/>): the texels and the vertex
+    /// colour reach the blend as they are stored. Every blended run is; an alpha-tested sprite is opaque and drawn with the world, so its colour does not depend on the blend. A ground run is
+    /// drawn with the transparent stage, which is in display values only while <see cref="DisplayValueOutput.Available"/>.
     /// </summary>
-    public bool InGammaPass => !Ground && Blend != FxBlend.AlphaTest;
+    public bool DisplayValues => Blend != FxBlend.AlphaTest && (!Ground || DisplayValueOutput.Available);
+
+    /// <summary>
+    /// In the stage of the blended effects, drawn after everything else (<c>DoParticles</c> last in <c>RTS3DScene::Flush</c>): every blended sprite, streak, tracer and band. The ground layers
+    /// (decals, tread marks, light pulses, shadow decals) stay in the transparent stage, under the stencil shadows and before water and translucent meshes.
+    /// </summary>
+    public bool InEffectsStage => !Ground && Blend != FxBlend.AlphaTest;
 }
 
 /// <summary>
 /// Unlit materials for effect quads: output is <c>texture * vertex color</c> (RGBA) as emissive color and alpha, blended with a manual
 /// blend state. They are registered with <see cref="RenderServices.DepthWrites"/> so the compositor's pipeline processor switches depth
 /// writes off for everything but alpha-tested sprites (depth test stays on, like the W3D sprite shaders). A material of
-/// <see cref="FxMaterialKey.InGammaPass"/> reads its texture undecoded; its blend state is applied by <see cref="GammaEffectsRenderer"/>'s stage.
+/// <see cref="FxMaterialKey.DisplayValues"/> reads its texture undecoded.
 /// </summary>
 internal sealed class FxMaterials(RenderServices services)
 {
@@ -70,7 +77,7 @@ internal sealed class FxMaterials(RenderServices services)
         if (key.Texture is not null)
         {
             // The pass that blends in display values reads the texels as they are stored, as the original's sprite shader does; the linear-light passes read them decoded.
-            var texture = services.Textures.Resolve(new W3dTextureReference(key.Texture), raw: key.InGammaPass);
+            var texture = services.Textures.Resolve(new W3dTextureReference(key.Texture), raw: key.DisplayValues);
             color = new ComputeBinaryColor(
                 new ComputeTextureColor(texture, TextureCoordinate.Texcoord0, Vector2.One, Vector2.Zero)
                 {

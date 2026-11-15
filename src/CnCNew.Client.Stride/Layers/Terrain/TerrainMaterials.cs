@@ -75,6 +75,7 @@ internal static class TerrainMaterials
             {
                 Diffuse = new MaterialDiffuseMapFeature(surface),
                 Emissive = new MaterialEmissiveMapFeature(surface),
+                Occlusion = Rendering.DisplayValueOutput.ForBlendedPass(),
                 CullMode = CullMode.None,
             },
         });
@@ -113,6 +114,7 @@ internal static class TerrainMaterials
             Attributes =
             {
                 Emissive = new MaterialEmissiveMapFeature(surface) { UseAlpha = true },
+                Occlusion = Rendering.DisplayValueOutput.ForBlendedPass(),
                 CullMode = CullMode.None,
             },
         });

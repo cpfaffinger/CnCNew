@@ -17,7 +17,7 @@ internal sealed class RenderServices : IDisposable
         Scene = scene;
         Data = data;
         Textures = new W3dTextureCache(graphicsDevice, data.Content);
-        Materials = new W3dMaterialFactory(graphicsDevice, Textures, DepthWrites);
+        Materials = new W3dMaterialFactory(graphicsDevice, Textures, DepthWrites, displayValueBlending: true);
     }
 
     public GraphicsDevice GraphicsDevice { get; }
@@ -46,10 +46,13 @@ internal sealed class RenderServices : IDisposable
     /// <summary>The shadow decals of the objects drawn this frame; the object layer fills it, the effect layer draws it.</summary>
     public List<CnCNew.Presentation.Shadows.ShadowDecal> ShadowDecals { get; } = [];
 
-    /// <summary>The pass of the blended effects, made with the compositor (null before).</summary>
-    public GammaEffectsRenderer? GammaEffects { get; private set; }
+    /// <summary>The pass that blends in display values, made with the compositor (null before).</summary>
+    public DisplayValuePass? DisplayValues { get; private set; }
 
-    /// <summary>The default forward compositor with the W3D depth-write processor installed, and after the world the pass of the blended effects.</summary>
+    /// <summary>
+    /// The default forward compositor with the W3D depth-write processor installed. The forward renderer draws the opaque world only; what blends - Stride's transparent stage and the
+    /// stage of the blended effects - is drawn after it by <see cref="DisplayValuePass"/>, in display values (issues 356 and 359).
+    /// </summary>
     public GraphicsCompositor CreateCompositor()
     {
         // W3DDisplay clears to black; where no terrain is and no sky box is shown, there is nothing.
@@ -61,16 +64,19 @@ internal sealed class RenderServices : IDisposable
         stageSelector.TransparentRenderStage.SortMode = TransparentOrder;
         stageSelector.OpaqueRenderStage.SortMode = OpaqueOrder;
 
-        // The blended effects leave the world's stages for a stage of their own, drawn after the world in display values (issue 356). Their runs are placed on the view axis
-        // in the builder's order, so back to front by that point is the order of DoParticles.
-        stageSelector.RenderGroup &= ~GammaEffectsRenderer.GroupMask;
-        var effectsStage = new RenderStage("GammaEffects", "Main") { SortMode = new BackToFrontSortMode() };
+        // The blended effects leave the world's stages for a stage of their own, drawn last. Their runs are placed on the view axis in the builder's order, so back to front by
+        // that point is the order of DoParticles.
+        stageSelector.RenderGroup &= ~DisplayValuePass.EffectsGroupMask;
+        var effectsStage = new RenderStage("Effects", "Main") { SortMode = new BackToFrontSortMode() };
         compositor.RenderStages.Add(effectsStage);
-        meshFeature.RenderStageSelectors.Add(new SimpleGroupToRenderStageSelector { RenderStage = effectsStage, EffectName = stageSelector.EffectName, RenderGroup = GammaEffectsRenderer.GroupMask });
-        meshFeature.PipelineProcessors.Add(new GammaEffectsPipelineProcessor { RenderStage = effectsStage });
+        meshFeature.RenderStageSelectors.Add(new SimpleGroupToRenderStageSelector { RenderStage = effectsStage, EffectName = stageSelector.EffectName, RenderGroup = DisplayValuePass.EffectsGroupMask });
+        meshFeature.PipelineProcessors.Add(new EffectsStagePipelineProcessor { RenderStage = effectsStage });
         var camera = (SceneCameraRenderer)compositor.Game;
-        GammaEffects = new GammaEffectsRenderer { RenderStage = effectsStage };
-        camera.Child = new SceneRendererCollection { camera.Child, GammaEffects };
+        var forward = (ForwardRenderer)camera.Child;
+        // The transparent stage's materials put out display values only with the encoding shader; without it they stay with the forward renderer, in linear light.
+        if (DisplayValueOutput.Available) forward.TransparentRenderStage = null;
+        DisplayValues = new DisplayValuePass { TransparentStage = DisplayValueOutput.Available ? stageSelector.TransparentRenderStage : null, EffectsStage = effectsStage };
+        camera.Child = new SceneRendererCollection { forward, DisplayValues };
         return compositor;
     }
 

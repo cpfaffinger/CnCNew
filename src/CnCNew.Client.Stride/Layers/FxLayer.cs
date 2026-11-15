@@ -120,7 +120,7 @@ internal sealed class FxLayer : IWorldLayer
         {
             _printed = true;
             Console.WriteLine(_totals.Format(Stats));
-            Console.WriteLine($"fx gamma pass: {_services?.GammaEffects?.FramesDrawn ?? 0} frames drawn in display values");
+            Console.WriteLine($"display-value pass: {_services?.DisplayValues?.FramesDrawn ?? 0} frames drawn, transparent stage {(_services?.DisplayValues?.TransparentStage is null ? "in linear light" : "included")}, encoding shader {DisplayValueOutput.State}");
         }
 
         _pool?.Dispose();

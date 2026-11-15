@@ -19,6 +19,7 @@ internal static class FrameBufferBlendTests
         t.Run("alpha and multiply in display values against linear light", AlphaAndMultiply);
         t.Run("the pass in display values gets the particle's colour as it is and reproduces the original's sums", DisplayPass);
         t.Run("a linear-light run decodes its vertex colour exactly as before", LinearRuns);
+        t.Run("a surface shaded in linear light and encoded keeps its look over black and blends on the bytes (issue 359)", EncodedSurfaces);
         return t.Failures;
     }
 
@@ -86,6 +87,38 @@ internal static class FrameBufferBlendTests
                 }
             }
         }
+    }
+
+    private static void EncodedSurfaces()
+    {
+        // Every shaded value alone over black: the encoded output shows what the sRGB target showed, within one step of a byte.
+        foreach (var shader in new[] { ParticleShader.Additive, ParticleShader.Alpha })
+        {
+            for (var level = 0; level <= 255; level++)
+            {
+                var linear = FrameBufferBlend.Decode(level / 255f);
+                var before = FrameBufferBlend.InLinearLight(shader, linear, 1f, 0);
+                var now = FrameBufferBlend.ThroughEncodedOutput(shader, linear, 1f, 0);
+                if (Math.Abs(before - now) > 1) { Assert(false, $"{shader} level {level}: {now} against {before}"); return; }
+            }
+        }
+
+        // Two additive glows of a translucent mesh (a muzzle flash over its own second card) add their bytes, as the original's ADD shader does.
+        var glow = FrameBufferBlend.Decode(100 / 255f);
+        var once = FrameBufferBlend.ThroughEncodedOutput(ParticleShader.Additive, glow, 1f, 0);
+        var twice = FrameBufferBlend.ThroughEncodedOutput(ParticleShader.Additive, glow, 1f, once);
+        var linearTwice = FrameBufferBlend.InLinearLight(ParticleShader.Additive, glow, 1f, FrameBufferBlend.InLinearLight(ParticleShader.Additive, glow, 1f, 0));
+        Assert(once == 100 && twice == 200, $"100 and 100 make {twice}, as the original adds ({once} after the first)");
+        Assert(linearTwice == 138, $"in linear light they made {linearTwice}");
+
+        // A scorch decal of half alpha, black, over a ground of 160: the original darkens to 80, linear light left 116.
+        var scorch = FrameBufferBlend.InDisplayValues(ParticleShader.Alpha, FrameBufferBlend.VertexChannel(0f, false) / 255f, 0.5f, 160);
+        var scorchBefore = FrameBufferBlend.InLinearLight(ParticleShader.Alpha, 0f, 0.5f, 160);
+        Assert(scorch == 80 && scorchBefore == 116, $"half a black scorch over 160: {scorch} now, {scorchBefore} in linear light");
+
+        // Water of 40 % alpha over a bright bank of 200, a water colour of 60: the bytes mix as the original's alpha blend.
+        var water = FrameBufferBlend.ThroughEncodedOutput(ParticleShader.Alpha, FrameBufferBlend.Decode(60 / 255f), 0.4f, 200);
+        Assert(water == 144, $"water over the bank shows {water} (0.4 * 60 + 0.6 * 200)");
     }
 
     private static void LinearRuns()

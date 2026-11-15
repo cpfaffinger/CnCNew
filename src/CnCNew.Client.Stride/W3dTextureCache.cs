@@ -26,7 +26,7 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
     public int UnsupportedHouseColorCount => _unsupportedHouseColor.Count;
     private readonly HashSet<string> _unsupportedHouseColor = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <param name="raw">Read the texels as they are stored, never decoded from sRGB: for a pass that blends in display values (<see cref="Layers.Fx.FxMaterialKey.InGammaPass"/>).</param>
+    /// <param name="raw">Read the texels as they are stored, never decoded from sRGB: for a pass that blends in display values (<see cref="Layers.Fx.FxMaterialKey.DisplayValues"/>).</param>
     public Texture Resolve(W3dTextureReference reference, bool raw = false)
     {
         var resolution = _paths.Resolve(reference.Name);

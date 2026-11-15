@@ -48,6 +48,13 @@ public static class FrameBufferBlend
         return ToByte(Encode(Math.Clamp(Blend(shader, Math.Clamp(linearSource, 0f, 1f), alpha, below), 0f, 1f)));
     }
 
+    /// <summary>
+    /// One channel of a surface that is shaded in linear light (a lit translucent mesh, water, a road, the shadow's fill) and drawn in the pass in display values: its shaded colour
+    /// <paramref name="linearOutput"/> is encoded at the end of its shader, so over black it shows what it showed in the linear-light target, and the blend works on the bytes.
+    /// </summary>
+    public static byte ThroughEncodedOutput(ParticleShader shader, float linearOutput, float alpha, byte target)
+        => InDisplayValues(shader, Encode(Math.Clamp(linearOutput, 0f, 1f)), alpha, target);
+
     /// <summary>The sprite shader's output of one channel, in display values: the texel times the vertex colour (<c>D3DTOP_MODULATE</c>).</summary>
     public static float SpriteOutput(float texel, float vertexColor) => texel * vertexColor;
 
