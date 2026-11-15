@@ -165,4 +165,67 @@ static partial class Tests
             Check.That(text == course30, $"{rate}: the same course in game time as at 30 Hz ({course30}).");
         }
     }
+    /// <summary>
+    /// #383: a building that rises again on its hole is the hole's (<c>RebuildHoleBehavior</c>: its own worker builds it, and the hole sends another when that one is lost). The built-in
+    /// AI took such a site for one of its own whose builder had stopped and sent one of its workers to resume it while the hole waited for its next worker. On real data, a GLA computer
+    /// player on Alpine Assault: its Stinger Site dies into its hole, the hole's worker begins the site and is killed; until the hole's next worker comes, no worker of the AI builds the
+    /// site, and then the hole's worker does. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void RealComputerLeavesARisingHoleToItsWorker(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";
+        MapData map;
+        using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
+        foreach (var (rate, _) in WorldRates)
+        {
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: RuleProfile.Product);
+            var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+            var session = SkirmishMatchSession.Start(SkirmishMatchOptions.StandardAt(catalog.Rate), catalog, fingerprint, TerrainMap.Build(map, MapPath), map.Objects,
+                [new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionGLA")), new SkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"))]);
+            var world = session.World;
+            for (var tick = 0; tick < rate.Time.OriginalFrames(30 * 60); tick++) session.Step();
+            var player = session.Players[0].Id;
+            var center = world.Entities.First(entity => entity.Owner == player && entity.Template.Name == "GLACommandCenter");
+            Check.That(catalog.TryGet("GLAStingerSite", out var template), "GLAStingerSite is a template.");
+            (Fixed X, Fixed Y)? place = null;
+            for (var distance = 160; distance <= 500 && place is null; distance += 20)
+                for (var step = 0; step < 16 && place is null; step++)
+                {
+                    var angle = Fixed.FromInt(step) * FixedTrig.Pi / Fixed.FromInt(8);
+                    var (x, y) = (center.X + Fixed.FromInt(distance) * FixedTrig.Cos(angle), center.Y + Fixed.FromInt(distance) * FixedTrig.Sin(angle));
+                    if (world.CheckBuildGround(template!, x, y, Fixed.Zero) == LegalBuildCode.Ok) place = (x, y);
+                }
+            Check.That(place is not null, $"{rate}: a legal place for the Stinger Site.");
+            var id = world.RequestSpawn(template!.Index, player, place!.Value.X, place.Value.Y, world.GroundHeightAt(place.Value.X, place.Value.Y), Fixed.Zero);
+            session.Step();
+            world.Kill(id);
+            session.Step();
+            var hole = world.Entities.Single(entity => entity.Template.Name == "GLAHoleStingerSite" && entity.Owner == player);
+            var behavior = hole.Modules.OfType<RebuildHoleBehavior>().Single();
+            var deadline = world.Tick + rate.TicksPerSecond * 25;
+            while (world.FindEntity(behavior.Reconstructed) is null && world.Tick < deadline) session.Step();
+            var site = world.FindEntity(behavior.Reconstructed);
+            Check.That(site is not null, $"{rate}: the hole's worker began the site.");
+            var first = world.FindEntity(site!.BuilderId)!;
+            for (var tick = 0; tick < rate.Time.OriginalFrames(90); tick++) session.Step();
+            world.Kill(first.Id);
+            var builders = new HashSet<uint>();
+            Entity? next = null;
+            deadline = world.Tick + rate.TicksPerSecond * 60;
+            while (world.Tick < deadline && next is null)
+            {
+                session.Step();
+                if (world.FindEntity(site.Id) is null) break;
+                if (site.BuilderId.IsValid && site.BuilderId != first.Id) builders.Add(site.BuilderId.Value);
+                if (world.FindEntity(site.BuilderId) is { } builder && builder.Id != first.Id && builder.HasStatus(ObjectStatusBits.Index("UNSELECTABLE"))) next = builder;
+            }
+            Check.That(world.FindEntity(site.Id) is not null, $"{rate}: the site waits for the hole's next worker.");
+            Check.That(next is not null, $"{rate}: the hole's next worker builds the site.");
+            Check.That(builders.Count == 1, $"{rate}: no worker of the computer took the hole's site in between ({builders.Count} builders).");
+        }
+    }
 }

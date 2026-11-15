@@ -1077,6 +1077,8 @@ public sealed partial class SkirmishAi
         var used = new HashSet<uint>();
         foreach (var site in _sites)
         {
+            // A building that rises again on its hole is the hole's: its own worker builds it, and the hole sends another when that one is lost (RebuildHoleBehavior).
+            if (site.HasStatus(ObjectStatusBits.Reconstructing)) continue;
             var builder = _world.FindEntity(site.BuilderId);
             var working = builder is not null && !builder.DestroyRequested && !builder.EffectivelyDead && builder.Owner == _player && AiOf(builder) is { IsBuilding: true };
             if (working) continue;
