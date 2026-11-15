@@ -61,6 +61,16 @@ internal interface IDockModule
     /// <summary><c>action</c>: true while the dock wants to be asked again after the action delay.</summary>
     bool Action(IWorldServices world, Entity docker);
 
+    /// <summary>
+    /// <c>getEnterPosition</c>, <c>getDockPosition</c>, <c>getExitPosition</c>: where the docker drives into, at and out of the dock - its model's <c>DockStart</c>, <c>DockAction</c>, <c>DockEnd</c>
+    /// in the world. <see langword="null"/> when the model has no <c>DockStart</c> ("if I don't have a bone, you are fine where you are"), except that a flyer is recentred over the dock on its
+    /// way in.
+    /// </summary>
+    (Fixed X, Fixed Y)? PathPoint(IWorldServices world, Entity docker, DockPathStage stage);
+
+    /// <summary><c>isAllowPassthroughType</c> (<c>AllowsPassthrough</c>).</summary>
+    bool AllowsPassthrough { get; }
+
     /// <summary><c>isDockOpen</c>: a closed dock refuses every state of the docker's machine (the ferry in transit); open by default.</summary>
     bool IsOpen { get; }
 
@@ -71,21 +81,32 @@ internal interface IDockModule
     void SetDockCrippled(IWorldServices world, bool crippled);
 }
 
-/// <summary><c>DockUpdate</c> field set (<c>AllowsPassthrough</c> only steers pathfinding, which does not exist here).</summary>
+/// <summary>The three moves of a docker through its dock (<c>AIDockMoveToEntryState</c>, <c>AIDockMoveToDockState</c>, <c>AIDockMoveToExitState</c>).</summary>
+internal enum DockPathStage { Enter, Dock, Exit }
+
+/// <summary>
+/// <c>DockUpdate</c> field set. <c>AllowsPassthrough</c> (default yes): the docker ignores the dock as an obstacle on its way into, at and out of it, and does not adjust the dock
+/// and exit points (<c>AIDockMoveToEntryState</c>, <c>AIDockMoveToDockState</c>, <c>AIDockMoveToExitState</c>).
+/// </summary>
 public record DockData(int NumberApproachPositions) : ModuleData
 {
     public const int DynamicApproachPositions = -1;
     private const int DefaultDynamicSize = 10;
 
+    public bool AllowsPassthrough { get; init; } = true;
+
     internal static int ParseApproachPositions(RatedModuleConfiguration configuration)
         => checked((int)ModuleConfigReader.Int(configuration, "NumberApproachPositions", 0));
+
+    internal static bool ParseAllowsPassthrough(RatedModuleConfiguration configuration) => ModuleConfigReader.Bool(configuration, "AllowsPassthrough", true);
 
     internal int InitialSlots => NumberApproachPositions == DynamicApproachPositions ? DefaultDynamicSize : NumberApproachPositions;
 }
 
 public sealed record SupplyCenterDockData(int NumberApproachPositions, long GrantStealthTicks = 0) : DockData(NumberApproachPositions)
 {
-    public static SupplyCenterDockData Parse(RatedModuleConfiguration configuration) => new(ParseApproachPositions(configuration), ModuleConfigReader.Ticks(configuration, "GrantTemporaryStealth", 0));
+    public static SupplyCenterDockData Parse(RatedModuleConfiguration configuration)
+        => new(ParseApproachPositions(configuration), ModuleConfigReader.Ticks(configuration, "GrantTemporaryStealth", 0)) { AllowsPassthrough = ParseAllowsPassthrough(configuration) };
 }
 
 public sealed record SupplyWarehouseDockData(int NumberApproachPositions, int StartingBoxes, bool DeleteWhenEmpty) : DockData(NumberApproachPositions)
@@ -93,7 +114,7 @@ public sealed record SupplyWarehouseDockData(int NumberApproachPositions, int St
     public static SupplyWarehouseDockData Parse(RatedModuleConfiguration configuration) => new(
         ParseApproachPositions(configuration),
         checked((int)ModuleConfigReader.Int(configuration, "StartingBoxes", 1)),
-        ModuleConfigReader.Bool(configuration, "DeleteWhenEmpty", false));
+        ModuleConfigReader.Bool(configuration, "DeleteWhenEmpty", false)) { AllowsPassthrough = ParseAllowsPassthrough(configuration) };
 }
 
 public sealed record CreateNoOpData : ModuleData
@@ -257,6 +278,20 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     /// <summary><c>fpOptions.maxRadius</c> of <c>computeApproachPosition</c>.</summary>
     private static readonly Fixed FindPositionRadius = Fixed.FromInt(100);
 
+    public bool AllowsPassthrough => data.AllowsPassthrough;
+
+    public (Fixed X, Fixed Y)? PathPoint(IWorldServices world, Entity docker, DockPathStage stage)
+    {
+        // DockUpdate tells a boneless dock by its enter position alone (m_enterPosition == zero), for all three.
+        if (Bones(world) is not { Start: { } start } bones || (start.X == Fixed.Zero && start.Y == Fixed.Zero && start.Z == Fixed.Zero))
+        {
+            if (stage != DockPathStage.Enter || !CrateModules.UsesAirborneLocomotor(docker)) return null;
+            var (x, y, _) = Entity.FrameEnd(world.Tick);
+            return (x, y);
+        }
+        return BoneToWorld(world, stage switch { DockPathStage.Enter => start, DockPathStage.Dock => bones.Action, _ => bones.End });
+    }
+
     public virtual bool IsClearToEnter(IWorldServices world, EntityId docker) => docker == _activeDocker;
 
     public bool IsClearToAdvance(EntityId docker, int index)
@@ -409,7 +444,7 @@ internal sealed class SupplyCenterDockUpdate(SupplyCenterDockData data) : DockUp
 /// <summary>
 /// <c>SupplyWarehouseDockUpdate::action</c>: hands one box to the docker per action while stock remains; the last box of a
 /// <c>DeleteWhenEmpty</c> warehouse destroys it. The reference's "close enough" check (the docker twitches by a random offset when it stopped
-/// too far away) is skipped: the docker always stops inside the warehouse's footprint here. <c>setDockCrippled</c> (raised by
+/// too far away) is skipped: the docker stops at the warehouse's <c>DockAction</c> bone or, at a boneless pile, where it waited beside it. <c>setDockCrippled</c> (raised by
 /// <see cref="SupplyWarehouseCripplingBehavior"/>) kills a truck that is between the entry and the exit and sends one that has only approached
 /// back to idle with its "want supplies" state forced, before the dock stops granting entry.
 /// </summary>

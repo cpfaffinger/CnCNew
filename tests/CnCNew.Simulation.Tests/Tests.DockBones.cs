@@ -108,6 +108,63 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>AIDockMoveToEntryState</c>, <c>AIDockMoveToDockState</c>, <c>AIDockMoveToExitState</c> at a dock with bones: a damaged tank waits at its approach place, drives to <c>DockStart</c>, is
+    /// repaired standing at <c>DockAction</c> and leaves for <c>DockEnd</c>, where its dock ends - in the same frames of the original at 30, 60 and 120 Hz. At a dock that ignores its bones the
+    /// tank is repaired where it waited and never moves after its approach.
+    /// </summary>
+    public static void DockerDrivesThroughTheDocksBones()
+    {
+        var frames = new List<(long Heal, long Done, long OtherHeal)>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder) = DockBonesWorld(rate, BayBones(start: Bone(60, 0), action: Bone(0, 0), end: Bone(-60, 0)));
+            feeder.Spawn(1, "BoneBay", owner: 1, x: 400, y: 400);
+            feeder.Spawn(1, "IgnoringBay", owner: 1, x: 800, y: 400);
+            feeder.Spawn(1, "DockTank", owner: 1, x: 520, y: 250);
+            feeder.Spawn(1, "DockTank", owner: 1, x: 900, y: 250);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var bay = world.Entities.Single(value => value.Template.Name == "BoneBay");
+            var ignoring = world.Entities.Single(value => value.Template.Name == "IgnoringBay");
+            var tanks = world.Entities.Where(value => value.Template.Name == "DockTank").OrderBy(value => value.Id.Value).ToArray();
+            var ai = tanks.Select(tank => tank.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.AIUpdateInterface>().Single()).ToArray();
+            Check.That(feeder.Dock(1, tanks[0].Id.Value, bay.Id.Value).Accepted && feeder.Dock(1, tanks[1].Id.Value, ignoring.Id.Value).Accepted, $"{rate}: both tanks are ordered to their bays.");
+            var (heal, done, otherHeal) = (-1L, -1L, -1L);
+            var (atStart, atExit) = (false, false);
+            var (healX, healY) = (Fixed.Zero, Fixed.Zero);
+            (Fixed X, Fixed Y)? otherWaited = null;
+            var otherMovedAfterHealing = false;
+            for (var step = 0; step < world.Frames(30 * 60) && (done < 0 || ai[1].IsDocking); step++)
+            {
+                world.Step();
+                // The frame of the original the tick that just ran lies in.
+                var frame = (world.Tick - 1) / rate.TicksPerOriginalFrame;
+                var tank = tanks[0];
+                if (Near(tank.X, Fixed.FromInt(460)) && Near(tank.Y, Fixed.FromInt(400))) atStart = true;
+                if (heal < 0 && tank.Body!.Health > Fixed.FromInt(40))
+                {
+                    heal = frame;
+                    (healX, healY) = (tank.X, tank.Y);
+                }
+                if (done < 0 && heal >= 0 && !ai[0].IsDocking)
+                {
+                    done = frame;
+                    atExit = Near(tank.X, Fixed.FromInt(340)) && Near(tank.Y, Fixed.FromInt(400));
+                }
+                var other = tanks[1];
+                if (otherWaited is null && other.Body!.Health > Fixed.FromInt(40)) (otherWaited, otherHeal) = ((other.X, other.Y), frame);
+                if (otherWaited is { } waited && (other.X != waited.X || other.Y != waited.Y)) otherMovedAfterHealing = true;
+            }
+            Check.That(atStart, $"{rate}: the tank passes the dock's way in (460, 400).");
+            Check.That(heal >= 0 && Near(healX, Fixed.FromInt(400)) && Near(healY, Fixed.FromInt(400)), $"{rate}: the tank is repaired at the dock's action place (400, 400), not at ({healX}, {healY}).");
+            Check.That(done >= 0 && atExit, $"{rate}: the tank's dock ends at the dock's way out (340, 400).");
+            Check.That(tanks[0].Body!.Health == tanks[0].Body!.MaxHealth, $"{rate}: the tank left repaired.");
+            Check.That(otherWaited is not null && !otherMovedAfterHealing && !ai[1].IsDocking, $"{rate}: at a dock that ignores its bones the tank is repaired where it waited and stays there.");
+            frames.Add((heal, done, otherHeal));
+        }
+        Check.That(frames.Distinct().Count() == 1, $"the repairs begin and the dock ends in the same frames of the original at 30, 60 and 120 Hz: {string.Join(", ", frames)}.");
+    }
+
+    /// <summary>
     /// <c>AIDockProcessDockState</c>: the dock's first action is the state's first update, in the frame after the docker reached the dock. Above 30 Hz it fell in the next tick, inside that
     /// frame, and a repair dock - which heals once per frame counted from its first action - healed and let its docker go half a frame early at 60 Hz, three quarters at 120 Hz.
     /// </summary>

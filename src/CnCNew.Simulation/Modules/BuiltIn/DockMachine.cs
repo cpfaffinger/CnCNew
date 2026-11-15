@@ -15,9 +15,10 @@ internal enum DockState { None, Approach, WaitForClearance, AdvancePosition, Mov
 /// <summary>
 /// <c>AIDockMachine</c> (<c>AIDock.cpp</c>) on top of the <c>StateMachine</c> transition semantics (<c>StateMachine.cpp</c>:
 /// <c>internalSetState</c>/<c>friend_checkForTransitions</c>): entering a state that answers success or failure at once transitions on
-/// within the same call, up to 20 levels deep. The dock positions carry no geometry (no bones, no terrain): entry, dock, exit and rally
-/// are the docker's own position, so those four states answer success when they are entered; the approach position is the only real move.
-/// The reference's machine lock during the dock move is not modelled (nothing sets a state from outside).
+/// within the same call, up to 20 levels deep. The approach and, at a dock whose model has a <c>DockStart</c> bone, the moves into, at and out of the dock
+/// (<c>DockStart</c>, <c>DockAction</c>, <c>DockEnd</c>) are internal moves that end when the docker arrives; at a boneless dock the docker is "fine where it is" and those three states
+/// answer success when they are entered (a flyer is recentred over the dock on its way in). There is no rally point after a dock. The reference's machine lock during the dock
+/// move is not modelled (nothing sets a state from outside).
 /// </summary>
 internal sealed class DockMachine(EntityId dockId)
 {
@@ -43,6 +44,14 @@ internal sealed class DockMachine(EntityId dockId)
     /// (<c>MODELCONDITION_DOCKING_BEGINNING</c>) has no duration that could be observed.
     /// </summary>
     public bool Active => _state == DockState.ProcessDock;
+
+    /// <summary>
+    /// <c>ignoreObstacle(dock)</c> of the moves into, at and out of a dock that <c>AllowsPassthrough</c>: the docker does not steer around the dock on that way; the approach ignores nothing
+    /// (<c>ignoreObstacle(NULL)</c>).
+    /// </summary>
+    public bool IgnoresDock => _ignoresDock && _state is DockState.MoveToEntry or DockState.MoveToDock or DockState.ProcessDock or DockState.MoveToExit;
+
+    private bool _ignoresDock;
 
     /// <summary><c>StateMachine::initDefaultState</c>: enters the first state and reports its raw answer, without resolving transitions.</summary>
     public DockStatus Enter(IWorldServices world, AIUpdateInterface ai)
@@ -122,12 +131,14 @@ internal sealed class DockMachine(EntityId dockId)
             case DockState.Approach:
                 if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock is null || !dock.ReserveApproachPosition(world, ai.Entity, out _approachPosition, out var x, out var y)) return DockStatus.Failure;
+                _ignoresDock = false;
                 // AIDockApproachState is an AIInternalMoveToState that adjusts its destination: a hovering docker waits in a cell no other flyer holds, not in the one at the dock.
                 world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
             case DockState.AdvancePosition:
                 if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock is null || !dock.AdvanceApproachPosition(world, ai.Entity, ref _approachPosition, out x, out y)) return DockStatus.Failure;
+                _ignoresDock = false;
                 world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
             case DockState.WaitForClearance:
@@ -136,13 +147,14 @@ internal sealed class DockMachine(EntityId dockId)
             case DockState.MoveToEntry:
                 if (dock is null) return DockStatus.Failure;
                 if (!dock.IsOpen) return RefuseClosed(dock, ai);
+                _ignoresDock = dock.AllowsPassthrough;
                 _approachPosition = -1;
-                return DockStatus.Success;
+                return StartDockMove(world, ai, dock, DockPathStage.Enter, adjust: true);
             case DockState.MoveToDock:
                 if (dock is null) return DockStatus.Failure;
-                return dock.IsOpen ? DockStatus.Success : RefuseClosed(dock, ai);
+                return dock.IsOpen ? StartDockMove(world, ai, dock, DockPathStage.Dock, adjust: !dock.AllowsPassthrough) : RefuseClosed(dock, ai);
             case DockState.MoveToExit:
-                return dock is null ? DockStatus.Failure : DockStatus.Success;
+                return dock is null ? DockStatus.Failure : StartDockMove(world, ai, dock, DockPathStage.Exit, adjust: !dock.AllowsPassthrough);
             case DockState.ProcessDock:
                 if (dock is null) return DockStatus.Failure;
                 // AIDockProcessDockState::onEnter: "it is simply okay to Action right away", which is the state's first update, in the frame after the docker reached the dock - at every
@@ -165,6 +177,14 @@ internal sealed class DockMachine(EntityId dockId)
             case DockState.Approach:
             case DockState.AdvancePosition:
                 if (dock is null) return DockStatus.Failure;
+                return ai.Entity.HasMoveTarget ? DockStatus.Continue : DockStatus.Success;
+            case DockState.MoveToEntry:
+            case DockState.MoveToExit:
+                if (dock is null) return DockStatus.Failure;
+                return ai.Entity.HasMoveTarget ? DockStatus.Continue : DockStatus.Success;
+            case DockState.MoveToDock:
+                // AIDockMoveToDockState::update fails when the dock closes; its exit then tells the dock goodbye.
+                if (dock is null || !dock.IsOpen) return DockStatus.Failure;
                 return ai.Entity.HasMoveTarget ? DockStatus.Continue : DockStatus.Success;
             case DockState.WaitForClearance:
                 if (dock is null) return DockStatus.Failure;
@@ -208,14 +228,34 @@ internal sealed class DockMachine(EntityId dockId)
                     if (reset || !dock.IsOpen) dock.CancelDock(id);
                     else dock.OnEnterReached(id);
                 }
+                StopDockMove(ai);
                 break;
             case DockState.MoveToDock:
                 if (dock is not null && (reset || !dock.IsOpen)) dock.CancelDock(id);
+                StopDockMove(ai);
                 break;
             case DockState.MoveToExit:
                 dock?.OnExitReached(id);
+                StopDockMove(ai);
                 break;
         }
+    }
+
+    /// <summary>
+    /// The <c>AIInternalMoveToState</c> of the moves into, at and out of the dock, to the dock's point for the stage. A boneless dock has none, and the docker that is fine where it is
+    /// passes the state at once. The way in adjusts its destination (an aircraft takes a cell no other flyer holds), the dock and exit points only at a dock without passthrough.
+    /// </summary>
+    private static DockStatus StartDockMove(IWorldServices world, AIUpdateInterface ai, IDockModule dock, DockPathStage stage, bool adjust)
+    {
+        if (dock.PathPoint(world, ai.Entity, stage) is not var (x, y)) return DockStatus.Success;
+        if (adjust) world.AdjustAircraftDestination(ai.Entity, ref x, ref y);
+        return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
+    }
+
+    /// <summary><c>AIInternalMoveToState::onExit</c> of a dock move that was cut short; a docker that arrived, or stood where it was, has nothing to stop.</summary>
+    private static void StopDockMove(AIUpdateInterface ai)
+    {
+        if (ai.Entity.HasMoveTarget) ai.StopInternalMove();
     }
 
     /// <summary>"Fail if the dock is closed": the docker tells the dock it is not coming and the state fails.</summary>
@@ -244,6 +284,8 @@ internal sealed class DockMachine(EntityId dockId)
         writer.Int("approachPosition", _approachPosition);
         writer.Int("enterTick", _enterTick);
         writer.Int("nextActionTick", _nextActionTick);
+        // Written only when set, so a docker of a dock without passthrough keeps its serialized form.
+        if (_ignoresDock) writer.Bool("ignoresDock", true);
         writer.EndObject();
     }
 
@@ -258,6 +300,7 @@ internal sealed class DockMachine(EntityId dockId)
             _approachPosition = checked((int)node.Int("approachPosition")),
             _enterTick = node.Int("enterTick"),
             _nextActionTick = node.Int("nextActionTick"),
+            _ignoresDock = node.Has("ignoresDock") && node.Bool("ignoresDock"),
         };
     }
 }

@@ -1308,9 +1308,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary>
     /// <c>AIUpdateInterface::getIgnoredObstacleID</c>: the one object this unit's steps and detours do not treat as an obstacle, because the order ends inside it — the goal
-    /// object of an approach, or the container of an enter order (<c>AIEnterState::onEnter</c>, AIStates.cpp: "tell the pathfinder to ignore the enterable object").
+    /// object of an approach, or the container of an enter order (<c>AIEnterState::onEnter</c>, AIStates.cpp: "tell the pathfinder to ignore the enterable object"), or the dock a docker
+    /// drives into, at and out of when it allows passthrough (<c>AIDockMoveToEntryState::onEnter</c>).
     /// </summary>
-    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget.IsValid ? _enterTarget : _exitFrom;
+    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget.IsValid ? _enterTarget : _exitFrom.IsValid ? _exitFrom : _dock is { IgnoresDock: true } dock ? dock.DockId : EntityId.Invalid;
 
     /// <summary>
     /// The approach half of <c>aiEnter</c>/<c>aiHijack</c>-style orders that end in a collision instead of a container entry: moves to <paramref name="goal"/> (following

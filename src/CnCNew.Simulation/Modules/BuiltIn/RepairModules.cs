@@ -34,7 +34,7 @@ public sealed record RepairDockData(int NumberApproachPositions, Fixed FramesFor
             ? Fixed.FromInt(configuration.Time.TicksPerOriginalFrame) // m_framesForFullHeal = 1.0f (RepairDockUpdate.cpp): one logic frame of the original
             : field.Value.Value is GameTime time ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : throw new InvalidDataException("RepairDockUpdate TimeForFullHeal is not a duration.");
         if (frames <= Fixed.Zero) throw new InvalidDataException("RepairDockUpdate TimeForFullHeal must be positive.");
-        return new RepairDockData(ParseApproachPositions(configuration), frames);
+        return new RepairDockData(ParseApproachPositions(configuration), frames) { AllowsPassthrough = ParseAllowsPassthrough(configuration) };
     }
 }
 

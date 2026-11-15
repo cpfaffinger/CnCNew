@@ -276,7 +276,7 @@ public sealed record RailedTransportDockData(int NumberApproachPositions, long P
 {
     public static RailedTransportDockData Parse(RatedModuleConfiguration configuration) => new(
         ParseApproachPositions(configuration), ModuleConfigReader.Ticks(configuration, "PullInsideDuration", 0), ModuleConfigReader.Ticks(configuration, "PushOutsideDuration", 0),
-        ModuleConfigReader.Real(configuration, "ToleranceDistance", Fixed.FromInt(50)));
+        ModuleConfigReader.Real(configuration, "ToleranceDistance", Fixed.FromInt(50))) { AllowsPassthrough = ParseAllowsPassthrough(configuration) };
 }
 
 /// <summary>
