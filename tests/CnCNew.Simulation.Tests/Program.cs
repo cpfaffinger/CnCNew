@@ -293,6 +293,7 @@ run.Test("#305: a lost power consumer shortens a build from the next frame, at 3
 run.Test("#305: a captured reinforcement pad starts its timer in its next frame, at 30, 60 and 120 Hz", Tests.ACapturedPadStartsItsTimerInItsNextFrame);
 run.Test("#305: a delivery plane decides its approach once per frame, at 30, 60 and 120 Hz", Tests.ADeliveryApproachDecidesOncePerFrame);
 run.Test("#305: a delivery plane climbs once per frame, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneClimbsOncePerFrame);
+run.Test("#371: a delivery plane leaves the map and is deleted as at 30 Hz, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneLeavesTheMapAsAt30Hz);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);
 run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED weapon bonus while inside", Tests.FireFromContainersGarrisonedBonus);

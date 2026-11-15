@@ -784,7 +784,7 @@ public readonly record struct DeliveryOrder(Fixed MoveToX, Fixed MoveToY, Fixed 
 /// </summary>
 public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateInterface(data.Base)
 {
-    private enum Phase : byte { None, Approach, Delivering, ConsiderNewApproach, RecoverFromOffMap, HeadOffMap, Delay }
+    private enum Phase : byte { None, Approach, Delivering, ConsiderNewApproach, RecoverFromOffMap, HeadOffMap, Delay, CleanUp }
 
     private enum Dive : byte { Post, Pre, Diving }
 
@@ -914,7 +914,21 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             case Phase.HeadOffMap:
                 HeadOffMap(world);
                 break;
+            case Phase.CleanUp:
+                CleanUp(world);
+                break;
         }
+    }
+
+    /// <summary>
+    /// <c>CleanUpState::onEnter</c> destroys the plane, and the original removes what it destroys at the end of the frame, after the plane's step of that frame: above 30 Hz in the
+    /// last tick of the plane's frame, so it stands and is seen as the 30 Hz plane is until it goes (#371). At 30 Hz the tick it was decided in.
+    /// </summary>
+    private void CleanUp(IWorldServices world)
+    {
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick + TickOrder.Next)) return;
+        _phase = Phase.None;
+        world.RequestDestroy(Entity.Id);
     }
 
     private void RunPhase(IWorldServices world)
@@ -935,11 +949,14 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
                 RunDelivering(world);
                 break;
             case Phase.ConsiderNewApproach:
+                // The state machine asks once per logic frame of the original, before the plane's step: above 30 Hz the frame's first tick, where the plane stands at the end of
+                // its last frame (#371).
+                if (!world.Time.BeginsFrameOf(Entity, world.Tick)) break;
                 if (FlightModules.IsOffMap(world, Entity.X, Entity.Y)) StartPhase(world, Phase.RecoverFromOffMap);
                 else if (!Entity.HasMoveTarget) StartPhase(world, Phase.Approach);
                 break;
             case Phase.RecoverFromOffMap:
-                if (world.Tick < _reentryTick) break;
+                if (!world.Time.BeginsFrameOf(Entity, world.Tick) || world.Tick < _reentryTick) break;
                 var (edgeX, edgeY) = FlightModules.ClosestEdgePoint(world, Entity.X, Entity.Y);
                 Entity.X = edgeX;
                 Entity.Y = edgeY;
@@ -949,11 +966,12 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
                 StartPhase(world, Phase.Approach);
                 break;
             case Phase.HeadOffMap:
-                if (FlightModules.IsOffMap(world, Entity.X, Entity.Y) || !Entity.HasMoveTarget)
-                {
-                    _phase = Phase.None;
-                    world.RequestDestroy(Entity.Id);
-                }
+                // HeadOffMapState::update, once per logic frame of the original from where the plane's last frame ended (#371).
+                if (!world.Time.BeginsFrameOf(Entity, world.Tick)) break;
+                if (FlightModules.IsOffMap(world, Entity.X, Entity.Y) || !Entity.HasMoveTarget) StartPhase(world, Phase.CleanUp);
+                break;
+            case Phase.CleanUp:
+                CleanUp(world);
                 break;
         }
     }
@@ -1117,9 +1135,8 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         _accepting = false;
         if (_run is { SelfDestructObject: true })
         {
-            // "this makes delivery unit pop away like a bubble"
-            _phase = Phase.None;
-            world.RequestDestroy(Entity.Id);
+            // "this makes delivery unit pop away like a bubble": destroyed, so removed at the end of the plane's frame (#371).
+            StartPhase(world, Phase.CleanUp);
             return;
         }
         // "just keep moving straight ahead till we exit the map": a point 1.2 map diagonals away along the heading.
@@ -1155,7 +1172,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         base.Load(reader);
         if (!reader.Has("deliverPhase")) return;
         var phase = reader.Int("deliverPhase");
-        if (phase < 0 || phase > (int)Phase.Delay) throw new InvalidDataException("Delivery phase out of range.");
+        if (phase < 0 || phase > (int)Phase.CleanUp) throw new InvalidDataException("Delivery phase out of range.");
         _phase = (Phase)phase;
         _targetX = reader.Fixed("deliverX");
         _targetY = reader.Fixed("deliverY");
