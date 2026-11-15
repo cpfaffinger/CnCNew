@@ -297,6 +297,7 @@ run.Test("#371: a delivery plane leaves the map and is deleted as at 30 Hz, at 3
 run.Test("#374: the ground beyond the height field is its edge vertex", Tests.TheGroundBeyondTheHeightFieldIsItsEdge);
 run.Test("#374: a delivery plane holds its height over the ground beyond the map, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneHoldsItsHeightBeyondTheMap);
 run.Test("#374: a delivery plane leaves the map beyond its border, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneLeavesTheMapBeyondItsBorder);
+run.Test("#376: a departing Spectre gunship leaves the map beyond its border, at 30, 60 and 120 Hz", Tests.ASpectreGunshipDepartsBeyondTheBorder);
 run.Test("#374: a delivery plane turned off its exit blows up, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneTurnedOffItsExitBlowsUp);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);

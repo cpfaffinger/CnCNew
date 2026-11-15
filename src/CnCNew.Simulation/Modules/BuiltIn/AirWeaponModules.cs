@@ -1425,12 +1425,15 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     /// <summary>One shot of the gattling's current weapon when it is ready (<c>Object::fireCurrentWeapon</c>: the slot's own clip, ready tick and last-shot bookkeeping).</summary>
     private static void FireGattling(IWorldServices world, Entity gattling, Entity? victim, Fixed x, Fixed y, Fixed z) => world.FireCurrentWeaponAtPosition(gattling, x, y, z, victim);
 
-    /// <summary>Straight ahead along the heading until the ship has left the map, then it is deleted (without a terrain: once it is far from the target).</summary>
+    /// <summary>
+    /// Straight ahead along the heading until the ship has left the map with its border (<c>SpectreGunshipUpdate::isPointOffMap</c>: <c>getExtentIncludingBorder</c>, #376), then it
+    /// is deleted (without a terrain: once it is far from the target).
+    /// </summary>
     private (Fixed X, Fixed Y, Fixed Turn) Depart(IWorldServices world)
     {
         var step = Fly(world, Transit, Entity.X + FixedTrig.Cos(Entity.Angle) * Fixed.FromInt(99999), Entity.Y + FixedTrig.Sin(Entity.Angle) * Fixed.FromInt(99999));
         var gone = world.Terrain is not null
-            ? FlightModules.IsOffMap(world, Entity.X, Entity.Y)
+            ? FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y)
             : AirModules.Distance2D(Entity.X, Entity.Y, _initialTarget.X, _initialTarget.Y) > data.GunshipOrbitRadius * 4;
         if (!gone) return step;
         world.RequestDestroy(Entity.Id);
