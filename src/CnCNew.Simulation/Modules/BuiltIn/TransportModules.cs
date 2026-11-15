@@ -378,7 +378,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     /// (<c>getExtentIncludingBorder</c>). Above 30 Hz it is asked when the step of its last frame is covered, where it stands at 30 Hz; inside the border it hovers on in that
     /// state - not idle - and is asked again (#376).
     /// </summary>
-    protected override bool ReturnEnds(IWorldServices world) => !CoveringFrameStep && FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y);
+    protected override bool ReturnEnds(IWorldServices world) => base.ReturnEnds(world) && FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y);
 
     /// <summary><c>OpenContain::hasObjectsWantingToEnterOrExit</c> for entering: a living object whose enter order aims at this Chinook.</summary>
     private bool HasBoarders(IWorldServices world)

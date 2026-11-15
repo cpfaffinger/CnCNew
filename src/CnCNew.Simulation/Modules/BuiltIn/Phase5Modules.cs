@@ -1513,9 +1513,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary>
     /// The way back of an evacuation with exit has ended where the transport stands: whether it is deleted now (<c>AIMoveAndDeleteState</c>: on arrival). A transport that is not
-    /// deleted stays on its way back - not idle - and is asked again in every tick.
+    /// deleted stays on its way back - not idle - and is asked again in every tick. Above 30 Hz the arrival is decided with the first tick of the transport's last logic frame of
+    /// the original; it is deleted when the step of that frame is covered, where it stands at 30 Hz, not after the first share of it (#377).
     /// </summary>
-    protected virtual bool ReturnEnds(IWorldServices world) => true;
+    protected virtual bool ReturnEnds(IWorldServices world) => !CoveringFrameStep;
 
     /// <summary>The evacuation itself, once the object stands still and is ready: every passenger is told to leave (<c>AI_EVACUATE</c>, <c>orderAllPassengersToExit</c>).</summary>
     protected virtual void Unload(IWorldServices world) => world.EvacuateContainer(Entity);

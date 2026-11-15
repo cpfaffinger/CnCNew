@@ -299,6 +299,7 @@ run.Test("#374: a delivery plane holds its height over the ground beyond the map
 run.Test("#374: a delivery plane leaves the map beyond its border, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneLeavesTheMapBeyondItsBorder);
 run.Test("#376: a departing Spectre gunship leaves the map beyond its border, at 30, 60 and 120 Hz", Tests.ASpectreGunshipDepartsBeyondTheBorder);
 run.Test("#376: a Chinook heading off the map after an evacuation with exit is destroyed only beyond its border, at 30, 60 and 120 Hz", Tests.AChinookHeadsOffTheMapBeyondTheBorder);
+run.Test("#377: a transport sent home with exit is deleted where its frame ends, at 30, 60 and 120 Hz", Tests.ATransportSentHomeIsDeletedWhereItsFrameEnds);
 run.Test("#374: a delivery plane turned off its exit blows up, at 30, 60 and 120 Hz", Tests.ADeliveryPlaneTurnedOffItsExitBlowsUp);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);

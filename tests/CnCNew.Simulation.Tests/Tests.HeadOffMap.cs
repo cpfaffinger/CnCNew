@@ -171,4 +171,47 @@ static partial class Tests
             Check.That(run.Skip(halt).All(value => value.Frame.X == last.Frame.X), $"{rate}: it stays where it stopped.");
         }
     }
+
+    /// <summary>
+    /// #377: a transport other than the Chinook sent home with exit (<c>AIMoveAndDeleteState</c>) is deleted in the logic frame of the original its move back ends, where that
+    /// frame's step ends - above 30 Hz not in the tick it decides its last step, after the first share of it. In the same frame at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void ATransportSentHomeIsDeletedWhereItsFrameEnds()
+    {
+        int? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: TransportFiles());
+            var terrain = HeadOffMapTerrain();
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "Hauler4x4", owner: 1, x: 100, y: 250);
+            world.Step();
+            var truck = world.Entities.Single(value => value.Template.Name == "Hauler4x4");
+            while (world.Tick < world.Time.OriginalFrames(25)) world.Step();
+            var ai = truck.Modules.OfType<AIUpdateInterface>().First();
+            ai.OrderEvacuate(world, true, Fixed.FromInt(300), Fixed.FromInt(250), thenExit: true);
+            var (lastX, lastY, atDrop, idle) = (truck.X, truck.Y, false, false);
+            var gone = -1;
+            for (var frame = 0; frame < 1500 && gone < 0; frame++)
+                for (var tick = 0; tick < factor; tick++)
+                {
+                    world.Step();
+                    // Where the truck stands in the tick it is deleted in.
+                    (lastX, lastY) = (truck.X, truck.Y);
+                    if (world.FindEntity(truck.Id) is not { EffectivelyDead: false })
+                    {
+                        gone = frame;
+                        break;
+                    }
+                    atDrop |= truck.X == Fixed.FromInt(300);
+                    idle |= ai.IsIdle;
+                }
+            Check.That(gone > 0 && atDrop && !idle, $"{rate}: setup - the truck unloads at the drop zone and is deleted after it came back, never idle (frame {gone}, idle {idle}).");
+            Check.That(lastX == Fixed.FromInt(100) && lastY == Fixed.FromInt(250),
+                $"{rate}: it is deleted where the step of its last frame ends, at its origin (deleted at {lastX.ToDecimal():0.000},{lastY.ToDecimal():0.000}).");
+            reference ??= gone;
+            Check.That(gone == reference, $"{rate}: it is deleted in frame {gone} after the order (30 Hz: {reference}).");
+        }
+    }
 }
