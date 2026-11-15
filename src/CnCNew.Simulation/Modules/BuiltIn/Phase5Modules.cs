@@ -1954,9 +1954,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // AIEnterState::update (fidelity finding F-38): a boarder on the ground gives up on a container that is itself carried by something in the air (rangers that were to
         // board a humvee the Chinook has taken up), and waits at the end of its approach while its container is in the air - it goes in only once the container is down.
         var carriedAway = container.ContainedBy.IsValid && AboveTerrain(world, container) && !AboveTerrain(world, Entity);
-        // The rule fix enter-needs-vertical-overlap (the community source): the wait is for an overlap in height, not for the container to be on the ground.
-        var waitForLanding = world.Templates.Rules.Has(Rules.GameFix.EnterNeedsVerticalOverlap) ? !VerticalOverlap(Entity, container)
-            : AboveTerrain(world, container) && !AboveTerrain(world, Entity);
         if (carriedAway)
         {
             _enterTarget = EntityId.Invalid;
@@ -1976,10 +1973,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             if (!TouchesContainer(Entity, container, endX, endY, world.Tick)) return;
             // The partition manager's collision is three-dimensional (PartitionManager.cpp, the height test of the geometries): a container hovering above the boarder is not
             // touched, the approach goes on to its end.
-            if (!VerticalOverlap(Entity, container)) return;
+            if (!VerticalOverlap(Entity, container, world.Tick)) return;
             if (_frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
         }
+        // The rule fix enter-needs-vertical-overlap (the community source): the wait is for an overlap in height, not for the container to be on the ground. A boarder that
+        // waits looks in every tick, at the two as they stand.
+        var waitForLanding = world.Templates.Rules.Has(Rules.GameFix.EnterNeedsVerticalOverlap) ? !VerticalOverlap(Entity, container)
+            : AboveTerrain(world, container) && !AboveTerrain(world, Entity);
         if (waitForLanding) return;
         _enterTarget = EntityId.Invalid;
         // The approach may end short (a partial path): only an object that actually reached the container gets in.
@@ -2017,8 +2018,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary><c>Object::isAboveTerrain</c>: the object's position lies above the ground under it.</summary>
     private static bool AboveTerrain(IWorldServices world, Entity entity) => entity.Z > world.LayerHeightAt(entity.X, entity.Y, entity.Layer);
 
-    private static bool VerticalOverlap(Entity a, Entity b)
-        => a.Z + ToppleAndFallModules.MaxHeightAbovePosition(a.Template) >= b.Z && a.Z <= b.Z + ToppleAndFallModules.MaxHeightAbovePosition(b.Template);
+    private static bool VerticalOverlap(Entity a, Entity b) => VerticalOverlap(a, a.Z, b, b.Z);
+
+    /// <summary>
+    /// The two overlap in height, each where the frame it has begun ends - for the touch a moving boarder decides in the first tick of its frame: above 30 Hz a boarder climbing a
+    /// slope is a share of its step lower there than the 30 Hz boarder, which has taken its whole step when it touches its container (#305).
+    /// </summary>
+    private static bool VerticalOverlap(Entity a, Entity b, long tick) => VerticalOverlap(a, a.FrameEnd(tick).Z, b, b.FrameEnd(tick).Z);
+
+    private static bool VerticalOverlap(Entity a, Fixed aZ, Entity b, Fixed bZ)
+        => aZ + ToppleAndFallModules.MaxHeightAbovePosition(a.Template) >= bZ && aZ <= bZ + ToppleAndFallModules.MaxHeightAbovePosition(b.Template);
 
     private void Move(IWorldServices world, LocomotorInfo locomotor)
     {
