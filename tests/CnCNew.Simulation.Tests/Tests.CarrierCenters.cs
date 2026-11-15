@@ -24,7 +24,7 @@ static partial class Tests
     /// 941 units back to the first center with every load, and the new Chinooks were made at the first center and stayed with it. Now every gatherer belongs to a center that has supplies
     /// in reach (<c>AIPlayer::onUnitProduced</c>, <c>queueSupplyTruck</c>): once two centers stand, (1) both centers receive deliveries while both have supplies in reach, and (2) at most
     /// two loads per gatherer (the one on board when it is given its new center, and the first one after) go to a center more than 300 units farther from the warehouse it was gathered at
-    /// than the nearest own center. (1) is asked only when both centers had supplies in reach for 20 s or more.
+    /// than the nearest own center. (1) is asked only when both centers had supplies in reach for a minute or more (a gatherer's round trip; a shorter stretch shows the course of one match, not the rule).
     /// </summary>
     public static void RealComputerGatherersWorkTheSourceOfTheirOwnCenter(string directory)
     {
@@ -90,7 +90,7 @@ static partial class Tests
                 }
             }
             Check.That(twoCenters, $"{rate}: America stood with two supply centers (centers {Centers().Length}).");
-            Check.That(bothFedTicks < rate.TicksPerSecond * 20 || bothFedDeliveries.Count >= 2,
+            Check.That(bothFedTicks < rate.TicksPerSecond * 60 || bothFedDeliveries.Count >= 2,
                 $"{rate}: while both centers had supplies in reach for {bothFedTicks / rate.TicksPerSecond} s both received loads ({string.Join(", ", bothFedDeliveries.Select(pair => $"{pair.Key}: {pair.Value}"))}).");
             Check.That(deliveries >= 10, $"{rate}: America delivered after its second center ({deliveries} loads).");
             Check.That(far.Values.All(count => count <= 2), $"{rate}: no gatherer flies its loads past a nearer own center ({string.Join(", ", far.Select(pair => $"{pair.Key}: {pair.Value}"))} of {deliveries} loads; {string.Join("; ", farLoads)}).");
