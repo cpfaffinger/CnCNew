@@ -39,10 +39,10 @@ internal sealed class DrawPartState
     public int StateIndex = -1;
 
     /// <summary>
-    /// <c>WaitForStateToFinishIfPossible</c> (<c>W3DModelDraw::setModelState</c>): lets the animation of the playing state run to its end before the state the conditions select takes over;
-    /// null for a draw module that never waits.
+    /// <c>W3DModelDraw::setModelState</c>: plays a transition state between two states, and lets the animation of the playing state run to its end before a state that waits for it
+    /// (<c>WaitForStateToFinishIfPossible</c>) takes over; null for a draw module that has neither. <see cref="StateIndex"/> may then name a transition (above the real states).
     /// </summary>
-    public StateWaitFollower? Follower;
+    public ModelStateFollower? Follower;
     public bool FollowerChecked;
     public AnimationSpec? Animation;
     public W3dAnimationBinding? Binding;
@@ -56,6 +56,7 @@ internal sealed class DrawPartState
     public int PartVisibleState = -1;
     public ModelAsset? PartVisibleAsset;
     public System.Collections.Immutable.ImmutableArray<CnCNew.Presentation.Objects.SubObjectVisibility> PartVisibleOverrides;
+
     public double ElapsedInState;
     public float LastFrame = float.NaN;
 

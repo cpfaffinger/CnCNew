@@ -200,20 +200,21 @@ internal sealed class ObjectLayerCore : IWorldLayer
     }
 
     /// <summary>
-    /// The state to draw: the one the conditions select, unless the state that is playing has to finish its animation first (<c>WaitForStateToFinishIfPossible</c>, which the Chinook's net
-    /// needs: <c>DOCKING</c> lowers it, and the first box aboard must not turn it into <c>DOCKING CARRYING</c> half way down).
+    /// The state to draw: the one the conditions select, unless a transition state plays between the last one and it (the Scud Storm raising its missiles, #385) or the state that is playing
+    /// has to finish its animation first (<c>WaitForStateToFinishIfPossible</c>, which the Chinook's net needs: <c>DOCKING</c> lowers it, and the first box aboard must not turn it into
+    /// <c>DOCKING CARRYING</c> half way down). A transition's index lies above the real states (<see cref="ModelStateFollower.StateAt"/>).
     /// </summary>
     private static DrawModuleSelection Followed(DrawSpec draw, DrawModuleSelection selection, DrawPartState part)
     {
         if (!part.FollowerChecked)
         {
             part.FollowerChecked = true;
-            part.Follower = StateWaitFollower.Needed(draw) ? new StateWaitFollower(draw) : null;
+            part.Follower = ModelStateFollower.Needed(draw) ? new ModelStateFollower(draw) : null;
         }
 
         if (part.Follower is not { } follower || selection.StateIndex < 0) return selection;
         var shown = follower.Follow(selection.StateIndex, CurrentAnimationComplete(draw, part));
-        return shown == selection.StateIndex || shown < 0 || shown >= draw.States.Length ? selection : new DrawModuleSelection(shown, draw.States[shown].Model);
+        return shown == selection.StateIndex || ModelStateFollower.StateAt(draw, shown) is not { } state ? selection : new DrawModuleSelection(shown, state.Model);
     }
 
     /// <summary>
@@ -222,9 +223,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
     /// </summary>
     private static bool CurrentAnimationComplete(DrawSpec draw, DrawPartState part)
     {
-        if (part.StateIndex < 0 || part.StateIndex >= draw.States.Length || part.Binding is null) return true;
+        if (ModelStateFollower.StateAt(draw, part.StateIndex) is not { } state || part.Binding is null) return true;
         if (part.LogicFrame is not null) return false;
-        var state = draw.States[part.StateIndex];
         return W3dAnimationClock.IsComplete((W3dAnimationMode)(int)state.Mode, part.Binding.Animation.FrameCount, CurrentFrame(state, part));
     }
 
@@ -244,14 +244,14 @@ internal sealed class ObjectLayerCore : IWorldLayer
     {
         var modelName = selection.Model!;
         // getCurrentAnimFraction of the state that is left, before anything of the part is reset: a state with a maintain flag that follows it starts there.
-        var previous = part.StateIndex >= 0 && part.StateIndex < draw.States.Length && part.StateIndex != selection.StateIndex ? draw.States[part.StateIndex] : null;
+        var previous = part.StateIndex != selection.StateIndex ? ModelStateFollower.StateAt(draw, part.StateIndex) : null;
         var previousFraction = previous is not null && part.Binding is not null ? AnimationStart.Fraction(previous, CurrentFrame(previous, part), part.Binding.Animation.FrameCount) : -1f;
         if (part.ModelName != modelName)
         {
             BindModel(part, modelName);
         }
 
-        var state = draw.States[selection.StateIndex];
+        var state = ModelStateFollower.StateAt(draw, selection.StateIndex)!;
         var asset = part.Asset;
         part.LogicFrame = drawable.AnimationFrame;
 

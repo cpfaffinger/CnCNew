@@ -117,6 +117,39 @@ public sealed class ModelStateTracker(DrawSpec spec, bool useTransitions = true)
 }
 
 /// <summary>
+/// <c>W3DModelDraw::setModelState</c> as the renderer follows it once per drawn frame (#385): a change between two real states whose transition keys name a <c>TransitionState</c> plays that
+/// transition first and shows the requested state when its animation has run out (<c>doDrawModule</c>: "transition ... is complete"), and a state that names the key of the playing one in
+/// <c>WaitForStateToFinishIfPossible</c> waits for it (<see cref="StateWaitFollower"/>). The Scud Storm raises its missiles this way - <c>Trans_READY</c> to <c>Trans_ATTACKING</c> - and lowers them
+/// again after the strike. <see cref="Follow"/> answers a state index: below <c>States.Length</c> a real state, above it a transition (<see cref="StateAt"/>).
+/// </summary>
+public sealed class ModelStateFollower(DrawSpec spec)
+{
+    private readonly ModelStateTracker _tracker = new(spec, useTransitions: true);
+
+    /// <summary>Whether a module with this spec ever shows anything but the state its conditions select: it has a transition state or a state that waits.</summary>
+    public static bool Needed(DrawSpec spec) => !spec.Transitions.IsDefaultOrEmpty || StateWaitFollower.Needed(spec);
+
+    /// <summary>The real state or transition behind an index <see cref="Follow"/> answered; null for an index the spec does not have.</summary>
+    public static ModelStateSpec? StateAt(DrawSpec spec, int index)
+    {
+        if (index < 0) return null;
+        if (index < spec.States.Length) return spec.States[index];
+        index -= spec.States.Length;
+        return !spec.Transitions.IsDefault && index < spec.Transitions.Length ? spec.Transitions[index] : null;
+    }
+
+    /// <summary>The state to show now for the real state <paramref name="requested"/>; <paramref name="currentAnimationComplete"/> is <c>isAnimationComplete</c> of what plays.</summary>
+    public int Follow(int requested, bool currentAnimationComplete)
+    {
+        if (requested < 0) return requested;
+        if (currentAnimationComplete) _tracker.AnimationCompleted();
+        _tracker.Request(requested, currentAnimationComplete);
+        var current = _tracker.Current;
+        return current.IsNone ? requested : current.IsTransition ? spec.States.Length + current.Index : current.Index;
+    }
+}
+
+/// <summary>
 /// <c>WaitForStateToFinishIfPossible</c> alone (<c>W3DModelDraw::setModelState</c>, "check for allow-to-finish implicit transitions"): a draw module whose new state names the transition key of the
 /// state that is playing lets that state's animation run to its end first, and shows the new state then. The Chinook's net is lowered, filled and pulled up this way: the first box that
 /// comes aboard turns <c>DOCKING</c> into <c>DOCKING CARRYING</c> at once, and the lowering of the net would be cut off. The renderer asks <see cref="Follow"/> once per drawn frame with the state the
