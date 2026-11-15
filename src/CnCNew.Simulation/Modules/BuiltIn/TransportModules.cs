@@ -98,8 +98,8 @@ public sealed class ChinookRope
 /// (<c>ChinookAIUpdate::getUpgradedSupplyBoost</c>). Flight: the Chinook keeps <c>PreferredHeight</c> above the ground while it flies and changes
 /// height by one locomotor speed per logic frame of the original (the reference's <c>ChinookTakeoffOrLandingState</c> lets the locomotor lift it); passengers only leave a
 /// landed Chinook (<c>getAiFreeToExit</c>), so an evacuation order lands it first and it takes off again when it moves on. A combat drop
-/// (<c>ChinookMoveToBldgState</c>, <c>ChinookCombatDropState</c>) flies to its building or place and lets the riders who can rappel down its ropes. The airfield healing and the
-/// head-off-map state are not simulated.
+/// (<c>ChinookMoveToBldgState</c>, <c>ChinookCombatDropState</c>) flies to its building or place and lets the riders who can rappel down its ropes. After an evacuation with exit
+/// it heads back to where it was ordered (<c>ChinookHeadOffMapState</c>, #376). The airfield healing is not simulated.
 /// </summary>
 internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.Carrier)
 {
@@ -121,6 +121,11 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     private bool _dropAll;
     /// <summary>The change of height of the running logic frame of the original, flown in shares per tick; empty at 30 Hz.</summary>
     private FlightFrameStep _climb;
+
+    /// <summary><c>ChinookHeadOffMapState::onEnter</c>: the move back is a temporary state of at most 20 seconds (<c>privateMoveToPosition</c>, <c>setTemporaryState</c>).</summary>
+    private const long HeadOffMapMoveFrames = 20L * SimulationRate.OriginalFramesPerSecond;
+    /// <summary>The tick from which the move back of <c>ChinookHeadOffMapState</c> ends with the Chinook's next logic frame of the original; 0 while it is not heading off.</summary>
+    private long _headOffUntil;
 
     public override string ModuleName => "ChinookAIUpdate";
 
@@ -302,7 +307,12 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         // Above 30 Hz a climb begun one tick after the appearance would end every frame of its flight in the first tick of a frame of whoever created it instead of the last.
         var stride = world.Time.TicksPerOriginalFrame;
         if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
+        // ChinookHeadOffMapState: the move back is a temporary state (AIStateMachine::setTemporaryState); when its 20 seconds are up the Chinook stops where it is, between two
+        // logic frames of the original of its move (above 30 Hz: when the last frame's step is covered, before the next is decided).
+        if (!Returning) _headOffUntil = 0;
+        else if (_headOffUntil > 0 && Entity.HasMoveTarget && world.Tick >= _headOffUntil && !CoveringFrameStep) StopInternalMove();
         var sleep = base.Update(world);
+        if (Returning && _headOffUntil == 0) _headOffUntil = world.Tick + world.Time.OriginalFrames(HeadOffMapMoveFrames);
         if (!EvacuatePending) _landing = _dropAll = false;
         if (_dropPhase == DropPhase.MoveTo)
         {
@@ -363,6 +373,13 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         return Entity.Z != target || forBoarders || _dropPhase != DropPhase.None || (Entity.Acquisition is { Victim.IsValid: true } && Entity.Container is { ContainCount: > 0 }) ? SimulationTiming.SleepNone : sleep;
     }
 
+    /// <summary>
+    /// <c>ChinookHeadOffMapState::update</c>, once the move back has ended (arrived, or its 20 seconds up): the Chinook is destroyed only beyond the map with its border
+    /// (<c>getExtentIncludingBorder</c>). Above 30 Hz it is asked when the step of its last frame is covered, where it stands at 30 Hz; inside the border it hovers on in that
+    /// state - not idle - and is asked again (#376).
+    /// </summary>
+    protected override bool ReturnEnds(IWorldServices world) => !CoveringFrameStep && FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y);
+
     /// <summary><c>OpenContain::hasObjectsWantingToEnterOrExit</c> for entering: a living object whose enter order aims at this Chinook.</summary>
     private bool HasBoarders(IWorldServices world)
     {
@@ -380,6 +397,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         base.Describe(writer);
         writer.Bool("landing", _landing);
         if (_dropAll) writer.Bool("dropAll", true);
+        if (_headOffUntil > 0) writer.Int("headOffUntil", _headOffUntil);
         _climb.Describe(writer, "climbStep");
         if (_dropPhase == DropPhase.None) return;
         writer.Int("dropPhase", (int)_dropPhase);
@@ -419,6 +437,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         base.Load(reader);
         _landing = reader.Bool("landing");
         _dropAll = reader.Has("dropAll") && reader.Bool("dropAll");
+        _headOffUntil = reader.Has("headOffUntil") ? reader.Int("headOffUntil") : 0;
         _climb.Load(reader, "climbStep");
         _ropes.Clear();
         _dropPhase = reader.Has("dropPhase") ? (DropPhase)reader.Int("dropPhase") : DropPhase.None;

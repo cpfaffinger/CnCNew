@@ -1505,6 +1505,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>An evacuation order waits for the object to stand still and be ready (<see cref="ReadyToUnload"/>).</summary>
     public bool EvacuatePending => _evacuatePending;
 
+    /// <summary>The transport is on its way back after an evacuation with exit (<c>aiMoveToAndEvacuateAndExit</c>), or waits there to be deleted.</summary>
+    protected bool Returning => _returning;
+
+    /// <summary>Above 30 Hz: the object is covering the step of a logic frame of the original it has decided (never at 30 Hz).</summary>
+    protected bool CoveringFrameStep => _frameTicksLeft > 0;
+
+    /// <summary>
+    /// The way back of an evacuation with exit has ended where the transport stands: whether it is deleted now (<c>AIMoveAndDeleteState</c>: on arrival). A transport that is not
+    /// deleted stays on its way back - not idle - and is asked again in every tick.
+    /// </summary>
+    protected virtual bool ReturnEnds(IWorldServices world) => true;
+
     /// <summary>The evacuation itself, once the object stands still and is ready: every passenger is told to leave (<c>AI_EVACUATE</c>, <c>orderAllPassengersToExit</c>).</summary>
     protected virtual void Unload(IWorldServices world) => world.EvacuateContainer(Entity);
 
@@ -1885,7 +1897,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                 if (!_returning) world.RequestDestroy(Entity.Id);
             }
         }
-        else if (_returning && !Entity.HasMoveTarget)
+        else if (_returning && !Entity.HasMoveTarget && ReturnEnds(world))
         {
             _returning = false;
             world.RequestDestroy(Entity.Id);
