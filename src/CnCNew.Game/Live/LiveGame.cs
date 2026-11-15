@@ -180,6 +180,11 @@ public abstract class LiveGame
     public RtsCamera Camera { get; }
     public FogOfWarGrid Fog { get; }
     public MinimapImage Minimap { get; }
+
+    private CnCNew.Game.Hud.RadarBlips? _radarBlips;
+
+    /// <summary>The blips of the radar for <see cref="FogViewer"/> in the current <see cref="Frame"/>: what the original's radar draws (<see cref="CnCNew.Game.Hud.RadarBlips"/>).</summary>
+    public List<MinimapDot> MinimapDots() => (_radarBlips ??= new CnCNew.Game.Hud.RadarBlips(Data.Graph)).Dots(Frame, World, FogViewer);
     public FxExecutor Fx { get; }
 
     /// <summary>The continuous effects of the objects shown: model-state particle systems, the body's fire and smoke, bone effects, damage transitions, missile exhaust.</summary>

@@ -701,7 +701,7 @@ internal sealed class ClientRuntime : IDisposable
             {
                 _nextDots = _clockMs + 250;
                 // The radar events (the game's and the scripts') are lines of the HUD over the radar, drawn in every frame (W3DRadar::drawEvents); the picture holds the objects only.
-                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, MinimapDots(running.Host.Match.Frame));
+                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, running.Host.Match.MinimapDots());
             }
             FollowTextFocus(input, running.Match?.Net?.ChatOpen == true, fixedSeconds, events);
             if (_shell is not null && running.Host.Match is LiveMatch ordered) GiveStandInOrder(ordered);
@@ -1002,16 +1002,6 @@ internal sealed class ClientRuntime : IDisposable
                 PendingResolution = (resolution.Width, resolution.Height, resolution.Mode);
                 break;
         }
-    }
-
-    /// <summary>One dot per object the viewer currently sees, in its team colour (the projector already left out what fog and shroud hide).</summary>
-    private static List<CnCNew.Presentation.Minimap.MinimapDot> MinimapDots(CnCNew.Presentation.Objects.RenderFrame frame)
-    {
-        var dots = new List<CnCNew.Presentation.Minimap.MinimapDot>();
-        foreach (var drawable in frame.Drawables)
-            if (drawable.Entity.IsValid && (drawable.IsUnit || drawable.IsStructure))
-                dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(new Vector2(drawable.Position.X, drawable.Position.Y), new CnCNew.Presentation.Terrain.Rgba32(drawable.TeamColor.Red, drawable.TeamColor.Green, drawable.TeamColor.Blue, 255)));
-        return dots;
     }
 
     private Vector2 BackBufferSize()
