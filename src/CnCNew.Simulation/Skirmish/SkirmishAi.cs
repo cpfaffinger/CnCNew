@@ -317,7 +317,7 @@ public sealed partial class SkirmishAi
         CommandArmy();
         UseTunnels();
         UseTransports();
-        CaptureNeutrals();
+        CaptureNeutrals(workerPrice);
         GarrisonBuildings();
         OrderCarriers();
         if (Stats.Commands == before) Stats.IdleThinks++;
@@ -1555,12 +1555,15 @@ public sealed partial class SkirmishAi
         => unit.Template.IsKindOf("INFANTRY") && (RoleOf(unit.Template) & Role.Army) != 0 && AiOf(unit) is not null && (allowWave || !_wave.Contains(unit.Id.Value))
            && !(_boarding.TryGetValue(unit.Id.Value, out var until) && until > _tick) && !_enemyTargets.Any(enemy => SquaredReach.Of(EngageRadius).ContainsStrictly(DistanceSquared(enemy.X, enemy.Y, unit.X, unit.Y)));
 
+    private const string CaptureUpgrade = "Upgrade_InfantryCaptureBuilding";
+
     /// <summary>
     /// The skirmish library's "Tech Capture Team" (<c>SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE</c> of the base, <c>AI_PLAYER_BUILD_UPGRADE Upgrade_InfantryCaptureBuilding</c>, then
     /// <c>TEAM_MOVE_TOWARDS_NEAREST_OBJECT_TYPE</c> and the capture command button): a neutral capturable building near an own structure makes the AI research the capture upgrade
-    /// and send its nearest idle infantry that can capture to the nearest such building that no enemy stands at. The wave is never touched.
+    /// and send its nearest idle infantry that can capture to the nearest such building that no enemy stands at. The wave is never touched. The upgrade is bought only with money that
+    /// leaves the price of a missing worker or a replacement carrier in the bank (<paramref name="workerPrice"/>, <see cref="ProduceWorkers"/>), as the army is.
     /// </summary>
-    private void CaptureNeutrals()
+    private void CaptureNeutrals(Fixed workerPrice)
     {
         Entity? target = null;
         var best = Fixed.Zero;
@@ -1593,8 +1596,9 @@ public sealed partial class SkirmishAi
         if (!result.Accepted)
         {
             // The ability is paused until the upgrade is researched (the library's AI_PLAYER_BUILD_UPGRADE): buy it, the order is given again later.
-            if (result.Reason == CommandRejection.SpecialPowerNotReady && !NeutralBackoff(0x84FFFFFFu, 3))
-                Send(sequence => new PurchaseUpgradeCommand(_player, sequence, _tick, "Upgrade_InfantryCaptureBuilding", null));
+            if (result.Reason == CommandRejection.SpecialPowerNotReady && _world.Upgrades.TryGet(CaptureUpgrade, out var upgrade) && _budget - upgrade.BuildCost >= workerPrice
+                && !NeutralBackoff(0x84FFFFFFu, 3) && Send(sequence => new PurchaseUpgradeCommand(_player, sequence, _tick, CaptureUpgrade, null)).Accepted)
+                _budget -= upgrade.BuildCost;
             return;
         }
         _boarding[chosen.Id.Value] = _tick + _time.OriginalFrames(CaptureErrandFrames);
