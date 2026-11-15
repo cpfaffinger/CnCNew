@@ -291,6 +291,7 @@ run.Test("#305: a place looked for beside a turning box is the same at 30, 60 an
 run.Test("#305: a boarder climbing to its transport goes in in the frame of 30 Hz, at 30, 60 and 120 Hz", Tests.ABoarderClimbingToItsTransportGoesInAsAt30Hz);
 run.Test("#305: a lost power consumer shortens a build from the next frame, at 30, 60 and 120 Hz", Tests.ALostConsumerShortensABuildFromTheNextFrame);
 run.Test("#305: a captured reinforcement pad starts its timer in its next frame, at 30, 60 and 120 Hz", Tests.ACapturedPadStartsItsTimerInItsNextFrame);
+run.Test("#305: a delivery plane decides its approach once per frame, at 30, 60 and 120 Hz", Tests.ADeliveryApproachDecidesOncePerFrame);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);
 run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED weapon bonus while inside", Tests.FireFromContainersGarrisonedBonus);

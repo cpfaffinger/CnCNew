@@ -922,6 +922,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
                 if (world.Tick >= _startTick) StartPhase(world, Phase.Approach);
                 break;
             case Phase.Approach:
+                // ApproachState::update asks once per logic frame of the original, before the plane's step of that frame: above 30 Hz the frame's first tick, where the plane
+                // stands at the end of its last frame. In a later tick it measured from the middle of the frame's step, and the doors opened a frame early (#305).
+                if (!world.Time.BeginsFrameOf(Entity, world.Tick)) break;
                 if (CloseEnoughToTarget()) StartPhase(world, Phase.Delivering);
                 else if (!Entity.HasMoveTarget) StartPhase(world, Phase.ConsiderNewApproach);
                 break;
