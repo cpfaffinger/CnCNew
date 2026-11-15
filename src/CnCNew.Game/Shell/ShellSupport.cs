@@ -32,11 +32,18 @@ public interface IShellEnvironment
 
     /// <summary>The names of the machine's sound output devices the options offer beside the system's default (docs/UI-MODERN.md section 7); none by default.</summary>
     IReadOnlyList<string> AudioDevices => [];
+
+    /// <summary>
+    /// Whether the installation says the player pre-ordered the game (<c>GetUnsignedIntFromRegistry("", "Preorder")</c> of the original's registry key): a skirmish then marks the
+    /// local player so (<see cref="CnCNew.Game.Live.MatchSetup.Preorder"/>). No by default.
+    /// </summary>
+    bool Preordered => false;
 }
 
 /// <summary>A fixed-size desktop backed by a caller-chosen directory (used by tests and by any host that already knows its screen size).</summary>
-public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null, IReadOnlyList<string>? audioDevices = null, IReadOnlyList<(int Width, int Height)>? displayModes = null, int virtualDesktopWidth = 0, int virtualDesktopHeight = 0) : IShellEnvironment
+public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null, IReadOnlyList<string>? audioDevices = null, IReadOnlyList<(int Width, int Height)>? displayModes = null, int virtualDesktopWidth = 0, int virtualDesktopHeight = 0, bool preordered = false) : IShellEnvironment
 {
+    public bool Preordered { get; } = preordered;
     public IReadOnlyList<(int Width, int Height)> DisplayModes { get; } = displayModes ?? [];
     public IReadOnlyList<string> AudioDevices { get; } = audioDevices ?? [];
     public string SettingsDirectory { get; } = settingsDirectory;

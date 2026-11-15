@@ -95,6 +95,7 @@ public static class ModelConditions
     public static readonly ModelConditionFlag ReallyDamaged = Parse("REALLYDAMAGED");
     public static readonly ModelConditionFlag Rubble = Parse("RUBBLE");
     public static readonly ModelConditionFlag Night = Parse("NIGHT");
+    public static readonly ModelConditionFlag Preorder = Parse("PREORDER");
     public static readonly ModelConditionFlag Snow = Parse("SNOW");
     public static readonly ModelConditionFlag Parachuting = Parse("PARACHUTING");
     public static readonly ModelConditionFlag Garrisoned = Parse("GARRISONED");

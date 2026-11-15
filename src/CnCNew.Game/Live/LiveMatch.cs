@@ -72,6 +72,12 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     public bool AutoPlay { get; init; }
 
     /// <summary>
+    /// The local player pre-ordered the game (<c>SkirmishGameOptionsMenu</c>: the registry value <c>Preorder</c> marks slot 0, <c>TheKey_playerIsPreorder</c>): its buildings with
+    /// <c>PreorderCreate</c> show <c>PREORDER</c>, the Officers' Club flag. Presentation only - nothing of the simulation reads it -, so it is not part of the match description.
+    /// </summary>
+    public bool Preorder { get; init; }
+
+    /// <summary>
     /// Nobody plays (docs/SPECTATOR-MODE.md): every slot is a computer player and the viewer only watches. Orders of the viewer end in
     /// <see cref="CnCNew.Game.Spectator.SpectatorCommandSink"/> and never reach the session.
     /// </summary>
@@ -147,7 +153,7 @@ public sealed class LiveMatch : LiveGame
     private readonly SkirmishMatchSession? _session;
 
     private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain), SlotColors(data, match))
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain), SlotColors(data, match), PreorderOf(setup, match))
     {
         Setup = setup;
         Match = match;
@@ -155,13 +161,17 @@ public sealed class LiveMatch : LiveGame
     }
 
     private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, ScriptedSkirmishSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain), SlotColors(data, match))
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain), SlotColors(data, match), PreorderOf(setup, match))
     {
         Setup = setup;
         Match = match;
         Scripted = session;
         _scriptedPlayers = session.Players;
     }
+
+    /// <summary>The local player when it pre-ordered the game and plays its slot itself (<see cref="MatchSetup.Preorder"/>), nobody otherwise.</summary>
+    private static System.Collections.Immutable.ImmutableHashSet<PlayerId> PreorderOf(MatchSetup setup, ResolvedMatch match)
+        => setup.Preorder && !setup.AutoPlay && !setup.Spectator ? [LocalOf(setup, match).Player] : [];
 
     /// <summary>
     /// The house colour of every player as its slot names it (<c>GameLogic::startNewGame</c>: <c>TheMultiplayerSettings->getColor(slot->getColor())</c>): the <c>RGBColor</c> of the slot's

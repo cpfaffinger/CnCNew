@@ -115,7 +115,7 @@ internal sealed class ClientRuntime : IDisposable
     {
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
-            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, desktop?.Width ?? width, desktop?.Height ?? height, audioDevices: audio.DeviceFree || audio.CaptureDirectory is not null ? [] : AudioOutput.DeviceNames(), displayModes: displayModes, virtualDesktopWidth: virtualDesktop?.Width ?? 0, virtualDesktopHeight: virtualDesktop?.Height ?? 0),
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, desktop?.Width ?? width, desktop?.Height ?? height, audioDevices: audio.DeviceFree || audio.CaptureDirectory is not null ? [] : AudioOutput.DeviceNames(), displayModes: displayModes, virtualDesktopWidth: virtualDesktop?.Width ?? 0, virtualDesktopHeight: virtualDesktop?.Height ?? 0, preordered: OriginalRegistry.Preordered()),
                 "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions, network, Skin is { } skin ? CnCNew.Ui.Skins.UiSkin.For(skin) : null), audio) { _alternateMouse = alternateMouse, _shellScript = shellScript };
         if (shellScript is not null)
         {

@@ -96,6 +96,22 @@ internal static class LiveMatchTests
             TestHarness.Assert(live.Relay.Server.LastAgreedTick == live.Tick - 1 && live.Lockstep.HashesReported == live.Tick, "the session hash of every tick reached the relay");
             TestHarness.Assert(live.World.FindEntity(unit.Id)!.X > unit.X - CnCNew.Simulation.Numerics.Fixed.FromInt(1), "the order is carried out");
         });
+        harness.Run("A player who pre-ordered the game (the original's registry value Preorder) sees the Officers' Club flag on his command centre, the computer's has none (issue 23)", () =>
+        {
+            var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+            int Flags(bool preorder, bool own)
+            {
+                var setup = new MatchSetup(mapPath, "FactionAmerica", ["FactionAmerica"], SkirmishMatchOptions.StandardAt(data.Rate)) { Preorder = preorder };
+                var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+                for (var index = 0; index < 30; index++) live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                var centres = live.World.Entities.Where(entity => entity.Template.IsKindOf("COMMANDCENTER") && (entity.Owner == live.Human) == own).Select(entity => entity.Id).ToHashSet();
+                TestHarness.Assert(centres.Count > 0 || !own, "the player has his command centre");
+                return live.Frame.Drawables.Count(drawable => centres.Contains(drawable.Entity) && drawable.Conditions.Contains(CnCNew.Presentation.Objects.ModelConditions.Preorder));
+            }
+            TestHarness.Assert(Flags(preorder: true, own: true) == 1, "the pre-ordering player's command centre shows PREORDER");
+            TestHarness.Assert(Flags(preorder: false, own: true) == 0, "without the value it does not");
+            TestHarness.Assert(Flags(preorder: true, own: false) == 0, "the computer player never pre-ordered");
+        });
         return harness.Failures;
     }
 

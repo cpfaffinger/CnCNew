@@ -71,7 +71,8 @@ public abstract class LiveGame
 
     /// <param name="houseColors">The colour of each player by id where the match names one (a skirmish slot's multiplayer colour); the others are resolved by <see cref="TeamColors"/>.</param>
     protected LiveGame(GameData data, SimulationWorld world, MapData map, string mapPath, TerrainMap terrain, IEnumerable<PlayerConfiguration> players, PlayerId human,
-        uint fxSeed, Vector2 viewport, Vector2 cameraStart, IReadOnlyDictionary<int, CnCNew.Data.Definitions.ColorValue>? houseColors = null)
+        uint fxSeed, Vector2 viewport, Vector2 cameraStart, IReadOnlyDictionary<int, CnCNew.Data.Definitions.ColorValue>? houseColors = null,
+        System.Collections.Immutable.ImmutableHashSet<PlayerId>? preorderPlayers = null)
     {
         MapPath = mapPath;
         var graph = data.Graph;
@@ -106,7 +107,8 @@ public abstract class LiveGame
         Colors = TeamColors.Resolve(players, graph, houseColors);
         var scenery = _scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         FogViewer = human;
-        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, PosedBone = data.ModelBones.FindPosed, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
+        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, PosedBone = data.ModelBones.FindPosed, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues,
+            PreorderPlayers = preorderPlayers ?? [] };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
         Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed, DeployedBones = data.ModelBones.FindAtFinalFrame };

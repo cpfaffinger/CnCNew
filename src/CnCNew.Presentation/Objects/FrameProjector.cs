@@ -47,6 +47,12 @@ public sealed record FrameProjectorOptions
     /// the tick, as before Phase 29 - for a comparison, and for whoever wants the steps. A frame drawn exactly at a tick is the same either way.
     /// </summary>
     public bool InterpolateValues { get; init; } = true;
+
+    /// <summary>
+    /// The players who pre-ordered the game (<c>Player::didPlayerPreorder</c>): in the original only the local player of a skirmish whose installation has the registry value
+    /// <c>Preorder</c>, or a GameSpy player. Their objects with <c>PreorderCreate</c> show <c>PREORDER</c> (the Officers' Club flag on the command centres). Nobody by default.
+    /// </summary>
+    public ImmutableHashSet<PlayerId> PreorderPlayers { get; init; } = [];
 }
 
 /// <summary>
@@ -89,6 +95,8 @@ public sealed class FrameProjector
     private readonly SuspensionTracker _suspension = new();
     private readonly UnitConditionTracker _units = new();
     private readonly StructureConditionTracker _structures = new();
+    // PreorderCreate::onBuildComplete decides PREORDER once, by the controlling player of that moment: a captured building keeps what it was given.
+    private readonly Dictionary<uint, bool> _preordered = [];
     private readonly SelectionFlashTracker _flashes = new();
     private readonly StatusTintTracker _tints = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
@@ -254,6 +262,7 @@ public sealed class FrameProjector
             _suspension.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _units.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _structures.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+            foreach (var id in _preordered.Keys.Where(id => world.FindEntity(new EntityId(id)) is null).ToArray()) _preordered.Remove(id);
             _flashes.Prune(_frame, id => world.FindEntity(new EntityId(id)) is not null);
             _tints.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             foreach (var id in _houseColors.Keys.Where(id => world.FindEntity(new EntityId(id)) is null).ToArray()) _houseColors.Remove(id);
@@ -508,6 +517,7 @@ public sealed class FrameProjector
         var conditions = ConditionDeriver.Derive(entity, world, visual,
             new ConditionContext(_options.Night, _options.Snow, previous?.ConstructionWork, _options.Viewer));
         conditions = conditions.Union(_structures.Update(entity, world));
+        if (Preordered(entity)) conditions = conditions.With(ModelConditions.Preorder);
         var health = entity.Body is { } body && body.MaxHealth > Fixed.Zero ? ToFloat(body.Health) / ToFloat(body.MaxHealth) : 1f;
         var construction = entity.HasStatus(ObjectStatusBits.UnderConstruction)
             ? ToFloat(entity.ConstructionShare)
@@ -565,6 +575,21 @@ public sealed class FrameProjector
     }
 
     private readonly Dictionary<CnCNew.Simulation.Templates.ObjectTemplate, bool> _flightPitched = [];
+    private readonly Dictionary<CnCNew.Simulation.Templates.ObjectTemplate, bool> _preorderCreate = [];
+
+    /// <summary>
+    /// <c>PreorderCreate::onBuildComplete</c>: an object with the module shows <c>PREORDER</c> once it is complete when its controlling player then had pre-ordered the game, and keeps
+    /// what it was given (the condition is set or cleared only there).
+    /// </summary>
+    private bool Preordered(Entity entity)
+    {
+        if (_options.PreorderPlayers.IsEmpty) return false;
+        if (_preordered.TryGetValue(entity.Id.Value, out var decided)) return decided;
+        if (!_preorderCreate.TryGetValue(entity.Template, out var has))
+            _preorderCreate[entity.Template] = has = entity.Template.Modules.Any(module => module.Name == "PreorderCreate");
+        if (!has || entity.HasStatus(ObjectStatusBits.UnderConstruction)) return false;
+        return _preordered[entity.Id.Value] = _options.PreorderPlayers.Contains(entity.Owner);
+    }
 
     /// <summary>
     /// Whether an object's matrix carries the pitch of its flight: every <c>PROJECTILE</c>, and the neutron missile, which is none (<c>KindOf</c> of <c>NeutronMissile</c> and
