@@ -1039,6 +1039,7 @@ if (contentDirectory is not null) run.Test("Real data (#274): a computer player 
 if (contentDirectory is not null) run.Test("Real data (#300): a GLA worker given a dock order on a supply dock gathers and delivers", () => Tests.RealGlaWorkerGathersAfterADockOrder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#383): a destroyed GLA building is rebuilt by its hole in a skirmish", () => Tests.RealGlaHolesRebuildInASkirmish(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#383): a computer player leaves a building rising on its hole to the hole's worker", () => Tests.RealComputerLeavesARisingHoleToItsWorker(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#384): five GLA workers sent together to a warehouse all gather and deliver", () => Tests.RealGlaWorkersGatherTogether(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the retail reference match gives the same commands in the same frames at 30, 60 and 120 Hz", () => Tests.RealReferenceMatchAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
