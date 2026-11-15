@@ -41,6 +41,9 @@ public sealed record ObjectVisual(
     /// <summary>The template's <c>SubObjectsUpgrade</c> modules in module order.</summary>
     public ImmutableArray<SubObjectsUpgradeSpec> SubObjectUpgrades { get; init; } = [];
 
+    /// <summary><c>SpecialJitterDistance</c> of the template's <c>NeutronMissileUpdate</c>: how far the drawn missile shakes right after its launch (0: no shake).</summary>
+    public float LaunchJitter { get; init; }
+
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
     public bool IsUnit => IsKindOf("INFANTRY") || IsKindOf("VEHICLE") || IsKindOf("AIRCRAFT") || IsKindOf("HUGE_VEHICLE");
@@ -122,6 +125,8 @@ public sealed class ObjectVisualCatalog
         {
             UpgradeCameos = [..Enumerable.Range(1, 5).Select(place => Text(definition.Fields, $"UpgradeCameo{place}") ?? string.Empty)],
             SubObjectUpgrades = subObjectUpgrades,
+            LaunchJitter = (float)(definition.Modules.Where(module => module.Name.Equals("NeutronMissileUpdate", StringComparison.OrdinalIgnoreCase))
+                .Select(module => Number(module.Fields, "SpecialJitterDistance")).LastOrDefault(value => value is not null) ?? 0m),
         };
 
         float Size(string key) => (float)(Number(definition.Fields, key) ?? 0m);

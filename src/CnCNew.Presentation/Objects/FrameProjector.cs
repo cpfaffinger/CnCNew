@@ -325,7 +325,7 @@ public sealed class FrameProjector
                 yaw = LerpAngle(previous.Yaw, capture.Yaw, alpha);
                 if (ahead > 0f) position += (capture.Position - previous.Position) * ahead;
             }
-            drawables.Add(ToDrawable(capture, position, yaw, false, _previous.GetValueOrDefault(capture.Id), alpha));
+            drawables.Add(ToDrawable(capture, position + capture.Jitter, yaw, false, _previous.GetValueOrDefault(capture.Id), alpha));
         }
         for (; nextGhost < ghosts.Length; nextGhost++)
             drawables.Add(ToDrawable(ghosts[nextGhost], ghosts[nextGhost].Position, ghosts[nextGhost].Yaw, true));
@@ -549,7 +549,19 @@ public sealed class FrameProjector
         var owner = _options.Viewer is { } viewer && entity.Container?.ApparentOwnerFor(world, viewer) is { } apparent ? apparent : entity.Owner;
         return new Capture(entity.Id.Value, visual, owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, selections,
-            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis, AnimationPauses.Of(world, entity), SubObjectOverrides.Of(entity, visual), AnimationDurations.Of(world, entity));
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis, AnimationPauses.Of(world, entity), SubObjectOverrides.Of(entity, visual), AnimationDurations.Of(world, entity))
+        {
+            Jitter = LaunchJitter(entity, world, visual, chassis),
+        };
+    }
+
+    /// <summary><see cref="MissileLaunchJitter"/> of a missile whose template names a <c>SpecialJitterDistance</c>, zero for everything else.</summary>
+    private Vector3 LaunchJitter(Entity entity, SimulationWorld world, ObjectVisual visual, ChassisPose chassis)
+    {
+        if (visual.LaunchJitter <= 0f || entity.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.NeutronMissileUpdate>().FirstOrDefault() is not { IsFired: true, LaunchTick: { } launched } missile)
+            return Vector3.Zero;
+        var rotation = Matrix4x4.CreateRotationY(chassis.Pitch) * Matrix4x4.CreateRotationZ(ToFloat(entity.Angle));
+        return MissileLaunchJitter.Offset(entity.Id.Value, Tick - launched, missile.SpecialSpeedTicks, world.Time.TicksPerOriginalFrame, visual.LaunchJitter, rotation);
     }
 
     private readonly Dictionary<CnCNew.Simulation.Templates.ObjectTemplate, bool> _flightPitched = [];
@@ -656,5 +668,9 @@ public sealed class FrameProjector
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
         float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
         float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0, long HealedAtTick = -1, ChassisPose Chassis = default, AnimationPause Pause = AnimationPause.None,
-        ImmutableArray<SubObjectVisibility> SubObjectOverrides = default, float AnimationSeconds = 0f);
+        ImmutableArray<SubObjectVisibility> SubObjectOverrides = default, float AnimationSeconds = 0f)
+    {
+        /// <summary>The drawable's instance offset in the world (a missile's launch shake), added after the interpolation: the original steps it once per logic frame.</summary>
+        public Vector3 Jitter { get; init; }
+    }
 }
