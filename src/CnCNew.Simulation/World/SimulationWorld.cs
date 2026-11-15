@@ -2000,6 +2000,16 @@ public sealed partial class SimulationWorld : IWorldServices
     public void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value)
         => Emit(kind, entity, other, text, value, PlayerId.System);
 
+    /// <summary>
+    /// The weapon's fire effect stays away while the tick lies before the weapon's making plus <see cref="WeaponInfo.SuspendFxDelayTicks"/> (<c>Weapon</c> ctor and
+    /// <c>fireWeaponTemplate</c>); the shot itself, its sound and its damage are unchanged. The delay is whole original frames, so the same frame of the object at every rate.
+    /// </summary>
+    public void EmitWeaponFired(EntityId source, EntityId victim, WeaponInfo weapon, long value, long weaponMadeTick)
+    {
+        var suspended = weapon.SuspendFxDelayTicks > 0 && _tick < weaponMadeTick + weapon.SuspendFxDelayTicks;
+        _events.Enqueue(new SimEvent(Ids.AllocateEvent(), _tick, SimEventKind.WeaponFired, source, victim, PlayerId.System, weapon.Name, value, FireFxSuspended: suspended));
+    }
+
     private void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value, PlayerId player)
     {
         // OpenContain::onRemoving: a rider comes out on the layer of its container.

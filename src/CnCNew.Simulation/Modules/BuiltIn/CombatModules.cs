@@ -79,7 +79,8 @@ internal sealed class FireWeaponUpdate(FireWeaponUpdateData data) : SimModule, I
         // A ClipReloadTime of 0 reloads at once; the next shot then comes with the next logic frame of the original, not with the next tick.
         _readyTick = world.Tick + (_clip == 0 ? world.Time.ZeroIsNextFrame(weapon.ClipReloadWith(world.Time, bonuses, conditions)) : weapon.DelayBetweenShotsWith(world.Time, bonuses, conditions));
         var damage = world.FireWeaponAt(Entity, weapon, null, Entity.X, Entity.Y, Entity.Z);
-        world.Emit(SimEventKind.WeaponFired, Entity.Id, EntityId.Invalid, weapon.Name, damage.Raw);
+        // The module's weapon is made with the object (FireWeaponUpdate ctor: allocateNewWeapon), so its SuspendFXDelay counts from the object's appearance.
+        world.EmitWeaponFired(Entity.Id, EntityId.Invalid, weapon, damage.Raw, Entity.SpawnTick);
         return SimulationTiming.SleepNone;
     }
 

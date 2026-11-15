@@ -140,6 +140,12 @@ public sealed record WeaponInfo(
     /// <summary><c>PreAttackDelay</c> (<c>m_preAttackDelay</c>): how long the weapon winds up (<c>PRE_ATTACK</c>, the model's <c>PREATTACK_A/B/C</c>) before a shot; 0 for none.</summary>
     public long PreAttackDelayTicks { get; init; }
 
+    /// <summary>
+    /// <c>SuspendFXDelay</c> (<c>m_suspendFXDelay</c>, whole original frames as ticks of the rate): a weapon made at tick T plays no fire effect before T plus this
+    /// (<c>Weapon</c> ctor: <c>m_suspendFXFrame = getFrame() + getSuspendFXDelay()</c>; <c>fireWeaponTemplate</c> nulls the FX list before it); 0 for none.
+    /// </summary>
+    public long SuspendFxDelayTicks { get; init; }
+
     /// <summary><c>PreAttackType</c> (<c>m_prefireType</c>): whether the delay applies to every shot, to the first shot at a victim or to the first shot of a clip.</summary>
     public WeaponPrefire PreAttackType { get; init; } = WeaponPrefire.PerShot;
 
@@ -422,6 +428,7 @@ public sealed class WeaponCatalog
                 ContinuousFireCoastTicks = Number("ContinuousFireCoast") is { } coast ? timing.DurationMillisecondsToTicks(coast) : 0,
                 AutoReloadWhenIdleTicks = Number("AutoReloadWhenIdle") is { } idle ? timing.DurationMillisecondsToTicks(idle) : 0,
                 PreAttackDelayTicks = Number("PreAttackDelay") is { } preAttack ? timing.DurationMillisecondsToTicks(preAttack) : 0,
+                SuspendFxDelayTicks = Field("SuspendFXDelay")?.Value.Value is GameTime suspendFx ? timing.DurationMillisecondsToTicks(suspendFx.Milliseconds) : 0,
                 // TheWeaponPrefireNames; the constructor default is PREFIRE_PER_SHOT.
                 PreAttackType = Name("PreAttackType").Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToUpperInvariant() switch
                 {

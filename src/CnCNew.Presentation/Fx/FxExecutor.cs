@@ -136,7 +136,9 @@ public sealed class FxExecutor
         if (view.GetPose(simEvent.Entity) is not { } source) { Count("weapon-source-without-pose"); return; }
         var level = Math.Clamp(source.Veterancy, 0, 3);
         Vector3? target = view.GetPose(simEvent.Other)?.Position;
-        if (weapon.FireFx[level] is { } fire)
+        // Weapon::fireWeaponTemplate: a weapon younger than its SuspendFXDelay plays no FX list (the simulation says so on the event).
+        if (simEvent.FireFxSuspended) Count("weapon-fire-fx-suspended");
+        else if (weapon.FireFx[level] is { } fire)
         {
             // Weapon::fireWeaponTemplate: without a drawable muzzle the effect plays at the drawable (or the target for contact weapons).
             var aimed = view.GetWeaponMuzzleTransform(simEvent.Entity, weapon.Name);

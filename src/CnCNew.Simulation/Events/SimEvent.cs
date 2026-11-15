@@ -194,10 +194,11 @@ public static class RadarNotices
 /// <c>Text</c> a template, effect or reason name, <c>Value</c> an amount (raw fixed-point), timer tag or reject code.
 /// Events that happen at a place rather than at an object (projectile launch and impact, the detonation effect) carry
 /// <see cref="HasPosition"/> and the world position; only those events write the position, so the serialized form of every
-/// other event is unchanged.
+/// other event is unchanged. A <see cref="SimEventKind.WeaponFired"/> whose weapon still holds its fire effect back (<c>SuspendFXDelay</c>) carries
+/// <see cref="FireFxSuspended"/>, written only when set.
 /// </summary>
 public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind, EntityId Entity, EntityId Other, PlayerId Player, string Text, long Value,
-    bool HasPosition = false, Numerics.Fixed X = default, Numerics.Fixed Y = default, Numerics.Fixed Z = default)
+    bool HasPosition = false, Numerics.Fixed X = default, Numerics.Fixed Y = default, Numerics.Fixed Z = default, bool FireFxSuspended = false)
 {
     public void Describe(IStateWriter writer)
     {
@@ -216,6 +217,7 @@ public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind,
             writer.Fixed("y", Y);
             writer.Fixed("z", Z);
         }
+        if (FireFxSuspended) writer.Bool("fireFxSuspended", true);
         writer.EndObject();
     }
 
@@ -227,7 +229,8 @@ public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind,
         return new SimEvent(new EventId(reader.UInt("id")), reader.Int("tick"), (SimEventKind)kind,
             new EntityId(checked((uint)reader.UInt("entity"))), new EntityId(checked((uint)reader.UInt("other"))),
             new PlayerId(checked((int)reader.Int("player"))), reader.Text("text"), reader.Int("value"),
-            located, located ? reader.Fixed("x") : default, located ? reader.Fixed("y") : default, located ? reader.Fixed("z") : default);
+            located, located ? reader.Fixed("x") : default, located ? reader.Fixed("y") : default, located ? reader.Fixed("z") : default,
+            reader.Has("fireFxSuspended") && reader.Bool("fireFxSuspended"));
     }
 }
 

@@ -382,6 +382,7 @@ run.Test("Combat: radius damage rings and the enemies-only filter", Tests.Radius
 run.Test("Combat: default affects mask and bounding sphere", Tests.RadiusDamageDefaultsAndBoundingSphere);
 run.Test("Combat: FireWeaponUpdate initial delay, cadence and SELF filter", Tests.FireWeaponUpdateCadence);
 run.Test("Combat: FireWeaponUpdate clip and reload", Tests.FireWeaponUpdateClip);
+run.Test("Combat: SuspendFXDelay holds the fire effect back at 30, 60 and 120 Hz", Tests.SuspendFxDelayHoldsTheFireEffectBack);
 run.Test("Combat: FireWeaponUpdate ExclusiveWeaponDelay", Tests.FireWeaponUpdateExclusiveDelay);
 run.Test("Combat: FireWeaponUpdate snapshot", Tests.FireWeaponUpdateSnapshot);
 run.Test("Combat: ReplaceObjectUpgrade swaps the template", Tests.ReplaceObjectUpgradeSwapsTemplate);
@@ -1011,6 +1012,7 @@ if (contentDirectory is not null) run.Test("Real data: the original skirmish AI 
 if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the ten weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-109): the napalm of five MiGs flying at a power plant makes a firestorm at 30, 60 and 120 Hz", () => Tests.RealNapalmMakesAFirestorm(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#355): the nuclear radiation field plays its puddles only after SuspendFXDelay, at 30, 60 and 120 Hz", () => Tests.RealNukeRadiationFieldHoldsItsPuddlesBack(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-158): Patriot batteries that assist each other make their feedback beams at 30, 60 and 120 Hz", () => Tests.RealPatriotsMakeTheirFeedbackLasers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (finding 12): the supply drop zone calls its plane, which drops three crates the building takes at 30, 60 and 120 Hz", () => Tests.RealSupplyDropZoneDropsItsCrates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#343): special powers recharge in the reduced time with the debug option, for everybody or for the human only, at 30, 60 and 120 Hz", () => Tests.RealSpecialPowersRechargeFasterWithTheOption(contentDirectory));

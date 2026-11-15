@@ -751,6 +751,12 @@ public static partial class FxTests
         executor.ExecuteEvents([Event(SimEventKind.FxRequested, TestView.Tank, TestView.Base, "FX_TestBone", 0)], view);
         var impact = executor.DrainSoundCues().Select(cue => cue.EventName).ToArray();
         Assert(impact.Count(name => name == "TestBoneSound") == 1, $"the detonation effect plays once, when the simulation asks for it: {string.Join(",", impact)}");
+
+        // #355: a shot whose weapon still holds its effect back (SuspendFXDelay) plays no FireFX list, but its weapon's FireSound as before (Weapon::fireWeaponTemplate nulls the list only).
+        executor.ExecuteEvents([Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 0) with { FireFxSuspended = true }], view);
+        var held = executor.DrainSoundCues().Select(cue => cue.EventName).ToArray();
+        Assert(!held.Contains("TestMuzzleSound") && held.Contains("TestGunShot") && executor.Counters["weapon-fire-fx-suspended"] == 1,
+            $"a suspended fire effect is left out and counted, the fire sound stays: {string.Join(",", held)}");
     }
 
     private static void CameraShakeSemantics()

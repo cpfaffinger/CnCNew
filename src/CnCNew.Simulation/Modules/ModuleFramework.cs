@@ -141,6 +141,12 @@ public interface IWorldServices
     WorldConfiguration Configuration { get; }
     void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value);
 
+    /// <summary>
+    /// <see cref="SimEventKind.WeaponFired"/> of a weapon made at <paramref name="weaponMadeTick"/>: before its <c>SuspendFXDelay</c> has passed the event says the fire effect is
+    /// held back (<c>Weapon::fireWeaponTemplate</c>: "if (getFrame() &lt; getSuspendFXFrame()) fx = NULL").
+    /// </summary>
+    void EmitWeaponFired(EntityId source, EntityId victim, WeaponInfo weapon, long value, long weaponMadeTick);
+
     /// <summary>Requests removal at the end of the tick. The entity receives no further updates, but its events are still delivered.</summary>
     void RequestDestroy(EntityId id);
 

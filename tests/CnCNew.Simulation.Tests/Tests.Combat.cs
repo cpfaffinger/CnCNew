@@ -61,6 +61,15 @@ static partial class Tests
           ClipSize = 0
           DelayBetweenShots = 300
         End
+        Weapon QuietPulse
+          PrimaryDamage = 5
+          PrimaryDamageRadius = 50.0
+          AttackRange = 0.0
+          DamageType = EXPLOSION
+          SuspendFXDelay = 1000;milliseconds
+          ClipSize = 0
+          DelayBetweenShots = 300
+        End
         Weapon TwoShotPulse
           PrimaryDamage = 5
           PrimaryDamageRadius = 50.0
@@ -167,6 +176,17 @@ static partial class Tests
           End
           Behavior = FireWeaponUpdate Pulse01
             Weapon = SelfPulse
+          End
+        End
+
+        Object QuietField
+          KindOf = IMMOBILE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = FireWeaponUpdate Pulse01
+            Weapon = QuietPulse
           End
         End
 
@@ -310,6 +330,46 @@ static partial class Tests
         selfWorld.Step();
         for (var i = 0; i < selfWorld.Frames(30); i++) selfWorld.Step();
         Check.That(HealthOf(selfWorld, "SelfHarmField") < Fixed.FromInt(100), "With SELF in the affects mask the emitter hurts itself.");
+    }
+
+    /// <summary>
+    /// <c>SuspendFXDelay</c> (#355): a weapon made with its object plays no fire effect for that long after it was made (<c>Weapon</c> ctor, <c>fireWeaponTemplate</c>) - the shots
+    /// and their damage come as before. 1000 ms are 30 frames of the original; the pulses come every 9 frames from the first frame after the field appeared, so those of
+    /// frames 1, 10, 19 and 28 are quiet and those from frame 37 on show their effect - the same frames at 30, 60 and 120 Hz. A weapon without the key is never quiet.
+    /// </summary>
+    public static void SuspendFxDelayHoldsTheFireEffectBack()
+    {
+        foreach (var rate in new[] { 30, 60, 120 })
+        {
+            var (world, feeder, _) = RatedWorld(SimulationRate.FromTicksPerSecond(rate), CombatFiles());
+            feeder.Spawn(1, "QuietField", x: 0, y: 0);
+            feeder.Spawn(1, "PoisonField", x: 300, y: 0);
+            feeder.Spawn(2, "Bystander", x: 20, y: 0);
+            world.Step();
+            var field = Get(world, "QuietField");
+            var poison = Get(world, "PoisonField");
+            var bystander = Get(world, "Bystander");
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            var shots = new List<(long Frame, bool Quiet)>();
+            var poisonQuiet = 0;
+            var damaged = 0;
+            for (var i = 0; i < world.Frames(60); i++)
+                foreach (var item in world.Step().Events)
+                {
+                    if (item.Kind == SimEventKind.WeaponFired && item.Entity == field.Id)
+                    {
+                        Check.That((item.Tick - field.SpawnTick) % perFrame == 0, $"{rate} Hz: a pulse comes on the field's own frame grid.");
+                        shots.Add(((item.Tick - field.SpawnTick) / perFrame, item.FireFxSuspended));
+                    }
+                    if (item.Kind == SimEventKind.WeaponFired && item.Entity == poison.Id && item.FireFxSuspended) poisonQuiet++;
+                    if (item.Kind == SimEventKind.EntityDamaged && item.Entity == bystander.Id) damaged++;
+                }
+            var described = string.Join(" ", shots.Select(shot => $"{shot.Frame}{(shot.Quiet ? "q" : "")}"));
+            Check.That(described == "1q 10q 19q 28q 37 46 55", $"{rate} Hz: quiet pulses before frame 30, then with their effect, got {described}.");
+            Check.That(damaged == shots.Count, $"{rate} Hz: every pulse hurts, quiet or not ({damaged} of {shots.Count}).");
+            Check.That(poisonQuiet == 0, $"{rate} Hz: a weapon without SuspendFXDelay is never quiet.");
+            Check.That(world.Weapons.TryGet("QuietPulse", out var quiet) && quiet.SuspendFxDelayTicks == world.Frames(30), $"{rate} Hz: SuspendFXDelay 1000 ms is 30 original frames.");
+        }
     }
 
     /// <summary>A weapon clip runs dry after ClipSize pulses and reloads for ClipReloadTime.</summary>

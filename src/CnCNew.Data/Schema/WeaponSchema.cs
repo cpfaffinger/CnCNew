@@ -41,6 +41,8 @@ public static class WeaponSchema
             new("DelayBetweenShots", FieldType.ShotDelayMs, Source: Table + " WeaponTemplate::parseShotDelay"),
             new("WeaponBonus", FieldType.WeaponBonusEntry, Repeat: RepeatPolicy.IndexedByFirstTwoTokens, Source: Table + " WeaponBonusSet::parseWeaponBonusSet"),
             new("AutoReloadsClip", FieldType.Enum, Table: NameTablesPhase5.WeaponReloadType, Source: Table),
+            // parseDurationUnsignedInt: how long after the weapon is made its fire effect stays away (Weapon::m_suspendFXFrame).
+            new("SuspendFXDelay", FieldType.DurationMs, Source: Table),
         ]);
     }
 }
