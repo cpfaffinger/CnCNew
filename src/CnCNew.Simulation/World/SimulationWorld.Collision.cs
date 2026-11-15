@@ -507,24 +507,7 @@ public sealed partial class SimulationWorld
     private void ResolveFootprintCollisionsCore(Entity mover, Fixed stepX, Fixed stepY)
     {
         if (mover.EffectivelyDead) return;
-        // PartitionContactList::processContactList: a pair of which either object is NO_COLLISIONS (a hijacker riding hidden in its vehicle, a parachute, a missile) has no contact - neither
-        // crushes nor is crushed.
-        if (mover.Template.CrusherLevel > 0 && CanCollide(mover))
-        {
-            // Only an object with a ToppleUpdate or a SquishCollide module or a crushable level can be toppled, squished or crushed; for every other object the calls below did nothing.
-            var targets = _crushTargets;
-            var contact = ContactShape(mover);
-            for (var index = 0; index < targets.Count; index++)
-            {
-                var other = targets[index];
-                if (other.Id == mover.Id || other.EffectivelyDead || !CanCollide(other)) continue;
-                if (!FootprintsOverlap(contact, other)) continue;
-                TryTopple(mover, other);
-                TrySquish(mover, other, stepX, stepY);
-                TryCrush(mover, other, stepX, stepY);
-            }
-        }
-        DeliverCollisions(mover);
+        DeliverCollisions(mover, stepX, stepY, mover.Template.CrusherLevel > 0);
     }
 
     // ------------------------------------------------------------------------------------------------ collide modules
@@ -579,12 +562,16 @@ public sealed partial class SimulationWorld
         if (entity.CollideModules.Length > 0) _collidables.Remove(entity);
     }
 
+    /// <summary>A look at what an object touches without a step of its own: it crushes nothing.</summary>
+    private void DeliverCollisions(Entity mover) => DeliverCollisions(mover, Fixed.Zero, Fixed.Zero, crushes: false);
+
     /// <summary>
-    /// <c>PartitionManager::checkForCollisions</c> (<c>obj->onCollide(other)</c>, then <c>other->onCollide(obj)</c>) for a mover whose footprint now overlaps another
-    /// object's: the mover's own collide modules hear about every overlapping object, and every collide-module holder the mover overlaps hears about the mover.
-    /// Only movers are tested, so an object standing still on a crate collects it as soon as it moves, not when the crate appears.
+    /// <c>PartitionContactList::processContactList</c> for a mover whose shape now meets other objects: each pair in ascending id order of the other, unless either is <c>NO_COLLISIONS</c>,
+    /// first <c>obj->onCollide(other)</c> - the mover's collide modules in module order -, then, unless one of the two is destroyed, <c>other->onCollide(obj)</c>. Only pairs in which one of
+    /// the two can do something are looked at: every object for a mover with a collide module, else the objects with one and, for a <paramref name="crushes">crusher with a step</paramref>,
+    /// what it can topple, squish or crush. Only movers are tested, so an object standing still on a crate collects it as soon as it moves, not when the crate appears.
     /// </summary>
-    private void DeliverCollisions(Entity mover)
+    private void DeliverCollisions(Entity mover, Fixed stepX, Fixed stepY, bool crushes)
     {
         var touched = false;
         // The mover's shape is formed again after each contact: a collide module may move it, turn it or take it out of the world.
@@ -592,21 +579,94 @@ public sealed partial class SimulationWorld
         if (mover.CollideModules.Length > 0)
             foreach (var other in _entities)
             {
-                if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(contact, other)) continue;
-                touched = true;
-                CallCollide(mover, other);
-                contact = ContactShape(mover);
+                if (!CanCollide(mover)) break;
+                touched |= Collide(mover, other, ref contact, stepX, stepY, crushes);
             }
-        for (var index = 0; index < _collidables.Count; index++)
+        else
         {
-            var holder = _collidables[index];
-            if (holder.Id == mover.Id || !CanCollide(holder) || !CanCollide(mover) || !FootprintsOverlap(contact, holder)) continue;
-            touched = true;
-            CallCollide(holder, mover);
-            contact = ContactShape(mover);
+            // The two lists by ascending id, an object in both once.
+            var targets = crushes ? _crushTargets : NoCrushTargets;
+            var holders = _collidables;
+            var (target, holder) = (0, 0);
+            while (CanCollide(mover) && (target < targets.Count || holder < holders.Count))
+            {
+                var targetId = target < targets.Count ? targets[target].Id.Value : uint.MaxValue;
+                var holderId = holder < holders.Count ? holders[holder].Id.Value : uint.MaxValue;
+                Entity other;
+                if (targetId <= holderId)
+                {
+                    other = targets[target++];
+                    if (targetId == holderId) holder++;
+                }
+                else other = holders[holder++];
+                touched |= Collide(mover, other, ref contact, stepX, stepY, crushes);
+            }
         }
         // PartitionContactList::processContactList: "re-dirtying collision": what touched something is looked at again in the next frame, whether it moves or not.
         if (touched && !mover.Template.IsKindOf("IMMOBILE")) _contacts.Add(mover.Id.Value);
+    }
+
+    private static readonly List<Entity> NoCrushTargets = [];
+
+    /// <summary>
+    /// One pair of <c>processContactList</c>: the mover's <c>onCollide</c>, then the other's unless one of the two is destroyed ("make sure that the previous collision didn't absorb him").
+    /// True when one of the two has a collide module (a contact that is looked at again).
+    /// </summary>
+    private bool Collide(Entity mover, Entity other, ref Contact contact, Fixed stepX, Fixed stepY, bool crushes)
+    {
+        if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(contact, other)) return false;
+        var touched = mover.CollideModules.Length > 0 || other.CollideModules.Length > 0;
+        if (crushes) CollideAsCrusher(mover, other, stepX, stepY);
+        else CallCollide(mover, other);
+        if (!mover.DestroyRequested && !other.DestroyRequested)
+        {
+            if (crushes) CollideWithCrusher(other, mover, stepX, stepY);
+            else CallCollide(other, mover);
+        }
+        contact = ContactShape(mover);
+        return touched;
+    }
+
+    /// <summary>
+    /// <c>Object::onCollide</c> of a crusher that has just made <paramref name="stepX"/>, <paramref name="stepY"/>: its modules in module order, its <c>PhysicsBehavior</c> crushing the other
+    /// (<c>PhysicsBehavior::onCollide</c>, <c>checkForOverlapCollision</c>) where it stands among its collide modules.
+    /// </summary>
+    private void CollideAsCrusher(Entity crusher, Entity other, Fixed stepX, Fixed stepY)
+    {
+        foreach (var module in crusher.ModuleArray)
+        {
+            if (crusher.DestroyRequested || other.DestroyRequested || crusher.HasStatus(NoCollisionsBit)) break;
+            if (module is PhysicsBehavior)
+            {
+                if (!other.EffectivelyDead) TryCrush(crusher, other, stepX, stepY);
+            }
+            else if (module is ICollideModule collide) collide.OnCollide(this, other);
+        }
+    }
+
+    /// <summary>
+    /// <c>Object::onCollide</c> of what a stepping crusher meets: its modules in module order - a <c>ToppleUpdate</c> pushed over, a <c>SquishCollide</c> squished, every other collide
+    /// module told of the crusher -, ending the moment it stops colliding. A collide module before its <c>SquishCollide</c> acts first: a hijacker that takes the vehicle hides in it
+    /// (<c>NO_COLLISIONS</c>) and is not squished by it.
+    /// </summary>
+    private void CollideWithCrusher(Entity self, Entity crusher, Fixed stepX, Fixed stepY)
+    {
+        foreach (var module in self.ModuleArray)
+        {
+            if (self.DestroyRequested || crusher.DestroyRequested || self.HasStatus(NoCollisionsBit)) break;
+            switch (module)
+            {
+                case ToppleUpdate:
+                    TryTopple(crusher, self);
+                    break;
+                case SquishCollide:
+                    if (!self.EffectivelyDead) TrySquish(crusher, self, stepX, stepY);
+                    break;
+                case ICollideModule collide:
+                    collide.OnCollide(this, crusher);
+                    break;
+            }
+        }
     }
 
     // The objects whose last look found something they touch and that are looked at again, by ascending id; none in a world where nothing touches.
@@ -770,7 +830,7 @@ public sealed partial class SimulationWorld
     private static readonly Fixed CrushPerpRange = Fixed.FromDecimal(0.15m);
 
     /// <summary>
-    /// <c>PhysicsBehavior::checkForOverlapCollision</c>: a mover with a crusher level above the victim's crushable level kills it when it has passed the victim's crush point nearest its line of
+    /// <c>PhysicsBehavior::checkForOverlapCollision</c>, called by the crusher's own <c>PhysicsBehavior</c> (<see cref="CollideAsCrusher"/>): a mover with a crusher level above the victim's crushable level kills it when it has passed the victim's crush point nearest its line of
     /// travel, of the front, the middle and the back, half the major radius apart, and no further from it than one and a half of that. The victim needs a physics module or to be immobile
     /// (<c>onCollide</c>), and an unmanned crusher crushes nothing. Not done: the first contact's damage of 0, which only triggers the minor <c>DamageFX</c>; a victim that survives no crush, so its
     /// crushed ends never lead the next crush. The ends a crushed car shows are the presentation's.
@@ -825,10 +885,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void TrySquish(Entity mover, Entity other, Fixed stepX, Fixed stepY)
     {
-        var squishable = false;
-        foreach (var module in other.ModuleArray)
-            if (module is SquishCollide) { squishable = true; break; }
-        if (!squishable || SpareFromSquish(other, mover)) return;
+        if (SpareFromSquish(other, mover)) return;
         // "Order matters: we want to know if IT considers ME to be an ally": the crusher's view of the victim (Object::getRelationship, with a script's team relationships).
         if (RelationshipBetween(mover, other) == Relationship.Allies) return;
         if (Array.Find(mover.ModuleArray, module => module is PhysicsBehavior) is null) return;

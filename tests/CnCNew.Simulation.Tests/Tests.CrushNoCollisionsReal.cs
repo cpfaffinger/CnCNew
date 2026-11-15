@@ -58,4 +58,19 @@ static partial class Tests
         Check.That(crusaderCrushed, "the Overlord crushes the Crusader it drives over.");
         Check.That(!riderKilled, "the hijacker riding hidden in the Crusader is not killed while it rides.");
     }
+
+    /// <summary>
+    /// #373 on real data: a hijacker that runs at a Crusader or an Overlord driving at it, met at 20, 60 and 120 units from the tank, takes the tank on the contact and is not squished by it -
+    /// its <c>ConvertToHijackedVehicleCrateCollide</c> stands before its <c>SquishCollide</c>, and the take hides it (<c>NO_COLLISIONS</c>). At 60 Hz.
+    /// </summary>
+    public static void RealHijackComesBeforeTheSquish(string directory)
+    {
+        var data = OpenRealFireData(directory);
+        foreach (var tank in new[] { "AmericaTankCrusader", "ChinaTankOverlord" })
+            foreach (var victimX in new[] { 320, 360, 420 })
+            {
+                var hijack = RealRunOver(data, SimulationRate.Hz60, tank, "GLAInfantryHijacker", "hijack", victimX);
+                Check.That(hijack.Taken && !hijack.Crushed, $"{tank}, hijacker at x={victimX}: it takes the tank and is not squished (taken {hijack.Taken}, crushed {hijack.Crushed}).");
+            }
+    }
 }
