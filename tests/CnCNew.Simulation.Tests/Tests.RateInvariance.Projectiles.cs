@@ -250,14 +250,15 @@ static partial class Tests
 
     /// <summary>
     /// §5.2 <c>MissileAIUpdate</c>: the two hand-computed missiles of Tests.Projectiles.cs fly the 30 Hz flight at every rate. With an acceleration of one top speed per frame the
-    /// missile is 10 units out after its first frame (before: 10 / 7.5 / 6.25, because speed and acceleration were stepped per tick) and lands in F+11; with an ignition delay of
+    /// missile is 10 units out after its first frame (before: 10 / 7.5 / 6.25, because speed and acceleration were stepped per tick) and lands in F+10, where its sphere meets the
+    /// dummy's (F-175; the stand-in before it waited for the goal in F+11); with an ignition delay of
     /// three frames and one unit per frame² it follows the table of Tests.Projectiles.cs (before, after frame 10: 56 / 50 / 47.19) and lands in F+18. The kill-self wait ends in the same frame.
     /// </summary>
     public static void RateProjectilesMissilesFlyTheThirtyHertzFlight()
     {
-        var fast = SameFlightAtEveryRate("MissileLauncher", "FastMissile", 100, 16, 11);
+        var fast = SameFlightAtEveryRate("MissileLauncher", "FastMissile", 100, 16, 10);
         Check.That(fast.Frames[1] is { } first && first.X == Fixed.FromInt(10), "After its first frame the missile is one full step out.");
-        Check.That(fast.Frames[13] is not null && fast.Frames[14] is null, "KillSelfDelay (3 frames) after the detonation removes the missile, in F+14.");
+        Check.That(fast.Frames[12] is not null && fast.Frames[13] is null, "KillSelfDelay (3 frames) after the detonation removes the missile, in F+13.");
         var slow = SameFlightAtEveryRate("SlowMissileLauncher", "SlowMissile", 100, 21, 18);
         for (var frame = 0; frame < SlowMissileTable.Length; frame++)
         {

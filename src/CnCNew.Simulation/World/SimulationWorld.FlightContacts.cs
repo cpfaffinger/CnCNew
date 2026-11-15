@@ -13,8 +13,10 @@ public sealed partial class SimulationWorld
 {
     /// <inheritdoc cref="IWorldServices.MeetWhatStands"/>
     /// <remarks>
-    /// The test is the original's last one: spheres (bounding sphere radii, the centres raised by the geometry) while the object is above the ground, circles on it; the partition's shape test
-    /// before it is not ported. The original meets its contacts in the partition's order; here in the order of the ids.
+    /// Both of the original's tests: the partition's shape test (<c>PartitionData::collidesWith</c>, <see cref="CollideShapes"/>: a box with its angle, a cylinder with its height,
+    /// a sphere) reports the contact, and <c>onCollide</c> keeps it only when the bounding spheres (the centres raised by the geometry) touch while the object is above the ground, the
+    /// bounding circles on it. The spheres are asked first, because they are cheaper; either alone lets through what the other refuses (a corpse beside a long building's corner is in its
+    /// sphere and outside its box). The original meets its contacts in the partition's order; here in the order of the ids.
     /// </remarks>
     public FlightContact MeetWhatStands(Entity flyer, Fixed x, Fixed y, Fixed z, string buildingWeapon, string otherWeapon)
     {
@@ -26,6 +28,7 @@ public sealed partial class SimulationWorld
         var usRadius = above ? flyer.Template.BoundingSphereRadius : CircleRadius(flyer);
         var usCenterZ = z + flyer.Template.CenterZDelta;
         var vehicle = flyer.Template.IsKindOf("VEHICLE");
+        var us = CollideShape.Of(flyer.Template, x, y, z, flyer.Angle);
         FlightContact contact = default;
         foreach (var other in _entities)
         {
@@ -38,6 +41,7 @@ public sealed partial class SimulationWorld
             if (dz.Abs() > limit) continue;
             var squared = dx * dx + dy * dy + dz * dz;
             if (!SquaredReach.Of(limit).Contains(squared)) continue;
+            if (!CollideShapes.Collides(flyer, us, other, CollideShape.Of(other.Template, other.X, other.Y, other.Z, other.Angle))) continue;
             // "if we are moving down, we may want to blow ourselves into smithereens...."
             if (dz < Fixed.Zero && z >= _templates.DefaultStructureRubbleHeight)
             {

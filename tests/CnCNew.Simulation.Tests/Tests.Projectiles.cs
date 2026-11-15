@@ -331,7 +331,9 @@ static partial class Tests
     /// <summary>
     /// Missile, hand-computed: ignition at once, InitialVelocity 0, acceleration 9000/s² (10 per frame²) up to 300/s (10 per frame), no lock distance.
     /// Frame F+1 ignites and flies to x = 10; F+2 (attack without turning) to 20; from F+3 it steers at the dummy with a little of its thrust against gravity, so its step is a little
-    /// short of 10; at the start of F+11 it is less than a step away, so it lands exactly on the dummy and detonates in the first tick of frame F+11; frame F+14 (KillSelfDelay 3) removes it.
+    /// short of 10; in F+10 it stops a thousandth short of the dummy, and its sphere (radius 1, the template's default) meets the dummy's: it detonates in that frame
+    /// (<c>PartitionData::collidesWith</c>, F-175; the stand-in before it tested the missile's centre against the dummy's height and waited until F+11, a step onto the dummy); frame F+13
+    /// (KillSelfDelay 3) removes it.
     /// Written in logic frames of the original, so the same numbers hold at 60 and 120 Hz.
     /// </summary>
     public static void ProjectileMissileFlightTime()
@@ -349,12 +351,12 @@ static partial class Tests
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.WeaponImpact)) impactTick = result.Tick;
         }
-        Check.That(impactTick == fire + world.Frames(11), $"The missile detonates in frame F+11 (got tick F+{impactTick - fire}).");
-        Check.That(missile.X == Fixed.FromInt(100) && dummy.Body!.Health == Fixed.FromInt(940), "It detonates on the dummy.");
-        while (world.Tick < fire + world.Frames(14)) world.Step();
+        Check.That(impactTick == fire + world.Frames(10), $"The missile detonates in frame F+10 (got tick F+{impactTick - fire}).");
+        Check.That(Fixed.FromInt(100) - missile.X < Fixed.FromDecimal(0.01m) && dummy.Body!.Health == Fixed.FromInt(940), $"It detonates on the dummy (x = {missile.X}).");
+        while (world.Tick < fire + world.Frames(13)) world.Step();
         Check.That(world.Entities.Any(value => value.Template.Name == "FastMissile"), "The missile waits KillSelfDelay before it removes itself.");
         world.Step();
-        Check.That(!world.Entities.Any(value => value.Template.Name == "FastMissile"), "Frame F+14, KillSelfDelay (3) after the detonation, removes the missile.");
+        Check.That(!world.Entities.Any(value => value.Template.Name == "FastMissile"), "Frame F+13, KillSelfDelay (3) after the detonation, removes the missile.");
     }
 
     /// <summary>

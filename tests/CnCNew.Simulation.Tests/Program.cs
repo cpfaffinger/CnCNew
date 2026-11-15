@@ -414,6 +414,7 @@ run.Test("Phase 61: the panel flag AI Recruitable keeps a unit out of recruiting
 run.Test("Phase 61: a mission's map objects come with their properties", Tests.MissionMapObjectsComeWithTheirProperties);
 run.Test("Phase 62 (F-141): a map object brings objectRecruitableAI and objectSelectable", Tests.MapObjectsBringRecruitableAndSelectable);
 run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkCrashesIntoABuilding);
+run.Test("F-175: a falling hulk meets the shape of a building, not its sphere", Tests.AFallingHulkMeetsTheShapeOfABuilding);
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);
 run.Test("Phase 58: a captured airfield takes its parked jets", Tests.AirCapturedAirfieldTakesItsParkedJets);
 run.Test("Phase 59 (F-124): attackers aim behind an attacking Aurora", Tests.AirAttackersAimBehindASneakyJet);
@@ -615,6 +616,7 @@ run.Test("Subdual: a body without a cap takes none", Tests.SubdualDamageNeedsABo
 run.Test("Combat drop: the riders come down the ropes at a place", Tests.CombatDropAtAPlace);
 run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDropIntoABuilding);
 run.Test("Projectiles: a shell meets what stands in its way", Tests.ProjectilesMeetWhatStandsInTheirWay);
+run.Test("F-175: a projectile meets the shape of a building, not its sphere", Tests.AProjectileMeetsTheShapeOfABuilding);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
 run.Test("Group move: a click into the group gathers it", Tests.AClickIntoTheGroupGathersIt);

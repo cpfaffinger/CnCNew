@@ -70,23 +70,18 @@ internal static class ProjectileModules
     }
 
     /// <summary>
-    /// The stand-in for <c>PhysicsBehavior</c>'s collision of a projectile with the object it was fired at (<c>projectileHandleCollision</c>; the port has no collision system): a point
-    /// with the projectile's radius meets the victim's box or cylinder, from its feet to its top, where the frame it has begun ends.
+    /// <c>PartitionData::collidesWith</c> of a projectile at <paramref name="point"/> with <paramref name="victim"/> (<see cref="CollideShapes"/>): the projectile's shape - its geometry, turned by
+    /// its angle - against the victim's box, cylinder or sphere where the frame the victim has begun ends. A projectile handles its own collisions (<c>projectileHandleCollision</c>
+    /// comes before <c>onCollide</c>'s sphere test), so the shapes alone decide.
     /// </summary>
-    internal static bool Touches(Entity victim, long tick, Point3 point, Fixed radius)
+    internal static bool Touches(Entity projectile, Entity victim, long tick, Point3 point) => Touches(projectile, Shape(projectile, point), victim, tick);
+
+    private static CollideShape Shape(Entity projectile, Point3 point) => CollideShape.Of(projectile.Template, point.X, point.Y, point.Z, projectile.Angle);
+
+    private static bool Touches(Entity projectile, in CollideShape shape, Entity victim, long tick)
     {
         var (x, y, z) = victim.FrameEnd(tick);
-        var template = victim.Template;
-        var height = template.Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase) ? template.GeometryMajorRadius : template.GeometryHeight;
-        if (point.Z < z || point.Z > z + height) return false;
-        var (dx, dy) = (point.X - x, point.Y - y);
-        if (template.IsBox)
-        {
-            var angle = victim.FrameEndAngle(tick);
-            var (cos, sin) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
-            return (dx * cos + dy * sin).Abs() <= template.GeometryMajorRadius + radius && (dy * cos - dx * sin).Abs() <= template.GeometryMinorRadius + radius;
-        }
-        return SquaredReach.Of(template.GeometryMajorRadius + radius).Contains(dx * dx + dy * dy);
+        return CollideShapes.Collides(projectile, shape, victim, CollideShape.Of(victim.Template, x, y, z, victim.FrameEndAngle(tick)));
     }
 
     /// <summary>
@@ -98,25 +93,25 @@ internal static class ProjectileModules
     {
         if (weaponIndex < 0) return null;
         var weapon = world.Weapons[weaponIndex];
-        var radius = projectile.Template.BoundingCircleRadius;
         var mask = weapon.ProjectileCollideMask;
         if (mask == 0) return null;
         var source = world.FindEntity(launcher);
+        var shape = Shape(projectile, point);
         // What is no structure is only met when the weapon asks for it: most weapons name structures alone, and a world has few of them.
         if ((mask & ~(WeaponInfo.CollideStructures | WeaponInfo.CollideControlledStructures | WeaponInfo.CollideWalls)) == 0)
         {
             foreach (var other in world.EntitiesOfKind("STRUCTURE").AsSpan())
-                if (Meets(world, projectile, source, other, victim, weapon, point, radius)) return other;
+                if (Meets(world, projectile, source, other, victim, weapon, shape)) return other;
             return null;
         }
         foreach (var other in world.Entities)
-            if (Meets(world, projectile, source, other, victim, weapon, point, radius)) return other;
+            if (Meets(world, projectile, source, other, victim, weapon, shape)) return other;
         return null;
     }
 
-    private static bool Meets(IWorldServices world, Entity projectile, Entity? source, Entity other, EntityId victim, WeaponInfo weapon, Point3 point, Fixed radius)
+    private static bool Meets(IWorldServices world, Entity projectile, Entity? source, Entity other, EntityId victim, WeaponInfo weapon, in CollideShape shape)
     {
-        if (other == projectile || other.Id == victim || other.DestroyRequested || other.EffectivelyDead || other.ContainedBy.IsValid || !Touches(other, world.Tick, point, radius)) return false;
+        if (other == projectile || other.Id == victim || other.DestroyRequested || other.EffectivelyDead || other.ContainedBy.IsValid || !Touches(projectile, shape, other, world.Tick)) return false;
         // "Don't hit your own launcher, ever", nor what it sits in.
         if (source is not null && (other == source || source.ContainedBy == other.Id)) return false;
         // "Never bother burning already-burned things."
@@ -644,8 +639,8 @@ public static class MissileFrames
 /// A followed victim that is gone makes it run out of fuel at once and remove itself without damage (<c>airborneTargetGone</c>).</description></item>
 /// <item><description>After detonating it waits <c>KillSelfDelay</c> ticks, then dies (<c>DetonateCallsKill</c>) or is destroyed.</description></item>
 /// </list>
-/// Collision stand-ins (no collision system): an armed missile detonates when it meets the object it was fired at (<see cref="ProjectileModules.Touches"/>) - only that object - or when it
-/// reaches its goal point; on the ground it detonates unless it came down more than a cell above its goal and more than three cells from it (<c>projectileHandleCollision(NULL)</c>); an
+/// Collisions: after the ground and a bridge's deck, an armed missile detonates when its shape meets the object it was fired at or what its weapon's <c>ProjectileCollidesWith</c>
+/// names (<see cref="ProjectileModules.Touches"/>, <c>PartitionData::collidesWith</c>), or when it reaches its goal point; on the ground it detonates unless it came down more than a cell above its goal and more than three cells from it (<c>projectileHandleCollision(NULL)</c>); an
 /// unarmed one slides along the ground; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). A missile marked by a plane's <c>CountermeasuresBehavior</c> gives up its victim for the
 /// closest flare after the decoy delay and then does no damage. Not modeled: jamming, the frames a missile waits for its path before the locomotor acts, a damaged locomotor. All
 /// vectors are <see cref="Fixed"/>; directions are normalised with the fixed-point square root; a rotation toward a direction is the sum of the two axes, not a matrix.
@@ -1038,18 +1033,6 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             Settled(_velocity.Y + push.Y - _velocity.Y * friction),
             Settled(_velocity.Z + push.Z + gravity - _velocity.Z * friction));
         var next = killing ? Cheat(position, speed) : new Point3(position.X + _velocity.X, position.Y + _velocity.Y, position.Z + _velocity.Z);
-        if (_armed && ProjectileModules.Collision(world, Entity, _launcher, _firedAt, _weapon, next) is { } inTheWay)
-        {
-            Place(world, next);
-            if (!ClearGarrison(world, inTheWay.Id)) Detonate(world);
-            return;
-        }
-        if (_armed && world.FindEntity(_firedAt) is { DestroyRequested: false } struck && ProjectileModules.Touches(struck, world.Tick, next, Entity.Template.GeometryMajorRadius))
-        {
-            Place(world, next);
-            if (!ClearGarrison(world, _firedAt)) Detonate(world);
-            return;
-        }
         if (world.ProjectileHitsDeck(next.X, next.Y, position.Z, next.Z, out var deckZ))
         {
             // MissileAIUpdate::detonate's neighbour: "ensure we are slightly above the bridge" - blown up on the deck.
@@ -1079,6 +1062,20 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             }
         }
         else _airborne = true;
+        // The partition's contacts (PartitionManager::update) come after every object's update of the frame, so after the ground and the deck of PhysicsBehavior::update: a missile is met
+        // where it stands above them.
+        if (_armed && ProjectileModules.Collision(world, Entity, _launcher, _firedAt, _weapon, next) is { } inTheWay)
+        {
+            Place(world, next);
+            if (!ClearGarrison(world, inTheWay.Id)) Detonate(world);
+            return;
+        }
+        if (_armed && world.FindEntity(_firedAt) is { DestroyRequested: false } struck && ProjectileModules.Touches(Entity, struck, world.Tick, next))
+        {
+            Place(world, next);
+            if (!ClearGarrison(world, _firedAt)) Detonate(world);
+            return;
+        }
         Fly(world, position, next);
     }
 

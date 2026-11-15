@@ -201,4 +201,104 @@ static partial class Tests
             Check.That(victims.Skip(1).All(value => value.Body!.MaxHealth - value.Body.Health == Fixed.FromInt(7)), $"{rate}: every place of the pattern once ({string.Join(", ", victims.Select(value => value.Body!.Health))}).");
         }
     }
+    private const string ShapeIni = """
+        Weapon ShapeGun
+          PrimaryDamage = 50
+          PrimaryDamageRadius = 1.0
+          AttackRange = 500.0
+          WeaponSpeed = 30
+          ProjectileObject = ShapeShell
+          DelayBetweenShots = 100000
+        End
+        Object ShapeShell
+          KindOf = PROJECTILE
+          Geometry = SPHERE
+          GeometryMajorRadius = 10.0
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Behavior = DumbProjectileBehavior Dumb01
+            FirstHeight = 10
+            SecondHeight = 10
+            FirstPercentIndent = 25%
+            SecondPercentIndent = 75%
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object ShapeShooter
+          KindOf = VEHICLE SELECTABLE
+          VisionRange = 500.0
+          ShroudClearingRange = 500.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY ShapeGun
+          End
+        End
+        Object ShapeBlock
+          KindOf = STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 20.0
+          GeometryMinorRadius = 20.0
+          GeometryHeight = 100.0
+          Body = StructureBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+        End
+        Object ShapeLowWall
+          KindOf = STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 40.0
+          GeometryHeight = 4.0
+          Body = StructureBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+        End
+        """;
+
+    /// <summary>
+    /// F-175, <c>PartitionData::collidesWith</c> of a projectile: its sphere against a building's box. A sphere is tested in the plane as the square of its radius turned with the shell
+    /// (<c>xy_collideTest_Rect_Circle</c>), and above a box by the circle where it cuts the box's top (<c>z_collideTest_Sphere_Nonsphere</c>). So a big shell that flies along x past the
+    /// corner of a block turned by 45 degrees, its centre 11.7 units from the corner, passes - the stand-in's box widened by the radius in the block's own axes met it - and a shell whose
+    /// centre flies 3.5 units above a low wall hits it - the stand-in tested the centre against the wall's height only. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AProjectileMeetsTheShapeOfABuilding()
+    {
+        (Entity Victim, Entity Building) Shoot(SimulationRate rate, string building, int y, Fixed angle)
+        {
+            var files = new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/Collision.ini"] = CollisionIni, ["Data/INI/Object/Shape.ini"] = ShapeIni };
+            var fixture = new SyntheticFixture(rate, files: files);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "ShapeShooter", owner: 1, x: 100, y: 100);
+            feeder.Spawn(2, "CollVictim", owner: 2, x: 300, y: 100);
+            feeder.Spawn(2, building, owner: 2, x: 200, y: y, angle: angle);
+            world.Step();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            var shooter = world.Entities.Single(value => value.Template.Name == "ShapeShooter");
+            var victim = world.Entities.Single(value => value.Template.Name == "CollVictim");
+            Check.That(feeder.FireWeapon(1, shooter.Id.Value, victim.Id.Value).Accepted, $"{rate}: the gun fires.");
+            for (var step = 0; step < world.Frames(300); step++) world.Step();
+            return (victim, world.Entities.Single(value => value.Template.Name == building));
+        }
+
+        foreach (var rate in new[] { SimulationRate.FromTicksPerSecond(30), SimulationRate.FromTicksPerSecond(60), SimulationRate.FromTicksPerSecond(120) })
+        {
+            // The block's corner points at the line of flight at y 111.7; the shell's square reaches 10 units to either side of it.
+            var (victim, block) = Shoot(rate, "ShapeBlock", 140, FixedTrig.Pi / Fixed.FromInt(4));
+            Check.That(block.Body!.Health == block.Body.MaxHealth, $"{rate}: the shell passes the corner of the turned block ({block.Body.Health}).");
+            Check.That(victim.Body!.Health < victim.Body.MaxHealth, $"{rate}: and hits what it was fired at ({victim.Body.Health}).");
+            var (behind, wall) = Shoot(rate, "ShapeLowWall", 100, Fixed.Zero);
+            Check.That(wall.Body!.Health < wall.Body.MaxHealth, $"{rate}: the shell flying over the low wall meets its top ({wall.Body.Health}).");
+            Check.That(behind.Body!.Health == behind.Body.MaxHealth, $"{rate}: and not what stands behind it ({behind.Body.Health}).");
+        }
+    }
 }

@@ -32,6 +32,18 @@ static partial class Tests
             InitialHealth = 1000.0
           End
         End
+        Object CrashLongHouse
+          KindOf = STRUCTURE IMMOBILE
+          Geometry = BOX
+          GeometryMajorRadius = 60.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 20.0
+          GeometryIsSmall = No
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+        End
         Object CrashRock
           KindOf = IMMOBILE
           Geometry = CYLINDER
@@ -107,5 +119,44 @@ static partial class Tests
         for (var step = 0; step < 120 && fallWorld.FindEntity(falling.Id) is not null; step++)
             died |= fallWorld.Step().Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity == falling.Id);
         Check.That(fallWorld.FindEntity(falling.Id) is null && !died, "The hulk is destroyed, not killed.");
+    }
+    /// <summary>
+    /// F-175, <c>PartitionData::collidesWith</c> before <c>PhysicsBehavior::onCollide</c>: a hulk that falls beside the corner of a long, low building is inside the building's bounding sphere
+    /// all the way down but never touches its box, so it lands beside it, whole, and the building is not hurt; one that falls onto the building's far end blows up on it - in the same
+    /// frame at 30, 60 and 120 Hz. Before, the spheres alone decided, and the hulk beside the corner blew up in the air.
+    /// </summary>
+    public static void AFallingHulkMeetsTheShapeOfABuilding()
+    {
+        (bool Gone, long Frame, Fixed Damage, Fixed Z) Fall(SimulationRate rate, int x, int y)
+        {
+            var files = new Dictionary<string, string>(GroupMoveFiles()) { ["Data/INI/Object/Crash.ini"] = FlightCrashIni };
+            var (world, feeder, _) = RatedWorld(rate, files, NavTerrain());
+            feeder.Spawn(2, "CrashLongHouse", owner: 2, x: 100, y: 100);
+            feeder.Spawn(1, "CrashHulk", owner: 1, x: x, y: y, z: 80);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var hulk = world.Entities.Single(value => value.Template.Name == "CrashHulk");
+            var house = world.Entities.Single(value => value.Template.Name == "CrashLongHouse");
+            hulk.Modules.OfType<PhysicsBehavior>().First().Launch(world, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, false, false, Fixed.Zero);
+            for (var frame = 1; frame <= 120; frame++)
+            {
+                for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+                if (world.FindEntity(hulk.Id) is null) return (true, frame, house.Body!.MaxHealth - house.Body.Health, Fixed.Zero);
+            }
+            return (false, -1, house.Body!.MaxHealth - house.Body.Health, hulk.Z);
+        }
+
+        var frames = new List<long>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            // Beside the corner: the hulk's box reaches y 117, the building's 110; the centres are 59 apart in the plane, within the two bounding spheres (61.6 + 7.5).
+            var beside = Fall(rate, 155, 122);
+            Check.That(!beside.Gone && beside.Damage == Fixed.Zero, $"{rate}: a hulk beside the corner lands whole and the building is not hurt (gone {beside.Gone}, damage {beside.Damage}).");
+            Check.That(beside.Z <= Fixed.One, $"{rate}: it lies on the ground ({beside.Z}).");
+            // Over the far end of the long side: it falls into the box.
+            var onto = Fall(rate, 155, 100);
+            Check.That(onto.Gone && onto.Damage == Fixed.FromInt(50), $"{rate}: a hulk over the building's end blows up on it (gone {onto.Gone}, damage {onto.Damage}).");
+            frames.Add(onto.Frame);
+        }
+        Check.That(frames.Distinct().Count() == 1, $"The crash on the end falls into the same frame at every rate ({string.Join(", ", frames)}).");
     }
 }
