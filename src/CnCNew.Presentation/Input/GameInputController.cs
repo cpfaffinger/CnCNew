@@ -42,7 +42,13 @@ public sealed class GameInputController
         Commands = new CommandModeController(localPlayer, sink, Selection, Settings.Commands);
         Camera = new CameraInputController(Settings.Camera);
         CommandBar = buttons is null ? null : new CommandBarModel(buttons, text);
-        Selection.SelectionChanged += _ => Commands.Cancel();
+        var selected = Selection.Selected;
+        Selection.SelectionChanged += after =>
+        {
+            var before = selected;
+            selected = after;
+            Commands.OnSelectionChanged(before, after);
+        };
         Selection.SubgroupChanged += Commands.Cancel;
     }
 

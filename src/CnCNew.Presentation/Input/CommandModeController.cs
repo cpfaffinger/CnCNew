@@ -113,7 +113,23 @@ public sealed class CommandModeController
         _sources = [..Selection.OwnSelected(world).Select(entity => entity.Id)];
     }
 
-    /// <summary>Leaves any pending targeting or placement mode (right click, Escape, selection change).</summary>
+    /// <summary>
+    /// The selection went from <paramref name="before"/> to <paramref name="after"/>. <c>ControlBar::onDrawableSelected</c> cancels the pending GUI command whenever an object is selected, and
+    /// <c>onDrawableDeselected</c> only when nothing is left selected - a member of the group that dies, enters a container or is sold leaves the guard area, the attack-move or a power's
+    /// target under the pointer (#381). A placement ends with any deselection (<c>placeBuildAvailable( NULL, NULL )</c>). Guarding and the attack-move act for what is still selected.
+    /// </summary>
+    public void OnSelectionChanged(ImmutableArray<EntityId> before, ImmutableArray<EntityId> after)
+    {
+        if (Mode == CommandModeKind.None) return;
+        if (after.IsEmpty || after.Any(id => !before.Contains(id)) || Mode == CommandModeKind.Placement)
+        {
+            Cancel();
+            return;
+        }
+        if (Mode is CommandModeKind.Guard or CommandModeKind.AttackMove) _sources = [.._sources.Where(after.Contains)];
+    }
+
+    /// <summary>Leaves any pending targeting or placement mode (right click, Escape, a new selection).</summary>
     public void Cancel()
     {
         Mode = CommandModeKind.None;
