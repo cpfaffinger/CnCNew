@@ -507,7 +507,9 @@ public sealed partial class SimulationWorld
     private void ResolveFootprintCollisionsCore(Entity mover, Fixed stepX, Fixed stepY)
     {
         if (mover.EffectivelyDead) return;
-        if (mover.Template.CrusherLevel > 0)
+        // PartitionContactList::processContactList: a pair of which either object is NO_COLLISIONS (a hijacker riding hidden in its vehicle, a parachute, a missile) has no contact - neither
+        // crushes nor is crushed.
+        if (mover.Template.CrusherLevel > 0 && CanCollide(mover))
         {
             // Only an object with a ToppleUpdate or a SquishCollide module or a crushable level can be toppled, squished or crushed; for every other object the calls below did nothing.
             var targets = _crushTargets;
@@ -515,7 +517,7 @@ public sealed partial class SimulationWorld
             for (var index = 0; index < targets.Count; index++)
             {
                 var other = targets[index];
-                if (other.Id == mover.Id || other.EffectivelyDead) continue;
+                if (other.Id == mover.Id || other.EffectivelyDead || !CanCollide(other)) continue;
                 if (!FootprintsOverlap(contact, other)) continue;
                 TryTopple(mover, other);
                 TrySquish(mover, other, stepX, stepY);

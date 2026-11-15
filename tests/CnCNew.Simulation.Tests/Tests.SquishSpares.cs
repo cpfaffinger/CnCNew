@@ -160,9 +160,11 @@ static partial class Tests
     /// A tank of player 1 at x = 78 drives east through (100, 100), where a <paramref name="victim"/> of player 2 stands facing away from it; the victim is given <paramref name="order"/>
     /// ("hijack" in the tick the tank is, "tnt" a logic frame earlier, or "none"). The tank covers 4 units a logic frame: its box first meets the victim in its second frame, deep enough to squish it.
     /// </summary>
-    private static SquishOutcome RunOver(SimulationRate rate, string tank, string victim, string order, (int From, int To, Relationship Relationship)[]? relations = null)
+    private static SquishOutcome RunOver(SimulationRate rate, string tank, string victim, string order, (int From, int To, Relationship Relationship)[]? relations = null,
+        string? extraIni = null, Action<Feeder, Entity, Entity>? setup = null)
     {
         var files = new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/SquishSpares.ini"] = SquishSparesIni };
+        if (extraIni is not null) files["Data/INI/Object/SquishSparesExtra.ini"] = extraIni;
         var (world, feeder, _) = RatedWorld(rate, files);
         foreach (var (from, to, relationship) in relations ?? []) Check.That(feeder.SetRelationship(from, to, relationship).Accepted, $"{rate}: the relationship is set.");
         feeder.Spawn(1, tank, owner: 1, x: 78, y: 100);
@@ -171,6 +173,7 @@ static partial class Tests
         while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
         var vehicle = world.Entities.Single(value => value.Template.Name == tank);
         var man = world.Entities.Single(value => value.Template.Name == victim);
+        setup?.Invoke(feeder, vehicle, man);
         if (order == "tnt")
         {
             // The ability takes up its target in the logic frame after the order (initiateIntentToDoSpecialPower: setWakeFrame); the tank sets off then.
