@@ -307,25 +307,34 @@ public sealed class TerrainMap
     /// <summary>Center of a pathfinding cell in world coordinates.</summary>
     public static Fixed CellCenter(int cell) => Fixed.FromInt(cell * CellSize) + Fixed.FromInt(CellSize / 2);
 
-    /// <summary><c>WorldHeightMap::getHeightMapHeight</c>: two triangles per height cell, split along the (ix,iy)-(ix+1,iy+1) diagonal; positions outside the height field clamp to its edge.</summary>
+    /// <summary>
+    /// <c>BaseHeightMapRenderObjClass::getHeightMapHeight</c>: two triangles per height cell, split along the (ix,iy)-(ix+1,iy+1) diagonal. A point whose cell lies on the first
+    /// vertex or the last two vertices of the field, or beyond it, is not interpolated: it reads the height of its cell's corner vertex, clamped to the field
+    /// (<c>getClipHeight</c>) - so the ground beyond the map is the edge of the height field, never 0 (#374).
+    /// </summary>
     public Fixed HeightAt(Fixed x, Fixed y)
     {
-        var gx = x / CellSizeFixed + Fixed.FromInt(_border);
-        var gy = y / CellSizeFixed + Fixed.FromInt(_border);
-        var maxX = Fixed.FromInt(_vertexWidth - 1);
-        var maxY = Fixed.FromInt(_vertexHeight - 1);
-        gx = Fixed.Min(Fixed.Max(gx, Fixed.Zero), maxX);
-        gy = Fixed.Min(Fixed.Max(gy, Fixed.Zero), maxY);
-        var ix = (int)Math.Min(gx.Floor(), _vertexWidth - 2);
-        var iy = (int)Math.Min(gy.Floor(), _vertexHeight - 2);
-        var fx = gx - Fixed.FromInt(ix);
-        var fy = gy - Fixed.FromInt(iy);
-        var raw = Raw;
+        var gx = x / CellSizeFixed;
+        var gy = y / CellSizeFixed;
+        var floorX = gx.Floor();
+        var floorY = gy.Floor();
+        var ix = floorX + _border;
+        var iy = floorY + _border;
         var width = _vertexWidth;
-        var p0 = Fixed.FromInt(raw[iy * width + ix]);
-        var p1 = Fixed.FromInt(raw[iy * width + ix + 1]);
-        var p2 = Fixed.FromInt(raw[(iy + 1) * width + ix + 1]);
-        var p3 = Fixed.FromInt(raw[(iy + 1) * width + ix]);
+        var raw = Raw;
+        if (ix > width - 3 || iy > _vertexHeight - 3 || ix < 1 || iy < 1)
+        {
+            var cx = (int)Math.Clamp(ix, 0, width - 1);
+            var cy = (int)Math.Clamp(iy, 0, _vertexHeight - 1);
+            return Fixed.FromInt(raw[cy * width + cx]) * HeightScale;
+        }
+        var fx = gx - Fixed.FromInt(floorX);
+        var fy = gy - Fixed.FromInt(floorY);
+        var index = (int)iy * width + (int)ix;
+        var p0 = Fixed.FromInt(raw[index]);
+        var p1 = Fixed.FromInt(raw[index + 1]);
+        var p2 = Fixed.FromInt(raw[index + width + 1]);
+        var p3 = Fixed.FromInt(raw[index + width]);
         var height = fy > fx
             ? p3 + (Fixed.One - fy) * (p0 - p3) + fx * (p2 - p3)
             : p1 + fy * (p2 - p1) + (Fixed.One - fx) * (p0 - p1);

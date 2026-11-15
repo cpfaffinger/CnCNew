@@ -900,7 +900,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         var preferred = locomotor.PreferredHeight;
         if (preferred <= Fixed.Zero) return;
-        Entity.Z = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero) + preferred;
+        // The ground off the map is the height field's edge, as the original's locomotor reads it (getGroundHeight clamps to the field), not 0: a plane over high ground
+        // crossing the edge held its height above 0 there and dropped (#374).
+        Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y) + preferred;
         world.MarkDirty(Entity);
     }
 
