@@ -57,7 +57,7 @@ those of `scripts/test.ps1`; the commands are printed by `-Plan`.
 | `formats` | `CnCNew.Formats`, its tests, `MapTool` | `formats`, `import` | `inputs`, `quick`, `presentation-content` |
 | `w3d` | `CnCNew.W3D`, its tests, `W3dTool` | `w3d` | `presentation-content`, `game` |
 | `data` | `CnCNew.Data`, its tests, `IniTool`, `baselines/compatibility.json` | `data`, `data-content`, `compat` | `ui`, `audio`, `sim`, `inputs`, `quick` |
-| `simulation` | `CnCNew.Simulation`, its tests | `sim` (60 Hz) | `sim-30`, `sim-120`, `presentation`, `inputs`, `quick`, `rate-suite`, `game-sim`, `check-match` |
+| `simulation` | `CnCNew.Simulation`, its tests | `sim` (60 Hz) | `sim-30`, `sim-120`, `presentation`, `inputs`, `quick`, `sim-content` (the real-data tests with the rate suite; until 15 November 2026 only `rate-suite`, which let #360 through), `game-sim`, `check-match` |
 | `simtool` | `SimTool`, `baselines/input-manifest.json` | – (build) | `inputs`, `quick` |
 | `manifest` | `baselines/reference-manifest.json` | `inputs`, `reference` (the full set) | – |
 | `presentation` | `CnCNew.Presentation`, its tests, `PresentationTool` | `presentation` | `presentation-content`, `game` |

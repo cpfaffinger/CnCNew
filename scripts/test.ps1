@@ -104,7 +104,7 @@ $stepsOfArea = @{
     formats      = @{ affected = 'formats', 'import';                       gate = 'inputs', 'quick', 'presentation-content' }
     w3d          = @{ affected = 'w3d';                                     gate = 'presentation-content', 'game' }
     data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick', 'patch-layer', 'map-rules' }
-    simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim', 'check-match', 'net' }
+    simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'sim-content', 'game-sim', 'check-match', 'net' }
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
