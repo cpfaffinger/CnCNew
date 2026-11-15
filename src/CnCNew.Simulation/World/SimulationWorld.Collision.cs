@@ -818,14 +818,15 @@ public sealed partial class SimulationWorld
     /// this tick (<paramref name="stepX"/>/<paramref name="stepY"/>, exactly what was just added to its position) rather than
     /// a velocity rebuilt from <c>Angle</c>/<c>Speed</c> through <c>Sin</c>/<c>Cos</c>: close to a victim lying exactly on the
     /// heading, the rebuilt vector's fixed-point rounding can disagree in sign with the true step, which the real displacement
-    /// cannot. A crusher without a physics module squishes nothing (<c>otherPhysics == NULL</c>).
+    /// cannot. A victim that is after the crusher itself - a hijacker, a Tank Hunter placing TNT - is spared (<see cref="SpareFromSquish"/>), and a crusher
+    /// without a physics module squishes nothing (<c>otherPhysics == NULL</c>).
     /// </summary>
     private void TrySquish(Entity mover, Entity other, Fixed stepX, Fixed stepY)
     {
         var squishable = false;
         foreach (var module in other.ModuleArray)
             if (module is SquishCollide) { squishable = true; break; }
-        if (!squishable) return;
+        if (!squishable || SpareFromSquish(other, mover)) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
         if (Array.Find(mover.ModuleArray, module => module is PhysicsBehavior) is null) return;
         // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlap); 30 Hz: its position.
@@ -844,4 +845,24 @@ public sealed partial class SimulationWorld
         Damage(other.Id, new DamageInfo(mover.Id, HugeDamage, CrushDamageType, DeathTypes.Crushed, false));
     }
 
+    /// <summary>
+    /// The first test of <c>SquishCollide::onCollide</c>, "we are actually targeting the other object to do something to": a victim whose AI goal object is the crusher is not
+    /// crushed by it when it has a <c>HijackerUpdate</c> (it runs at the vehicle to take it) or its <c>SPECIAL_TANKHUNTER_TNT_ATTACK</c> ability is active (it places a charge on it).
+    /// The goal object is the approach's (<see cref="AIUpdateInterface.GoalObject"/>) or, for the ability, the target it walks to and turns to
+    /// (<see cref="SpecialAbilityUpdate.HoldsAsAiGoal"/>: <c>aiMoveToObject</c> and <c>aiFaceObject</c>).
+    /// </summary>
+    private bool SpareFromSquish(Entity victim, Entity crusher)
+    {
+        if (AiOf(victim) is not { } ai) return false;
+        SpecialAbilityUpdate? tnt = null;
+        var hijacker = false;
+        foreach (var module in victim.ModuleArray)
+        {
+            if (module is HijackerUpdate) hijacker = true;
+            // Object::findSpecialAbilityUpdate: the first one of the type.
+            else if (tnt is null && module is SpecialAbilityUpdate ability && ability.IsTankHunterTnt(this)) tnt = ability;
+        }
+        if (ai.GoalObject != crusher.Id && tnt?.HoldsAsAiGoal(crusher.Id) != true) return false;
+        return hijacker || tnt is { IsActive: true };
+    }
 }

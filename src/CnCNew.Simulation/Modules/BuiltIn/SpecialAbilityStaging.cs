@@ -157,6 +157,18 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
 
     public EntityId Target => _target;
 
+    /// <summary>The ability is <c>SPECIAL_TANKHUNTER_TNT_ATTACK</c> (<c>Object::findSpecialAbilityUpdate</c> of <c>SquishCollide::onCollide</c>).</summary>
+    internal bool IsTankHunterTnt(IWorldServices world) => KindOf(world) == AbilityKind.TankHunterTnt;
+
+    /// <summary>
+    /// Whether the reference's AI holds <paramref name="target"/> as its goal object for this ability: <c>approachTarget</c> walks to it (<c>aiMoveToObject</c>) and <c>startFacing</c>
+    /// turns to it (<c>aiFaceObject</c>), and the goal stays until the next order clears the machine - <c>startUnpacking</c> (<c>aiBusy</c>) or <c>startPreparation</c> (<c>aiIdle</c>).
+    /// This port walks and turns without the AI's goal object, so the ability says it.
+    /// </summary>
+    internal bool HoldsAsAiGoal(EntityId target)
+        => _active && _target.IsValid && _target == target && _prepFrames == 0 && (_approachOrders > 0 || _facingInitiated)
+           && (_packState == PackState.Packed || (_packState == PackState.Unpacked && data.UnpackTicks == 0));
+
     /// <summary>Where the active ability is (presentation: <c>UNPACKING</c>, <c>RAISING_FLAG</c>/<c>FIRING_A</c>, <c>PACKING</c>).</summary>
     public AbilityStage Stage
     {

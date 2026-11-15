@@ -628,6 +628,8 @@ run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDro
 run.Test("Projectiles: a shell meets what stands in its way", Tests.ProjectilesMeetWhatStandsInTheirWay);
 run.Test("F-175: a projectile meets the shape of a building, not its sphere", Tests.AProjectileMeetsTheShapeOfABuilding);
 run.Test("#363: ground contacts meet the shapes, not the bounding circles", Tests.GroundContactsMeetTheShapes);
+run.Test("#370: a tank spares a hijacker running at it", Tests.SquishSparesAHijacker);
+run.Test("#370: a tank spares a Tank Hunter placing TNT on it", Tests.SquishSparesATankHunter);
 run.Test("#370: a crusher without a physics module squishes nobody", Tests.SquishNeedsTheCrushersPhysics);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
@@ -973,6 +975,7 @@ if (contentDirectory is not null) run.Test("#337: real builders build from where
 if (contentDirectory is not null) run.Test("Real data (playtest): a wheeled unit ordered onto a goal inside its turning circle does not circle it for ever", () => Tests.RealWheeledUnitDoesNotCircleItsGoalForEver(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): five Dozers sent to one place settle around it", () => Tests.RealDozersSentToOnePlaceSettleAroundIt(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (issue 350): tanks run idle infantry over", () => Tests.RealTanksRunIdleInfantryOver(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#370): a tank spares a hijacker and a Tank Hunter that are after it", () => Tests.RealSquishSparesHijackerAndTankHunter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a reversing Dozer is held up by nobody in front of it", () => Tests.RealReversingDozerIsHeldByNobody(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): the donut timer of a circling Dozer survives a save", () => Tests.RealDonutTimerSurvivesASave(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));

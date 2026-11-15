@@ -194,6 +194,29 @@ static partial class Tests
         return new SquishOutcome(crushed, vehicle.Owner == new PlayerId(2), charge, chargeFirst);
     }
 
+    /// <summary>#370: a hijacker running at the tank that runs at it is not squished and takes the tank; the same hijacker standing idle is squished. At 30, 60 and 120 Hz.</summary>
+    public static void SquishSparesAHijacker()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var hijack = RunOver(rate, "SquishTank", "SquishHijacker", "hijack");
+            Check.That(!hijack.Crushed && hijack.TankTaken, $"{rate}: a hijacker running at the tank is not squished by it and takes it (crushed {hijack.Crushed}, taken {hijack.TankTaken}).");
+            var idle = RunOver(rate, "SquishTank", "SquishHijacker", "none");
+            Check.That(idle.Crushed && !idle.TankTaken, $"{rate}: an idle hijacker the tank runs over is squished (crushed {idle.Crushed}).");
+        }
+    }
+
+    /// <summary>#370: a Tank Hunter placing TNT on the tank is not squished while it walks to it and turns to it, and places its charge; an idle one is squished. At 30, 60 and 120 Hz.</summary>
+    public static void SquishSparesATankHunter()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var tnt = RunOver(rate, "SquishTank", "SquishTankHunter", "tnt");
+            Check.That(tnt.ChargePlaced && tnt.ChargeBeforeDeath, $"{rate}: a Tank Hunter placing TNT on the tank is not squished before its charge is placed (placed {tnt.ChargePlaced}, crushed {tnt.Crushed}).");
+            Check.That(RunOver(rate, "SquishTank", "SquishTankHunter", "none").Crushed, $"{rate}: an idle Tank Hunter the tank runs over is squished.");
+        }
+    }
+
     /// <summary>#370: <c>PhysicsBehavior *otherPhysics = other->getPhysics(); if (otherPhysics == NULL) return;</c> - a crusher without a physics module squishes nobody. At 30, 60 and 120 Hz.</summary>
     public static void SquishNeedsTheCrushersPhysics()
     {
