@@ -13,15 +13,19 @@ public static partial class SteamLocator
     public const string DefaultLibrary = @"C:\Program Files (x86)\Steam";
 
     /// <summary>The installation directory of <paramref name="appId"/>, or null with the places searched in <paramref name="searched"/>.</summary>
-    public static string? FindGame(long appId, string defaultDirectoryName, out IReadOnlyList<string> searched)
+    public static string? FindGame(long appId, string defaultDirectoryName, out IReadOnlyList<string> searched) =>
+        FindGame(appId, defaultDirectoryName, DefaultLibrary, SteamRoots(), out searched);
+
+    /// <summary>The same search with the default library and the Steam installations given (the registry's are the other overload's).</summary>
+    public static string? FindGame(long appId, string defaultDirectoryName, string defaultLibrary, IEnumerable<string> steamRoots, out IReadOnlyList<string> searched)
     {
         var places = new List<string>();
         searched = places;
-        var standard = Path.Combine(DefaultLibrary, "steamapps", "common", defaultDirectoryName);
+        var standard = Path.Combine(defaultLibrary, "steamapps", "common", defaultDirectoryName);
         places.Add(standard);
         if (Directory.Exists(standard)) return standard;
         var libraries = new List<string>();
-        foreach (var root in SteamRoots().Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var root in steamRoots.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             libraries.Add(root);
             var folders = Path.Combine(root, "steamapps", "libraryfolders.vdf");

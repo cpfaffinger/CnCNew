@@ -24,6 +24,7 @@ internal static class InstallTests
             await InstallRepairAndUninstall(game, master, root);
             await PatchIsFetchedChecked(game, master, root);
             BuiltInMasterLoads();
+            SteamOutsideItsDefaultPlace(root);
         }
         finally
         {
@@ -33,6 +34,57 @@ internal static class InstallTests
 
         var gameDirectory = Option(args, "--game-dir");
         if (gameDirectory is not null) await RealMaster(gameDirectory);
+    }
+
+    /// <summary>
+    /// Steam elsewhere than <c>C:\Program Files (x86)\Steam</c> (#175): a Steam installation named by the registry, a second library its
+    /// <c>libraryfolders.vdf</c> names with doubled backslashes, and the game in a folder of its own that the app's manifest names.
+    /// </summary>
+    private static void SteamOutsideItsDefaultPlace(string root)
+    {
+        const long app = 2732960;
+        var steam = Path.Combine(root, "Games", "Steam");
+        var library = Path.Combine(root, "D drive", "SteamLibrary");
+        var game = Path.Combine(library, "steamapps", "common", "A Folder Of Its Own");
+        Directory.CreateDirectory(Path.Combine(steam, "steamapps"));
+        Directory.CreateDirectory(game);
+        var steamPath = steam.Replace(@"\", @"\\", StringComparison.Ordinal);
+        var libraryPath = library.Replace(@"\", @"\\", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf"), $$"""
+            "libraryfolders"
+            {
+            	"0"
+            	{
+            		"path"		"{{steamPath}}"
+            	}
+            	"1"
+            	{
+            		"path"		"{{libraryPath}}"
+            		"apps"
+            		{
+            			"{{app}}"		"123"
+            		}
+            	}
+            }
+
+            """);
+        File.WriteAllText(Path.Combine(library, "steamapps", $"appmanifest_{app}.acf"), $$"""
+            "AppState"
+            {
+            	"appid"		"{{app}}"
+            	"installdir"		"A Folder Of Its Own"
+            }
+
+            """);
+        var nowhere = Path.Combine(root, "no default library");
+        var found = SteamLocator.FindGame(app, "Command & Conquer Generals - Zero Hour", nowhere, [steam], out var searched);
+        Assert(found == game, $"Steam outside its default place: the game in the second library is found ({found ?? "nothing"}).");
+        Assert(searched.Count == 3 && searched[0].StartsWith(nowhere, StringComparison.Ordinal), "The default place, then the manifest of each library is searched.");
+        var none = SteamLocator.FindGame(app + 1, "Other", nowhere, [steam], out var searchedNone);
+        Assert(none is null && searchedNone.Count == 3, "Another app is not found, and every place searched is named.");
+        Directory.CreateDirectory(Path.Combine(nowhere, "steamapps", "common", "Command & Conquer Generals - Zero Hour"));
+        Assert(SteamLocator.FindGame(app, "Command & Conquer Generals - Zero Hour", nowhere, [steam], out _)!.StartsWith(nowhere, StringComparison.Ordinal),
+            "The default library wins when the game is there.");
     }
 
     private static async Task<InstallationMaster> MasterDescriptionIsCanonical(string game, string root)
