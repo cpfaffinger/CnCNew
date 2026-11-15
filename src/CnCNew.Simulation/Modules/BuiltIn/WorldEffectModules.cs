@@ -148,6 +148,10 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
             world.MarkDirty(Entity);
             return SimulationTiming.SleepNone;
         }
+        // OCLUpdate::update runs once per logic frame of the original: above 30 Hz an owner that changes in the frame's first tick after this update (a capture) is seen in the
+        // object's next frame, as at 30 Hz, not in the frame's second tick (#305). Without a delay (the patch's starting objects) only the frame keeps the count of creations
+        // the same at every rate.
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return SimulationTiming.SleepNone;
         if (data.FactionTriggered)
         {
             var owner = Entity.Owner;
@@ -169,8 +173,6 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
             if (_factionNeutral) return SimulationTiming.SleepNone;
         }
 
-        // Without a delay (the patch's starting objects) only the frame keeps the count of creations the same at every rate.
-        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return SimulationTiming.SleepNone;
         if (world.Tick >= _nextCreation && !Entity.HasStatus(ObjectStatusBits.UnderConstruction))
         {
             if (_nextCreation == 0)
