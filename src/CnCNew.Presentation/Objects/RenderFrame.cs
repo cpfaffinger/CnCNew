@@ -42,8 +42,12 @@ public sealed record DrawableInstance(
     AnimationPause Pause = AnimationPause.None,
     ImmutableArray<SubObjectVisibility> SubObjectOverrides = default,
     float AnimationSeconds = 0f,
-    float? AnimationFrame = null)
+    float? AnimationFrame = null,
+    ImmutableArray<ProjectileClip> ProjectileClips = default)
 {
+    // ProjectileClips: the rounds left in each weapon slot whose clip a draw module shows by its projectile sub-objects (ProjectileBoneFeedbackEnabledSlots), applied by the renderer after the state's
+    // lines and before SubObjectOverrides (ProjectileFeedback.Rules); default: none.
+
     // AnimationFrame: the frame the logic holds the current state's animation at (Drawable::setAnimationFrame: a deploying unit with ManualDeployAnimations), as a frame of the
     // animation; null: the animation plays by its state's mode.
 

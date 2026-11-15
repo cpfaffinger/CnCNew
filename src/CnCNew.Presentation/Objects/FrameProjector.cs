@@ -563,6 +563,7 @@ public sealed class FrameProjector
         {
             Jitter = LaunchJitter(entity, world, visual, chassis),
             AnimationFrame = DeployFrame(entity, world, visual),
+            ProjectileClips = ProjectileFeedback.Of(entity, world, visual),
         };
     }
 
@@ -663,7 +664,8 @@ public sealed class FrameProjector
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), Mix(previous?.Travel, capture.Travel, alpha), capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= _healingIconTicks && capture.Health01 < 1f && Tick > _healingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id), Pause: capture.Pause, SubObjectOverrides: capture.SubObjectOverrides, AnimationSeconds: capture.AnimationSeconds, AnimationFrame: ghost ? null : capture.AnimationFrame);
+        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id), Pause: capture.Pause, SubObjectOverrides: capture.SubObjectOverrides, AnimationSeconds: capture.AnimationSeconds, AnimationFrame: ghost ? null : capture.AnimationFrame,
+        ProjectileClips: capture.ProjectileClips);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -711,5 +713,8 @@ public sealed class FrameProjector
 
         /// <summary>The frame the logic holds the animation at (<see cref="DrawableInstance.AnimationFrame"/>).</summary>
         public float? AnimationFrame { get; init; }
+
+        /// <summary>The clips the model shows by its projectile sub-objects (<see cref="DrawableInstance.ProjectileClips"/>).</summary>
+        public ImmutableArray<ProjectileClip> ProjectileClips { get; init; }
     }
 }

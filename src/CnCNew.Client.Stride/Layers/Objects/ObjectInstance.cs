@@ -57,6 +57,9 @@ internal sealed class DrawPartState
     public ModelAsset? PartVisibleAsset;
     public System.Collections.Immutable.ImmutableArray<CnCNew.Presentation.Objects.SubObjectVisibility> PartVisibleOverrides;
 
+    /// <summary>What the clip shows and hides of the rounds on the model this frame (<see cref="CnCNew.Presentation.Objects.ProjectileFeedback.Rules"/>), and what <see cref="PartVisible"/> was resolved with.</summary>
+    public System.Collections.Immutable.ImmutableArray<CnCNew.Presentation.Objects.SubObjectVisibility> ProjectileRules;
+    public System.Collections.Immutable.ImmutableArray<CnCNew.Presentation.Objects.SubObjectVisibility> PartVisibleProjectiles;
     public double ElapsedInState;
     public float LastFrame = float.NaN;
 

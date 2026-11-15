@@ -134,6 +134,12 @@ public sealed record DrawSpec(
     /// </summary>
     public bool ReceivesDynamicLights { get; init; } = true;
 
+    /// <summary>
+    /// <c>ProjectileBoneFeedbackEnabledSlots</c>: one bit per weapon slot (PRIMARY 1, SECONDARY 2, TERTIARY 4) whose clip the model shows - one projectile sub-object per round, hidden as the
+    /// rounds are fired (<c>W3DModelDraw::updateProjectileClipStatus</c>, <see cref="ProjectileFeedback"/>). 0 for most modules.
+    /// </summary>
+    public int ProjectileBoneFeedbackSlots { get; init; }
+
     /// <summary>Every distinct turret bone name of the module's states (angle and pitch, main and alternate), ordinal order.</summary>
     public ImmutableArray<string> TurretBones => [..States.Concat(Transitions)
         .SelectMany(state => new[] { state.Turret.AngleBone, state.Turret.PitchBone, state.AltTurret.AngleBone, state.AltTurret.PitchBone })

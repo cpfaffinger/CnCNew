@@ -154,6 +154,21 @@ public sealed partial class SimulationWorld
         return null;
     }
 
+    /// <summary>
+    /// What <c>Object::adjustModelConditionForWeaponStatus</c> tells the drawable of a slot's clip every frame (<c>Drawable::updateDrawableClipStatus</c>): <c>Weapon::getRemainingAmmo</c> - none
+    /// while the emptied clip reloads, the full clip once it may fire again (the clip here is refilled with the next shot) - and <c>getClipSize</c>. Null for a slot of the active set that holds
+    /// no weapon, and for a weapon without a clip.
+    /// </summary>
+    public (int Remaining, int Size)? ClipStatusOf(Entity entity, int slot)
+    {
+        if (slot < 0 || slot >= WeaponSlot.Count || ActiveWeaponSet(entity) is not { } set || !set.HasWeapon(slot)) return null;
+        var size = _templates.Weapons[set.Weapons[slot]].ClipSize;
+        if (size <= 0) return null;
+        var clip = entity.ClipOf(slot);
+        if (clip == 0) return (_tick >= entity.ReadyTickOf(slot) ? size : 0, size);
+        return (Math.Clamp(clip, 0, size), size);
+    }
+
     /// <summary><c>WeaponSet::isAnyWithinTargetPitch</c>: what an order for one slot asks of the whole set.</summary>
     private bool AnyWithinTargetPitch(Entity source, WeaponSetInfo set, Entity victim)
     {

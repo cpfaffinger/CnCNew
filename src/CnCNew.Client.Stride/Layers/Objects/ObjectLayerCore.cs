@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Numerics;
 using CnCNew.Client.Stride.Layers.Shadows;
@@ -254,6 +255,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         var state = ModelStateFollower.StateAt(draw, selection.StateIndex)!;
         var asset = part.Asset;
         part.LogicFrame = drawable.AnimationFrame;
+        part.ProjectileRules = ProjectileFeedback.Rules(draw, state, drawable.ProjectileClips);
 
         if (part.StateIndex != selection.StateIndex)
         {
@@ -855,20 +857,29 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
     /// <summary>
     /// The reference's sub-object merge (<see cref="SubObjectOverrides.Resolve"/>): the state's lines, then what an upgrade showed or hid, each also showing or hiding the sub-objects that hang
-    /// below the bone of the part it names (F-159). A model with nothing to show or hide draws its default parts.
+    /// below the bone of the part it names (F-159). Between the two, the rounds a clip has fired are hidden (<c>doHideShowProjectileObjects</c>, #385). A model with nothing to show or hide draws its
+    /// default parts.
     /// </summary>
     private static bool[] PartVisibility(DrawPartState part, ModelAsset asset, ModelStateSpec state, DrawableInstance drawable)
     {
-        if (state.SubObjects.IsDefaultOrEmpty && drawable.SubObjectOverrides.IsDefaultOrEmpty) return asset.PartDefaults;
-        if (part.PartVisible is not null && part.PartVisibleState == part.StateIndex && ReferenceEquals(part.PartVisibleAsset, asset) && part.PartVisibleOverrides.Equals(drawable.SubObjectOverrides)) return part.PartVisible;
+        var projectiles = part.ProjectileRules;
+        if (state.SubObjects.IsDefaultOrEmpty && drawable.SubObjectOverrides.IsDefaultOrEmpty && projectiles.IsDefaultOrEmpty) return asset.PartDefaults;
+        if (part.PartVisible is not null && part.PartVisibleState == part.StateIndex && ReferenceEquals(part.PartVisibleAsset, asset) && part.PartVisibleOverrides.Equals(drawable.SubObjectOverrides)
+            && SameRules(part.PartVisibleProjectiles, projectiles)) return part.PartVisible;
         var visible = part.PartVisible is { } kept && kept.Length == asset.PartNames.Length ? kept : new bool[asset.PartNames.Length];
-        SubObjectOverrides.Resolve(asset.PartNames, asset.PartBones, asset.PartDefaults, asset.BoneParents, state.SubObjects, drawable.SubObjectOverrides, visible);
+        var after = projectiles.IsDefaultOrEmpty ? drawable.SubObjectOverrides
+            : drawable.SubObjectOverrides.IsDefaultOrEmpty ? projectiles : projectiles.AddRange(drawable.SubObjectOverrides);
+        SubObjectOverrides.Resolve(asset.PartNames, asset.PartBones, asset.PartDefaults, asset.BoneParents, state.SubObjects, after, visible);
         part.PartVisible = visible;
         part.PartVisibleState = part.StateIndex;
         part.PartVisibleAsset = asset;
         part.PartVisibleOverrides = drawable.SubObjectOverrides;
+        part.PartVisibleProjectiles = projectiles;
         return visible;
     }
+
+    private static bool SameRules(ImmutableArray<SubObjectVisibility> a, ImmutableArray<SubObjectVisibility> b)
+        => a.IsDefaultOrEmpty ? b.IsDefaultOrEmpty : !b.IsDefaultOrEmpty && a.AsSpan().SequenceEqual(b.AsSpan());
 
     private static uint Hash(uint key, int salt)
     {
