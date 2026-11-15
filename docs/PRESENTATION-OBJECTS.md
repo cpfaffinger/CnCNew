@@ -50,7 +50,7 @@ deliver. The reference sets the bits imperatively in many places; here every bit
 | 15–16 | WEAPONSET_CRATEUPGRADE_ONE/TWO | not modelled: weapon crates (`SalvageCrateCollide`) |
 | 17 | WEAPONSET_PLAYER_UPGRADE | `Entity.HasPlayerUpgradeWeapon` (`WeaponSetUpgrade`) |
 | 18–33 | DOOR_1..4_OPENING/CLOSING/WAITING_OPEN/WAITING_TO_CLOSE | not modelled: door states of the `ProductionUpdate` when a product drives out |
-| 34 | ATTACKING | status bit `IS_ATTACKING` (currently never set: no AI attack state) |
+| 34 | ATTACKING | the attack state: an acquired victim or an attacked place, as `AIAttackState::onEnter`/`onExit` set and clear `IS_ATTACKING` (#385) |
 | 35 | PREATTACK_A | not modelled: `PreAttackDelay` |
 | 36 | FIRING_A | `LastFireTick` is the most recently simulated tick (`world.Tick - 1`) |
 | 37 | BETWEEN_FIRING_SHOTS_A | `world.Tick < WeaponReadyTick` with a non-empty magazine |
@@ -195,7 +195,8 @@ Transitions (`W3DModelDraw::setModelState`): if a real state with `TransitionKey
 `WaitForStateToFinishIfPossible` equal to the transition key of the running state and its animation is still running,
 it is noted for later. `ModelStateTracker` reproduces that; the animation time belongs to the renderer, which reports completion
 (`AnimationCompleted`). The frame projector delivers only the target state (no "sticky" transitions in the frame);
-transitions are the client's business.
+transitions are the client's business. Since #385 the client plays them through `ModelStateFollower` once per drawn frame: the transition first, then the
+requested state when the transition's animation has run out; an index above the real states names a transition (`ModelStateFollower.StateAt`).
 
 ## 5. Frame projector
 
@@ -373,3 +374,11 @@ A vehicle whose draw module names a `TrackMarks` texture leaves marks as `W3DTer
 ## An aircraft's shadow at the edge of the view (#352)
 
 The box that decides whether an object is posed was extended by the shadow of the object's own height only. A thing more than 2 units over the ground has its shadow volume extruded to the lowest point of the map (`W3DVolumetricShadow::Update`, `updateMeshVolume`), so its shadow lies a whole flight height below it, and a cargo plane at 100 could leave the view with its shadow still on screen and lose the shadow. `ShadowSun.Tip` gives the point on the floor the volume reaches, and the object layer keeps the object posed while that point is in view. Whether this was the owner's missing shadow is open (#352). A neutron missile is drawn along its flight like a projectile (#349): nose up as it climbs, down as it falls.
+
+## The Scud Storm's launch (#385)
+
+Three things the Scud Storm showed, each general. **`ATTACKING`:** `AIAttackState::onEnter` sets `OBJECT_STATUS_IS_ATTACKING` and `MODELCONDITION_ATTACKING` and `onExit` clears both, for the whole attack on an object or a place (approach, aim, wind-up, shots); the status had no writer in the port, so no drawable ever showed an `ATTACKING` state and the Scud Storm lay flat through its wind-up. `ConditionDeriver.IsAttacking` reads the attack from the simulation (an acquired victim or an attacked place). **Transitions:** `W3DModelDraw::setModelState` plays the `TransitionState` of two transition keys before the requested state; the client knew only `WaitForStateToFinishIfPossible`, so the Scud Storm never raised its missiles (`Trans_READY` to `Trans_ATTACKING`) nor lowered its rails, and none of the data's other transitions (about 4,800, §8) played. `ModelStateFollower` answers a real state or a transition, and the object layer draws either. **The rounds in the clip:** `ProjectileBoneFeedbackEnabledSlots` was parsed and dropped, so the nine missiles stayed on the rails while they flew. `Object::adjustModelConditionForWeaponStatus` tells the drawable every frame how many rounds each slot has left (none while the clip reloads), and `W3DModelDraw::doHideShowProjectileObjects` hides the fired ones from the front by the state's launch bone and a two-digit number, or its one `WeaponHideShowBone` part (`ProjectileFeedback`); it acts after the state's own show and hide lines and before the upgrades'. `SimulationWorld.ClipStatusOf` answers the rounds left and the clip's size, read only. Test `ScudStormLaunchTests` (Game.Tests, a staged strike on a real map at 30, 60 and 120 Hz: `ATTACKING` from the order to the last missile, the missiles raised during the three-second wind-up and the rails lowered after it, each fired missile gone from the rails, all hidden while the clip reloads and back after, each of the nine starting at its own rail with its exhaust). `docs/MODEL-CONDITIONS-UNITS.md` is corrected.
+
+## The nuclear missile's shake (#361)
+
+`NeutronMissileUpdate::doAttack` gives the drawable an instance matrix for every logic frame of `SpecialSpeedTime` after the launch: a translation by (0, y, z) in the missile's own space, y and z in [-1, 1] times (1 - elapsed / `SpecialSpeedTime`) times `SpecialJitterDistance`. The port drew no shake. The projector adds that offset after the interpolation, stepped once per logic frame (`MissileLaunchJitter`); the two values come from a hash of the object and the frame since the launch instead of the logic stream (the original notes they need not be synced), so the simulation is untouched apart from two read-only accessors. Test `MissileJitterTests` (Presentation.Tests).

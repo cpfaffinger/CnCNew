@@ -88,11 +88,17 @@ two runs never get the same depth.
   skips the alpha keyframe progress for additive systems); `VolumeParticle` is drawn like a normal sprite
   (the reference varies only the emission here, not the rendering).
 
-### Linear colour space correction
+### Display values (#356, #359)
 
-If `GraphicsDevice.ColorSpace == Linear`, the packed RGB vertex colours are converted through a 256-byte sRGB→linear table
-(alpha stays unchanged), so that `texture × vertex colour` in the linear pipeline gives the same look as the
-reference in gamma space. The table is built once per `FxBuilder`.
+The original blends everything after its opaque world in the bytes of a Direct3D 8 frame buffer without sRGB (`RTS3DScene::Flush`: decals and shadows, water, translucent meshes,
+particles last; the sprite shaders `SC_ADD_SPRITE`, `SC_ALPHA_SPRITE`, `SC_MUL_SPRITE`). The client's target stores sRGB and blends in linear light, where two half-bright additive puffs
+over black came to 176 instead of 255 and half a black scorch over a ground of 160 left 116 instead of 80 - a glow became a flat blotch. `DisplayValuePass` copies the opaque world's
+picture into a scratch target of the same bytes without sRGB conversion, draws Stride's transparent stage (roads, ground decals and tread marks, the stencil shadows' fill, water,
+translucent meshes) and then the stage of the blended effects (render group 30) there with the world's depth and stencil, and copies the bytes back. The blended sprites, streaks, tracers
+and bands read their textures undecoded and their vertex colours as the particle gives them (`FrameBufferBlend`); every other material of these stages ends with `DisplayValueOutput`, a
+shader step of the client's own that encodes the shaded colour to display values, so a surface keeps its look alone and blends on the bytes. Alpha-tested sprites stay in linear light;
+a ground run of the effects does too while the encoding shader is not available, and its packed vertex colours are then decoded (`FrameBufferBlend.ToLinearLight`). `FrameBufferBlendTests`
+(Presentation.Tests) pins the arithmetic.
 
 ## Known limits (never silent, always counted)
 
@@ -195,3 +201,7 @@ Not verified: the look of the effects at 60 Hz (no human has seen it).
 ## Track marks (#323)
 
 The FX layer draws the tread marks of `FxFrame.TreadMarks` as alpha-blended ground quads (`FxBuilder.EmitTreadMarks`); `docs/PRESENTATION-OBJECTS.md` "Track marks".
+
+## Ground decals on the terrain's own cells (#367)
+
+A ground decal - the nuclear missile's delivery decal, a radius cursor, a scorch, a shadow decal, a light pulse - was a grid of at most 8 x 8 quads of its own (the delivery decal of radius 210 in quads 52 units wide), and where the ground rose inside a quad the terrain hid that part; on a steep ridge the grid lay 38 units under the ground. `W3DProjectedShadowManager::queueDecal` lays a decal on the height map's own cells with the texture mapped from above, and `GroundDrape` does the same: one piece per cell, its corners at the height-map vertices plus the lift, clipped to the decal's rectangle (the scorches share an atlas, so nothing outside may be drawn), each cell split along its upper diagonal, so the decal lies on or above the drawn ground whichever way a blend tile flipped the cell. Objects in front still hide it. A vertex is projected once for the pieces of the cells around it: the delivery decal (about 2,000 pieces) takes about 0.25 ms. Test `GroundDrapeTests` (Presentation.Tests).

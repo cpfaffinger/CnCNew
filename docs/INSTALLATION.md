@@ -48,6 +48,8 @@ reference manifest on this machine's CPU. A difference there is no reason to sto
 
 **How the launcher starts things.** Every program runs under a hidden `cmd.exe` with its output in a log of `%LOCALAPPDATA%\CnCNew\logs`, the acceptance too (`acceptance.log`). On a tester's Windows 11 Enterprise PC `pwsh.exe` started directly failed with `0xC0000142` (a dialog, then nothing), while the same program under `cmd.exe` had just made the game; the cause on that PC is not known. The launcher stays open until the acceptance has run for ten seconds, tries twice, and says the code in its own window when it does not start. `Start-Acceptance.cmd` leads to the launcher when `pwsh` ends with a code below zero.
 
+**What a native program writes to its error stream (#364).** A `dotnet` that never ran for the user writes its welcome to the error stream, beginning with an empty line; Windows PowerShell 5.1 under `Stop` made that an error record even behind `2>$null`, and "Set up the game" stopped with an empty "Something went wrong" before its first log. Every native call of the launcher goes through `Invoke-Quiet`, which runs it with `Continue` and drops the error stream (the exit code stays in `$LASTEXITCODE`). A failure writes its type, record and stack to `launcher-error.log`, shows a message that is never empty and gives the buttons back. The check of the `nuget.org` source no longer adds the source on every run. `scripts/check-setup.ps1` runs the helper under Windows PowerShell 5.1 against a fresh dotnet home.
+
 ## The public launcher: one exe for players
 
 For people who do not build anything. The release carries three kinds of file (the names are what the launcher looks for):
@@ -293,7 +295,8 @@ Not shown: a machine without .NET (this one has the SDK), a machine where Steam 
 - The export leaves out what the client does not read: the original's program files, manuals and installation metadata stay in the Steam installation (F-33, Phase 56).
 - `content-manifest.json` is written with the line endings of the platform; the recorded hash applies
   to Windows.
-- The search through registry and `libraryfolders.vdf` has not been tried on an installation outside the
-  default path.
+- The search through registry and `libraryfolders.vdf` outside the default path is tested on a Steam installation that `Import.Tests` builds elsewhere - its
+  `libraryfolders.vdf` names a second library with doubled backslashes, the game lies in the folder the app's manifest names (#175; `SteamLocator.FindGame` takes the
+  default library and the Steam installations in a second overload) -, not on a real machine with the game in another library.
 - That the installed client starts is verified by a smoke test, not by a human at the
   screen.

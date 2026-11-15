@@ -104,6 +104,9 @@ the start frame of the state (doors, packages); the flags `StartFrameFirst/Last`
 `MaintainFrameAcrossStates*` are still not evaluated. Turrets, tyres and muzzle flash: see
 "Phase 15: corrections of the world presentation".
 
+Since #385 the layer plays a state's `TransitionState` before the state it leads to (`ModelStateFollower` in `ObjectInstance`/`ObjectLayerCore`) and hides the
+fired rounds of a model with `ProjectileBoneFeedbackEnabledSlots` (`docs/PRESENTATION-OBJECTS.md` "The Scud Storm's launch").
+
 `AnimationFlags.AdjustHeightByConstructionPercent` lowers the instance by
 `height * (1 - construction progress)` (`W3DModelDraw::adjustTransformMtx`, `references/generals-game-code/
 Core/GameEngineDevice/Source/W3DDevice/GameClient/Drawable/Draw/W3DModelDraw.cpp`); the height is the

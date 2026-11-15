@@ -81,7 +81,8 @@ All names are in `ConditionDeriver.ProducedNames` (own lines at the end of the s
   are not captured; a drop of the firing level is caught up at the next capture.
 * **`CONTINUOUS_FIRE_*` comes from the simulation** (`docs/SIM-FIRING-TRACKER.md` §2): the levels are the weapon bonus conditions `CONTINUOUS_FIRE_MEAN/FAST` of the object and speed up the weapon
   (Gattling: 200 % and 400 %); the `UnitConditionTracker` no longer counts itself, the levels survive loading a saved game.
-* **`ATTACKING` is never set by the simulation** (`IS_ATTACKING` has no writer), although `ConditionDeriver` derives the bit. Many states are named
+* **`ATTACKING` comes from the attack state** (#385): `AIAttackState::onEnter` sets it and `onExit` clears it; `ConditionDeriver.IsAttacking` reads the attack from the simulation (an acquired
+  victim or an attacked place). Many states are named
   `ATTACKING <X>` (e.g. `ATTACKING CONTINUOUS_FIRE_MEAN`); the state selection then takes the best partial match, which is enough for the Gattling states but does not hit all combinations.
 * **`SPLATTED` and `FRONTCRUSHED`/`BACKCRUSHED` are hardly reachable in today's simulation** (the code is tested and ready): `ParachuteContain.OnDie` kills the occupant after the
   fall damage with `DEATH_NORMAL` (a death type `SPLATTED` results only if the fall damage already kills), and `SquishCollide` crushes only infantry, while only vehicles carry `CrushDie`

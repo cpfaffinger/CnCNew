@@ -186,8 +186,17 @@ The original intersects a ray with the rendered geometry (`W3DView::pickDrawable
   within 500 ms (strictly less) centres on the last member (highest id) and selects anew only if not all are selected;
   Shift+N adds (a building that is selected or stands as the first member empties beforehand); Alt+N only centres.
 * **Pruning** (`Prune`, per tick): removes deleted, dead, contained, unselectable, sold (`SOLD`) and foreign objects as soon as they are no
-  longer selected alone or no longer visible; groups lose dead ones and ones that have become foreign. Every change triggers `SelectionChanged`;
-  a selection change cancels an open target or placement mode (`ControlBar.cpp`).
+  longer selected alone or no longer visible; groups lose dead ones and ones that have become foreign. Every change triggers `SelectionChanged`.
+* **A pending command mode** (guard, attack-move, a button's or a special power's target) ends on a click, a right click, Escape, or when anything is added to the selection or nothing is
+  left selected (`ControlBar::onDrawableSelected`, `onDrawableDeselected`); a unit that leaves the selection - killed, contained, sold - leaves the mode armed, and guard and attack-move act for
+  the units still selected (`CommandModeController.OnSelectionChanged`). A placement ends with any change of the selection (`placeBuildAvailable(NULL, NULL)`). Before #381 every change
+  cancelled the mode. `RadiusCursorTests`: "The guard mode outlives a member of the group that dies and ends with the last one or a new selection (#381)", "A power's target mode outlives a
+  selected unit that dies (#381)".
+* **An angry mob is one unit** (#382; `SpawnBehavior::computeAggregateStates`, `InGameUI::evaluateSoloNexus`): its nexus has no model and is `MASKED`, so it is never picked; a selected
+  member of an own mob selects every living member and the nexus, on a click or a box and again on every tick (`SelectionModel.ShareSpawnerSelection`, for a spawner whose
+  `ISpawnerModule.AggregatesSlaves`), so the masked nexus stays selected and new members join. The bar of one nexus and its `IGNORED_IN_GUI` members is the nexus' (Attack Move, Guard,
+  Stop), and its buttons act on the whole selection; a right click orders the nexus and every member. A Shift-click on one member does not take it out of the selection (it comes back at
+  the next tick; the original takes it back a logic frame later). `AngryMobTests` (Game.Tests, real data, 30, 60 and 120 Hz).
 
 ## 6. Commands
 
@@ -253,7 +262,7 @@ the check "fast path available" for the move cursor.
   object or position target (Phase 43: a position, `ATTACK_OBJECTS_POSITION` and a button without a target are an `AttackPositionCommand`, F-64). An object matching the options (enemy/neutral/ally, own ones count as allied) has precedence over the position; the
   cursor is `CursorName` or `InvalidCursorName`, otherwise `Target`/`GenericInvalid` (like `InGameUI::evaluateContextCommand`: if `getCursorIndex` delivers
   no cursor, `Mouse::CROSS` applies). A name that is not an engine cursor is listed in `CommandButtonCatalog.UnknownCursorNames`; in the retail data that is
-  exactly `DaisyCutter` (§11). Right click/Escape/selection change cancel.
+  exactly `DaisyCutter` (§11). Right click, Escape and a new selection cancel; a unit that leaves the selection does not (#381, §5).
 * `SPECIAL_POWER_FROM_SHORTCUT`: the source is the own object with the readiest module (ready first, then smallest id;
   `findMostReadyShortcutSpecialPowerOfType`), independently of the selection.
 * Unsupported button kinds (hack, hijacking, sabotage, car bomb, combat drop, weapon switch, overcharge, beacon, rail transport,

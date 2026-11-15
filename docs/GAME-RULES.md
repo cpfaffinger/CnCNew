@@ -316,7 +316,7 @@ interval after a restore and the snapshot continuation diverges.
 | `PreorderCreate` | `PreorderCreate.cpp` | Shows only a preorder decoration; inert placeholder without keys. |
 | `RadarUpdate` | `RadarUpdate.cpp` | Passive; `RadarUpgrade` starts the extend animation (`RadarExtendTime`). There is no radar/no minimap in the simulation. |
 | `RebuildHoleExposeDie` | `RebuildHoleExposeDie.cpp` | Dying GLA structures leave a hole (owner, position, orientation, `HoleMaxHealth`); not for neutral ones or ones under construction. Omitted: `isPlayerActive`, geometry takeover, `TransferAttackers`. |
-| `RebuildHoleBehavior` | `RebuildHoleBehavior.cpp` | The hole regenerates `HoleHealthRegen%PerSecond`; after `WorkerRespawnDelay` a worker would rebuild – worker and build order are AI (Phase 6), therefore `CreationSkipped` and end of the countdown. |
+| `RebuildHoleBehavior` | `RebuildHoleBehavior.cpp` | The hole regenerates `HoleHealthRegen%PerSecond`; after `WorkerRespawnDelay` a worker comes up and rebuilds - in every skirmish with a match description, every mission and the original AI's session (#383, `docs/SIMULATION-CORE.md` §90.25); a bare world without a match records `CreationSkipped` and ends the countdown. |
 
 `HealContain` belongs to the containers (§6a); `ProductionUpdate` queries the exit through the interface
 `IProductionExit`. `ModuleFramework.cs` additionally knows `ISpawnOriginReceiver` (hole origin) and the
@@ -402,14 +402,14 @@ real definitions. Reference: `DockUpdate.cpp`, `AIDock.cpp` (`AIDockMachine`), `
 
 **Docking machine** (`DockMachine.cs`, `AIDockMachine`). States as in the original (Approach, Enter, Dock, Exit, Rally); the
 transition semantics of `StateMachine` are ported: a state that reports success or failure immediately on entering continues in the same
-call (up to 20 levels). The docking positions carry no geometry (no bones, no terrain): entry, dock, exit and
-rally point lie at the position of the docker, so these four states report success on entering; only the approach position is
-a real movement. The machine lock of the original during the dock movement is dropped (nothing sets a state from outside).
+call (up to 20 levels). Since #354 a dock whose model has dock bones moves the docker to `DockStart`, serves it at `DockAction` and lets it leave
+for `DockEnd` (`docs/SIMULATION-CORE.md` §90.10); at a dock without them entry, dock and exit lie at the position of the docker (a flyer is first moved
+over the dock's centre), so these states report success on entering. The machine lock of the original during the dock movement is dropped (nothing sets a state from outside).
 
 **`DockUpdate`** (base of the docking modules): approach slots (`NumberApproachPositions`, dynamic at −1 or `HasApproachPositions =
 No`), clearance (`isClearToApproach`), slot reservation and advancing (`reserveApproachPosition`, `advanceApproachPosition`) and the
-one active docker. Without bone geometry every approach point lies in the centre of the dock, shifted by `majorRadius / 2` towards the docker
-(the boneless branch of `computeApproachPosition`, without `findPositionAround`). `update()` makes the owner of the first
+one active docker. An approach point is the model's `DockWaiting` bone of the slot (#354); without bones it lies in the centre of the dock, shifted by
+`majorRadius / 2` towards the docker (the boneless branch of `computeApproachPosition`); either is then moved to a free place around it (`findPositionAround`, #339). `update()` makes the owner of the first
 slot reached the active docker, as long as none is active. Slots and dockers whose entity has died are
 released (the original relies on the docker's machine doing that itself). The dock sleeps as long as no slot
 and no docker is occupied, and is woken by the first reservation.
@@ -456,7 +456,7 @@ worker) of its own side as well as a neutral warehouse (`SpawnSupplyInfrastructu
 of several carriers at one warehouse, command check, snapshot and replay continuation, the `SpawnBehavior` variants and real-data check; the
 real match requires zero skipped start objects and deliveries.
 
-**Not modelled (deliberately, not silently):** geometry (bones, terrain, paths), `GrantTemporaryStealth`, construction/dozer/repair by
+**Not modelled (deliberately, not silently):** geometry of terrain and paths at the dock (the bones are read since #354), `GrantTemporaryStealth`, construction/dozer/repair by
 workers, warehouse crippling, capture bonus, slaved/mob spawners.
 
 ## 6f. Repair and healing
@@ -498,7 +498,7 @@ instead of hitting only the target (`FireWeaponWhenDeadBehavior` still reports t
 
 | Module | Reference | Behaviour |
 | --- | --- | --- |
-| `FireWeaponUpdate` | `FireWeaponUpdate.cpp` `update`, `isOkayToFire` | After `InitialDelay` the private weapon of the module (own clip and reload, never the weapon set) detonates at the position of the object as soon as it is ready; `forceFireWeapon` ignores range and target, the radius decides. Not under construction and not within `ExclusiveWeaponDelay` ticks after a shot of the object (`getLastShotFiredFrame` considers only the weapon set, so the own weapon never suppresses itself). |
+| `FireWeaponUpdate` | `FireWeaponUpdate.cpp` `update`, `isOkayToFire` | After `InitialDelay` the private weapon of the module (own clip and reload, never the weapon set) detonates at the position of the object as soon as it is ready; `forceFireWeapon` ignores range and target, the radius decides. Not under construction and not within `ExclusiveWeaponDelay` ticks after a shot of the object (`getLastShotFiredFrame` considers only the weapon set, so the own weapon never suppresses itself). Before the object's spawn plus the weapon's `SuspendFXDelay` a shot plays no fire FX list (#355, `docs/SIMULATION-CORE.md` §90.11). |
 | `ReplaceObjectUpgrade` | `ReplaceObjectUpgrade.cpp` `upgradeImplementation` | The object is destroyed, a fresh one of the replacement template takes over owner, position and orientation (full health, no rank, no queue). An unknown or not instantiable template yields only a `CreationSkipped` event (the reference aborts before destroying). Not modelled: path map maintenance, `Player::onStructureConstructionComplete`. |
 | `CrushDie` | `CrushDie.cpp` | Reacts only to `DAMAGE_CRUSH` of a crusher (front/rear end, sound, model condition flags); crush damage arises through `PhysicsCollide`, and there is no collision detection. Stateless and inert (precedent `SquishCollide`); collision is Phase 6. |
 

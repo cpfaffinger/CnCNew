@@ -30,10 +30,14 @@ A tree with `DoShadow` has `shadow.tga` as wide as the mean of its box (`W3DTree
   `updateOptimalExtrusionPadding` says. That walk runs once per object: terrain up to 5 units lower takes the floor with it, a drop beyond that makes the light steeper, because terrain casts no shadow and a shadow
   below a cliff would hang in the air (`ShadowSun.OptimalExtrusion`).
 - Stencil (`ShadowStencilPipelineProcessor`): sides without colour or depth, front faces that pass the depth test count up, back faces down, with wrapping counters in one draw. Then a rectangle over the screen,
-  `DestinationColor / Zero`, where the count is not zero. The colour is 160/255 (`m_shadowColor` 0x7fa0a0a0, alpha unused); a product differs in gamma and linear space by a power only, so the factor is its linear value.
+  `DestinationColor / Zero`, where the count is not zero. The colour is the map's shadow colour from its lighting, or 160/255 (`m_shadowColor` 0x7fa0a0a0, alpha unused) by default, and the product is taken on display values, as
+  `W3DVolumetricShadowManager::renderStencilShadows` does with `D3DBLEND_DESTCOLOR`/`ZERO`: the fill is drawn in the display-value pass (`docs/CLIENT-FX.md`), and the material constant is
+  the colour itself (`ShadowSun.FillConstant`), which Stride converts to linear light and the pass converts back. Before #362 the colour was converted twice, so a shadow multiplied the ground
+  by about 0.35 instead of 0.63 and went black on darker map colours (Silent River, `0xFF656565`: about 0.40 now against the original's 0.396). `ShadowTests` "The stencil fill multiplies the
+  ground by the shadow colour on display values, not by its linear value twice (issue 362)".
 - An object just outside the view is still posed when its shadow reaches into it: the culling box takes in the tip of the shadow.
 
-A `MaterialPass` with `HasTransparency` and a pipeline processor is the whole of the Stride side: no shader of our own. **Direct3D 11 refuses colour factors for alpha:** `new BlendStateDescription(a, b)` uses the
+A `MaterialPass` with `HasTransparency` and a pipeline processor is the whole of the Stride side; the fill's material ends with the client's `DisplayValueOutput` step (#359). **Direct3D 11 refuses colour factors for alpha:** `new BlendStateDescription(a, b)` uses the
 same factors for both and the device creation throws; `ShadowVolumeRenderer.Multiply` sets alpha apart. `FxBlend.Multiply` had this defect since it was written and never met a texture that used it.
 
 Left out: the volume of a skinned mesh (the original has none), `SHADOW_PROJECTION` and the projected kinds (no shipped object names them), a decal on a bridge deck (it lies on the terrain under it), the

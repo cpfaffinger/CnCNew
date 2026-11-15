@@ -80,9 +80,9 @@ Explicitly counted, non-fatal cases:
 - **Unresolvable HLOD entries** (export leftovers such as splines, `RECTANGLE01`, `... TOE0`): the
   asset manager of the original returns `null`, `HLodClass` skips them. CnCNew lists them in
   `W3dModel.UnresolvedSubObjects` (content: 45).
-- **Ignored render objects**: Emitter, Dazzle, Light, Morph-Animation, HModel, LOD-Model,
+- **Ignored render objects**: Dazzle, Light, Morph-Animation, HModel, LOD-Model,
   Collection, Points, Aggregate, Sphere, Ring, Lightscape, Sound, ShaderMesh are kept as
-  `W3dIgnoredChunk` with kind and offset, not interpreted (content: 3 emitters, otherwise 0).
+  `W3dIgnoredChunk` with kind and offset, not interpreted (content: 0). Emitters are decoded since #369 ("Particle emitters").
 - **CRLF text-mode damage**: five `UISabotr_*` animations are repaired through the existing reconstruction
   in `W3dFileReader` and are reported by name in the audit.
 
@@ -190,7 +190,7 @@ Measured on 30 September 2026 on `game/content`, two runs byte-identical
 | Unresolvable hierarchy references | 6 (animations `GENERALSKEL.GENERAL_*`, hierarchy missing in the content) |
 | Discarded channels beyond the hierarchy | 233 |
 | Surplus of uncompressed channels | 8,333,276 bytes |
-| Ignored chunks | 3 emitters |
+| Ignored chunks | 3 emitters (before #369, which decodes them; not measured again here) |
 | Files repaired from text mode | 5 |
 | Reading + decoding all files | 3.9 s (Release, incl. file I/O) |
 | Whole audit incl. model building, binding, pose samples | 4.8 s |
@@ -216,4 +216,15 @@ errors and checks these counts as well as `AVCrusader` (the turret rotates the b
   can therefore deviate within the range of the table errors.
 - Meshes of a model are decoded completely on loading (not lazily); the memory is, however,
   allocated once per model and shared by all instances through `W3dAssetLibrary`.
-- Emitters and all other ignored render object kinds are only counted, not interpreted.
+- The ignored render object kinds are only counted, not interpreted.
+
+## Particle emitters (#369)
+
+`W3D_CHUNK_EMITTER` was an ignored chunk, so `Art/W3D/EXHydrant.w3d` - the model of the `WaterSpray` a destroyed hydrant leaves - failed with "no HLOD and 0 meshes". `W3dEmitter`
+decodes it as `ParticleEmitterDefClass::Load_W3D` reads it (part_ldr.cpp): header, user data and info, for version 2 the second info (burst, creation and velocity randomizers, outward
+velocity, inheritance, shader, render and frame mode) and the keyframed properties (with `Read_Props`'s black last colour key), then line properties, rotation, frame and blur-time keys
+and extra info. A version 1 emitter is converted as `Convert_To_Ver2` does, its shader decided by the texture's alpha. A sub-chunk the original skips is kept and counted; a truncated
+chunk, an unknown randomizer class or render mode is an error. The shader struct shares the mesh decoder's checks. A file of one emitter alone is a model
+(`WW3DAssetManager::Create_Render_Obj` makes a `ParticleEmitterClass` of it): default skeleton, no sub-objects, `W3dModel.Emitter`. The skeleton audit counts emitters and emitter models
+(three in the shipped data: `EXHydrant`, `EXDrtExp01`, `EXLeafFall`); `W3dTool model` prints the emitter. Tests `EmitterTests` (W3D.Tests, synthetic and real data). How the
+presentation runs them: `docs/PRESENTATION-FX.md` "A model that is a W3D emitter".
