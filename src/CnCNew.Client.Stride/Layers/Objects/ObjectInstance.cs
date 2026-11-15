@@ -59,6 +59,12 @@ internal sealed class DrawPartState
     public double ElapsedInState;
     public float LastFrame = float.NaN;
 
+    /// <summary>The frame a <c>MANUAL</c> animation stands on (<c>W3DModelDraw::adjustAnimation</c>'s start frame, <see cref="CnCNew.Presentation.Objects.AnimationStart"/>).</summary>
+    public float ManualFrame;
+
+    /// <summary>The frame the logic holds the animation at (<c>Drawable::setAnimationFrame</c>, <see cref="CnCNew.Presentation.Objects.DrawableInstance.AnimationFrame"/>), null when it holds none.</summary>
+    public float? LogicFrame;
+
     /// <summary>The turret angles last written into <see cref="Pose"/> (main yaw/pitch, alternate yaw/pitch); NaN until the first write.</summary>
     public float[] TurretApplied = [float.NaN, float.NaN, float.NaN, float.NaN];
     public bool InScene;

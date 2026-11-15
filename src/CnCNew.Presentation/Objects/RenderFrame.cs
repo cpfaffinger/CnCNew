@@ -41,8 +41,12 @@ public sealed record DrawableInstance(
     float Opacity = 1f,
     AnimationPause Pause = AnimationPause.None,
     ImmutableArray<SubObjectVisibility> SubObjectOverrides = default,
-    float AnimationSeconds = 0f)
+    float AnimationSeconds = 0f,
+    float? AnimationFrame = null)
 {
+    // AnimationFrame: the frame the logic holds the current state's animation at (Drawable::setAnimationFrame: a deploying unit with ManualDeployAnimations), as a frame of the
+    // animation; null: the animation plays by its state's mode.
+
     // AnimationSeconds: the time the animation of the drawable's current state is stretched to (Drawable::setAnimationLoopDuration), see AnimationDurations; 0: its own speed.
 
     // SubObjectOverrides: what the object's executed SubObjectsUpgrade modules show and hide (Drawable::showSubObject), applied by the renderer after the state's own ShowSubObject/HideSubObject lines; default: none.

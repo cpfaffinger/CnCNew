@@ -916,7 +916,45 @@ internal static class StructureConditionTests
 
         // The modules of the other retail names answer with their states.
         RealModules(world, tracker, Spawn, ref sequence);
+        RealAnimationFrames(graph, world, Spawn, ref sequence);
         RealSweep(graph, templates, fingerprint, players);
+    }
+
+    /// <summary>
+    /// Issue 23, <c>AnimationMode = MANUAL</c> on the shipped data: the China war factory's conveyor belt stands where its loop stopped (<c>MAINTAIN_FRAME_ACROSS_STATES</c>), and the Nuke
+    /// Cannon's unpacking animation is held by the logic at the frame its timer has reached (<c>ManualDeployAnimations</c>).
+    /// </summary>
+    private static void RealAnimationFrames(CompiledDefinitionGraph graph, SimulationWorld world, Func<string, int, int, int, Entity> spawn, ref ulong sequence)
+    {
+        var catalog = ObjectVisualCatalog.Build(graph);
+        var belt = catalog["ChinaWarFactory"].Draws.FirstOrDefault(draw => draw.States.Any(state => state.IsDefault && state.Mode == AnimationMode.Manual && AnimationStart.Maintains(state.Flags))
+            && draw.States.Any(state => state.Mode == AnimationMode.Loop && AnimationStart.Maintains(state.Flags)));
+        Check(belt is not null, "The China war factory has a manual belt that loops with a maintained frame.");
+        var idle = belt!.States.First(state => state.IsDefault);
+        var running = belt.States.First(state => state.Mode == AnimationMode.Loop && AnimationStart.Maintains(state.Flags));
+        Check(AnimationStart.Frame(idle, running, 0.5f, 31) == 14f, "The stopped belt stands where its loop was, not on frame 0.");
+
+        Check(catalog["ChinaVehicleNukeLauncher"].ManualDeployAnimations, "The Nuke Cannon's deploy animations are manual.");
+        var cannon = spawn("ChinaVehicleNukeLauncher", 2, 3500, 3000);
+        var target = spawn("AmericaTankCrusader", 1, 3700, 3000);
+        var deploy = cannon.Modules.OfType<DeployStyleAIUpdate>().Single();
+        var projector = new FrameProjector(catalog);
+        Check(world.Submit(new FireWeaponCommand(new PlayerId(2), ++sequence, world.Tick, cannon.Id, target.Id)).Accepted, "The cannon is ordered to fire.");
+        var frames = new List<float>();
+        for (var i = 0; i < TestTime.Frames(world, 400) && !deploy.IsDeployed; i++)
+        {
+            world.Step();
+            projector.Advance(world);
+            var held = projector.Project(1f).Drawables.Single(drawable => drawable.Entity == cannon.Id).AnimationFrame;
+            if (deploy.IsUnpacking) Check(held is not null, "While it unpacks the logic holds its animation at a frame.");
+            if (held is { } frame) frames.Add(frame);
+        }
+        world.Step();
+        projector.Advance(world);
+        Check(deploy.IsDeployed && projector.Project(1f).Drawables.Single(drawable => drawable.Entity == cannon.Id).AnimationFrame is null, "Once it is deployed its state's animation plays by its mode again.");
+        var packFrames = deploy.PackTicks / world.Time.TicksPerOriginalFrame;
+        Check(frames.Count > 0 && frames[0] <= 2f && frames.Zip(frames.Skip(1)).All(pair => pair.Second >= pair.First) && frames[^1] >= packFrames - 2 && frames[^1] <= packFrames,
+            $"The unpacking animation runs from its first frame to the pack time's ({packFrames}): {frames[0]} .. {frames[^1]} in {frames.Count} ticks.");
     }
 
     private static void RealModules(SimulationWorld world, StructureConditionTracker tracker, Func<string, int, int, int, Entity> spawn, ref ulong sequence)

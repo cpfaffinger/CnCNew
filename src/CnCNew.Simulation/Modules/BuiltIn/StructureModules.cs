@@ -384,6 +384,12 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
     /// <summary><c>UNDEPLOY</c>: the reference shows <c>MODELCONDITION_PACKING</c> for exactly this state (<c>setMyState</c>).</summary>
     public bool IsPacking => _state == DeployState.Undeploy;
 
+    /// <summary>The tick the unit is set up or packed at (<c>m_frameToWaitForDeploy</c>) while it unpacks or packs; read by the presentation for <c>ManualDeployAnimations</c>.</summary>
+    public long DeployDoneTick => _frameToWait;
+
+    /// <summary><c>PackTime</c> in ticks.</summary>
+    public long PackTicks => data.PackTicks;
+
     public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
         if (_state == DeployState.ReadyToMove)

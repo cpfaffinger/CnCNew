@@ -44,6 +44,9 @@ public sealed record ObjectVisual(
     /// <summary><c>SpecialJitterDistance</c> of the template's <c>NeutronMissileUpdate</c>: how far the drawn missile shakes right after its launch (0: no shake).</summary>
     public float LaunchJitter { get; init; }
 
+    /// <summary><c>ManualDeployAnimations</c> of the template's <c>DeployStyleAIUpdate</c>: the logic holds the unpacking and packing animations at the frame its timer has reached.</summary>
+    public bool ManualDeployAnimations { get; init; }
+
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
     public bool IsUnit => IsKindOf("INFANTRY") || IsKindOf("VEHICLE") || IsKindOf("AIRCRAFT") || IsKindOf("HUGE_VEHICLE");
@@ -127,6 +130,8 @@ public sealed class ObjectVisualCatalog
             SubObjectUpgrades = subObjectUpgrades,
             LaunchJitter = (float)(definition.Modules.Where(module => module.Name.Equals("NeutronMissileUpdate", StringComparison.OrdinalIgnoreCase))
                 .Select(module => Number(module.Fields, "SpecialJitterDistance")).LastOrDefault(value => value is not null) ?? 0m),
+            ManualDeployAnimations = definition.Modules.Any(module => module.Name.Equals("DeployStyleAIUpdate", StringComparison.OrdinalIgnoreCase)
+                && Text(module.Fields, "ManualDeployAnimations") is { } manual && manual.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase)),
         };
 
         float Size(string key) => (float)(Number(definition.Fields, key) ?? 0m);

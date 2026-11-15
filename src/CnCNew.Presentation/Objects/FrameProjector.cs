@@ -562,7 +562,18 @@ public sealed class FrameProjector
             entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis, AnimationPauses.Of(world, entity), SubObjectOverrides.Of(entity, visual), AnimationDurations.Of(world, entity))
         {
             Jitter = LaunchJitter(entity, world, visual, chassis),
+            AnimationFrame = DeployFrame(entity, world, visual),
         };
+    }
+
+    /// <summary>
+    /// <c>DeployStyleAIUpdate::update</c> with <c>ManualDeployAnimations</c>: while the unit unpacks or packs, the logic sets its animation to the frame its timer has reached
+    /// (<see cref="AnimationStart.DeployFrame"/>); null otherwise.
+    /// </summary>
+    private float? DeployFrame(Entity entity, SimulationWorld world, ObjectVisual visual)
+    {
+        if (!visual.ManualDeployAnimations || entity.Modules.OfType<DeployStyleAIUpdate>().FirstOrDefault() is not { } deploy || !(deploy.IsUnpacking || deploy.IsPacking)) return null;
+        return AnimationStart.DeployFrame(deploy.IsUnpacking, deploy.DeployDoneTick - Tick, deploy.PackTicks, world.Time.TicksPerOriginalFrame);
     }
 
     /// <summary><see cref="MissileLaunchJitter"/> of a missile whose template names a <c>SpecialJitterDistance</c>, zero for everything else.</summary>
@@ -652,7 +663,7 @@ public sealed class FrameProjector
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), Mix(previous?.Travel, capture.Travel, alpha), capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= _healingIconTicks && capture.Health01 < 1f && Tick > _healingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id), Pause: capture.Pause, SubObjectOverrides: capture.SubObjectOverrides, AnimationSeconds: capture.AnimationSeconds);
+        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame) + _tints.TintAt(capture.Id), Pause: capture.Pause, SubObjectOverrides: capture.SubObjectOverrides, AnimationSeconds: capture.AnimationSeconds, AnimationFrame: ghost ? null : capture.AnimationFrame);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -697,5 +708,8 @@ public sealed class FrameProjector
     {
         /// <summary>The drawable's instance offset in the world (a missile's launch shake), added after the interpolation: the original steps it once per logic frame.</summary>
         public Vector3 Jitter { get; init; }
+
+        /// <summary>The frame the logic holds the animation at (<see cref="DrawableInstance.AnimationFrame"/>).</summary>
+        public float? AnimationFrame { get; init; }
     }
 }

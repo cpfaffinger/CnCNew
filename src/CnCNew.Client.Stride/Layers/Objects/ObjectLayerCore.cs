@@ -215,21 +215,36 @@ internal sealed class ObjectLayerCore : IWorldLayer
         return shown == selection.StateIndex || shown < 0 || shown >= draw.States.Length ? selection : new DrawModuleSelection(shown, draw.States[shown].Model);
     }
 
-    /// <summary><c>isAnimationComplete</c> for the state the part plays now: no animation is complete, a looping or manual one never is.</summary>
+    /// <summary>
+    /// <c>isAnimationComplete</c> for the state the part plays now: no animation is complete, a looping or manual one never is - nor one the logic holds at a frame (<c>setAnimationFrame</c>
+    /// sets it to <c>ANIM_MODE_MANUAL</c>).
+    /// </summary>
     private static bool CurrentAnimationComplete(DrawSpec draw, DrawPartState part)
     {
         if (part.StateIndex < 0 || part.StateIndex >= draw.States.Length || part.Binding is null) return true;
+        if (part.LogicFrame is not null) return false;
         var state = draw.States[part.StateIndex];
-        var mode = (W3dAnimationMode)(int)state.Mode;
-        var animation = part.Binding.Animation;
-        var manualFrame = state.Flags.HasFlag(AnimationFlags.StartFrameLast) ? animation.FrameCount - 1 : 0;
-        var frame = W3dAnimationClock.GetFrame(mode, animation.FrameCount, animation.FrameRate, part.ElapsedInState, part.Speed, manualFrame);
-        return W3dAnimationClock.IsComplete(mode, animation.FrameCount, frame);
+        return W3dAnimationClock.IsComplete((W3dAnimationMode)(int)state.Mode, part.Binding.Animation.FrameCount, CurrentFrame(state, part));
+    }
+
+    /// <summary>
+    /// The frame the part's animation stands at: the frame the logic holds it at, else the frame a manual animation was started on (<c>adjustAnimation</c>), else the frame its mode has
+    /// reached in the time it has played.
+    /// </summary>
+    private static float CurrentFrame(ModelStateSpec state, DrawPartState part)
+    {
+        var animation = part.Binding!.Animation;
+        var last = animation.FrameCount - 1;
+        if (part.LogicFrame is { } held) return Math.Clamp(held, 0f, last);
+        return W3dAnimationClock.GetFrame((W3dAnimationMode)(int)state.Mode, animation.FrameCount, animation.FrameRate, part.ElapsedInState, part.Speed, Math.Clamp(part.ManualFrame, 0f, last));
     }
 
     private void UpdatePart(DrawableInstance drawable, DrawSpec draw, DrawModuleSelection selection, DrawPartState part, in WorldFrame frame)
     {
         var modelName = selection.Model!;
+        // getCurrentAnimFraction of the state that is left, before anything of the part is reset: a state with a maintain flag that follows it starts there.
+        var previous = part.StateIndex >= 0 && part.StateIndex < draw.States.Length && part.StateIndex != selection.StateIndex ? draw.States[part.StateIndex] : null;
+        var previousFraction = previous is not null && part.Binding is not null ? AnimationStart.Fraction(previous, CurrentFrame(previous, part), part.Binding.Animation.FrameCount) : -1f;
         if (part.ModelName != modelName)
         {
             BindModel(part, modelName);
@@ -237,11 +252,12 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         var state = draw.States[selection.StateIndex];
         var asset = part.Asset;
+        part.LogicFrame = drawable.AnimationFrame;
 
         if (part.StateIndex != selection.StateIndex)
         {
             part.StateIndex = selection.StateIndex;
-            ChooseAnimation(drawable, asset, state, part);
+            ChooseAnimation(drawable, asset, state, part, previous, previousFraction);
             part.MuzzleBoneSlots = MuzzleBones(state, asset);
         }
 
@@ -312,11 +328,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
             part.LastFrame = float.NaN;
         if (part.Binding is not null)
         {
-            var mode = (W3dAnimationMode)(int)state.Mode;
-            // A manual animation stands on one frame: the first, or the last with START_FRAME_LAST (W3DModelDraw::setAnimationFrame at the state change).
-            var manualFrame = state.Flags.HasFlag(AnimationFlags.StartFrameLast) ? part.Binding.Animation.FrameCount - 1 : 0;
-            var animationFrame = W3dAnimationClock.GetFrame(
-                mode, part.Binding.Animation.FrameCount, part.Binding.Animation.FrameRate, part.ElapsedInState, part.Speed, manualFrame);
+            // A manual animation stands on the frame it was started on, or the logic holds the animation at a frame of its own (a deploying unit's ManualDeployAnimations).
+            var animationFrame = CurrentFrame(state, part);
             if (float.IsNaN(part.LastFrame) || MathF.Abs(animationFrame - part.LastFrame) > 1e-3f)
             {
                 pose.Evaluate(part.Binding, animationFrame, Matrix4x4.Identity);
@@ -769,12 +782,13 @@ internal sealed class ObjectLayerCore : IWorldLayer
     }
 
     /// <summary>Deterministic per-instance choice: a non-idle <c>Animation</c> entry of the state if any exist, else the idle one; the frame's random-start jitter (if flagged) and playback speed are picked the same way.</summary>
-    private void ChooseAnimation(DrawableInstance drawable, ModelAsset? asset, ModelStateSpec state, DrawPartState part)
+    private void ChooseAnimation(DrawableInstance drawable, ModelAsset? asset, ModelStateSpec state, DrawPartState part, ModelStateSpec? previous, float previousFraction)
     {
         part.Binding = null;
         part.Animation = null;
         part.LastFrame = float.NaN;
         part.ElapsedInState = 0;
+        part.ManualFrame = 0;
         part.Speed = 1.0;
         if (asset is null || state.Animations.Length == 0) return;
 
@@ -819,6 +833,13 @@ internal sealed class ObjectLayerCore : IWorldLayer
             // Different instances of the same unit should not play in lockstep; jitter the starting point within the clip's duration.
             var jitterFraction = ((seed >> 20) % 1000) / 1000.0;
             part.ElapsedInState = jitterFraction * binding.Animation.DurationSeconds;
+        }
+        else
+        {
+            // adjustAnimation: the first frame by the mode, START_FRAME_FIRST/LAST, or the share of the state that was left (MAINTAIN_FRAME_ACROSS_STATES).
+            var start = AnimationStart.Frame(state, previous, previousFraction, binding.Animation.FrameCount);
+            if (state.Mode == AnimationMode.Manual) part.ManualFrame = start;
+            else part.ElapsedInState = AnimationStart.ElapsedAt(state.Mode, start, binding.Animation.FrameCount, binding.Animation.FrameRate, part.Speed);
         }
     }
 
