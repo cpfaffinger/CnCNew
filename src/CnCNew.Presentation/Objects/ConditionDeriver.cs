@@ -77,7 +77,9 @@ public static partial class ConditionDeriver
 
         if (entity.Speed != Fixed.Zero || entity.HasMoveTarget) set = set.With(ModelConditions.Moving);
         set = Weapon(entity, world, set);
-        if (entity.HasStatus(AttackingStatus)) set = set.With(ModelConditions.Attacking);
+        // AIAttackState::onEnter sets OBJECT_STATUS_IS_ATTACKING and MODELCONDITION_ATTACKING, onExit clears both: the whole attack on an object or a place - the approach, the
+        // aim, the wind-up and the shots (#385: the Scud Storm raises its missiles in this state). The simulation keeps the attack as the acquired victim or the attacked place.
+        if (IsAttacking(entity, world)) set = set.With(ModelConditions.Attacking);
 
         set = Construction(entity, world, set, context);
         if (entity.HasStatus(ObjectStatusBits.Sold)) set = set.With(ModelConditions.Sold);
@@ -145,6 +147,10 @@ public static partial class ConditionDeriver
         set = CaptureConditions.Apply(entity, world, set);
         return set;
     }
+
+    /// <summary><c>OBJECT_STATUS_IS_ATTACKING</c>: the object is in an attack (<c>AIAttackState</c>) - on a victim it acquired or was ordered to, or on a place.</summary>
+    public static bool IsAttacking(Entity entity, SimulationWorld world)
+        => entity.HasStatus(AttackingStatus) || world.AcquiredVictimOf(entity).IsValid || world.IsAttackingPlace(entity);
 
     /// <summary>
     /// The current weapon slot only (<c>Object::adjustModelConditionForWeaponStatus</c> sets nothing for a slot that is not the current weapon).

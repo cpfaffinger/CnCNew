@@ -499,17 +499,17 @@ static partial class ObjectTests
         Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
         // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 3) && !world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == rover); i++) { }
-        Check.That(Conditions() == ModelConditionSet.Parse("FIRING_A USING_WEAPON_A"), $"The firing tick shows FIRING_A ({Conditions()}).");
+        Check.That(Conditions() == ModelConditionSet.Parse("ATTACKING FIRING_A USING_WEAPON_A"), $"The firing tick shows FIRING_A, in the attack the order began (AIAttackState sets ATTACKING; {Conditions()}).");
         // FIRING_A is shown for one original frame; the step of the shot is a step, the rest are frames of game time.
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
-        Check.That(Conditions() == ModelConditionSet.Parse("BETWEEN_FIRING_SHOTS_A USING_WEAPON_A"), $"Then the shot delay ({Conditions()}).");
+        Check.That(Conditions() == ModelConditionSet.Parse("ATTACKING BETWEEN_FIRING_SHOTS_A USING_WEAPON_A"), $"Then the shot delay, still in the attack ({Conditions()}).");
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 12); i++) world.Step();
         Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
         world.Step();
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
-        Check.That(entity.WeaponClip == 0 && Conditions() == ModelConditionSet.Parse("RELOADING_A USING_WEAPON_A"), $"An empty clip reloads ({Conditions()}).");
+        Check.That(entity.WeaponClip == 0 && Conditions() == ModelConditionSet.Parse("ATTACKING RELOADING_A USING_WEAPON_A"), $"An empty clip reloads ({Conditions()}).");
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 40); i++) world.Step();
-        Check.That(Conditions() == ModelConditionSet.Empty, "Ready again: no weapon bits.");
+        Check.That(Conditions() == ModelConditionSet.Parse("ATTACKING"), $"Ready again: no weapon bits, the attack on the bunker goes on ({Conditions()}).");
 
         Submit(world, sequence => new DamageCommand(PlayerId.System, sequence, world.Tick, rover, Fixed.FromInt(95), 0, 0));
         world.Step();
