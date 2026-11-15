@@ -2,7 +2,10 @@ using System.Collections.Generic;
 using System.Linq;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -93,5 +96,106 @@ static partial class Tests
                     $"{rate}, {behind} behind: the second capturer stands where the 30 Hz one stands at the end of every frame (first difference after frame {(first < 0 ? -1 : 41 + first)}: " +
                     $"{(first < 0 ? "-" : $"{positions[first].X.ToDecimal():0.000} against {expected[first].X.ToDecimal():0.000}")}).");
             }
+    }
+
+    private static IReadOnlyDictionary<string, string> ChasingCapturerFiles() => new Dictionary<string, string>(StagedCaptureFiles())
+    {
+        ["Data/INI/Object/ChasingCapturerFixture.ini"] = """
+        Weapon ChasingCapturerGun
+          PrimaryDamage = 1
+          AttackRange = 20.0
+          DamageType = EXPLOSION
+          DelayBetweenShots = 1000
+        End
+        Object ChasingCapturer
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 200.0
+          Locomotor = SET_NORMAL CaptureLoco
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY ChasingCapturerGun
+          End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            MoodAttackCheckRate = 250
+          End
+          Behavior = SpecialAbility Cap01
+            SpecialPowerTemplate = SPECIAL_StagedCapture
+            UpdateModuleStartsAttack = Yes
+          End
+          Behavior = SpecialAbilityUpdate CapUpdate01
+            SpecialPowerTemplate = SPECIAL_StagedCapture
+            StartAbilityRange = 5.0
+            UnpackTime = 3000
+            PreparationTime = 2000
+            PackTime = 500
+          End
+        End
+        Object ChasedWalker
+          KindOf = SELECTABLE INFANTRY
+          Locomotor = SET_NORMAL CaptureLoco
+          Body = ActiveBody Body01
+            MaxHealth = 10000.0
+            InitialHealth = 10000.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """,
+    };
+
+    /// <summary>
+    /// A computer player's capturer unpacks at a building and chases an enemy that walks by meanwhile (a civilian building: its own enemy would be closer); when its preparation begins it stops (<c>startPreparation</c>'s
+    /// <c>aiIdle</c>) and stands where the 30 Hz capturer stands at the end of every frame, at 30, 60 and 120 Hz (Alpine Assault China against GLA, a Rebel at frame 39,305).
+    /// </summary>
+    public static void AStagedAbilityThatPreparesStopsItsChaseWhereThe30HzUnitStops()
+    {
+        var reference = new Dictionary<int, List<(Fixed X, Fixed Y)>>();
+        var stoppedWalking = 0;
+        foreach (var (rate, _) in WorldRates)
+            for (var offset = 0; offset <= 3; offset++)
+            {
+                var fixture = new SyntheticFixture(rate, files: ChasingCapturerFiles());
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+                var feeder = new Feeder(world);
+                feeder.Spawn(1, "ChasingCapturer", owner: 1, x: 100, y: 50);
+                feeder.Spawn(0, "CapturableStation", owner: 0, x: 200, y: 53);
+                feeder.Spawn(2, "ChasedWalker", owner: 2, x: 330 + offset, y: 150);
+                feeder.SetRelationship(1, 2, Relationship.Enemies);
+                world.Step();
+                while (world.Tick < world.Time.OriginalFrames(40)) world.Step();
+                var capturer = world.Entities.Single(value => value.Template.Name == "ChasingCapturer");
+                var station = world.Entities.Single(value => value.Template.Name == "CapturableStation");
+                var walker = world.Entities.Single(value => value.Template.Name == "ChasedWalker");
+                Check.That(feeder.Capture(1, capturer.Id.Value, station.Id.Value).Accepted, $"{rate}: the capture is accepted.");
+                Check.That(feeder.SetMoveTarget(2, walker.Id.Value, 20, 400).Accepted, $"{rate}: the enemy walks by.");
+                var ability = capturer.Modules.OfType<SpecialAbilityUpdate>().Single();
+                var positions = new List<(Fixed X, Fixed Y)>();
+                var walkingAtPreparation = false;
+                var stage = AbilityStage.None;
+                while (world.Tick < world.Time.OriginalFrames(260))
+                {
+                    var moving = capturer.HasMoveTarget;
+                    world.Step();
+                    if (stage != AbilityStage.Preparing && ability.Stage == AbilityStage.Preparing) walkingAtPreparation = moving;
+                    stage = ability.Stage;
+                    if (world.Time.IsOriginalFrameBoundary(world.Tick)) positions.Add((capturer.X, capturer.Y));
+                }
+                if (rate == SimulationRate.Hz30 && walkingAtPreparation) stoppedWalking++;
+                if (!reference.TryGetValue(offset, out var expected))
+                {
+                    reference[offset] = positions;
+                    continue;
+                }
+                var first = Enumerable.Range(0, positions.Count).FirstOrDefault(index => positions[index] != expected[index], -1);
+                Check.That(first < 0,
+                    $"{rate}, walker {offset} further: the capturer stands where the 30 Hz one stands at the end of every frame (first difference after frame {(first < 0 ? -1 : 41 + first)}: " +
+                    $"{(first < 0 ? "-" : $"{positions[first].X.ToDecimal():0.000},{positions[first].Y.ToDecimal():0.000} against {expected[first].X.ToDecimal():0.000},{expected[first].Y.ToDecimal():0.000}")}).");
+            }
+        Check.That(stoppedWalking > 0, $"Setup: the capturer chases while it unpacks and walks when its preparation begins ({stoppedWalking} of 4 at 30 Hz).");
     }
 }

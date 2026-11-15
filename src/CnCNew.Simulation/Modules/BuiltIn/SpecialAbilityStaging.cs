@@ -449,7 +449,12 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         if (target is not null && KindOf(world) is AbilityKind.InfantryCapture or AbilityKind.BlackLotusCapture or AbilityKind.HackerDisable or AbilityKind.VehicleHack or AbilityKind.StealCash)
             world.Emit(SimEventKind.RadarNotice, target.Id, Entity.Id, RadarNotices.Infiltration, 0);
         power.Trigger(world);
-        if (CrateModules.AiOf(Entity) is { } ai) ai.OrderIdle(world, false);
+        if (CrateModules.AiOf(Entity) is { } ai)
+        {
+            // A unit that walks (it chases what it acquired while it unpacked) stands where its begun frame ends, as the 30 Hz unit after its whole step (#305).
+            if (Entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(world);
+            ai.OrderIdle(world, false);
+        }
         Entity.Status |= 1UL << UsingAbilityBit;
     }
 
