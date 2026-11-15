@@ -168,12 +168,20 @@ public static class W3dSkeletonAudit
 
             Add("boxes", file.Boxes.Length);
             Add("null-objects", file.NullObjects.Length);
+            foreach (var emitter in file.Emitters)
+            {
+                Increment("emitters");
+                Increment($"emitters.render-mode.{emitter.RenderMode}");
+                Add("emitters.frame-mode-grid", emitter.FrameMode != W3dEmitterFrameMode.Grid1x1 ? 1 : 0);
+                Add("emitters.version-1", emitter.ShaderFromTextureAlpha ? 1 : 0);
+                Add("emitters.ignored-sub-chunks", emitter.IgnoredChunks.Length);
+            }
             foreach (var animation in file.Animations)
             {
                 AuditAnimation(assetName, file, animation);
             }
 
-            if (file.Hlods.Length > 0 || (file.Meshes.Length > 0 && file.Hierarchies.Length == 0))
+            if (file.Hlods.Length > 0 || (file.Meshes.Length > 0 && file.Hierarchies.Length == 0) || (file.Meshes.Length == 0 && file.Emitters.Length > 0))
             {
                 AuditModel(assetName, file);
             }
@@ -192,7 +200,7 @@ public static class W3dSkeletonAudit
                 return;
             }
 
-            Increment(file.Hlods.Length > 0 ? "models.hlod" : "models.bare-mesh");
+            Increment(file.Hlods.Length > 0 ? "models.hlod" : model.Emitter is not null ? "models.emitter" : "models.bare-mesh");
             Increment($"models.hierarchy-source.{model.HierarchySource}");
             Add("hlods.lod-arrays", file.Hlods.Sum(hlod => hlod.Lods.Length));
             Add("hlods.aggregates", model.Aggregates.Length);

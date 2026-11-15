@@ -128,6 +128,7 @@ RunMapperTests();
 RunMaterialFunctionTests();
 RunTextureResolutionTests();
 SkeletonTests.RunSynthetic();
+EmitterTests.RunSynthetic();
 
 var contentArgument = Array.FindIndex(args, value => value.Equals("--content-dir", StringComparison.OrdinalIgnoreCase));
 if (contentArgument >= 0)
@@ -135,6 +136,7 @@ if (contentArgument >= 0)
     Assert(contentArgument + 1 < args.Length, "--content-dir requires a path.");
     RunRealAssetRenderPlanTests(args[contentArgument + 1]);
     SkeletonTests.RunRealData(args[contentArgument + 1]);
+    EmitterTests.RunRealData(args[contentArgument + 1]);
 }
 
 Console.WriteLine("All W3D chunk reader tests passed.");

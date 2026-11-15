@@ -97,6 +97,22 @@ if (args is ["model", var modelContentDirectory, var modelName])
         foreach (var entry in model.UnresolvedSubObjects) Console.WriteLine($"  UNRESOLVED bone {entry.BoneIndex}: {entry.Name}");
         foreach (var entry in model.UnreferencedMeshes) Console.WriteLine($"  UNREFERENCED mesh: {entry}");
         foreach (var chunk in model.IgnoredChunks) Console.WriteLine($"  IGNORED chunk {chunk.Kind} (0x{chunk.Type:X})");
+        if (model.Emitter is { } emitter)
+        {
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+            Console.WriteLine(string.Create(invariant,
+                $"  EMITTER '{emitter.Name}' version {emitter.Version >> 16}.{emitter.Version & 0xffff}: texture '{emitter.TextureName}', {emitter.RenderMode}, {emitter.FrameMode}, lifetime {emitter.Lifetime} s, " +
+                $"{emitter.EmissionRate} bursts/s of {emitter.BurstSize}, max {emitter.MaxEmissions}, velocity {emitter.Velocity} + outward {emitter.OutwardVelocity}, acceleration {emitter.Acceleration}"));
+            Console.WriteLine(string.Create(invariant,
+                $"    creation {emitter.CreationVolume.Kind} ({emitter.CreationVolume.Value1}, {emitter.CreationVolume.Value2}, {emitter.CreationVolume.Value3}), " +
+                $"velocity random {emitter.VelocityRandom.Kind} ({emitter.VelocityRandom.Value1}, {emitter.VelocityRandom.Value2}, {emitter.VelocityRandom.Value3}), inherit {emitter.VelocityInherit}, shader " +
+                $"{(emitter.Shader is { } shader ? $"src {shader.SourceBlend} dst {shader.DestinationBlend} alpha-test {shader.AlphaTestEnabled}" : "by the texture's alpha")}"));
+            Console.WriteLine(string.Create(invariant,
+                $"    colour {emitter.Colors.Start} +-{emitter.Colors.Random} keys {emitter.Colors.Keys.Length}, opacity {emitter.Opacities.Start} +-{emitter.Opacities.Random} keys {emitter.Opacities.Keys.Length}, " +
+                $"size {emitter.Sizes.Start} +-{emitter.Sizes.Random} keys {emitter.Sizes.Keys.Length}, rotation {emitter.Rotations.Start} keys {emitter.Rotations.Keys.Length}, frames keys {emitter.Frames.Keys.Length}"));
+            foreach (var chunk in emitter.IgnoredChunks) Console.WriteLine($"    IGNORED emitter chunk 0x{chunk.Type:X}");
+        }
+
         return 0;
     }
     catch (Exception exception)

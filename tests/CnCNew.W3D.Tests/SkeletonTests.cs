@@ -317,8 +317,9 @@ internal static class SkeletonTests
             RawChannel(1, W3dChannelType.X, 0, [0, 1]),
         ])).Animations.Single();
         Throws<InvalidDataException>(() => duplicate.Bind(2), "Duplicate channels for one pivot must fail.");
-        var emitter = Decode(Concat(Container(W3dChunkType.Emitter, Chunk(0x501, [0])), Mesh("C", "M", null, 0)));
-        Check(emitter.IgnoredChunks.Single().Kind == "emitter", "Known unused chunks must be listed as ignored.");
+        var dazzle = Decode(Concat(Container(W3dChunkType.Dazzle, Chunk(0x901, [0])), Mesh("C", "M", null, 0)));
+        Check(dazzle.IgnoredChunks.Single().Kind == "dazzle", "Known unused chunks must be listed as ignored.");
+        Fails(Concat(Container(W3dChunkType.Emitter, Chunk(0x501, [0])), Mesh("C", "M", null, 0)), "An emitter is decoded, so a malformed one fails (issue 369).");
     }
 
     // ---------------------------------------------------------------- real data
@@ -343,6 +344,9 @@ internal static class SkeletonTests
             $"Real W3D inventory changed ({report.FileCount} files, {report["hierarchies"]} hierarchies, {report["models.hlod"]} HLODs).");
         Check(report["animations.None"] == 4084 && report["animations.TimeCoded"] == 21 && report["animations.AdaptiveDelta"] == 0,
             $"Real animation counts changed ({report["animations.None"]}, {report["animations.TimeCoded"]}, {report["animations.AdaptiveDelta"]}).");
+        // Issue 369: three files are a particle emitter alone (the hydrant's water spray among them); each is a model.
+        Check(report["emitters"] == 3 && report["models.emitter"] == 3 && report["emitters.ignored-sub-chunks"] == 0,
+            $"Real emitter counts changed ({report["emitters"]} emitters, {report["models.emitter"]} emitter models, {report["emitters.ignored-sub-chunks"]} skipped sub-chunks).");
         Check(report["meshes.skinned"] == 169 && report["model.unresolved-sub-objects"] == 42,
             $"Real skin or unresolved sub-object counts changed ({report["meshes.skinned"]}, {report["model.unresolved-sub-objects"]}).");
         // Issue 23: no shipped model has a camera-aligned or camera-oriented mesh (W3D_MESH_FLAG_GEOMETRY_TYPE_CAMERA_ALIGNED/_ORIENTED, which the original turns to the camera

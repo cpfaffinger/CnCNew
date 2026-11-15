@@ -3,8 +3,8 @@ using System.Collections.Immutable;
 namespace CnCNew.W3D;
 
 /// <summary>
-/// Every top-level object of one W3D file, decoded. Known render-object kinds this runtime does not use (emitters,
-/// dazzles, lights, ...) are listed in <see cref="IgnoredChunks"/>; unknown top-level chunks are decode errors.
+/// Every top-level object of one W3D file, decoded. Known render-object kinds this runtime does not use (dazzles,
+/// lights, ...) are listed in <see cref="IgnoredChunks"/>; unknown top-level chunks are decode errors.
 /// </summary>
 public sealed record W3dAssetFile(
     W3dReadResult Source,
@@ -16,6 +16,9 @@ public sealed record W3dAssetFile(
     ImmutableArray<W3dNullObject> NullObjects,
     ImmutableArray<W3dIgnoredChunk> IgnoredChunks)
 {
+    /// <summary>The particle emitters of the file (<c>W3D_CHUNK_EMITTER</c>), in file order.</summary>
+    public ImmutableArray<W3dEmitter> Emitters { get; init; } = [];
+
     public static W3dAssetFile Read(Stream stream) => Decode(W3dFileReader.Read(stream));
 
     public static W3dAssetFile Decode(W3dReadResult source)
@@ -28,6 +31,7 @@ public sealed record W3dAssetFile(
         var boxes = ImmutableArray.CreateBuilder<W3dBox>();
         var nullObjects = ImmutableArray.CreateBuilder<W3dNullObject>();
         var ignored = ImmutableArray.CreateBuilder<W3dIgnoredChunk>();
+        var emitters = ImmutableArray.CreateBuilder<W3dEmitter>();
         foreach (var chunk in source.File.Chunks)
         {
             switch (chunk.Type)
@@ -50,6 +54,8 @@ public sealed record W3dAssetFile(
                     nullObjects.Add(W3dHlodDecoder.DecodeNullObject(data, chunk));
                     break;
                 case W3dChunkType.Emitter:
+                    emitters.Add(W3dEmitterDecoder.Decode(data, chunk));
+                    break;
                 case W3dChunkType.Dazzle:
                 case W3dChunkType.Light:
                 case W3dChunkType.MorphAnimation:
@@ -79,7 +85,7 @@ public sealed record W3dAssetFile(
             animations.ToImmutable(),
             boxes.ToImmutable(),
             nullObjects.ToImmutable(),
-            ignored.ToImmutable());
+            ignored.ToImmutable()) { Emitters = emitters.ToImmutable() };
     }
 
     public static string GetIgnoredKind(uint type) => type switch

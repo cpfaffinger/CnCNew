@@ -278,51 +278,61 @@ public static class W3dMeshDecoder
         var result = new W3dShader[count];
         for (var index = 0; index < count; index++)
         {
-            var offset = index * ShaderSize;
-            var depthCompare = payload[offset];
-            var depthWrite = payload[offset + 1];
-            var destinationBlend = payload[offset + 3];
-            var primaryGradient = payload[offset + 5];
-            var sourceBlend = payload[offset + 7];
-            var texturing = payload[offset + 8];
-            var detailColor = payload[offset + 9];
-            var detailAlpha = payload[offset + 10];
-            var alphaTest = payload[offset + 12];
-            var postDetailColor = payload[offset + 13];
-            var postDetailAlpha = payload[offset + 14];
-            if (depthCompare > 7 || depthWrite > 1 || destinationBlend > 6 || primaryGradient > 5 ||
-                payload[offset + 6] > 1 || sourceBlend > 3 || texturing > 1 ||
-                detailColor > 12 || detailAlpha > 3 || alphaTest > 1 ||
-                postDetailColor > 12 || postDetailAlpha > 3)
-            {
-                throw new InvalidDataException(
-                    $"Mesh '{meshName}' shader {index} contains an unknown render-state value " +
-                    $"(depth={depthCompare}, write={depthWrite}, destination={destinationBlend}, " +
-                    $"primary={primaryGradient}, secondary={payload[offset + 6]}, source={sourceBlend}, " +
-                    $"texturing={texturing}, detailColor={detailColor}, detailAlpha={detailAlpha}, " +
-                    $"alphaTest={alphaTest}, postColor={postDetailColor}, postAlpha={postDetailAlpha}).");
-            }
-
-            result[index] = new W3dShader(
-                (W3dDepthCompare)depthCompare,
-                depthWrite != 0,
-                payload[offset + 2],
-                (W3dDestinationBlend)destinationBlend,
-                payload[offset + 4],
-                (W3dPrimaryGradient)primaryGradient,
-                (W3dSecondaryGradient)payload[offset + 6],
-                (W3dSourceBlend)sourceBlend,
-                texturing != 0,
-                (W3dDetailColorFunction)detailColor,
-                (W3dDetailAlphaFunction)detailAlpha,
-                payload[offset + 11],
-                alphaTest != 0,
-                (W3dDetailColorFunction)postDetailColor,
-                (W3dDetailAlphaFunction)postDetailAlpha,
-                payload[offset + 15]);
+            result[index] = DecodeShader(payload.Slice(index * ShaderSize, ShaderSize), $"Mesh '{meshName}' shader {index}");
         }
 
         return result;
+    }
+
+    /// <summary>One <c>W3dShaderStruct</c> (16 bytes) as meshes and particle emitters store it; an unknown render-state value is a decode error.</summary>
+    internal static W3dShader DecodeShader(ReadOnlySpan<byte> payload, string description)
+    {
+        if (payload.Length != ShaderSize)
+        {
+            throw new InvalidDataException($"{description} has {payload.Length} bytes; expected {ShaderSize}.");
+        }
+
+        var depthCompare = payload[0];
+        var depthWrite = payload[1];
+        var destinationBlend = payload[3];
+        var primaryGradient = payload[5];
+        var sourceBlend = payload[7];
+        var texturing = payload[8];
+        var detailColor = payload[9];
+        var detailAlpha = payload[10];
+        var alphaTest = payload[12];
+        var postDetailColor = payload[13];
+        var postDetailAlpha = payload[14];
+        if (depthCompare > 7 || depthWrite > 1 || destinationBlend > 6 || primaryGradient > 5 ||
+            payload[6] > 1 || sourceBlend > 3 || texturing > 1 ||
+            detailColor > 12 || detailAlpha > 3 || alphaTest > 1 ||
+            postDetailColor > 12 || postDetailAlpha > 3)
+        {
+            throw new InvalidDataException(
+                $"{description} contains an unknown render-state value " +
+                $"(depth={depthCompare}, write={depthWrite}, destination={destinationBlend}, " +
+                $"primary={primaryGradient}, secondary={payload[6]}, source={sourceBlend}, " +
+                $"texturing={texturing}, detailColor={detailColor}, detailAlpha={detailAlpha}, " +
+                $"alphaTest={alphaTest}, postColor={postDetailColor}, postAlpha={postDetailAlpha}).");
+        }
+
+        return new W3dShader(
+            (W3dDepthCompare)depthCompare,
+            depthWrite != 0,
+            payload[2],
+            (W3dDestinationBlend)destinationBlend,
+            payload[4],
+            (W3dPrimaryGradient)primaryGradient,
+            (W3dSecondaryGradient)payload[6],
+            (W3dSourceBlend)sourceBlend,
+            texturing != 0,
+            (W3dDetailColorFunction)detailColor,
+            (W3dDetailAlphaFunction)detailAlpha,
+            payload[11],
+            alphaTest != 0,
+            (W3dDetailColorFunction)postDetailColor,
+            (W3dDetailAlphaFunction)postDetailAlpha,
+            payload[15]);
     }
 
     private static IReadOnlyList<W3dVertexMaterial> ReadVertexMaterials(

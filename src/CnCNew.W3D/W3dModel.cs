@@ -71,7 +71,8 @@ public sealed class W3dModel
         ImmutableArray<string> unreferencedMeshes,
         ImmutableArray<W3dHlodSubObject> aggregates,
         ImmutableArray<W3dHlodSubObject> proxies,
-        ImmutableArray<W3dIgnoredChunk> ignoredChunks)
+        ImmutableArray<W3dIgnoredChunk> ignoredChunks,
+        W3dEmitter? emitter = null)
     {
         Name = name;
         Skeleton = skeleton;
@@ -83,6 +84,7 @@ public sealed class W3dModel
         Aggregates = aggregates;
         Proxies = proxies;
         IgnoredChunks = ignoredChunks;
+        Emitter = emitter;
     }
 
     public string Name { get; }
@@ -110,6 +112,12 @@ public sealed class W3dModel
 
     public ImmutableArray<W3dIgnoredChunk> IgnoredChunks { get; }
 
+    /// <summary>
+    /// For a model that is a particle emitter (a file with one emitter and nothing else, <c>WW3DAssetManager::Create_Render_Obj</c> making a <c>ParticleEmitterClass</c>): its
+    /// definition. Such a model has a single-pivot default skeleton and no sub-objects; what it shows are the particles the presentation runs from it. Null for every other model.
+    /// </summary>
+    public W3dEmitter? Emitter { get; }
+
     public IEnumerable<W3dSubObject> GetLod(int lodIndex) => SubObjects.Where(subObject => subObject.LodIndex == lodIndex);
 
     public W3dPose CreatePose() => new(Skeleton);
@@ -133,7 +141,7 @@ public sealed class W3dModel
 
         if (file.Hlods.Length == 0)
         {
-            return CreateBareMesh(name, file);
+            return file.Meshes.Length == 0 && file.Emitters.Length > 0 ? CreateEmitter(name, file) : CreateBareMesh(name, file);
         }
 
         var hlod = SelectHlod(name, file);
@@ -221,7 +229,7 @@ public sealed class W3dModel
             [.. meshes.Keys.Where(mesh => !referenced.Contains(mesh)).Order(StringComparer.OrdinalIgnoreCase)],
             hlod.Aggregates,
             hlod.Proxies,
-            file.IgnoredChunks);
+            UnusedEmitters(file));
     }
 
     /// <summary>Case-insensitive exact bone lookup (HTreeClass::Get_Bone_Index); -1 if missing.</summary>
@@ -350,7 +358,54 @@ public sealed class W3dModel
             [],
             [],
             [],
-            file.IgnoredChunks);
+            UnusedEmitters(file));
+    }
+
+    /// <summary>
+    /// A file of particle emitters only: the original's asset manager registers each emitter under its own name and <c>Create_Render_Obj</c> of the model's name clones the one of
+    /// that name. Several emitters, or one of another name, leave the model without a render object of its name - an error here.
+    /// </summary>
+    private static W3dModel CreateEmitter(string name, W3dAssetFile file)
+    {
+        if (file.Boxes.Length != 0 || file.Hierarchies.Length != 0 || file.NullObjects.Length != 0)
+        {
+            throw new InvalidDataException(
+                $"File '{name}' has {file.Emitters.Length} emitters beside {file.Boxes.Length} boxes, {file.Hierarchies.Length} hierarchies, {file.NullObjects.Length} null objects; " +
+                "only files of emitters alone are emitter models.");
+        }
+
+        var named = file.Emitters.Where(emitter => emitter.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (named.Length != 1)
+        {
+            throw new InvalidDataException(
+                $"File '{name}' has the emitters {string.Join(", ", file.Emitters.Select(emitter => $"'{emitter.Name}'"))} and none uniquely named like the model.");
+        }
+
+        return new W3dModel(
+            name,
+            W3dSkeleton.CreateDefault(named[0].Name),
+            W3dHierarchySource.Default,
+            1,
+            [],
+            [],
+            [],
+            [],
+            [],
+            file.IgnoredChunks,
+            named[0]);
+    }
+
+    /// <summary>Emitters of a mesh or HLOD file are not part of the model the file's name makes: listed beside the ignored chunks.</summary>
+    private static ImmutableArray<W3dIgnoredChunk> UnusedEmitters(W3dAssetFile file)
+    {
+        if (file.Emitters.IsEmpty)
+        {
+            return file.IgnoredChunks;
+        }
+
+        var emitters = file.Source.File.Chunks.Where(chunk => chunk.Type == W3dChunkType.Emitter)
+            .Select(chunk => new W3dIgnoredChunk(chunk.Type, W3dAssetFile.GetIgnoredKind(chunk.Type), chunk.HeaderOffset));
+        return [.. file.IgnoredChunks.Concat(emitters).OrderBy(chunk => chunk.HeaderOffset)];
     }
 
     private static void ValidateSkin(string modelName, W3dMesh mesh, W3dSkeleton skeleton)
