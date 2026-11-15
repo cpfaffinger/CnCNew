@@ -88,6 +88,9 @@ public sealed class TerrainHeightSampler
 
     public byte RawHeight(int vertexX, int vertexY) => _heights[vertexY * VertexWidth + vertexX];
 
+    /// <summary>The raw heights of one row of height vertices.</summary>
+    public ReadOnlySpan<byte> RawHeightRow(int vertexY) => _heights.AsSpan(vertexY * VertexWidth, VertexWidth);
+
     public bool IsInsideField(float x, float y)
         => x >= FieldMin.X && y >= FieldMin.Y && x <= FieldMax.X && y <= FieldMax.Y;
 

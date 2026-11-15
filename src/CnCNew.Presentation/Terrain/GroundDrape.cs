@@ -60,15 +60,20 @@ public static class GroundDrape
         Span<Point> corners = stackalloc Point[4];
         Span<Point> polygon = stackalloc Point[9];
         Span<Point> scratch = stackalloc Point[9];
+        // Each height-map vertex is computed once: the row below the cells and the row above them.
+        Span<Point> lower = stackalloc Point[MaxVerticesPerSide];
+        Span<Point> upper = stackalloc Point[MaxVerticesPerSide];
+        Row(lower, startY);
         for (var j = startY; j < endY; j++)
         {
-            for (var i = startX; i < endX; i++)
+            Row(upper, j + 1);
+            for (var i = 0; i < endX - startX; i++)
             {
                 // Corners 0..3 counter-clockwise from the cell's lower left, as the terrain mesh numbers them.
-                Corner(ref corners[0], i, j);
-                Corner(ref corners[1], i + 1, j);
-                Corner(ref corners[2], i + 1, j + 1);
-                Corner(ref corners[3], i, j + 1);
+                corners[0] = lower[i];
+                corners[1] = lower[i + 1];
+                corners[2] = upper[i + 1];
+                corners[3] = upper[i];
                 if (AllOutside(corners)) continue;
                 // The upper of the two splits: along 0-2 when its middle lies at least as high as the middle of 1-3.
                 var first = corners[0].Z + corners[2].Z >= corners[1].Z + corners[3].Z ? 0 : 1;
@@ -81,18 +86,28 @@ public static class GroundDrape
                 Triangle(corners[first], corners[first + 1], corners[first + 2], polygon, scratch, output);
                 Triangle(corners[first], corners[first + 2], corners[(first + 3) & 3], polygon, scratch, output);
             }
+
+            var swap = lower;
+            lower = upper;
+            upper = swap;
         }
 
         return output.Count - before;
 
-        void Corner(ref Point point, int vertexX, int vertexY)
+        void Row(Span<Point> row, int vertexY)
         {
-            point.X = (vertexX - border) * cell;
-            point.Y = (vertexY - border) * cell;
-            point.Z = heights.RawHeight(vertexX, vertexY) * TerrainHeightSampler.HeightScale + lift;
-            var offset = new Vector2(point.X, point.Y) - center;
-            point.U = Vector2.Dot(offset, toU) + 0.5f;
-            point.V = Vector2.Dot(offset, toV) + 0.5f;
+            var y = (vertexY - border) * cell;
+            var raw = heights.RawHeightRow(vertexY);
+            for (var vertexX = startX; vertexX <= endX; vertexX++)
+            {
+                ref var point = ref row[vertexX - startX];
+                point.X = (vertexX - border) * cell;
+                point.Y = y;
+                point.Z = raw[vertexX] * TerrainHeightSampler.HeightScale + lift;
+                var offset = new Vector2(point.X, y) - center;
+                point.U = Vector2.Dot(offset, toU) + 0.5f;
+                point.V = Vector2.Dot(offset, toV) + 0.5f;
+            }
         }
     }
 
