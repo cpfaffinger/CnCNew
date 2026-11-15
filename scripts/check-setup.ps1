@@ -101,7 +101,7 @@ param([string]$Launcher, [string]$Root)
 $ErrorActionPreference = 'Stop'
 $ast = [Management.Automation.Language.Parser]::ParseFile($Launcher, [ref]$null, [ref]$null)
 foreach ($f in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
-    if (@('Set-Skippable', 'Skip-Simulation', 'Step-Simulation', 'Invoke-Logged', 'Get-ShortcutFolders', 'Get-PlayCommand', 'New-GameShortcuts', 'Test-Inside', 'Add-ReportLine', 'Set-Done') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) }
+    if (@('Set-Skippable', 'Skip-Simulation', 'Step-Simulation', 'Invoke-Logged', 'Invoke-Quiet', 'Get-ShortcutFolders', 'Get-PlayCommand', 'New-GameShortcuts', 'Test-Inside', 'Add-ReportLine', 'Set-Done') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) }
 }
 $logDir = Join-Path $Root 'setup'; New-Item -ItemType Directory -Force $logDir | Out-Null
 $repo = Split-Path -Parent (Split-Path -Parent $Launcher)
@@ -148,6 +148,18 @@ foreach ($case in @(@('C:\Dotnet\dotnet.exe', 'cmd'), @((Join-Path $programFiles
     }
 }
 if (@(Get-Content -LiteralPath $shortcutFile).Count -ne 2) { 'FAIL shortcuts: the record does not hold exactly the two shortcuts' }
+
+# A dotnet that never ran for this user writes its welcome to the error stream, beginning with an empty line; under 'Stop' Windows PowerShell 5.1 made
+# that an error with an empty message, and the setup stopped before its first step (the owner's test PC, 15 November 2026).
+$dotnetCommand = Get-Command dotnet.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($dotnetCommand) {
+    $env:DOTNET_CLI_HOME = Join-Path $Root 'fresh-dotnet-home'
+    try {
+        $sources = @(Invoke-Quiet $dotnetCommand.Source @('nuget', 'list', 'source'))
+        if (-not ($sources | Where-Object { $_ -match 'api\.nuget\.org' })) { "FAIL native: no nuget.org among the sources of a fresh dotnet home: $($sources -join ' | ')" }
+    } catch { "FAIL native: a fresh dotnet's welcome on the error stream ended the launcher: $($_.Exception.GetType().FullName) [$($_.Exception.Message)]" }
+    Remove-Item Env:DOTNET_CLI_HOME
+} else { 'native: no dotnet on this PATH, the check of a fresh dotnet home was not run' }
 'parts done'
 '@)
     $partsOutput = & $powershell -NoProfile -ExecutionPolicy Bypass -File $parts -Launcher $launcher -Root (Join-Path $work 'parts') 2>&1 | Out-String

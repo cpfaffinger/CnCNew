@@ -166,8 +166,16 @@ function Add-ToolPath([string]$Directory) {
     if (($user -split ';') -notcontains $Directory) { [Environment]::SetEnvironmentVariable('Path', ((@($Directory, $user) | Where-Object { $_ }) -join ';'), 'User') }
 }
 
+# The lines a program writes to its output; what it writes to its error stream is dropped. Windows PowerShell 5.1 makes every line a native program
+# writes to its error stream an error record even behind 2>$null, and under 'Stop' that ended the setup with an empty message (the owner's test PC,
+# 15 November 2026). Here the preference is 'Continue', so nothing a program says can end the launcher; its exit code stays in $LASTEXITCODE.
+function Invoke-Quiet([string]$File, [string[]]$Arguments) {
+    $ErrorActionPreference = 'Continue'
+    & $File @Arguments 2>$null
+}
+
 function Test-Sdk([string]$Dotnet) {
-    foreach ($line in @(& $Dotnet --list-sdks 2>$null)) {
+    foreach ($line in @(Invoke-Quiet $Dotnet @('--list-sdks'))) {
         if ($line -match '^(\d+\.\d+\.\d+) ') {
             $version = [version]$Matches[1]
             if ($version.Major -eq $wantedSdk.Major -and $version.Minor -eq $wantedSdk.Minor -and $version.Build -ge $wantedSdk.Build) { return $Matches[1] }
@@ -315,9 +323,9 @@ function Test-Reachable([string]$HostName) {
 
 function Get-Commit {
     if (-not $script:tools.Git) { return 'unknown' }
-    $commit = & $script:tools.Git -C $repo rev-parse --short=10 HEAD 2>$null
+    $commit = Invoke-Quiet $script:tools.Git @('-C', $repo, 'rev-parse', '--short=10', 'HEAD')
     if (-not $commit) { return 'unknown' }
-    if (& $script:tools.Git -C $repo status --porcelain 2>$null) { return "$commit-dirty" }
+    if (Invoke-Quiet $script:tools.Git @('-C', $repo, 'status', '--porcelain')) { return "$commit-dirty" }
     $commit
 }
 
@@ -329,7 +337,7 @@ function Get-Sha256([string]$Path) {
 # What the data depend on: the two masters and the code that makes it. A new version that changes none of these keeps the data.
 function Get-ContentKey {
     $key = @((Get-Sha256 (Join-Path $repo 'baselines\steam-master.json')), (Get-Sha256 (Join-Path $repo 'baselines\patch-master.json')))
-    if ($script:tools.Git) { $key += @(& $script:tools.Git -C $repo log -1 '--format=%H' -- src/CnCNew.Import src/CnCNew.Formats src/CnCNew.Images tools/CnCNew.AssetTool 2>$null) }
+    if ($script:tools.Git) { $key += @(Invoke-Quiet $script:tools.Git @('-C', $repo, 'log', '-1', '--format=%H', '--', 'src/CnCNew.Import', 'src/CnCNew.Formats', 'src/CnCNew.Images', 'tools/CnCNew.AssetTool')) }
     $key += $script:installDir
     $key -join ' '
 }
@@ -419,8 +427,8 @@ function Invoke-Checks {
 
     $script:behind = 0
     if ($script:tools.Git -and -not (Get-Row 'network').Detail.StartsWith('No answer')) {
-        & $script:tools.Git -C $repo fetch --quiet origin master 2>$null
-        if ($LASTEXITCODE -eq 0) { $script:behind = [int](& $script:tools.Git -C $repo rev-list --count 'HEAD..FETCH_HEAD' 2>$null) }
+        $null = Invoke-Quiet $script:tools.Git @('-C', $repo, 'fetch', '--quiet', 'origin', 'master')
+        if ($LASTEXITCODE -eq 0) { $script:behind = [int](@(Invoke-Quiet $script:tools.Git @('-C', $repo, 'rev-list', '--count', 'HEAD..FETCH_HEAD')) | Select-Object -First 1) }
     }
 }
 
@@ -460,8 +468,8 @@ function Invoke-Logged([string]$Name, [string]$Title, [string]$File, [string]$Ar
     $started = Get-Date
     $shown = ''
     while (-not $process.HasExited) {
-        if ($script:cancel) { & "$env:windir\System32\taskkill.exe" /PID $process.Id /T /F 2>$null | Out-Null; return -1 }
-        if ($script:skip) { & "$env:windir\System32\taskkill.exe" /PID $process.Id /T /F 2>$null | Out-Null; return -2 }
+        if ($script:cancel) { $null = Invoke-Quiet "$env:windir\System32\taskkill.exe" @('/PID', "$($process.Id)", '/T', '/F'); return -1 }
+        if ($script:skip) { $null = Invoke-Quiet "$env:windir\System32\taskkill.exe" @('/PID', "$($process.Id)", '/T', '/F'); return -2 }
         $last = Get-LastLine $log
         $seconds = [int]((Get-Date) - $started).TotalSeconds
         if ($script:statusLabel) {
@@ -728,7 +736,10 @@ function Invoke-Setup {
             if ((Get-Row $id).State -ne 'OK') { Set-Row $id 'Failed' 'Could not be installed. See the log folder.'; return $false }
         }
         # The pitfall of BUILDING.md: a user configuration without nuget.org fails the restore with NU1101.
-        if (@(& $script:tools.Dotnet nuget list source 2>$null) -notmatch 'nuget\.org') { & $script:tools.Dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org 2>$null | Out-Null }
+        # (-notmatch on a list gives the lines that do not match, which is never empty: the old test added the source on every run.)
+        if (-not @(Invoke-Quiet $script:tools.Dotnet @('nuget', 'list', 'source') | Where-Object { $_ -match 'api\.nuget\.org' })) {
+            $null = Invoke-Quiet $script:tools.Dotnet @('nuget', 'add', 'source', 'https://api.nuget.org/v3/index.json', '-n', 'nuget.org')
+        }
         foreach ($step in 'Step-Content', 'Step-Client', 'Step-Verify', 'Step-Start', 'Step-Simulation') {
             if ($script:cancel) { return $false }
             if (-not (& $step)) { return $false }
@@ -899,7 +910,18 @@ function Update-Buttons {
 }
 
 function Invoke-Guarded([scriptblock]$Action) {
-    try { & $Action } catch { $script:busy = $false; Say "Something went wrong: $($_.Exception.Message)`nThe logs are in $logDir"; $progress.Visible = $false }
+    try { & $Action } catch {
+        $script:busy = $false
+        # Every failure goes into a file with its place, so an empty message (an error record of a native program) can still be traced.
+        $errorLog = Join-Path $logDir 'launcher-error.log'
+        $details = "$(Get-Date -Format s)  $($_.Exception.GetType().FullName)`r`n$($_ | Out-String)`r`n$($_.ScriptStackTrace)`r`n`r`n"
+        try { [IO.File]::AppendAllText($errorLog, $details) } catch { Write-Verbose "$_" }
+        $message = "$($_.Exception.Message)".Trim()
+        if (-not $message) { $message = "$($_.Exception.GetType().Name) $($_.InvocationInfo.PositionMessage)" }
+        Say "Something went wrong: $message`nThe details are in $errorLog"
+        $progress.Visible = $false
+        try { Update-Buttons } catch { Write-Verbose "$_" }
+    }
 }
 
 # This window stays until the acceptance has lasted some seconds: what fails at once is said here, in words, and not by a dialog nobody can act on.
