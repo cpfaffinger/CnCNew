@@ -49,6 +49,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(SkirmishMemoryTests), SkirmishMemoryTests.Run),
     (nameof(AttachedEffectsTests), AttachedEffectsTests.Run),
     (nameof(DoorAnimationTests), DoorAnimationTests.Run),
+    (nameof(ScudStormLaunchTests), ScudStormLaunchTests.Run),
     (nameof(ProjectileFlightTests), ProjectileFlightTests.Run),
     (nameof(CampaignPinTests), CampaignPinTests.Run),
     (nameof(RadarEventTests), RadarEventTests.Run),
