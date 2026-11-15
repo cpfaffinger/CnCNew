@@ -102,8 +102,8 @@ public sealed record CreateNoOpData : ModuleData
 }
 
 /// <summary>
-/// <c>DockUpdate</c>: the approach queue and the active-docker hand-over. The dock carries no bone geometry (the <c>DockWaiting</c> bones are not read), so every slot's approach point is
-/// the reference's boneless branch of <c>computeApproachPosition</c> (see <see cref="ApproachPosition"/>). <c>update()</c> makes the owner of the first reached slot the active docker while none is active.
+/// <c>DockUpdate</c>: the approach queue and the active-docker hand-over. The approach place of a slot is its model's <c>DockWaitingNN</c> bone where the model has them, else the
+/// reference's boneless branch of <c>computeApproachPosition</c> (see <see cref="ApproachPosition"/>). <c>update()</c> makes the owner of the first reached slot the active docker while none is active.
 /// Slots and the active docker whose entity died or vanished are released (the reference relies on the docker's own machine to do that).
 /// The dock sleeps while no slot and no docker is in use and is woken by the first reservation.
 /// </summary>
@@ -176,7 +176,7 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     private bool Claimed(IWorldServices world, Entity docker, int slot, out int index, out Fixed x, out Fixed y)
     {
         index = slot;
-        (x, y) = ApproachPosition(world, docker);
+        (x, y) = ApproachPosition(world, docker, slot);
         world.WakeAt(Entity, this, world.Tick);
         return true;
     }
@@ -190,17 +190,53 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
         _owners[index] = EntityId.Invalid;
         _reached[index] = false;
         index--;
-        (x, y) = ApproachPosition(world, docker);
+        (x, y) = ApproachPosition(world, docker, index);
         return true;
     }
 
     /// <summary>
-    /// <c>DockUpdate::computeApproachPosition</c> for a model without <c>DockWaiting</c> bones: the dock's centre pushed <c>majorRadius / 2</c> towards the docker (all three axes in the
-    /// vector's length), then the nearest place <c>findPositionAround</c> finds within 100 units that nothing overlaps - a supply pile's trucks wait at its edge, not on it. A flyer ignores the
-    /// dock itself. A dock that is itself a mobile blocker overrides it.
+    /// The dock bones this dock reads (<c>DockUpdate::loadDockPositions</c>): none for an object that is <c>KINDOF_IGNORE_DOCKING_BONES</c> ("some of the GLASupplyStash assets still have
+    /// docking bones in them") or whose model has none.
     /// </summary>
-    protected virtual (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker)
+    protected DockBones? Bones(IWorldServices world)
+        => UsesBones && !Entity.Template.IsKindOf("IGNORE_DOCKING_BONES") && world.Templates.Geometry.Docks.TryGetValue(Entity.Template.Name, out var bones) ? bones : null;
+
+    /// <summary>A dock that keeps its own approach and moves (the ferry) reads no bones.</summary>
+    protected virtual bool UsesBones => true;
+
+    /// <summary>
+    /// <c>m_numberApproachPositionBones</c>: how many of the slots have a <c>DockWaitingNN</c> bone - the model's first ones, up to <c>NumberApproachPositions</c>; none for a dynamic dock
+    /// ("dynamic means no bones").
+    /// </summary>
+    private int ApproachBoneCount(DockBones? bones) => Dynamic || bones is null ? 0 : Math.Min(bones.Waiting.Length, data.NumberApproachPositions);
+
+    /// <summary>
+    /// <c>Object::convertBonePosToWorldPos</c>: a bone of the dock's model (the zero vector for one the model does not have) in the world, turned with the dock where its frame ends.
+    /// </summary>
+    protected (Fixed X, Fixed Y) BoneToWorld(IWorldServices world, BonePose? bone)
     {
+        var (x, y, _) = Entity.FrameEnd(world.Tick);
+        if (bone is not { } pose) return (x, y);
+        var heading = Entity.FrameEndAngle(world.Tick);
+        var (cos, sin) = (FixedTrig.Cos(heading), FixedTrig.Sin(heading));
+        return (x + pose.X * cos - pose.Y * sin, y + pose.X * sin + pose.Y * cos);
+    }
+
+    /// <summary>
+    /// <c>DockUpdate::computeApproachPosition</c>. With <c>DockWaiting</c> bones the slot's bone in the world (a slot beyond the model's bones takes the zero vector, the dock's centre); without
+    /// them the dock's centre pushed <c>majorRadius / 2</c> towards the docker (all three axes in the vector's length). Then the nearest place <c>findPositionAround</c> finds within 100 units
+    /// that nothing overlaps - a supply pile's trucks wait at its edge, not on it. A flyer ignores the dock itself. A dock that is itself a mobile blocker overrides it.
+    /// </summary>
+    protected virtual (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker, int slot)
+    {
+        var flies = CrateModules.UsesAirborneLocomotor(docker);
+        var bones = Bones(world);
+        var count = ApproachBoneCount(bones);
+        if (count > 0)
+        {
+            var (boneX, boneY) = BoneToWorld(world, slot < count ? bones!.Waiting[slot] : null);
+            return world.FindPositionAround(boneX, boneY, Fixed.Zero, FindPositionRadius, docker, flies ? Entity : null, out var atX, out var atY) ? (atX, atY) : (boneX, boneY);
+        }
         var (x, y) = (Entity.X, Entity.Y);
         // The docker where its frame ends (the frame convention: what the dock sees of it at 30 Hz).
         var (dockerX, dockerY, dockerZ) = docker.FrameEnd(world.Tick);
@@ -215,7 +251,6 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
             x += dx / dist * reach;
             y += dy / dist * reach;
         }
-        var flies = CrateModules.UsesAirborneLocomotor(docker);
         return world.FindPositionAround(x, y, Fixed.Zero, FindPositionRadius, docker, flies ? Entity : null, out var foundX, out var foundY) ? (foundX, foundY) : (x, y);
     }
 

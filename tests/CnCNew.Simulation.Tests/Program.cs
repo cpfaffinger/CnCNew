@@ -347,6 +347,7 @@ run.Test("Special powers: cash hack and cash bounty", Tests.SpecialPowerCash);
 run.Test("Special powers: snapshot continuation and replay round-trip", Tests.SpecialPowerSnapshot);
 run.Test("Phase 5 golden master: damage chain with armor, clip and reload", Tests.Phase5GoldenDamageChain);
 run.Test("Phase 5 golden master: production clock and ledger", Tests.Phase5GoldenProduction);
+run.Test("Dock bones (#354): the approach places are the model's DockWaiting bones, turned with the dock", Tests.DockApproachTakesTheModelsWaitingBones);
 run.Test("Supply economy golden master: independent trip recomputation, ledger and determinism", Tests.SupplyEconomyGoldenMaster);
 run.Test("Veterancy golden master: experience, levels and health scaling", Tests.VeterancyExperienceAndHealthGoldenMaster);
 run.Test("Veterancy: no experience for non-trainable killers and IGNORED_IN_GUI victims", Tests.VeterancyGrantRules);

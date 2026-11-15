@@ -310,6 +310,9 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
 
     public override string ModuleName => "RailedTransportDockUpdate";
 
+    /// <summary>The ferry keeps its own approach beside it, its pull and its push (see the class remarks): it reads none of its model's dock bones.</summary>
+    protected override bool UsesBones => false;
+
     /// <summary><c>isLoadingOrUnloading</c>.</summary>
     public bool IsLoadingOrUnloading => _unloading.IsValid || _docking.IsValid;
 
@@ -322,7 +325,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
     /// The waiting spot is just outside the ferry's bounding circle on the docker's side (the reference uses the <c>DOCKWAITING</c> bones beside the pier): the ferry is a mobile object that
     /// the local avoidance of a walking docker steers around, so a spot inside its footprint could never be reached.
     /// </summary>
-    protected override (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker)
+    protected override (Fixed X, Fixed Y) ApproachPosition(IWorldServices world, Entity docker, int slot)
     {
         var dx = docker.X - Entity.X;
         var dy = docker.Y - Entity.Y;
