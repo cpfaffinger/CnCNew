@@ -695,6 +695,7 @@ run.Test("Capture: the unit faces its target; the Black Lotus starts from afar a
 run.Test("Capture: the ability aborts when the target dies, the player re-orders, the unit dies or a colleague captured first", Tests.StagedCaptureAbortRules);
 run.Test("Capture: the capture power as a special power command runs the same stages", Tests.StagedCaptureViaTheSpecialPowerCommand);
 run.Test("Capture: snapshots in every stage continue identically, idle objects save nothing new, two runs agree", Tests.StagedCaptureSnapshotAndDeterminism);
+run.Test("#305: a staged ability stops its unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityStopsWhereThe30HzUnitStops);
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);

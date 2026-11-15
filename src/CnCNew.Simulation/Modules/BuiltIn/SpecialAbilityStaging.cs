@@ -335,13 +335,18 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             return;
         }
 
-        if (IsWithinStartRange(target, ai))
+        if (IsWithinStartRange(world, target, ai))
         {
             if (!_withinRange)
             {
                 _withinRange = true;
-                // The approach move ends where the unit is (aiBusy / aiIdle in the reference's first state change).
-                if (Entity.HasMoveTarget) ai.OrderIdle(world, false);
+                // The approach move ends where the unit is (aiBusy / aiIdle in the reference's first state change). Above 30 Hz the range was judged where the unit's begun frame
+                // ends, and the 30 Hz unit has taken that frame's whole step when its ability stops it: it stands there (#305).
+                if (Entity.HasMoveTarget)
+                {
+                    ai.StopInternalMoveAtFrameEnd(world);
+                    ai.OrderIdle(world, false);
+                }
             }
             if (data.NeedToFaceTarget && !_noTarget && !_facingComplete)
             {
@@ -452,7 +457,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     /// </summary>
     private bool ContinuePreparation(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
-        if (data.AbilityAbortRange < SpecialAbilityUpdateData.HugeDistance && target is not null && !WithinSpheres(target, data.AbilityAbortRange)) return false;
+        if (data.AbilityAbortRange < SpecialAbilityUpdateData.HugeDistance && target is not null && !WithinSpheres(world, target, data.AbilityAbortRange)) return false;
         if (!IsCapture(world)) return ContinueKind(world, target);
         if (target is null) return false;
         if (world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;
@@ -581,20 +586,21 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     /// modelled; the collision requirement of a range under 2.5 units neither). When an approach has ended without reaching it (the grid lets the unit get no closer), a gap of
     /// up to two cells counts as arrived instead of re-ordering the same approach for ever.
     /// </summary>
-    private bool IsWithinStartRange(Entity? target, AIUpdateInterface ai)
+    private bool IsWithinStartRange(IWorldServices world, Entity? target, AIUpdateInterface ai)
     {
         if (_withinRange) return true;
         if (data.StartAbilityRange >= SpecialAbilityUpdateData.HugeDistance) return true;
         if (_hasPlace)
         {
-            var (dx, dy) = (_placeX - Entity.X, _placeY - Entity.Y);
+            var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+            var (dx, dy) = (_placeX - ownX, _placeY - ownY);
             if (SquaredReach.Of(data.StartAbilityRange + Entity.Template.BoundingCircleRadius).Contains(dx * dx + dy * dy)) return true;
             return ai.IsIdle && _approachOrders > 0;
         }
         if (target is null) return true;
         var range = data.ApproachRequiresLos ? Fixed.Max(Fixed.Zero, data.StartAbilityRange - Undersize) : data.StartAbilityRange;
-        if (WithinSpheres(target, range)) return true;
-        return ai.IsIdle && _approachOrders > 0 && WithinSpheres(target, range + ArrivalSlack);
+        if (WithinSpheres(world, target, range)) return true;
+        return ai.IsIdle && _approachOrders > 0 && WithinSpheres(world, target, range + ArrivalSlack);
     }
 
     /// <summary><c>UNDERSIZE</c> of <c>isWithinStartAbilityRange</c>: <c>PATHFIND_CELL_SIZE_F * 0.25</c>.</summary>
@@ -602,11 +608,14 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
 
     private static readonly Fixed ArrivalSlack = Fixed.FromInt(2 * TerrainMap.CellSize);
 
-    private bool WithinSpheres(Entity target, Fixed range)
+    private bool WithinSpheres(IWorldServices world, Entity target, Fixed range)
     {
         var reach = range + target.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
-        var dx = target.X - Entity.X;
-        var dy = target.Y - Entity.Y;
+        // Both where the frames they have begun end: the 30 Hz unit judges the range after its whole step (docs/SIMULATION-CORE.md section 43.2, rule 4).
+        var (targetX, targetY, _) = target.FrameEnd(world.Tick);
+        var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+        var dx = targetX - ownX;
+        var dy = targetY - ownY;
         return SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
     }
 
