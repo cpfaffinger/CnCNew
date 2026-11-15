@@ -4,6 +4,7 @@ using CnCNew.Content;
 using CnCNew.Game.Campaign;
 using CnCNew.Game.Live;
 using CnCNew.Simulation.Testing;
+using CnCNew.Ui.Settings;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Wnd;
@@ -29,6 +30,9 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 
     private readonly ImmutableArray<string> _factionChoices;
     private readonly bool[] _computer = new bool[Slots];
+    /// <summary>Whether an opponent slot's box says Closed (not Open); only what the box shows and what the setup remembers (<see cref="RememberedSlots"/>).</summary>
+    private readonly bool[] _closed = new bool[Slots];
+    private readonly string _defaultPlayerName;
     private readonly int[] _factionIndex = new int[Slots];
     private int _startPositionCount = Slots;
 
@@ -91,7 +95,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         Tree.Register("SkirmishGameOptionsMenuInput", OnInput);
         Tree.TooltipOverride = window => window == TryW("ListboxInfo") ? HonorTooltip(window) : null;
 
-        W("TextEntryPlayerName").SetEntryText(names.Player);
+        _defaultPlayerName = names.Player;
+        W("TextEntryPlayerName").SetEntryText(Shell.Settings.Skirmish.PlayerName is { Length: > 0 } rememberedName ? rememberedName : names.Player);
         var computerArmy = names.ComputerArmy;
         _originalAi = Shell.SkirmishAi == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
         Array.Fill(_ai, new MatchAi(Shell.SkirmishAi));
@@ -148,6 +153,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         // SkirmishGameOptionsMenuInit: the map of the preferences (SkirmishPreferences::getPreferredMap), or the first multiplayer map of the cache (getDefaultMap) - the
         // setup never stands without a map unless there is none at all.
         if (PreferredMap() is { } map) SetSelectedMap(map);
+        // ParseAsciiStringToGameInfo(prefs.getSlotList()): the slots as the setup was left (issue #379).
+        RestoreSlots(Shell.Settings.Skirmish);
         RefreshMapDisplay();
         ApplySlotVisibility();
         ShowStartSpots();
@@ -370,6 +377,107 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         ShowStartSpots();
     }
 
+    /// <summary>
+    /// <c>SkirmishPreferences::write</c> on Start and Back: the map, the money, the speed, the name and every slot (<c>setSlotList</c>) go into the settings, so the setup opens
+    /// as it was left (issue #379). The debug and advanced options are not kept.
+    /// </summary>
+    private void Remember()
+    {
+        var typed = W("TextEntryPlayerName").TextEntry?.Text ?? "";
+        var name = typed == _defaultPlayerName ? "" : typed;
+        if (name.Length > SettingsValidator.MaximumPlayerNameLength || name.Any(char.IsControl)) name = "";
+        _ = Shell.ApplySettings(Shell.Settings with
+        {
+            Skirmish = Shell.Settings.Skirmish with
+            {
+                LastMap = _selectedMapPath, LastStartMoney = _startMoney, GameSpeed = _gameSpeed, Slots = RememberedSlots(), PlayerName = name,
+            },
+        });
+    }
+
+    /// <summary>Every slot as the setup shows it now, in the spelling of <see cref="SkirmishSlotMemory"/>.</summary>
+    public ImmutableArray<SkirmishSlotMemory> RememberedSlots()
+    {
+        var slots = ImmutableArray.CreateBuilder<SkirmishSlotMemory>(Slots);
+        for (var slot = 0; slot < Slots; slot++)
+        {
+            var state = slot == 0 ? "human" : _computer[slot] ? "computer" : _closed[slot] ? "closed" : "open";
+            var faction = _factionIndex[slot] < _factionChoices.Length - 1 ? _factionChoices[_factionIndex[slot]] : SkirmishSlotMemory.RandomFaction;
+            var ai = _ai[slot];
+            var engine = ai.Kind == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original ? "original" : "builtin";
+            var strength = ai.Difficulty switch
+            {
+                CnCNew.Simulation.Scripting.ScriptDifficulty.Easy => "easy",
+                CnCNew.Simulation.Scripting.ScriptDifficulty.Hard => "hard",
+                _ => "medium",
+            };
+            var tactics = ai.Tactics switch
+            {
+                null => "",
+                CnCNew.Simulation.Skirmish.AiTactics.Rush => "rush",
+                CnCNew.Simulation.Skirmish.AiTactics.Turtle => "turtle",
+                CnCNew.Simulation.Skirmish.AiTactics.Eco => "eco",
+                _ => "balanced",
+            };
+            slots.Add(new SkirmishSlotMemory(state, faction, _team[slot], _color[slot], _start[slot], engine, strength, tactics));
+        }
+        return slots.MoveToImmutable();
+    }
+
+    /// <summary>
+    /// <c>ParseAsciiStringToGameInfo</c>: the remembered slots come back into the boxes. A faction the data no longer has keeps the box's choice, a colour or a place another
+    /// slot already holds is given up, and the places are kept only on the map they were chosen on.
+    /// </summary>
+    private void RestoreSlots(SkirmishMemory memory)
+    {
+        if (memory.Slots.IsDefaultOrEmpty) return;
+        var sameMap = _selectedMapPath is not null && string.Equals(memory.LastMap, _selectedMapPath, StringComparison.Ordinal);
+        for (var slot = 0; slot < Math.Min(Slots, memory.Slots.Length); slot++)
+        {
+            var saved = memory.Slots[slot];
+            var faction = saved.Faction == SkirmishSlotMemory.RandomFaction ? _factionChoices.Length - 1 : _factionChoices.IndexOf(saved.Faction);
+            if (faction >= 0)
+            {
+                _factionIndex[slot] = faction;
+                W($"ComboBoxPlayerTemplate{slot}").SetComboSelection(faction);
+            }
+            _team[slot] = Math.Clamp(saved.Team, 0, 4);
+            W($"ComboBoxTeam{slot}").SetComboSelection(_team[slot]);
+            if (slot > 0)
+            {
+                _computer[slot] = saved.State == "computer";
+                _closed[slot] = saved.State == "closed";
+                if (_computer[slot])
+                {
+                    var kind = saved.Engine == "original" ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin;
+                    var difficulty = saved.Strength switch
+                    {
+                        "easy" => CnCNew.Simulation.Scripting.ScriptDifficulty.Easy,
+                        "hard" => CnCNew.Simulation.Scripting.ScriptDifficulty.Hard,
+                        _ => CnCNew.Simulation.Scripting.ScriptDifficulty.Normal,
+                    };
+                    CnCNew.Simulation.Skirmish.AiTactics? tactics = kind != CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin ? null : saved.Tactics switch
+                    {
+                        "balanced" => CnCNew.Simulation.Skirmish.AiTactics.Balanced,
+                        "rush" => CnCNew.Simulation.Skirmish.AiTactics.Rush,
+                        "turtle" => CnCNew.Simulation.Skirmish.AiTactics.Turtle,
+                        "eco" => CnCNew.Simulation.Skirmish.AiTactics.Eco,
+                        _ => null,
+                    };
+                    _ai[slot] = new MatchAi(kind, difficulty, tactics);
+                    ShowSlot(slot);
+                }
+                else W($"ComboBoxPlayer{slot}").SetComboSelection(_closed[slot] ? 1 : 0);
+                W($"ComboBoxPlayerTemplate{slot}").SetEnabled(_computer[slot]);
+            }
+            var color = saved.Color >= 0 && saved.Color < _colorNames.Length ? saved.Color : -1;
+            _color[slot] = color >= 0 && Enumerable.Range(0, slot).Any(other => _color[other] == color) ? -1 : color;
+            var start = sameMap && saved.Start >= 0 && saved.Start < _startPositionCount ? saved.Start : -1;
+            _start[slot] = start >= 0 && Enumerable.Range(0, slot).Any(other => _start[other] == start) ? -1 : start;
+        }
+        PopulateColors();
+    }
+
     private string ResolveFaction(int slot)
     {
         var index = _factionIndex[slot];
@@ -410,7 +518,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable(), Speed = GameSpeedFactor, Debug = _debug, Preorder = Shell.Environment.Preordered,
             PlayerName = W("TextEntryPlayerName").TextEntry?.Text is { Length: > 0 } typed ? typed : null };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
-        _ = Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney, GameSpeed = _gameSpeed } });
+        Remember();
         Shell.BeginMatchLoading(setup);
     }
 
@@ -436,6 +544,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
                 break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
+                Remember();
                 Shell.CloseTop();
                 break;
             case UiEventKind.ButtonSelected when e.Source == "SkirmishGameOptionsMenu.wnd:ButtonSelectMap":
@@ -463,6 +572,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
                 // GameSlot::setState: a slot that opens, closes or becomes an army gives its colour back; an army that only changes its strength keeps it.
                 if (!(_computer[slot] && e.Value >= ComputerArmyEntry)) _color[slot] = -1;
                 _computer[slot] = e.Value >= ComputerArmyEntry;
+                _closed[slot] = e.Value == 1;
                 PopulateColors();
                 // An army entry is a strength (the slot keeps its engine, its profile goes); a profile entry is the new AI with that profile at medium strength.
                 if (e.Value >= ProfileEntry)
@@ -479,7 +589,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 
     private void OnInput(UiWindowTree tree, UiEvent e)
     {
-        if (e.Kind == UiEventKind.Key && e.Value == (int)UiKey.Escape) Shell.CloseTop();
+        if (e.Kind == UiEventKind.Key && e.Value == (int)UiKey.Escape)
+        {
+            Remember();
+            Shell.CloseTop();
+        }
     }
 
     public override UiDrawList BuildDrawList()

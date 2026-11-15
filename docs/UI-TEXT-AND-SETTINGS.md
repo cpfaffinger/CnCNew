@@ -135,7 +135,8 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 | `general.showFps`, `general.pauseOnFocusLoss` | bool | `false`, `true` |
 | `general.defaultAiDifficulty` | `easy`, `medium`, `hard` | `medium` |
 | `skirmish.lastMap` | relative virtual path or `null` | `null` |
-| `skirmish.lastFactions` | up to 8 names `[A-Za-z0-9_]+` | empty |
+| `skirmish.slots` | up to 8 objects: `state` (`human`, `open`, `closed`, `computer`), `faction` (`[A-Za-z0-9_]+` or `Random`), `team` 0..4, `color` -1..63, `start` -1..7, `engine` (`builtin`, `original`), `strength` (`easy`, `medium`, `hard`), `tactics` (empty, `balanced`, `rush`, `turtle`, `eco`); a list with any other value is forgotten whole | empty (the setup's defaults) |
+| `skirmish.playerName` | up to 64 characters, no control characters; empty for the default name | empty |
 | `skirmish.lastStartMoney` | 0..1,000,000 | 10,000 (`DefaultStartingCash`) |
 
 `SettingsStore`:
@@ -216,3 +217,7 @@ of any; below 800 × 600 it is raised, a smaller desktop gives 800 × 600 with a
 ## Phase 65: schema 8
 
 **Schema 8** (the owner's playtest of 9 November 2026): the migration step 7 to 8 adds `display.barOpacity` (20 to 100, default 80; the modern control bar's band and the wells behind its buttons), `display.markerStyle` (`original`, `extended`, `modern`; default `extended`, the look before the setting), `display.healthBarMode` (`selectedOnly` the default, `belowFull`, `always`: a bar for every selectable object in view, or only the damaged ones) and `display.healthBarHeight` (`narrow`, `normal`, `wide`: 3, 5 or 8 pixels of fill, modern 3, 4 or 6). They are set on More options; buttons, cameos, the radar and text stay opaque at any opacity.
+
+## Schema 9: the skirmish setup keeps its slots
+
+**Schema 9** (the owner's playtest of 15 November 2026, issue #379): the skirmish setup keeps what `SkirmishPreferences::write` keeps in the original's `Skirmish.ini` - on Start, Back and Escape it writes the map, the money, the speed, the typed name and every slot (`setSlotList`: who sits in it, a computer's engine, strength and tactics, the faction, team, colour and start place), and `SkirmishSetupScreen` reads them back when it opens (`ParseAsciiStringToGameInfo`). A faction the data no longer has keeps the box's choice, a colour or a place another slot already holds is given up, and the places are kept only on the map they were chosen on; slots beyond the map's places are open, as before. The debug and advanced options are not kept. The migration step 8 to 9 removes `skirmish.lastFactions`, which no setup ever read, and adds an empty `skirmish.slots` and `skirmish.playerName`. Pinned by `Game.Tests` `SkirmishMemoryTests`.

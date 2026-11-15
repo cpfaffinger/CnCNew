@@ -105,20 +105,42 @@ public sealed record AccessibilitySettings(bool HighContrastUi, int UiTextScaleP
 /// <param name="TickRate">The simulation rate of this game, 60 or 120 Hz, from its next start (D-22): a match at a server is played by those of one rate.</param>
 public sealed record GeneralSettings(string Language, bool ShowFps, bool PauseOnFocusLoss, AiDifficulty DefaultAiDifficulty, int TickRate = 60);
 
-/// <summary>What the skirmish setup screen remembers between sessions.</summary>
-/// <param name="LastMap">Virtual path of the last map (for example <c>Maps/Alpine Assault/Alpine Assault.map</c>), or <c>null</c>.</param>
-/// <param name="LastFactions">Faction names per slot as chosen last time (at most 8).</param>
-/// <param name="GameSpeed">The game speed slider of the setup (<c>SliderGameSpeed</c>, the preference <c>FPS</c>): logic frames a second, 15 to 61; above 60 there is no limit.</param>
-public sealed record SkirmishMemory(string? LastMap, ImmutableArray<string> LastFactions, int LastStartMoney, int GameSpeed = SkirmishMemory.NormalGameSpeed)
+/// <summary>
+/// One slot of the skirmish setup as it was left (<c>SkirmishPreferences::setSlotList</c>, <c>GameInfoToAsciiString</c>): who sits in it, its army, team, colour and start place.
+/// </summary>
+/// <param name="State"><c>human</c> (the first slot), <c>open</c>, <c>closed</c> or <c>computer</c>.</param>
+/// <param name="Faction">The faction's name, or <c>Random</c>.</param>
+/// <param name="Team">0 for none, 1 to 4.</param>
+/// <param name="Color">The index of a <c>MultiplayerColor</c>, -1 for "???".</param>
+/// <param name="Start">The start place on the map (0 to 7), -1 for a random one.</param>
+/// <param name="Engine">A computer's AI: <c>builtin</c> or <c>original</c>.</param>
+/// <param name="Strength">A computer's strength: <c>easy</c>, <c>medium</c> or <c>hard</c>.</param>
+/// <param name="Tactics">A computer's tactics profile: empty for none, or <c>balanced</c>, <c>rush</c>, <c>turtle</c>, <c>eco</c>.</param>
+public sealed record SkirmishSlotMemory(string State, string Faction, int Team, int Color, int Start, string Engine = "builtin", string Strength = "medium", string Tactics = "")
 {
-    public ImmutableArray<string> LastFactions { get; init; } = LastFactions.IsDefault ? [] : LastFactions;
+    public static readonly ImmutableArray<string> States = ["human", "open", "closed", "computer"];
+    public static readonly ImmutableArray<string> Engines = ["builtin", "original"];
+    public static readonly ImmutableArray<string> Strengths = ["easy", "medium", "hard"];
+    public static readonly ImmutableArray<string> TacticsNames = ["", "balanced", "rush", "turtle", "eco"];
+    public const string RandomFaction = "Random";
+}
+
+/// <summary>What the skirmish setup screen remembers between sessions (<c>SkirmishPreferences</c>, the original's <c>Skirmish.ini</c>).</summary>
+/// <param name="LastMap">Virtual path of the last map (for example <c>Maps/Alpine Assault/Alpine Assault.map</c>), or <c>null</c>.</param>
+/// <param name="Slots">The slots as they were left (at most 8; empty: the setup's defaults). Their start places belong to <paramref name="LastMap"/>.</param>
+/// <param name="GameSpeed">The game speed slider of the setup (<c>SliderGameSpeed</c>, the preference <c>FPS</c>): logic frames a second, 15 to 61; above 60 there is no limit.</param>
+/// <param name="PlayerName">The name typed into the setup (<c>UserName</c>); empty for the game's default name.</param>
+public sealed record SkirmishMemory(string? LastMap, ImmutableArray<SkirmishSlotMemory> Slots, int LastStartMoney, int GameSpeed = SkirmishMemory.NormalGameSpeed, string PlayerName = "")
+{
+    public ImmutableArray<SkirmishSlotMemory> Slots { get; init; } = Slots.IsDefault ? [] : Slots;
 
     public bool Equals(SkirmishMemory? other)
         => other is not null
             && string.Equals(LastMap, other.LastMap, StringComparison.Ordinal)
-            && LastFactions.SequenceEqual(other.LastFactions, StringComparer.Ordinal)
+            && Slots.SequenceEqual(other.Slots)
             && LastStartMoney == other.LastStartMoney
-            && GameSpeed == other.GameSpeed;
+            && GameSpeed == other.GameSpeed
+            && string.Equals(PlayerName, other.PlayerName, StringComparison.Ordinal);
 
     /// <summary><c>GlobalData::m_framesPerSecondLimit</c>: the speed of the original, 30 logic frames a second.</summary>
     public const int NormalGameSpeed = 30;
@@ -127,9 +149,10 @@ public sealed record SkirmishMemory(string? LastMap, ImmutableArray<string> Last
     {
         var hash = new HashCode();
         hash.Add(LastMap, StringComparer.Ordinal);
-        foreach (var faction in LastFactions) hash.Add(faction, StringComparer.Ordinal);
+        foreach (var slot in Slots) hash.Add(slot);
         hash.Add(LastStartMoney);
         hash.Add(GameSpeed);
+        hash.Add(PlayerName, StringComparer.Ordinal);
         return hash.ToHashCode();
     }
 }
@@ -147,7 +170,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

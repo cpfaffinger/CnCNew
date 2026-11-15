@@ -381,14 +381,16 @@ public static class TextAndSettingsTests
                 Audio = GameSettings.Default.Audio with { Master = 0.25f, Voice = 0f },
                 Accessibility = new AccessibilitySettings(true, 150, true),
                 General = GameSettings.Default.General with { Language = "German", ShowFps = true, DefaultAiDifficulty = AiDifficulty.Hard },
-                Skirmish = new SkirmishMemory("Maps/Alpine Assault/Alpine Assault.map", ["FactionChina", "FactionGLA"], 50000),
+                Skirmish = new SkirmishMemory("Maps/Alpine Assault/Alpine Assault.map",
+                    [new SkirmishSlotMemory("human", "FactionChina", 1, 4, 2), new SkirmishSlotMemory("computer", "FactionGLA", 2, -1, 0, "builtin", "hard", "rush"),
+                     new SkirmishSlotMemory("closed", "Random", 0, -1, -1), new SkirmishSlotMemory("computer", "FactionAmerica", 0, 7, -1, "original", "easy")], 50000, PlayerName: "Commander"),
             };
             Assert(store.Save(settings).IsEmpty, "Valid settings save without issues.");
             Assert(!File.Exists(store.FilePath + ".tmp"), "No temporary file is left behind.");
             var first = File.ReadAllBytes(store.FilePath);
             var loaded = store.Load();
             Assert(loaded.Status == SettingsLoadStatus.Loaded && loaded.Issues.IsEmpty && loaded.FileVersion == GameSettings.CurrentVersion, "Loads cleanly.");
-            Assert(loaded.Settings == settings, "Round trip preserves every value (including the faction list).");
+            Assert(loaded.Settings == settings, "Round trip preserves every value (including the slots of the skirmish setup).");
             store.Save(loaded.Settings);
             Assert(first.AsSpan().SequenceEqual(File.ReadAllBytes(store.FilePath)), "Serialization is byte-identical.");
             Assert(first.AsSpan().SequenceEqual(SettingsJson.Write(settings)), "The file is exactly the serializer output.");
@@ -435,18 +437,18 @@ public static class TextAndSettingsTests
             Audio = GameSettings.Default.Audio with { Master = 1.5f, Music = float.NaN },
             Accessibility = GameSettings.Default.Accessibility with { UiTextScalePercent = 130 },
             General = GameSettings.Default.General with { Language = "Engl1sh" },
-            Skirmish = new SkirmishMemory("C:\\evil.map", ["FactionUSA", "bad name", "A", "B", "C", "D", "E", "F", "G", "H"], -5),
+            Skirmish = new SkirmishMemory("C:\\evil.map", [new SkirmishSlotMemory("human", "FactionUSA", 0, -1, -1), new SkirmishSlotMemory("computer", "bad name", 9, 64, 8, "other")], -5, PlayerName: "a\u0001b"),
         });
         Assert(normalized.Display.Width == 800 && normalized.Display.Mode == DisplayMode.Windowed, "Width clamps, unknown enum falls back visibly.");
         Assert(normalized.Audio.Master == 1f && normalized.Audio.Music == GameSettings.Default.Audio.Music, "Volume clamps, NaN is replaced.");
         Assert(normalized.Accessibility.UiTextScalePercent == 125 && normalized.General.Language == "English", "Text scale snaps, bad language is replaced.");
-        Assert(normalized.Skirmish.LastMap is null && normalized.Skirmish.LastFactions.Length == 8 && normalized.Skirmish.LastStartMoney == 0, "Skirmish memory is sanitized.");
+        Assert(normalized.Skirmish.LastMap is null && normalized.Skirmish.Slots.IsEmpty && normalized.Skirmish.PlayerName.Length == 0 && normalized.Skirmish.LastStartMoney == 0, "Skirmish memory is sanitized.");
         var codes = issues.Select(issue => $"{issue.Path}:{issue.Code}").ToArray();
         string[] expected =
         [
             "display.mode:invalid-value", "display.width:clamped", "audio.master:clamped", "audio.music:invalid-value",
             "accessibility.uiTextScalePercent:snapped", "general.language:invalid-value", "skirmish.lastMap:invalid-value",
-            "skirmish.lastFactions:invalid-value", "skirmish.lastFactions:clamped", "skirmish.lastStartMoney:clamped",
+            "skirmish.slots:invalid-value", "skirmish.playerName:invalid-value", "skirmish.lastStartMoney:clamped",
         ];
         Assert(codes.SequenceEqual(expected), $"Every correction is reported: {string.Join(", ", codes)}.");
 
@@ -461,7 +463,7 @@ public static class TextAndSettingsTests
                   "audio": { "master": 0.5, "music": 0.5, "effects": 0.5, "voice": 0.5, "ambient": 7 },
                   "controls": { "scrollSpeed": 0.9, "edgeScrolling": false },
                   "general": { "language": "French", "showFps": true, "pauseOnFocusLoss": false, "defaultAiDifficulty": "brutal" },
-                  "skirmish": { "lastMap": null, "lastFactions": ["FactionGLA", 3], "lastStartMoney": 20000 },
+                  "skirmish": { "lastMap": null, "lastFactions": ["FactionGLA", 3], "slots": [{ "state": "human" }], "lastStartMoney": 20000 },
                   "extra": 1
                 }
                 """);
@@ -469,14 +471,14 @@ public static class TextAndSettingsTests
             var found = result.Issues.Select(issue => $"{issue.Path}:{issue.Code}").ToArray();
             string[] wanted =
             [
-                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
-                "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.lastFactions:invalid-type",
+                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
+                "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.slots:invalid-type",
                 "audio.ambient:clamped",
             ];
             Assert(found.SequenceEqual(wanted), $"Binding issues: {string.Join(", ", found)}.");
             Assert(result.Status == SettingsLoadStatus.Migrated && result.Settings.Display.Mode == DisplayMode.Fullscreen && result.Settings.Display.Width == 1280
                 && result.Settings.Display.Aspect == AspectHandling.KeepHorizontal && result.Settings.Display.Skin == UiSkinName.Modern && result.Settings.Audio.Device.Length == 0
-                && result.Settings.Audio.Ambient == 1f && result.Settings.General.Language == "French" && result.Settings.Skirmish.LastFactions.IsEmpty,
+                && result.Settings.Audio.Ambient == 1f && result.Settings.General.Language == "French" && result.Settings.Skirmish.Slots.IsEmpty,
                 "Valid values are kept, invalid ones use the defaults.");
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -533,7 +535,7 @@ public static class TextAndSettingsTests
             Assert(!six.Contains("hotkeys", StringComparison.Ordinal), "the schema 6 file was written as schema 6 had it");
             File.WriteAllText(store.FilePath, six);
             var migrated = new SettingsStore(directory).Load();
-            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 6 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 2
+            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 6 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 3
                 && migrated.Issues.All(issue => issue.Code == "migrated"), "a schema 6 file migrates to the shipped keys and keeps everything else");
 
             var damagedText = six.Replace("\"retaliation\": true", "\"retaliation\": true, \"hotkeys\": {\"STOP\": 5}", StringComparison.Ordinal)
@@ -569,7 +571,7 @@ public static class TextAndSettingsTests
             var seven = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default)).Replace($"\"version\": {GameSettings.CurrentVersion}", "\"version\": 7", StringComparison.Ordinal).Replace(Schema8DisplayLines, "", StringComparison.Ordinal);
             File.WriteAllText(store.FilePath, seven);
             var migrated = new SettingsStore(directory).Load();
-            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 7 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 1 && migrated.Issues.All(issue => issue.Code == "migrated"), "a schema 7 file migrates to the defaults and keeps everything else");
+            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 7 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 2 && migrated.Issues.All(issue => issue.Code == "migrated"), "a schema 7 file migrates to the defaults and keeps everything else");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -610,7 +612,7 @@ public static class TextAndSettingsTests
             Assert(result.Issues.Length == GameSettings.CurrentVersion && result.Issues.All(issue => issue.Code == "migrated"), "Every migration step is reported.");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration, migration]), "same schema version");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration with { FromVersion = GameSettings.CurrentVersion }]), "must start below");
-            Assert(SettingsStore.Migrations.Length == 7 && SettingsStore.Migrations[6].FromVersion == 7, "Schema version 8 ships the steps from versions 1 to 7.");
+            Assert(SettingsStore.Migrations.Length == 8 && SettingsStore.Migrations[7].FromVersion == 8, "Schema version 9 ships the steps from versions 1 to 8.");
 
             // Version 1 to 2 (Phase 38): the skin and the device come in at what version 1 meant, the aspect the client never applied becomes the one it drew.
             var version1 = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default))
@@ -628,7 +630,7 @@ public static class TextAndSettingsTests
             File.WriteAllText(Path.Combine(directory, SettingsStore.FileName), version1);
             var upgraded = new SettingsStore(directory).Load();
             // The modern skin is the default for every file (schema 6, 7 November 2026): the original skin a version 1 file meant is replaced like any other.
-            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == GameSettings.Default && upgraded.Issues.Length == 7 && upgraded.Issues.All(issue => issue.Code == "migrated"),
+            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == GameSettings.Default && upgraded.Issues.Length == 8 && upgraded.Issues.All(issue => issue.Code == "migrated"),
                 $"A version 1 file of the defaults loads in the modern skin: {string.Join(", ", upgraded.Issues.Select(issue => issue.Path + ":" + issue.Code))}.");
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -661,7 +663,7 @@ public static class TextAndSettingsTests
             .Replace("\"lastStartMoney\": 10000", "\"lastStartMoney\": 30000", StringComparison.Ordinal);
         Assert(five.Contains("\"skin\": \"original\"", StringComparison.Ordinal) && five.Contains("\"version\": 5", StringComparison.Ordinal), "the schema 5 file holds the original skin");
         Assert(SkinLoaded(five, out var migrated) == UiSkinName.Modern && migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 5
-            && migrated.Issues.Count(issue => issue.Code == "migrated") == 3
+            && migrated.Issues.Count(issue => issue.Code == "migrated") == 4
             && migrated.Settings.Display.Mode == DisplayMode.Borderless && migrated.Settings.Skirmish.LastStartMoney == 30000,
             "a schema 5 file with the original skin loads in the modern skin and keeps its other settings");
         Assert(SkinLoaded(FileOf(5, UiSkinName.Modern), out _) == UiSkinName.Modern, "a schema 5 file with the modern skin stays modern");

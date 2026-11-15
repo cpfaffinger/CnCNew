@@ -91,6 +91,16 @@ public sealed class SettingsStore
             }
             return root;
         }),
+        new SettingsMigration(8, "skirmish.lastFactions, which no setup read, replaced by skirmish.slots (empty: the setup's defaults); skirmish.playerName added (empty: the default name)", root =>
+        {
+            if (root["skirmish"] is JsonObject skirmish)
+            {
+                skirmish.Remove("lastFactions");
+                if (!skirmish.ContainsKey("slots")) skirmish["slots"] = new JsonArray();
+                if (!skirmish.ContainsKey("playerName")) skirmish["playerName"] = "";
+            }
+            return root;
+        }),
     ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
@@ -239,11 +249,24 @@ public static class SettingsJson
             writer.WriteStartObject("skirmish");
             if (settings.Skirmish.LastMap is null) writer.WriteNull("lastMap");
             else writer.WriteString("lastMap", settings.Skirmish.LastMap);
-            writer.WriteStartArray("lastFactions");
-            foreach (var faction in settings.Skirmish.LastFactions) writer.WriteStringValue(faction);
+            writer.WriteStartArray("slots");
+            foreach (var slot in settings.Skirmish.Slots)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("state", slot.State);
+                writer.WriteString("faction", slot.Faction);
+                writer.WriteNumber("team", slot.Team);
+                writer.WriteNumber("color", slot.Color);
+                writer.WriteNumber("start", slot.Start);
+                writer.WriteString("engine", slot.Engine);
+                writer.WriteString("strength", slot.Strength);
+                writer.WriteString("tactics", slot.Tactics);
+                writer.WriteEndObject();
+            }
             writer.WriteEndArray();
             writer.WriteNumber("lastStartMoney", settings.Skirmish.LastStartMoney);
             writer.WriteNumber("gameSpeed", settings.Skirmish.GameSpeed);
+            writer.WriteString("playerName", settings.Skirmish.PlayerName);
             writer.WriteEndObject();
 
             writer.WriteEndObject();
@@ -266,7 +289,7 @@ public static class SettingsJson
         var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation", "hotkeys"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
         var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty", "tickRate"]);
-        var skirmish = reader.Section(root, "skirmish", ["lastMap", "lastFactions", "lastStartMoney", "gameSpeed"]);
+        var skirmish = reader.Section(root, "skirmish", ["lastMap", "slots", "lastStartMoney", "gameSpeed", "playerName"]);
 
         return new GameSettings(
             new DisplaySettings(
@@ -307,9 +330,10 @@ public static class SettingsJson
                 reader.Int(general, "general.tickRate", d.General.TickRate)),
             new SkirmishMemory(
                 reader.String(skirmish, "skirmish.lastMap", d.Skirmish.LastMap, nullable: true),
-                reader.StringArray(skirmish, "skirmish.lastFactions", d.Skirmish.LastFactions),
+                reader.Slots(skirmish, "skirmish.slots", d.Skirmish.Slots),
                 reader.Int(skirmish, "skirmish.lastStartMoney", d.Skirmish.LastStartMoney),
-                reader.Int(skirmish, "skirmish.gameSpeed", d.Skirmish.GameSpeed)));
+                reader.Int(skirmish, "skirmish.gameSpeed", d.Skirmish.GameSpeed),
+                reader.String(skirmish, "skirmish.playerName", d.Skirmish.PlayerName)!));
     }
 
     /// <summary>Enum values are stored as camelCase names (<c>Borderless</c> becomes <c>borderless</c>).</summary>
@@ -386,6 +410,48 @@ public static class SettingsJson
                 return fallback;
             }
             return [..array.Select(item => item!.GetValue<string>())];
+        }
+
+        /// <summary>The setup's slots: an array of objects with every field of <see cref="SkirmishSlotMemory"/>; anything else forgets the whole list (one slot cannot be left out without moving the others).</summary>
+        public ImmutableArray<SkirmishSlotMemory> Slots(JsonObject? section, string path, ImmutableArray<SkirmishSlotMemory> fallback)
+        {
+            if (section is null) return fallback;
+            if (!section.TryGetPropertyValue(Leaf(path), out var node))
+            {
+                issues.Add(new SettingsIssue(path, "missing", $"'{path}' is missing; using the default."));
+                return fallback;
+            }
+            if (node is not JsonArray array)
+            {
+                issues.Add(new SettingsIssue(path, "invalid-type", $"'{path}' is not an array; using the default."));
+                return fallback;
+            }
+            var slots = ImmutableArray.CreateBuilder<SkirmishSlotMemory>(array.Count);
+            string[] fields = ["state", "faction", "team", "color", "start", "engine", "strength", "tactics"];
+            foreach (var item in array)
+            {
+                if (item is not JsonObject slot || slot.Count != fields.Length || !fields.All(slot.ContainsKey)
+                    || !Text(slot["state"], out var state) || !Text(slot["faction"], out var faction) || !Number(slot["team"], out var team) || !Number(slot["color"], out var color)
+                    || !Number(slot["start"], out var start) || !Text(slot["engine"], out var engine) || !Text(slot["strength"], out var strength) || !Text(slot["tactics"], out var tactics))
+                {
+                    issues.Add(new SettingsIssue(path, "invalid-type", $"'{path}' holds a slot that is not an object of state, faction, team, color, start, engine, strength and tactics; the slots are forgotten."));
+                    return fallback;
+                }
+                slots.Add(new SkirmishSlotMemory(state, faction, team, color, start, engine, strength, tactics));
+            }
+            return slots.MoveToImmutable();
+
+            static bool Text(JsonNode? field, out string text)
+            {
+                text = "";
+                return field is JsonValue value && value.TryGetValue(out text!);
+            }
+
+            static bool Number(JsonNode? field, out int number)
+            {
+                number = 0;
+                return field is JsonValue value && value.TryGetValue(out number);
+            }
         }
 
         public ImmutableSortedDictionary<string, string> StringMap(JsonObject? section, string path, ImmutableSortedDictionary<string, string> fallback)

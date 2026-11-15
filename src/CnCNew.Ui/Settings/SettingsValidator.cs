@@ -86,18 +86,19 @@ public static class SettingsValidator
             issues.Add(new SettingsIssue("skirmish.lastMap", "invalid-value", $"'{map}' is not a relative virtual path; it is forgotten."));
             skirmish = skirmish with { LastMap = null };
         }
-        var factions = skirmish.LastFactions.Where(IsFactionName).ToList();
-        if (factions.Count != skirmish.LastFactions.Length)
-            issues.Add(new SettingsIssue("skirmish.lastFactions", "invalid-value",
-                $"{skirmish.LastFactions.Length - factions.Count} faction name(s) are not [A-Za-z0-9_]+ and were dropped."));
-        if (factions.Count > MaximumFactions)
+        if (skirmish.Slots.Length > MaximumFactions || skirmish.Slots.Any(slot => !IsValidSlot(slot)))
         {
-            issues.Add(new SettingsIssue("skirmish.lastFactions", "clamped", $"{factions.Count} factions exceed the {MaximumFactions} player slots; the rest was dropped."));
-            factions = factions.Take(MaximumFactions).ToList();
+            issues.Add(new SettingsIssue("skirmish.slots", "invalid-value",
+                $"The {skirmish.Slots.Length} remembered slot(s) are more than {MaximumFactions} or hold a value no setup offers; the setup starts with its defaults."));
+            skirmish = skirmish with { Slots = [] };
+        }
+        if (skirmish.PlayerName.Length > MaximumPlayerNameLength || skirmish.PlayerName.Any(char.IsControl))
+        {
+            issues.Add(new SettingsIssue("skirmish.playerName", "invalid-value", $"The player name is longer than {MaximumPlayerNameLength} characters or has control characters; the default name is used."));
+            skirmish = skirmish with { PlayerName = "" };
         }
         skirmish = skirmish with
         {
-            LastFactions = [..factions],
             LastStartMoney = Clamp(issues, "skirmish.lastStartMoney", skirmish.LastStartMoney, 0, MaximumStartMoney),
         };
 
@@ -106,6 +107,15 @@ public static class SettingsValidator
 
     public static bool IsLanguageName(string? value)
         => !string.IsNullOrEmpty(value) && value.Length <= MaximumLanguageLength && value.All(char.IsAsciiLetter);
+
+    /// <summary>The longest player name kept (the setup's name field).</summary>
+    public const int MaximumPlayerNameLength = 64;
+
+    /// <summary>A remembered slot holds only what the setup offers: a known state, engine, strength and profile, a faction name, a team 0 to 4, a colour -1 to 63 and a place -1 to 7.</summary>
+    public static bool IsValidSlot(SkirmishSlotMemory slot)
+        => SkirmishSlotMemory.States.Contains(slot.State) && SkirmishSlotMemory.Engines.Contains(slot.Engine) && SkirmishSlotMemory.Strengths.Contains(slot.Strength)
+            && SkirmishSlotMemory.TacticsNames.Contains(slot.Tactics) && IsFactionName(slot.Faction)
+            && slot.Team is >= 0 and <= 4 && slot.Color is >= -1 and <= 63 && slot.Start is >= -1 and < MaximumFactions;
 
     public static bool IsFactionName(string? value)
         => !string.IsNullOrEmpty(value) && value.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '_');
