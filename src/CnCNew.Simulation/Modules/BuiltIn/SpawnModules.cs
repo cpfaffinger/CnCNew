@@ -97,6 +97,7 @@ internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdate
     public int SpawnNumber => data.SpawnNumber;
     public IReadOnlyList<EntityId> Slaves => _spawns;
     public bool SlavesHaveFreeWill => data.SlavesHaveFreeWill;
+    public bool AggregatesSlaves => data.AggregateHealth;
 
     public override void OnSpawn(IWorldServices world)
     {

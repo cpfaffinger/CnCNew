@@ -55,6 +55,12 @@ public interface ISpawnerModule
 
     /// <summary><c>doSlavesHaveFreedom</c> (<c>SlavesHaveFreeWill</c>): "slaves with free will don't attack when parent attacks".</summary>
     bool SlavesHaveFreeWill { get; }
+
+    /// <summary>
+    /// <c>AggregateHealth</c>: the spawner and its slaves are one unit to the player (the angry mob). <c>SpawnBehavior::computeAggregateStates</c> then also shares the selection
+    /// - a selected slave selects every slave and the spawner - which is the presentation's to do (<c>SelectionModel</c>).
+    /// </summary>
+    bool AggregatesSlaves { get; }
 }
 
 /// <summary>The part of a spawn-point exit that remembers who stands on which spawn point (<c>m_spawnPointOccupier</c>), told by the spawner once it asked for the entity.</summary>

@@ -245,9 +245,44 @@ public sealed class SelectionModel
                 if (selectMine && side == Side.Mine && (!entity.Template.IsKindOf("STRUCTURE") || selectMineBuildings)) set.Add(entity.Id.Value);
                 else if (selectOther == side) set.Add(entity.Id.Value);
             }
+            ShareSpawnerSelection(world, set);
         });
         return true;
     }
+
+    /// <summary>
+    /// The selection part of <c>SpawnBehavior::computeAggregateStates</c>: a spawner with aggregate health (the angry mob's nexus, <c>MOB_NEXUS</c>) and its slaves are one unit -
+    /// when any of its slaves is selected, every slave and the spawner are ("this way we are always one big happy mob"). The nexus has no model and is <c>MASKED</c>, so a person
+    /// never picks it; it is selected through its members, and the bar is its own (<see cref="CommandBarModel"/>, <c>InGameUI::evaluateSoloNexus</c>). The original does this
+    /// once per logic frame for every nexus; here it is done for the local player's spawners when a click or a box selects, and on every tick (<see cref="Prune"/>).
+    /// </summary>
+    private void ShareSpawnerSelection(SimulationWorld world, SortedSet<uint> set)
+    {
+        if (set.Count == 0) return;
+        List<Entity>? spawners = null;
+        foreach (var id in set)
+        {
+            if (world.FindEntity(new EntityId(id)) is not { } entity || entity.Owner != LocalPlayer) continue;
+            foreach (var module in entity.Modules)
+            {
+                if (module is not ISlavedModule { Slaver.IsValid: true } slaved) continue;
+                if (world.FindEntity(slaved.Slaver) is { } master && SharesSelection(master) && !(spawners ??= []).Contains(master)) spawners.Add(master);
+                break;
+            }
+        }
+        if (spawners is null) return;
+        foreach (var master in spawners)
+        {
+            foreach (var slave in master.Modules.OfType<ISpawnerModule>().First().Slaves)
+                if (world.FindEntity(slave) is { } member && member.Owner == LocalPlayer && EntityPicker.IsSelectable(member)) set.Add(slave.Value);
+            set.Add(master.Id.Value);
+        }
+    }
+
+    /// <summary>An own, living spawner whose slaves share its selection (<see cref="ISpawnerModule.AggregatesSlaves"/>); it is kept selected although it is <c>MASKED</c>.</summary>
+    private bool SharesSelection(Entity master)
+        => master.Owner == LocalPlayer && !master.DestroyRequested && !master.EffectivelyDead && !master.ContainedBy.IsValid
+           && master.Modules.OfType<ISpawnerModule>().FirstOrDefault() is { AggregatesSlaves: true };
 
     /// <summary>
     /// True when <paramref name="building"/> is a finished own structure of the template every selected object has: the selection is a structure group (or one building) of its kind.
@@ -614,6 +649,7 @@ public sealed class SelectionModel
                 // A foreign object is only ever selected alone, for information, and only while it stays in sight.
                 return entity.Owner != LocalPlayer && (count > 1 || !world.CanPlayerSee(LocalPlayer, entity));
             });
+            ShareSpawnerSelection(world, set);
         });
     }
 

@@ -307,7 +307,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         if (selected.Any(entity => entity.Owner != player)) return Empty(CommandBarContext.Foreign);
         var units = selected.Where(entity => !entity.Template.IsKindOf("IGNORED_IN_GUI") && !entity.HasStatus(ObjectStatusBits.Sold)).ToList();
         if (units.Count == 0) return Empty(CommandBarContext.BeingSold);
-        if (units.Count == 1) return BuildSingle(world, player, units[0]);
+        // InGameUI::evaluateSoloNexus: one angry mob is its nexus and its members (IGNORED_IN_GUI); the bar is the nexus', and its orders go to the whole selection.
+        if (units.Count == 1) return BuildSingle(world, player, units[0], units[0].Template.IsKindOf("MOB_NEXUS") && selected.Count > 1 ? [..selected.Select(entity => entity.Id)] : null);
         // Several buildings of one template are a structure group; the active kind of a mixed selection is a subgroup (Tab).
         if (selection.OwnStructureTemplate(world) is { } structureTemplate)
             return BuildGroup(world, player, units, new SelectionGroup(SelectionGroupKind.Structures, structureTemplate, units.Count, 0, 0));
@@ -333,7 +334,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     private static CommandBarView Empty(CommandBarContext context)
         => new(context, string.Empty, [..Enumerable.Repeat<CommandBarButton?>(null, GridSlots)], [], EntityId.Invalid, [], false);
 
-    private CommandBarView BuildSingle(SimulationWorld world, PlayerId player, Entity entity)
+    private CommandBarView BuildSingle(SimulationWorld world, PlayerId player, Entity entity, ImmutableArray<EntityId>? sources = null)
     {
         if (entity.HasStatus(ObjectStatusBits.UnderConstruction))
             return Empty(CommandBarContext.UnderConstruction) with { CanCancelConstruction = true, Producer = entity.Id };
@@ -349,7 +350,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             if (ButtonOf(set, index) is not { } button) continue;
             var state = Evaluate(world, player, entity, button);
             if (state.Availability == ButtonAvailability.Hidden) continue;
-            slots[index] = Make(index + 1, button, state, [entity.Id], hotkeys);
+            slots[index] = Make(index + 1, button, state, sources ?? [entity.Id], hotkeys);
         }
         AddRiders(world, entity, set, slots);
         return new CommandBarView(CommandBarContext.Command, set.Name, [..slots], QueueOf(world, entity, set), entity.Id, UpgradesOf(world, entity), false);
