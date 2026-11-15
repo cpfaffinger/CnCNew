@@ -402,6 +402,9 @@ public interface IWorldServices
     /// <summary><c>ActionManager::canEnterObject</c> with <c>CHECK_CAPACITY</c>: whether <paramref name="actor"/> may enter <paramref name="container"/> now, room included.</summary>
     bool CanEnter(Entity actor, Entity container);
 
+    /// <summary><c>ActionManager::canEnterObject</c> with <c>DONT_CHECK_CAPACITY</c> (<c>privateEnter</c>'s test): whether <paramref name="actor"/> may enter <paramref name="container"/> if there were room.</summary>
+    bool MayEnterIgnoringRoom(Entity actor, Entity container);
+
     /// <summary>The arrival half of <c>aiEnter</c>: puts <paramref name="actor"/> into <paramref name="container"/> when the container accepts it; false leaves both untouched.</summary>
     bool TryEnterContainer(Entity actor, Entity container);
 

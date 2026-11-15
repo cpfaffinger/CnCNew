@@ -505,6 +505,10 @@ public sealed partial class SimulationWorld : IWorldServices
     public bool CanEnter(Entity actor, Entity container)
         => container.Container is { } inside && MayEnterAsOwner(actor, container) && inside.IsValidContainerFor(this, actor, EnterChecksRoom(actor, container));
 
+    /// <inheritdoc cref="IWorldServices.MayEnterIgnoringRoom"/>
+    public bool MayEnterIgnoringRoom(Entity actor, Entity container)
+        => container.Container is { } inside && MayEnterAsOwner(actor, container) && inside.IsValidContainerFor(this, actor, false);
+
     /// <summary><c>canEnterObject</c>'s capacity test: skipped for another player's building held by stealth riders only (it looks empty).</summary>
     private bool EnterChecksRoom(Entity actor, Entity container)
         => container.Owner == actor.Owner || container.Container is not { ContainCount: > 0 } inside || inside.StealthUnitsContained(this) == 0;
@@ -1151,7 +1155,8 @@ public sealed partial class SimulationWorld : IWorldServices
         return CollideEntry.None;
     }
 
-    /// <summary><c>ActionManager::canEnterObject</c>, reduced to what exists here: an own mobile object that is not inside anything, a container whose entry rules accept it (capacity is checked on arrival).</summary>
+    /// <summary><c>ActionManager::canEnterObject</c>, reduced to what exists here: an own mobile object that is not inside anything, a container whose entry rules accept it - <c>privateEnter</c>'s test, without the room. A full container is
+    /// no refusal: the order goes through, and the enter state finds no room and stops the object (<see cref="Modules.BuiltIn.AIUpdateInterface.OrderEnter"/>, issue #372).</summary>
     private CommandRejection CheckMoveAndEnter(PlayerId issuer, MoveAndEnterCommand order, out Entity? actor, out Entity? container)
     {
         container = null;
@@ -1163,7 +1168,7 @@ public sealed partial class SimulationWorld : IWorldServices
         container = FindEntity(order.Container);
         if (container is not null && CollideEntryOf(issuer, actor, container) != CollideEntry.None) return 0;
         if (container is null || container.DestroyRequested || container.Container is null || container == actor) return CommandRejection.UnknownEntity;
-        return MayEnterAsOwner(actor, container) && container.Container.IsValidContainerFor(this, actor, false) ? 0 : CommandRejection.CannotEnterContainer;
+        return MayEnterIgnoringRoom(actor, container) ? 0 : CommandRejection.CannotEnterContainer;
     }
 
     /// <summary>The container's owner evacuates it; a position needs a container that can move there.</summary>

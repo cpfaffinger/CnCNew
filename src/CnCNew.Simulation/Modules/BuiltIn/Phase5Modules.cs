@@ -1292,6 +1292,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     public virtual void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
+        // AIEnterState::onEnter (issue #372): privateEnter has cleared the state machine for a container the object could enter if there were room (canEnterObject with
+        // DONT_CHECK_CAPACITY); the enter state asks again with CHECK_CAPACITY, and a container that is full fails it at once into AI_IDLE - the object stops where it is
+        // instead of starting for the container. A group's order sends each member alone: those that fit go, the others stand.
+        if (world.MayEnterIgnoringRoom(Entity, container) && !world.CanEnter(Entity, container))
+        {
+            OrderIdle(world, fromPlayer);
+            return;
+        }
         var (containerX, containerY, _) = container.FrameEnd(world.Tick);
         OrderMove(world, containerX, containerY, fromPlayer);
         _enterTarget = container.Id;
