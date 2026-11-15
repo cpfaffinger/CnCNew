@@ -4,6 +4,7 @@ using System.Linq;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
@@ -11,7 +12,8 @@ using CnCNew.Simulation.World;
 
 /// <summary>
 /// #374: a delivery plane that leaves the map holds its height over the ground of the height field's edge (<c>BaseHeightMapRenderObjClass::getHeightMapHeight</c> clamps to the
-/// field) and is off the map only beyond the map's border (<c>DeliverPayloadAIUpdate::isOffMap</c>, <c>getExtentIncludingBorder</c>).
+/// field), is off the map only beyond the map's border (<c>DeliverPayloadAIUpdate::isOffMap</c>, <c>getExtentIncludingBorder</c>), and blows up when it has been turned away from
+/// its exit (<c>HeadOffMapState::update</c>).
 /// </summary>
 static partial class Tests
 {
@@ -121,6 +123,57 @@ static partial class Tests
                     $"{rate}, start {start}: the plane is deleted in the frame that begins beyond the border at {edge.ToDecimal()} (frame {gone}; before it {Describe(frames[gone - 2])}, {Describe(frames[gone - 1])}).");
                 if (!reference.TryGetValue(start, out var expected)) reference[start] = gone;
                 else Check.That(gone == expected, $"{rate}, start {start}: the plane is deleted in frame {gone} (30 Hz: {expected}).");
+            }
+    }
+    /// <summary>
+    /// A plane heading off the map that is turned away from its exit blows up (<c>HeadOffMapState::update</c>: it turned in its last frame and faces less than 0.3 of the way it
+    /// headed off). The port has nothing that deflects a plane on its way out, so the test turns it round itself at the end of a frame (a stand-in for a collision); the plane is
+    /// killed in the same frame after the turn at 30, 60 and 120 Hz, far inside the map. A plane that is not turned leaves the map as before.
+    /// </summary>
+    public static void ADeliveryPlaneTurnedOffItsExitBlowsUp()
+    {
+        var angle = typeof(Entity).GetProperty(nameof(Entity.Angle))!;
+        var clearAhead = typeof(Entity).GetMethod("ClearAheadAngle", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var reference = new Dictionary<int, (int Turned, int Gone)>();
+        foreach (var (rate, factor) in WorldRates)
+            for (var start = 0; start <= 3; start++)
+            {
+                var fixture = new SyntheticFixture(rate, files: LastBlockerFiles());
+                var terrain = OffMapTerrain();
+                ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+                var feeder = new Feeder(world);
+                var bomber = CsSpawn(world, feeder, "LbBomber", 1, 20 + start, 100);
+                var bomb = CsSpawn(world, feeder, "LbDumbBomb", 1, 20 + start, 100);
+                while (world.Tick < world.Time.OriginalFrames(5)) world.Step();
+                Check.That(world.TryEnterContainer(bomb, bomber), $"{rate}: the bomb is loaded into the plane.");
+                // One pass, a drop every three frames: the frame after the drop finds the plane empty and sends it off the map, eastwards.
+                var run = new DeliveryRun(Fixed.FromInt(40), Fixed.Zero, 1, world.Time.OriginalFrames(3), Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero,
+                    false, 0, 0, string.Empty, string.Empty, false, false, Fixed.Zero, Fixed.Zero, false, Fixed.Zero);
+                bomber.Modules.OfType<DeliverPayloadAIUpdate>().Single().DeliverPayload(world, new DeliveryOrder(Fixed.FromInt(120), Fixed.FromInt(100), Fixed.FromInt(120), Fixed.FromInt(100), run, 0));
+                int dropped = -1, turned = -1, gone = -1;
+                var where = Fixed.Zero;
+                for (var frame = 0; frame < 200 && gone < 0; frame++)
+                {
+                    for (var tick = 0; tick < factor; tick++) world.Step();
+                    if (world.FindEntity(bomber.Id) is not { EffectivelyDead: false })
+                    {
+                        gone = frame;
+                        break;
+                    }
+                    if (dropped < 0 && !bomb.ContainedBy.IsValid) dropped = frame;
+                    if (dropped >= 0 && turned < 0 && frame == dropped + 10)
+                    {
+                        turned = frame;
+                        where = bomber.X;
+                        clearAhead.Invoke(bomber, null);
+                        angle.SetValue(bomber, FixedTrig.Normalize(bomber.Angle + FixedTrig.Pi));
+                    }
+                }
+                Check.That(turned > 0 && gone > turned && gone <= turned + 3 && where < terrain.ExtentX,
+                    $"{rate}, start {start}: the plane turned round at {where.ToDecimal():0.000} in frame {turned} blows up at once (gone in frame {gone}).");
+                if (!reference.TryGetValue(start, out var expected)) reference[start] = (turned, gone);
+                else Check.That((turned, gone) == expected, $"{rate}, start {start}: turned in frame {turned}, gone in frame {gone} (30 Hz: {expected.Turned}, {expected.Gone}).");
             }
     }
 }

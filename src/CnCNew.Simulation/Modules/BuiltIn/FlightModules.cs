@@ -792,7 +792,7 @@ public readonly record struct DeliveryOrder(Fixed MoveToX, Fixed MoveToY, Fixed 
 /// (<c>RecoverFromOffMapState</c>). From head-off-map on it no longer answers movement orders. A bomber with <c>DiveStartDistance</c> strafes: while it is between the dive start and end
 /// distance it fires its weapon at a point sliding along its heading over the target (<c>StrafeLength</c> is the weapon's own reach and not read). Flight is kinematic through the
 /// ordinary move machine of <see cref="AIUpdateInterface"/>; the dive's altitude change, <c>InheritTransportVelocity</c> (a physics push), the exit pitch, the drop bones and the delivery decal are
-/// not modelled, nor is the hack that kills a plane that was turned off its exit course. <see cref="DeliverViaModuleData"/> is <c>deliverPayloadViaModuleData</c> (scripted reinforcements),
+/// not modelled. A plane that was turned off its exit course is killed (<c>HeadOffMapState::update</c>). <see cref="DeliverViaModuleData"/> is <c>deliverPayloadViaModuleData</c> (scripted reinforcements),
 /// <see cref="DeliverPayload"/> is <c>deliverPayload</c> (creation lists).
 /// </summary>
 public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateInterface(data.Base)
@@ -816,6 +816,8 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     private int _visibleDelivered;
     private Dive _dive;
     private Fixed _previousDistance2;
+    private Fixed _exitAngle;
+    private Fixed _headingAtDecision;
 
     public override string ModuleName => "DeliverPayloadAIUpdate";
 
@@ -983,7 +985,16 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             case Phase.HeadOffMap:
                 // HeadOffMapState::update, once per logic frame of the original from where the plane's last frame ended (#371).
                 if (!world.Time.BeginsFrameOf(Entity, world.Tick)) break;
-                if (FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y) || !Entity.HasMoveTarget) StartPhase(world, Phase.CleanUp);
+                if (FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y) || !Entity.HasMoveTarget)
+                {
+                    StartPhase(world, Phase.CleanUp);
+                    break;
+                }
+                // "If terrain or objects or whatever have turned me away from the map-edge that I had first headed for, I blow up": a plane that turned in its last frame
+                // (PhysicsBehavior::getTurning) and faces less than 0.3 of the way it faced when it headed off is killed. The port keeps no pitch, so the facings are flat.
+                var turning = Entity.Angle != _headingAtDecision;
+                _headingAtDecision = Entity.Angle;
+                if (turning && FixedTrig.Cos(Entity.Angle - _exitAngle) < Fixed.FromDecimal(0.3m)) world.Kill(Entity.Id);
                 break;
             case Phase.CleanUp:
                 CleanUp(world);
@@ -1154,6 +1165,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             StartPhase(world, Phase.CleanUp);
             return;
         }
+        // HeadOffMapState::onEnter remembers the facing it heads off with (facingDirectionUponDelivery); entered in a frame's first tick, before the plane's step.
+        _exitAngle = Entity.Angle;
+        _headingAtDecision = Entity.Angle;
         // "just keep moving straight ahead till we exit the map": a point 1.2 map diagonals away along the heading.
         var reach = world.Terrain is { } terrain
             ? Fixed.Sqrt(terrain.ExtentX * terrain.ExtentX + terrain.ExtentY * terrain.ExtentY) * Fixed.FromDecimal(1.2m)
@@ -1179,6 +1193,11 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         writer.Int("visibleDelivered", _visibleDelivered);
         writer.Int("diveState", (int)_dive);
         writer.Fixed("previousDistance2", _previousDistance2);
+        if (_phase == Phase.HeadOffMap)
+        {
+            writer.Fixed("exitAngle", _exitAngle);
+            writer.Fixed("exitHeading", _headingAtDecision);
+        }
         if (_run is { } run) run.Describe(writer);
     }
 
@@ -1204,6 +1223,8 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         if (dive < 0 || dive > (int)Dive.Diving) throw new InvalidDataException("Dive state out of range.");
         _dive = (Dive)dive;
         _previousDistance2 = reader.Fixed("previousDistance2");
+        _exitAngle = reader.Has("exitAngle") ? reader.Fixed("exitAngle") : Fixed.Zero;
+        _headingAtDecision = reader.Has("exitHeading") ? reader.Fixed("exitHeading") : Fixed.Zero;
         _run = reader.Has("runDistance") ? DeliveryRun.Load(reader) : null;
     }
 }
