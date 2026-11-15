@@ -1287,15 +1287,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary>
     /// <c>aiEnter</c> (<c>AI_ENTER</c>): moves to the container and enters it on arrival if it still accepts the object. An immobile object
-    /// or a missing container ignores the order, as <c>privateEnter</c> does.
+    /// or a container it may not enter ignores the order, as <c>privateEnter</c> does.
     /// </summary>
     public virtual void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
-        // AIEnterState::onEnter (issue #372): privateEnter has cleared the state machine for a container the object could enter if there were room (canEnterObject with
-        // DONT_CHECK_CAPACITY); the enter state asks again with CHECK_CAPACITY, and a container that is full fails it at once into AI_IDLE - the object stops where it is
-        // instead of starting for the container. A group's order sends each member alone: those that fit go, the others stand.
-        if (world.MayEnterIgnoringRoom(Entity, container) && !world.CanEnter(Entity, container))
+        // privateEnter (issue #375): a container the object may not enter even with room (canEnterObject with DONT_CHECK_CAPACITY) - another player's barracks a hurt
+        // infantryman was sent to by AutoFindHealingUpdate - leaves the order without effect: the state machine is not touched, the object does not start for it.
+        if (!world.MayEnterIgnoringRoom(Entity, container)) return;
+        // AIEnterState::onEnter (issue #372): privateEnter has cleared the state machine for a container the object could enter if there were room; the enter state asks
+        // again with CHECK_CAPACITY, and a container that is full fails it at once into AI_IDLE - the object stops where it is instead of starting for the container. A
+        // group's order sends each member alone: those that fit go, the others stand.
+        if (!world.CanEnter(Entity, container))
         {
             OrderIdle(world, fromPlayer);
             return;

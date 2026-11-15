@@ -1013,6 +1013,7 @@ if (contentDirectory is not null) run.Test("Real data (owner decision): target v
 if (contentDirectory is not null) run.Test("Real data: a unit ordered to garrison a building goes in at its wall", () => Tests.RealGarrisonEntryAtTheWall(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: units ordered into a full bunker stop where they are", () => Tests.RealUnitsStopWhenTheirContainerIsFull(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered into a bunker that is full stops at once", () => Tests.RealUnitOrderedIntoAFullBunkerStops(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a hurt computer ranger is healed in its barracks, not sent into an ally's (#375)", () => Tests.RealHurtRangerIsHealedInItsBarracks(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit sent into a building the enemy garrisons first attacks it", () => Tests.RealEnterOrderTurnsIntoAttackOnAnEnemyGarrison(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: attackers whose victim dies on their way stop where they are", () => Tests.RealAttackersStopWhenTheirVictimDies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on the bridge of a skirmish map, and with the bridge down the way is gone", () => Tests.RealDataUnitsCrossABridge(contentDirectory));
