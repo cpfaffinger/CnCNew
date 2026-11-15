@@ -96,6 +96,12 @@ public sealed class TerrainHeightSampler
 
     public float HeightAt(float x, float y)
     {
+        // As TerrainMap.HeightAt (#374, getHeightMapHeight): a point whose cell lies on the first vertex, the last two vertices or beyond the field reads that
+        // cell's corner vertex clamped to the field, not interpolated.
+        var cellX = (int)MathF.Floor(x / CellSize) + Border;
+        var cellY = (int)MathF.Floor(y / CellSize) + Border;
+        if (cellX > VertexWidth - 3 || cellY > VertexHeight - 3 || cellX < 1 || cellY < 1)
+            return _heights[Math.Clamp(cellY, 0, VertexHeight - 1) * VertexWidth + Math.Clamp(cellX, 0, VertexWidth - 1)] * HeightScale;
         Locate(x, y, out var ix, out var iy, out var fx, out var fy);
         float P(int px, int py) => _heights[py * VertexWidth + px];
         var p0 = P(ix, iy);
