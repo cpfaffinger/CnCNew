@@ -477,7 +477,6 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
     private EntityId _worker;
     private EntityId _reconstructing;
     private EntityId _spawner;
-    private bool _workerOnItsWay;
 
     public override string ModuleName => "RebuildHoleBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -502,7 +501,6 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
     {
         if (worker is not null) world.RequestDestroy(worker.Id);
         _worker = EntityId.Invalid;
-        _workerOnItsWay = false;
         _workerWait = data.WorkerRespawnDelayTicks;
         Entity.Status &= ~(1UL << MaskedBit);
         world.MarkDirty(Entity);
@@ -511,7 +509,7 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
     private void UpdateRebuild(IWorldServices world)
     {
         var worker = _worker.IsValid ? world.FindEntity(_worker) : null;
-        if (_worker.IsValid && worker is null && !_workerOnItsWay) NewWorkerRespawnProcess(world, null);
+        if (_worker.IsValid && worker is null) NewWorkerRespawnProcess(world, null);
         var reconstructing = _reconstructing.IsValid ? world.FindEntity(_reconstructing) : null;
         if (_reconstructing.IsValid && reconstructing is null)
         {
@@ -521,12 +519,12 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
             worker = null;
             _reconstructing = EntityId.Invalid;
         }
-        if (_workerOnItsWay && worker is not null) StartWorker(world, worker, ref reconstructing);
-        else if (worker is null && !_workerOnItsWay && _workerWait > 0 && --_workerWait == 0 && world.Templates.TryGet(data.WorkerName, out var template) && template.IsInstantiable)
+        if (worker is null && _workerWait > 0 && --_workerWait == 0 && world.Templates.TryGet(data.WorkerName, out var template) && template.IsInstantiable)
         {
-            // The worker exists from the spawn phase on; the next update tells it what to do.
-            _worker = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
-            _workerOnItsWay = true;
+            // TheThingFactory->newObject and ai->construct in one update: the worker is made at the hole and told what to do at once (#383).
+            worker = world.SpawnAtHole(Entity, template.Index);
+            _worker = worker.Id;
+            StartWorker(world, worker, ref reconstructing);
         }
         if (reconstructing is null || reconstructing.HasStatus(ObjectStatusBits.UnderConstruction)) return;
         if (worker is not null) world.RequestDestroy(worker.Id);
@@ -535,7 +533,6 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
 
     private void StartWorker(IWorldServices world, Entity worker, ref Entity? reconstructing)
     {
-        _workerOnItsWay = false;
         if (reconstructing is null) reconstructing = world.Reconstruct(Entity, worker, _origin);
         else
         {
@@ -599,7 +596,6 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         if (_worker.IsValid) writer.UInt("worker", _worker.Value);
         if (_reconstructing.IsValid) writer.UInt("reconstructing", _reconstructing.Value);
         if (_spawner.IsValid) writer.UInt("spawner", _spawner.Value);
-        if (_workerOnItsWay) writer.Bool("workerOnItsWay", true);
     }
 
     public override void Load(IStateReader reader)
@@ -610,6 +606,5 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         _worker = reader.Has("worker") ? new EntityId(checked((uint)reader.UInt("worker"))) : EntityId.Invalid;
         _reconstructing = reader.Has("reconstructing") ? new EntityId(checked((uint)reader.UInt("reconstructing"))) : EntityId.Invalid;
         _spawner = reader.Has("spawner") ? new EntityId(checked((uint)reader.UInt("spawner"))) : EntityId.Invalid;
-        _workerOnItsWay = reader.Has("workerOnItsWay") && reader.Bool("workerOnItsWay");
     }
 }

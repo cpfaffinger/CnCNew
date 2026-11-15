@@ -203,6 +203,10 @@ public sealed partial class SimulationWorld
         return site;
     }
 
+    /// <inheritdoc cref="Modules.IWorldServices.SpawnAtHole"/>
+    public Entity SpawnAtHole(Entity hole, int templateIndex)
+        => SpawnEntity(new PendingSpawn(Ids.AllocateEntity(), templateIndex, hole.Owner, hole.X, hole.Y, hole.Z, hole.Angle));
+
     private void StartConstruction(PlayerId issuer, Entity builder, ObjectTemplate template, ConstructCommand construct)
     {
         // "We tried to move our units out of the way, but they wouldn't" (buildObjectNow): the AI gets to cheat.

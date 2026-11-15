@@ -471,6 +471,9 @@ public interface IWorldServices
     /// <inheritdoc cref="SimulationWorld.Reconstruct"/>
     Entity Reconstruct(Entity hole, Entity worker, int templateIndex);
 
+    /// <summary><c>TheThingFactory->newObject</c> of a hole's worker: the object of <paramref name="templateIndex"/> exists at once, at the hole, for the hole's player.</summary>
+    Entity SpawnAtHole(Entity hole, int templateIndex);
+
     /// <summary><see cref="RelationshipOf"/> == enemies.</summary>
     bool AreEnemies(PlayerId a, PlayerId b);
 
