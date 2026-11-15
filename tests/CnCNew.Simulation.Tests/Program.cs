@@ -703,6 +703,7 @@ run.Test("Capture: snapshots in every stage continue identically, idle objects s
 run.Test("#305: a staged ability stops its unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityStopsWhereThe30HzUnitStops);
 run.Test("#305: a staged ability that ends on the way stops its unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityThatEndsOnTheWayStopsWhereThe30HzUnitStops);
 run.Test("#305: a staged ability that prepares stops its chasing unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityThatPreparesStopsItsChaseWhereThe30HzUnitStops);
+run.Test("#305: a staged ability sees its target taken in its next frame, at 30, 60 and 120 Hz", Tests.AStagedAbilitySeesItsTargetTakenInItsNextFrame);
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);

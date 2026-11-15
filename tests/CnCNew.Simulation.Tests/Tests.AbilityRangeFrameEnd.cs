@@ -198,4 +198,47 @@ static partial class Tests
             }
         Check.That(stoppedWalking > 0, $"Setup: the capturer chases while it unpacks and walks when its preparation begins ({stoppedWalking} of 4 at 30 Hz).");
     }
+
+    /// <summary>
+    /// The far capturer of two updates before the near one (it was made first), so the capture comes after its update in the frame's first tick: it gives up in its next frame
+    /// and stands where the 30 Hz one stands at the end of every frame, at 30, 60 and 120 Hz (Death Valley America against China, a Ranger at frame 11,255).
+    /// </summary>
+    public static void AStagedAbilitySeesItsTargetTakenInItsNextFrame()
+    {
+        var reference = new Dictionary<int, List<(Fixed X, Fixed Y)>>();
+        foreach (var (rate, _) in WorldRates)
+            for (var behind = 0; behind <= 3; behind++)
+            {
+                var (world, feeder, _) = RatedWorld(rate, StagedCaptureFiles());
+                feeder.Spawn(1, "StagedCapturer", owner: 1, x: 100 + behind, y: 51);
+                feeder.Spawn(1, "StagedCapturer", owner: 1, x: 500, y: 50);
+                feeder.Spawn(2, "PlainStation", owner: 2, x: 600, y: 53);
+                feeder.SetRelationship(1, 2, Relationship.Enemies);
+                world.Step();
+                world.CompleteUpgrade(new PlayerId(1), null, "Upgrade_StagedCapture");
+                while (world.Tick < world.Time.OriginalFrames(40)) world.Step();
+                var capturers = world.Entities.Where(value => value.Template.Name == "StagedCapturer").OrderBy(value => value.Id.Value).ToArray();
+                var station = world.Entities.Single(value => value.Template.Name == "PlainStation");
+                foreach (var capturer in capturers) Check.That(feeder.Capture(1, capturer.Id.Value, station.Id.Value).Accepted, $"{rate}: the capture is accepted.");
+                var late = capturers[0];
+                Check.That(late.X < Fixed.FromInt(200), $"{rate}: setup - the far capturer has the lower id.");
+                var positions = new List<(Fixed X, Fixed Y)>();
+                while (world.Tick < world.Time.OriginalFrames(240))
+                {
+                    world.Step();
+                    if (world.Time.IsOriginalFrameBoundary(world.Tick)) positions.Add((late.X, late.Y));
+                }
+                Check.That(station.Owner == new PlayerId(1) && late.X < Fixed.FromInt(450) && !late.HasMoveTarget,
+                    $"{rate}, {behind} behind: the near capturer takes the building while the far one walks, and the far one stops (at {late.X.ToDecimal():0.000}).");
+                if (!reference.TryGetValue(behind, out var expected))
+                {
+                    reference[behind] = positions;
+                    continue;
+                }
+                var first = Enumerable.Range(0, positions.Count).FirstOrDefault(index => positions[index] != expected[index], -1);
+                Check.That(first < 0,
+                    $"{rate}, {behind} behind: the far capturer stands where the 30 Hz one stands at the end of every frame (first difference after frame {(first < 0 ? -1 : 41 + first)}: " +
+                    $"{(first < 0 ? "-" : $"{positions[first].X.ToDecimal():0.000} against {expected[first].X.ToDecimal():0.000}")}).");
+            }
+    }
 }

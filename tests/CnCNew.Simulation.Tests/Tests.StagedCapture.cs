@@ -304,7 +304,9 @@ static partial class Tests
             var world = StagedWorldAt(AbilityStage.Preparing, 20, out _, out _);
             Check.That(world.TransferOwnership(new EntityId(2), new PlayerId(1)), "Somebody else hands the building to player 1.");
             var after = ObserveCapture(world, 1, 2, 5);
-            Check.That(after.All(value => value.Stage == AbilityStage.None && !value.CapturedThisTick), "The ability stops when the building is already ours; no second capture.");
+            // The unit looks at its target once per logic frame of the original: above 30 Hz a change in the middle of a frame is seen when the unit's next frame begins (#305).
+            Check.That(after.Skip(world.Frames(1) - 1).All(value => value.Stage == AbilityStage.None) && after.All(value => !value.CapturedThisTick),
+                "The ability stops when the building is already ours (in the unit's next frame); no second capture.");
         }
 
         // A target that is no structure and uses of the power without a proper target are refused.

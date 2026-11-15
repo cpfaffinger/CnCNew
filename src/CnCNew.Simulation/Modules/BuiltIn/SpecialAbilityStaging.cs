@@ -298,6 +298,9 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             }
         }
 
+        // The target's state is looked at once per logic frame of the original, in the first tick of the unit's frame: a target that dies or changes hands later in the frame
+        // (a colleague's capture) ends the ability in the unit's next frame, as at 30 Hz, not in the frame's next tick (#305).
+        if (abort && !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         var power = SpecialPowerRouting.FindModule(Entity, PowerIndex);
         if (abort || power is null)
         {
