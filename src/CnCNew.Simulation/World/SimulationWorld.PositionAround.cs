@@ -52,13 +52,14 @@ public sealed partial class SimulationWorld
         {
             if (ReferenceEquals(them, ignore) || ReferenceEquals(them, forWhom) || them.ContainedBy.IsValid || them.DestroyRequested) continue;
             var limit = reach + them.Template.BoundingCircleRadius;
-            // Above 30 Hz a mover stands where its frame ends, as an observer sees it at 30 Hz (the frame convention, docs/SIMULATION-CORE.md §43).
+            // Above 30 Hz a mover stands where its frame ends, as an observer sees it at 30 Hz (the frame convention, docs/SIMULATION-CORE.md §43), and faces the heading it
+            // ends that frame with: a box turning in the frame covers another place halfway through its turn (#305).
             var (themX, themY, themZ) = them.FrameEnd(Tick);
             if (FurtherThan(themX, x, limit) || FurtherThan(themY, y, limit)) continue;
             // z_collideTest: the sphere reaches five above the ground, the other object as high as its height (a sphere: its radius).
             var height = them.Template.IsSphere ? them.Template.GeometryMajorRadius : them.Template.GeometryHeight;
             if (ground + PositionProbeRadius < themZ || ground > themZ + height) continue;
-            if (SiteShape.Collide(probe, new SiteShape(them.Template, themX, themY, them.Angle))) return false;
+            if (SiteShape.Collide(probe, new SiteShape(them.Template, themX, themY, them.FrameEndAngle(Tick)))) return false;
         }
         // The mover must be able to get there (from where its frame ends); an aircraft needs no path.
         var (fromX, fromY, _) = forWhom.FrameEnd(Tick);
