@@ -301,6 +301,8 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         var power = SpecialPowerRouting.FindModule(Entity, PowerIndex);
         if (abort || power is null)
         {
+            // A unit still walking to its target stands where its begun frame ends: the 30 Hz unit has taken that frame's whole step when its ability sees the target gone (#305).
+            if (Entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(world);
             ai.OrderIdle(world, false);
             Exit(world);
             return;
