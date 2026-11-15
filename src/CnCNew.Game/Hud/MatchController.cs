@@ -1506,6 +1506,8 @@ public sealed partial class MatchController
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         // InGameUI::updateIdleWorker: the button is enabled while the local player has an idle worker, disabled otherwise.
         _tree.FindByName("ControlBar.wnd:ButtonIdleWorker")?.SetEnabled(Input.Selection.IdleWorkerCount > 0);
+        // ControlBar::triggerRadarAttackGlow and updateRadarAttackGlow: the glow window is disabled while it is lit, so it shows its disabled image (the scheme's lit one).
+        _tree.FindByName("ControlBar.wnd:WinUAttack")?.SetEnabled(!UnderAttackLightLit);
         RefreshOclTimer(view);
         if (view.Context == CommandBarContext.UnderConstruction && Match.World.FindEntity(view.Producer) is { } site) RefreshUnderConstruction(site);
 

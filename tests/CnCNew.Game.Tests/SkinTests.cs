@@ -48,6 +48,7 @@ internal static class SkinTests
         harness.Run("The modern command bar fills the width at every aspect ratio; its pictures keep their proportions and the width goes to the selection plate", () => ModernBarFillsTheWidth(data));
         harness.Run("#345: the modern bar draws its own controls - no scheme art, an icon and every state per button, the idle count, the status light, the general's blink; clicks and keys still work", () => ModernBarDrawsItsOwnControls(data));
         harness.Run("#345: the status light follows the original's under-attack glow: 150 frames, lit first, switching every 15, at every rate", UnderAttackGlowSchedule);
+        harness.Run("#357: the original skin's under-attack light blinks: the glow window disabled (its lit image) while the glow is lit, enabled while dark, for 150 frames", () => OriginalUnderAttackLightBlinks(data));
         harness.Run("More options offers windowed fullscreen (borderless) as a display mode and hands it to the host without a resolution of its own", () => WindowedFullscreen(data));
         harness.Run("The options cover the main menu, a text field asks the host for characters, and the score screen's panel says what the match was", () => ShellDefectsOfTheAcceptance(data));
         harness.Run("R4: a person by script switches to the modern skin in the options and walks skirmish, score, analysis and the replay list with its playback", () => PersonSwitchesTheSkin(data));
@@ -140,8 +141,18 @@ internal static class SkinTests
             TestHarness.Assert(tipped.OfType<UiTextDraw>().Any(text => text.Text.Contains("a line of the message list", StringComparison.Ordinal)), $"{skin}: the message list shows the line");
             TestHarness.Assert(skin.IsModern == tipped.OfType<UiFillRect>().Any(fill => fill.Color == palette.Panel), $"{skin}: the tooltip is a panel of the modern palette only in the modern skin");
             Pin($"HudTooltip-{skin.Id}", hud.BuildDrawList, baselines, updating);
+
+            // #357: the original skin's under-attack light lit (the glow window disabled, its lit image), the pointer away from the money display.
+            if (!skin.IsModern)
+            {
+                hud.Process(new MouseMoveEvent(10_032, new Vector2(NavWidth / 2f, NavHeight / 3f)));
+                TriggerUnderAttack(hud, live);
+                hud.BuildDrawList(NavWidth, NavHeight);
+                TestHarness.Assert(hud.UnderAttackLightLit && !hud.IsWindowEnabled("ControlBar.wnd:WinUAttack"), "the attack lights the glow");
+                Pin($"HudUnderAttack-{skin.Id}", hud.BuildDrawList, baselines, updating);
+            }
         }
-        TestHarness.Assert(baselines.Count == 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
+        TestHarness.Assert(baselines.Count == 54 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
     }
 
     /// <summary>
@@ -254,6 +265,68 @@ internal static class SkinTests
                     TestHarness.Assert(MatchController.UnderAttackGlowLit(frame * perFrame + tick, perFrame) == lit, $"{perFrame} ticks a frame, frame {frame}: lit {lit}");
             }
         TestHarness.Assert(!MatchController.UnderAttackGlowLit(-1, 2), "nothing before the trigger");
+    }
+
+    /// <summary>An enemy's hit on one of the human's structures, as the radar's under-attack event sees it.</summary>
+    private static void TriggerUnderAttack(MatchController hud, LiveMatch match)
+    {
+        var own = match.World.Entities.First(entity => entity.Owner == match.Human && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE"));
+        var enemy = match.World.Entities.First(entity => entity.Owner != match.Human && match.World.AreEnemies(match.Human, entity.Owner));
+        hud.Messages.Observe(new CnCNew.Simulation.Events.SimEvent(default, match.World.Tick, CnCNew.Simulation.Events.SimEventKind.EntityDamaged, own.Id, enemy.Id, default, string.Empty, 5), match.World, match.Human);
+    }
+
+    /// <summary>
+    /// #357: in the original skin the under-attack light (<c>ControlBar.wnd:WinUAttack</c>) blinks as <c>ControlBar::updateRadarAttackGlow</c> switches it: the window is disabled
+    /// while lit, so it shows its disabled image - the scheme's <c>UAttackButtonHightlited</c> - and enabled (<c>UAttackButtonEnable</c>) while dark, lit first, switching every 15 frames
+    /// of the original for 150 frames, then enabled for good.
+    /// </summary>
+    private static void OriginalUnderAttackLightBlinks(GameData data)
+    {
+        var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        const int width = 1280, height = 720;
+        foreach (var faction in new[] { "FactionAmerica", "FactionChina", "FactionGLA" })
+        {
+            var setup = new MatchSetup(map, faction, [faction == "FactionChina" ? "FactionAmerica" : "FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = 3 };
+            var match = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
+            var hud = new MatchController(match, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = UiSkinName.Original } }) { StarBlinks = false };
+            for (var step = 0; step < 8; step++) match.Advance(0.25);
+            hud.Update(0.25);
+            var schemes = hud.Assets.Schemes.Schemes;
+            var dark = schemes.Select(scheme => scheme.UnderAttackImages.Enabled).Where(name => name.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var lit = schemes.Select(scheme => scheme.UnderAttackImages.Hilited).Where(name => name.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            string? Shown()
+            {
+                // The scheme places the light when the draw list is built (ControlBarScheme::init).
+                var commands = hud.BuildDrawList(width, height).Commands;
+                var light = hud.WindowRect("ControlBar.wnd:WinUAttack") ?? throw new InvalidOperationException("no under-attack light");
+                var images = commands.OfType<UiImageDraw>().Where(draw => draw.Destination == light).Select(draw => draw.Image).ToArray();
+                return images.Length == 1 ? images[0] : null;
+            }
+            var atRest = Shown();
+            TestHarness.Assert(atRest is not null && dark.Contains(atRest) && hud.IsWindowEnabled("ControlBar.wnd:WinUAttack"), $"{faction}: at rest the light is enabled and dark ({atRest})");
+
+            TriggerUnderAttack(hud, match);
+            var since = match.World.Tick;
+            var perFrame = match.World.Time.OriginalFrames(1);
+            var switches = 0;
+            var wasLit = false;
+            var seenFrames = new HashSet<long>();
+            while (match.World.Tick - since < 170 * perFrame)
+            {
+                var frame = (match.World.Tick - since) / perFrame;
+                var expected = frame < 150 && frame / 15 % 2 == 0;
+                var shown = Shown();
+                TestHarness.Assert(hud.IsWindowEnabled("ControlBar.wnd:WinUAttack") == !expected && shown is not null && (expected ? lit : dark).Contains(shown),
+                    $"{faction}, frame {frame}: the light is {(expected ? "lit" : "dark")} ({shown}, enabled {hud.IsWindowEnabled("ControlBar.wnd:WinUAttack")})");
+                if (seenFrames.Count == 0) TestHarness.Assert(expected, $"{faction}: the light is lit first");
+                if (seenFrames.Count > 0 && expected != wasLit) switches++;
+                wasLit = expected;
+                seenFrames.Add(frame);
+                match.Advance(1.0 / 30);
+            }
+            TestHarness.Assert(switches == 9, $"{faction}: the light switched {switches} times in 150 frames (five bright phases, nine switches)");
+            TestHarness.Assert(dark.Contains(Shown() ?? string.Empty) && hud.IsWindowEnabled("ControlBar.wnd:WinUAttack"), $"{faction}: dark and enabled after 150 frames");
+        }
     }
 
     /// <summary>
