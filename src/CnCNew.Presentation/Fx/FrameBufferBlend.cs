@@ -55,6 +55,9 @@ public static class FrameBufferBlend
     public static byte ThroughEncodedOutput(ParticleShader shader, float linearOutput, float alpha, byte target)
         => InDisplayValues(shader, Encode(Math.Clamp(linearOutput, 0f, 1f)), alpha, target);
 
+    /// <summary>What the shader of a material sees of a colour constant: the renderer converts a colour constant from sRGB to linear light (Stride's <c>ComputeColor</c> of a colour key).</summary>
+    public static float MaterialConstant(float given) => Decode(given);
+
     /// <summary>The sprite shader's output of one channel, in display values: the texel times the vertex colour (<c>D3DTOP_MODULATE</c>).</summary>
     public static float SpriteOutput(float texel, float vertexColor) => texel * vertexColor;
 

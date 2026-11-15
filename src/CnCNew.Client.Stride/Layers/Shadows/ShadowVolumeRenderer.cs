@@ -79,10 +79,9 @@ internal sealed class ShadowVolumeRenderer : IDisposable
         var sphere = BoundingSphere.FromBox(everywhere);
         // No colour reaches the target from this pass; what the mesh draws is the stencil count.
         var volumeMaterial = Create(new ComputeColor(new Color4(0f, 0f, 0f, 1f)), new BlendStateDescription(Blend.One, Blend.Zero), ShadowStencilRole.Volume, StackedBackToFrontSortMode.ShadowVolumeLayer);
-        // D3DBLEND_DESTCOLOR, D3DBLEND_ZERO: the target times the colour. The original multiplies in gamma space, and a product in linear space differs only by a power, so the factor is the
-        // colour's linear value.
-        float Channel(float value) => device.ColorSpace == ColorSpace.Linear ? MathUtil.SRgbToLinear(value) : value;
-        var fillMaterial = Create(new ComputeColor(new Color4(Channel(color.X), Channel(color.Y), Channel(color.Z), 1f)), Multiply(Blend.DestinationColor, Blend.Zero), ShadowStencilRole.Fill, StackedBackToFrontSortMode.ShadowFillLayer);
+        // D3DBLEND_DESTCOLOR, D3DBLEND_ZERO: the target times the colour, on display values (ShadowSun.FillConstant: the renderer decodes the constant, the fill encodes it again).
+        var fill = ShadowSun.FillConstant(color);
+        var fillMaterial = Create(new ComputeColor(new Color4(fill.X, fill.Y, fill.Z, 1f)), Multiply(Blend.DestinationColor, Blend.Zero), ShadowStencilRole.Fill, StackedBackToFrontSortMode.ShadowFillLayer);
 
         _volumeMesh = new Mesh
         {

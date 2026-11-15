@@ -41,6 +41,14 @@ public static class ShadowSun
         return new Vector3(bytes[2] / 255f, bytes[1] / 255f, bytes[0] / 255f);
     }
 
+    /// <summary>
+    /// The colour constant of the material that fills the stencil shadows. <c>W3DVolumetricShadowManager::renderStencilShadows</c> draws a rectangle with the shadow colour as its vertex colour
+    /// and <c>D3DBLEND_DESTCOLOR</c>/<c>D3DBLEND_ZERO</c>: the frame buffer's bytes times the colour's bytes. The renderer converts a colour constant from sRGB to linear light, and the fill's
+    /// material encodes its shaded colour back to display values before the blend (<see cref="CnCNew.Presentation.Fx.FrameBufferBlend.ThroughEncodedOutput"/>), so the constant is the
+    /// colour as it is. The client converted it to linear light first and the renderer a second time: shadowed ground showed at 0.35 of its brightness instead of the default 160/255 (issue 362).
+    /// </summary>
+    public static Vector3 FillConstant(Vector3 stencilColor) => stencilColor;
+
     /// <summary>The direction the light travels: the first light of the objects, or straight down without one.</summary>
     public static Vector3 Direction(TerrainLighting lighting)
     {

@@ -25,6 +25,7 @@ internal static class ShadowTests
         harness.Run("A thing in the air: its shadow reaches the lowest point of the map, and the visibility box holds that tip", AirborneTip);
         harness.Run("Extrusion: flat ground needs the buffer, a dip takes the floor down", ExtrusionOnTheFlat);
         harness.Run("Extrusion: at a cliff the light is made steeper", ExtrusionAtACliff);
+        harness.Run("The stencil fill multiplies the ground by the shadow colour on display values, not by its linear value twice (issue 362)", FillStrength);
         harness.Run("A decal turns with its object; offset X goes forward, offset Y to the right", DecalPlace);
         harness.Run("A decal without a texture is shadow.tga, with one its name and .tga", DecalTexture);
         harness.Run("The clouds slide with game time and a picture shifts by parts of a texel", CloudShift);
@@ -32,6 +33,37 @@ internal static class ShadowTests
         harness.Run("The water's edge: opacity follows the depth up to the minimum opacity", WaterEdge);
         harness.Run("Snow: flakes in a box around the camera, the same picture for the same time, falling, culled by leaf", Snow);
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// <c>W3DVolumetricShadowManager::renderStencilShadows</c>: the frame buffer's bytes times the shadow colour's bytes (<c>D3DBLEND_DESTCOLOR</c>, <c>D3DBLEND_ZERO</c>). The fill is drawn in
+    /// the pass in display values and encodes its shaded colour; the renderer decodes the material's constant. The engine's default grey and a map's own colour (0x7F5A6E8C: red 0x5A,
+    /// green 0x6E, blue 0x8C).
+    /// </summary>
+    private static void FillStrength()
+    {
+        foreach (var colour in new[] { ShadowSun.StencilColor(null), new Vector3(0x5A / 255f, 0x6E / 255f, 0x8C / 255f) })
+        {
+            var constant = ShadowSun.FillConstant(colour);
+            foreach (var (channel, given) in new[] { (colour.X, constant.X), (colour.Y, constant.Y), (colour.Z, constant.Z) })
+            {
+                for (var ground = 0; ground < 256; ground++)
+                {
+                    var original = FrameBufferBlend.InDisplayValues(ParticleShader.Multiply, channel, 1f, (byte)ground);
+                    var drawn = FrameBufferBlend.ThroughEncodedOutput(ParticleShader.Multiply, FrameBufferBlend.MaterialConstant(given), 1f, (byte)ground);
+                    if (Math.Abs(drawn - original) > 1) { TestHarness.Assert(false, $"ground {ground} under {channel:F3}: {drawn}, the original {original}"); return; }
+                    // Without the pass in display values (a device that cannot register the shader) the linear-light blend comes close to the same product.
+                    var linear = FrameBufferBlend.InLinearLight(ParticleShader.Multiply, FrameBufferBlend.MaterialConstant(given), 1f, (byte)ground);
+                    if (ground >= 96 && Math.Abs(linear - original) > 6) { TestHarness.Assert(false, $"linear light: ground {ground} under {channel:F3}: {linear}, the original {original}"); return; }
+                }
+            }
+        }
+
+        // The defect: the colour's linear value handed over as the constant is decoded once more; a ground of 200 under the default grey showed at 70 instead of 125.
+        var grey = 160f / 255f;
+        var twice = FrameBufferBlend.ThroughEncodedOutput(ParticleShader.Multiply, FrameBufferBlend.MaterialConstant(FrameBufferBlend.Decode(grey)), 1f, 200);
+        var now = FrameBufferBlend.ThroughEncodedOutput(ParticleShader.Multiply, FrameBufferBlend.MaterialConstant(ShadowSun.FillConstant(new Vector3(grey)).X), 1f, 200);
+        TestHarness.Assert(twice == 70 && now == 125, $"a ground of 200 in the shadow: {now} now, {twice} with the colour decoded twice");
     }
 
     /// <summary>A unit cube from (0,0,0) to (1,1,1) with counter-clockwise faces seen from outside, every vertex three times over as a mesh with seams has it.</summary>
