@@ -882,6 +882,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     private void ClimbToHeight(IWorldServices world)
     {
         if (Entity.Template.Locomotor is not { } locomotor) return;
+        // Once per logic frame of the original, before the plane's step, over the ground where its last frame ended: above 30 Hz the frame's second tick measured the ground
+        // under the middle of the step (#305).
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         var preferred = locomotor.PreferredHeight;
         if (preferred <= Fixed.Zero) return;
         Entity.Z = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero) + preferred;
