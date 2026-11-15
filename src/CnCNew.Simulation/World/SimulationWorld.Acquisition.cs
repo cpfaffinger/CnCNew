@@ -174,6 +174,7 @@ public sealed partial class SimulationWorld
                 if (state.Cycle is { } cycle) cycle.Victim = to;
                 changed = true;
             }
+            if (AiOf(other) is { } ai && ai.TransferPursuit(from, to)) changed = true;
             // "Transfer the turrets too this frame."
             if (other.Turrets is { } turrets)
                 foreach (var turret in turrets)

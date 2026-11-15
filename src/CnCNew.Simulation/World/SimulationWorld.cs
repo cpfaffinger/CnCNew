@@ -1567,6 +1567,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var (pursueX, pursueY) = (pursue.X, pursue.Y);
                 if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere && FindAttackPosition(unit, victim) is { } place) (pursueX, pursueY) = place;
                 AiOf(unit)!.OrderMove(this, pursueX, pursueY, true);
+                AiOf(unit)!.NotePursuit(victim.Id);
                 BeginPursuit(unit, victim);
                 NoteOrderedAttack(unit, victim);
                 break;

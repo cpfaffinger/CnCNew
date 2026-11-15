@@ -306,6 +306,7 @@ public sealed partial class SimulationWorld
         {
             var (goalX, goalY) = FindAttackPosition(entity, victim) ?? (victimX, victimY);
             if (!ai.StartInternalMove(goalX, goalY)) return false;
+            ai.NotePursuit(victim.Id);
             ai.BeginMoveWithNextFrame(this);
             WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             state.Chasing = true;

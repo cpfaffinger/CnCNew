@@ -848,6 +848,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private bool _lastCommandFromPlayer;
     private EntityId _enterTarget;
     private EntityId _goal;
+    // The victim of the attack order whose approach the current move is (AIAttackApproachTargetState); invalid for every other move.
+    private EntityId _pursued;
     private readonly List<PathPoint> _path = [];
     private int _pathIndex;
     private bool _pathValid;
@@ -1117,6 +1119,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _returning = false;
         _lastCommandFromPlayer = fromPlayer;
         EndExitPath();
+        _pursued = EntityId.Invalid;
         // AIInternalMoveToState::onEnter: a hovering or winged aircraft takes a goal cell nobody else of its kind holds (not for the stop order onto its own place).
         if (!IsGroundMover)
         {
@@ -1683,6 +1686,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     {
         if (Entity.Template.Locomotor is null) return false;
         EndExitPath();
+        _pursued = EntityId.Invalid;
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
@@ -1694,6 +1698,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     internal void StopInternalMove()
     {
         EndExitPath();
+        _pursued = EntityId.Invalid;
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
@@ -1854,6 +1859,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         }
         if (_enterTarget.IsValid) UpdateEnter(world);
         if (_goal.IsValid) UpdateGoal(world);
+        if (_pursued.IsValid) UpdatePursuit(world);
         if (_evacuatePending && !Entity.HasMoveTarget && _dock is null && ReadyToUnload(world))
         {
             _evacuatePending = false;
@@ -1931,6 +1937,45 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             }
         // Whatever happened, a finished approach is over: a module that wanted to keep the order called OrderApproachGoal again itself.
         if (_goal == goal.Id && !Entity.HasMoveTarget) _goal = EntityId.Invalid;
+    }
+
+    /// <summary>
+    /// The move just given is the approach of an attack on <paramref name="victim"/> (<c>AIAttackApproachTargetState</c> inside <c>AIAttackState</c>): it ends with the victim
+    /// (<see cref="UpdatePursuit"/>). Any later move replaces it.
+    /// </summary>
+    internal void NotePursuit(EntityId victim)
+    {
+        if (Entity.HasMoveTarget) _pursued = victim;
+    }
+
+    /// <summary><c>AIUpdateInterface::transferAttack</c>: an approach of <paramref name="from"/> goes on as one of <paramref name="to"/> (a destroyed building's rebuild hole).</summary>
+    internal bool TransferPursuit(EntityId from, EntityId to)
+    {
+        if (!_pursued.IsValid || _pursued != from) return false;
+        _pursued = to;
+        return true;
+    }
+
+    /// <summary>
+    /// <c>AIAttackState::update</c> (issue #366): a victim that is dead or gone ends the attack - <c>notifyVictimIsDead</c>, the state succeeds into <c>AI_IDLE</c> - and the object stands where
+    /// it is instead of walking on to where the victim stood. Looked at once per logic frame of the original of this object, like the container of <see cref="UpdateEnter"/>; the
+    /// object stops where the frame it has begun ends.
+    /// </summary>
+    private void UpdatePursuit(IWorldServices world)
+    {
+        if (!Entity.HasMoveTarget)
+        {
+            _pursued = EntityId.Invalid;
+            return;
+        }
+        if (!DecidedThisTick(world)) return;
+        var victim = world.FindEntity(_pursued);
+        if (victim is not null && !victim.DestroyRequested && !victim.EffectivelyDead) return;
+        // A victim the attack was handed on to that the spawn phase creates later in this tick (a rebuild hole).
+        if (victim is null && world.IsSpawnPending(_pursued)) return;
+        if (_frameTicksLeft > 0) SettleFrame(world.Tick);
+        StopInternalMove();
+        world.MarkDirty(Entity);
     }
 
     /// <summary>The tick in which this object decided its logic frame of the original: the first share of a step, or the first tick of a frame it stands through (waiting for its path).</summary>
@@ -3202,6 +3247,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_donutSince != 0 && Entity.HasMoveTarget) writer.Int("donutSince", _donutSince);
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
+        if (_pursued.IsValid) writer.UInt("pursued", _pursued.Value);
         if (_exitAfterEvacuate || _returning)
         {
             writer.Bool("exitAfterEvacuate", _exitAfterEvacuate);
@@ -3302,6 +3348,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _donutSince = reader.Has("donutSince") ? reader.Int("donutSince") : 0;
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
+        _pursued = reader.Has("pursued") ? new EntityId(checked((uint)reader.UInt("pursued"))) : EntityId.Invalid;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
         _returning = reader.Has("returning") && reader.Bool("returning");
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;
