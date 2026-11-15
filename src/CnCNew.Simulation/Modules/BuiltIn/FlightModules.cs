@@ -34,6 +34,19 @@ internal static class FlightModules
     public static bool IsOffMap(IWorldServices world, Fixed x, Fixed y)
         => world.Terrain is { } terrain && (x < Fixed.Zero || y < Fixed.Zero || x > terrain.ExtentX || y > terrain.ExtentY);
 
+    /// <summary>
+    /// <c>DeliverPayloadAIUpdate::isOffMap</c>: outside the map with its border (<c>W3DTerrainLogic::getExtentIncludingBorder</c>: from minus the border to the height field's width
+    /// less the border, the point strictly inside - <c>isInRegionNoZ</c>); without a terrain nothing is off the map.
+    /// </summary>
+    public static bool IsOffMapIncludingBorder(IWorldServices world, Fixed x, Fixed y)
+    {
+        if (world.Terrain is not { } terrain) return false;
+        var border = Fixed.FromInt(terrain.Border * TerrainMap.CellSize);
+        var highX = Fixed.FromInt((terrain.VertexWidth - terrain.Border) * TerrainMap.CellSize);
+        var highY = Fixed.FromInt((terrain.VertexHeight - terrain.Border) * TerrainMap.CellSize);
+        return !(-border < x && x < highX && -border < y && y < highY);
+    }
+
     /// <summary>The terrain height under a point, or the given fallback when the point is off the map.</summary>
     public static Fixed GroundOrDefault(IWorldServices world, Fixed x, Fixed y, Fixed fallback) => IsOffMap(world, x, y) ? fallback : world.GroundHeightAt(x, y);
 
@@ -952,7 +965,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
                 // The state machine asks once per logic frame of the original, before the plane's step: above 30 Hz the frame's first tick, where the plane stands at the end of
                 // its last frame (#371).
                 if (!world.Time.BeginsFrameOf(Entity, world.Tick)) break;
-                if (FlightModules.IsOffMap(world, Entity.X, Entity.Y)) StartPhase(world, Phase.RecoverFromOffMap);
+                if (FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y)) StartPhase(world, Phase.RecoverFromOffMap);
                 else if (!Entity.HasMoveTarget) StartPhase(world, Phase.Approach);
                 break;
             case Phase.RecoverFromOffMap:
@@ -968,7 +981,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             case Phase.HeadOffMap:
                 // HeadOffMapState::update, once per logic frame of the original from where the plane's last frame ended (#371).
                 if (!world.Time.BeginsFrameOf(Entity, world.Tick)) break;
-                if (FlightModules.IsOffMap(world, Entity.X, Entity.Y) || !Entity.HasMoveTarget) StartPhase(world, Phase.CleanUp);
+                if (FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y) || !Entity.HasMoveTarget) StartPhase(world, Phase.CleanUp);
                 break;
             case Phase.CleanUp:
                 CleanUp(world);
