@@ -3695,8 +3695,12 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         }
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         // ProductionUpdate::update: one more frame under construction against calcTimeToBuild of this frame - a unit's total follows the player's power, an upgrade's does not.
+        // The total of a frame is the one of its first tick: above 30 Hz a power plant lost later in the frame shortens the build from the next frame on, as at 30 Hz,
+        // not from the frame's next tick (#305).
         var elapsed = head.ElapsedTicks + TickOrder.Next;
-        var total = head.UpgradeIndex >= 0 ? head.TotalTicks : world.Time.AtLeastOneFrame(world.BuildTicksUnderPower(Entity.Owner, world.Templates[head.TemplateIndex].BuildTicks));
+        var total = head.UpgradeIndex >= 0 ? head.TotalTicks
+            : head.TotalTicks > 0 && !world.Time.BeginsFrameOf(Entity, world.Tick) ? head.TotalTicks
+            : world.Time.AtLeastOneFrame(world.BuildTicksUnderPower(Entity.Owner, world.Templates[head.TemplateIndex].BuildTicks));
         if (elapsed < total)
         {
             _queue[0] = head with { ElapsedTicks = elapsed, TotalTicks = total };
