@@ -1954,7 +1954,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // AIEnterState::update (fidelity finding F-38): a boarder on the ground gives up on a container that is itself carried by something in the air (rangers that were to
         // board a humvee the Chinook has taken up), and waits at the end of its approach while its container is in the air - it goes in only once the container is down.
         var carriedAway = container.ContainedBy.IsValid && AboveTerrain(world, container) && !AboveTerrain(world, Entity);
-        if (carriedAway)
+        // AIEnterState::update asks canEnterObject with CHECK_CAPACITY in every frame (issue #365): a container that has filled up - or that this object may no longer enter -
+        // ends the order, the state fails into AI_IDLE and the object stands where it is instead of walking on to the container.
+        if (carriedAway || !world.CanEnter(Entity, container))
         {
             _enterTarget = EntityId.Invalid;
             if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);

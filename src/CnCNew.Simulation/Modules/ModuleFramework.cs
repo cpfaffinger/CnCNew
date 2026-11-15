@@ -399,6 +399,9 @@ public interface IWorldServices
     /// <summary><c>Player::getRelationship</c>: <paramref name="from"/>'s directed view of <paramref name="to"/> (teams plus explicit overrides; self = allies, neutral objects = neutral).</summary>
     Relationship RelationshipOf(PlayerId from, PlayerId to);
 
+    /// <summary><c>ActionManager::canEnterObject</c> with <c>CHECK_CAPACITY</c>: whether <paramref name="actor"/> may enter <paramref name="container"/> now, room included.</summary>
+    bool CanEnter(Entity actor, Entity container);
+
     /// <summary>The arrival half of <c>aiEnter</c>: puts <paramref name="actor"/> into <paramref name="container"/> when the container accepts it; false leaves both untouched.</summary>
     bool TryEnterContainer(Entity actor, Entity container);
 

@@ -1000,6 +1000,7 @@ if (contentDirectory is not null) run.Test("Real data (owner decision): units pi
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value leaves ordered attacks and lone victims alone", () => Tests.RealTargetValueLeavesOrdersAndLoneVictimsAlone(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value numbers follow the armour table and the threat", () => Tests.RealTargetValueNumbersFollowTheRule(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered to garrison a building goes in at its wall", () => Tests.RealGarrisonEntryAtTheWall(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: units ordered into a full bunker stop where they are", () => Tests.RealUnitsStopWhenTheirContainerIsFull(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on the bridge of a skirmish map, and with the bridge down the way is gone", () => Tests.RealDataUnitsCrossABridge(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a player starts with one builder at every rate", () => Tests.RealPlayersStartWithOneBuilder(contentDirectory));
