@@ -145,7 +145,10 @@ internal sealed class DockMachine(EntityId dockId)
                 return dock is null ? DockStatus.Failure : DockStatus.Success;
             case DockState.ProcessDock:
                 if (dock is null) return DockStatus.Failure;
-                _nextActionTick = world.Tick + ActionDelay(world, dock, ai);
+                // AIDockProcessDockState::onEnter: "it is simply okay to Action right away", which is the state's first update, in the frame after the docker reached the dock - at every
+                // rate in the first tick of that frame, so that the dock's own frames (a repair dock heals once per frame from its first action) and the move out after its last action
+                // lie on the original's frames.
+                _nextActionTick = world.Tick + world.Time.ZeroIsNextFrame(ActionDelay(world, dock, ai));
                 return DockStatus.Continue;
             case DockState.MoveToRally:
                 return dock is null ? DockStatus.Failure : DockStatus.Success;

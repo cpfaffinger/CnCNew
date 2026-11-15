@@ -106,4 +106,36 @@ static partial class Tests
                 $"{rate}: a dock that ignores its bones keeps the boneless approach ({tanks[4].MoveTargetX}, {tanks[4].MoveTargetY}).");
         }
     }
+
+    /// <summary>
+    /// <c>AIDockProcessDockState</c>: the dock's first action is the state's first update, in the frame after the docker reached the dock. Above 30 Hz it fell in the next tick, inside that
+    /// frame, and a repair dock - which heals once per frame counted from its first action - healed and let its docker go half a frame early at 60 Hz, three quarters at 120 Hz.
+    /// </summary>
+    public static void RepairDockActsInTheFrameAfterTheDockerArrived()
+    {
+        var frames = new List<(long First, long Full, long Done)>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder) = DockBonesWorld(rate, BayBones());
+            feeder.Spawn(1, "IgnoringBay", owner: 1, x: 400, y: 400);
+            feeder.Spawn(1, "DockTank", owner: 1, x: 500, y: 250);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var bay = world.Entities.Single(value => value.Template.Name == "IgnoringBay");
+            var tank = world.Entities.Single(value => value.Template.Name == "DockTank");
+            var ai = tank.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.AIUpdateInterface>().Single();
+            Check.That(feeder.Dock(1, tank.Id.Value, bay.Id.Value).Accepted, $"{rate}: the tank is ordered to the bay.");
+            var (first, full, done) = (-1L, -1L, -1L);
+            for (var step = 0; step < world.Frames(30 * 60) && done < 0; step++)
+            {
+                world.Step();
+                var frame = (world.Tick - 1) / rate.TicksPerOriginalFrame;
+                if (first < 0 && tank.Body!.Health > Fixed.FromInt(40)) first = frame;
+                if (full < 0 && tank.Body!.Health == tank.Body.MaxHealth) full = frame;
+                if (done < 0 && first >= 0 && !ai.IsDocking) done = frame;
+            }
+            Check.That(first >= 0 && full >= 0 && done >= 0, $"{rate}: the tank is repaired and leaves ({first}, {full}, {done}).");
+            frames.Add((first, full, done));
+        }
+        Check.That(frames.Distinct().Count() == 1, $"the first repair, the full health and the end of the dock lie in the same frames of the original at 30, 60 and 120 Hz: {string.Join(", ", frames)}.");
+    }
 }
