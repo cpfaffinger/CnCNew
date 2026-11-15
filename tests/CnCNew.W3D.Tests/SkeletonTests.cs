@@ -345,6 +345,12 @@ internal static class SkeletonTests
             $"Real animation counts changed ({report["animations.None"]}, {report["animations.TimeCoded"]}, {report["animations.AdaptiveDelta"]}).");
         Check(report["meshes.skinned"] == 169 && report["model.unresolved-sub-objects"] == 42,
             $"Real skin or unresolved sub-object counts changed ({report["meshes.skinned"]}, {report["model.unresolved-sub-objects"]}).");
+        // Issue 23: no shipped model has a camera-aligned or camera-oriented mesh (W3D_MESH_FLAG_GEOMETRY_TYPE_CAMERA_ALIGNED/_ORIENTED, which the original turns to the camera
+        // in MeshModelClass) and no HLOD has an aggregate or a proxy array (HLodClass's constructor attaches those to bones). The client draws neither: it has to learn them once data
+        // with them appears.
+        Check(new[] { "meshes.camera-facing", "hlods.aggregates", "hlods.proxies" }.All(report.Counts.ContainsKey), "The audit no longer counts camera-facing meshes, aggregates or proxies.");
+        Check(report["meshes.camera-facing"] == 0 && report["hlods.aggregates"] == 0 && report["hlods.proxies"] == 0,
+            $"Real models now use camera-facing meshes ({report["meshes.camera-facing"]}), HLOD aggregates ({report["hlods.aggregates"]}) or proxies ({report["hlods.proxies"]}), which the client does not draw.");
         Check(report.UnresolvedHierarchyReferences.Length == 6 &&
               report.UnresolvedHierarchyReferences.All(entry => entry.Contains("GENERALSKEL", StringComparison.Ordinal)),
             "Only the six GENERALSKEL animations may lack their hierarchy.");
