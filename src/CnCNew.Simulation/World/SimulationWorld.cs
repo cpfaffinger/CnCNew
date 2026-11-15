@@ -1947,6 +1947,7 @@ public sealed partial class SimulationWorld : IWorldServices
         // object (a fling turns it): the 30 Hz object took that frame whole before it died (F-138).
         else if (_firstFrameTicks != TickOrder.Next && AiOf(entity) is { CoversFrame: true } arriving) arriving.SettleFrame(_tick);
         if (_firstFrameTicks != TickOrder.Next && entity.Turrets is { } turrets) CompleteTurretFrames(entity, turrets);
+        AiOf(entity)?.OnDied(this, _stepping && _updatesRan);
         // SlowDeathBehavior::onDie, ai->markAsDead(): the dying object stops where the logic frame ends in which it died, so that what its death leaves lies where it died.
         AiOf(entity)?.StopAtDeath(this, settled);
         Emit(SimEventKind.EntityDied, entity.Id, info.Source, string.Empty, info.DeathType);

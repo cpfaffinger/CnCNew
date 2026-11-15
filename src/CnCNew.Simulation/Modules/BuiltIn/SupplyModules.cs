@@ -173,6 +173,25 @@ internal struct DozerBoredom
         return Math.Min(sleep, (world.Tick < LookTick(world, due) ? LookTick(world, due) : due) - world.Tick);
     }
 
+    /// <summary>
+    /// The builder has died in this tick (<paramref name="updatesRan"/>: after the updates of the tick). The 30 Hz look of a frame runs inside the builder's update and writes its
+    /// stamp before what kills the builder later in that frame; above 30 Hz the look writes it where the frame ends, which a dead builder never reaches. A death after the update of
+    /// the frame's first tick and before the look at its end writes the stamp here, as that look would (F-139); a death before the frame's first update writes none, as at 30 Hz.
+    /// </summary>
+    public void AtDeath(IWorldServices world, AIUpdateInterface ai, long boredTicks, bool updatesRan)
+    {
+        var entity = ai.Entity;
+        var frame = world.Time.TicksPerOriginalFrame;
+        if (frame == TickOrder.Next) return;
+        var into = (world.Tick - entity.SpawnTick) % frame;
+        var end = world.Tick - into + frame - TickOrder.Next;
+        if ((into == 0 && !updatesRan) || (world.Tick == end && updatesRan)) return;
+        if (_busy || ai.HasBuilderTask || !ai.IsIdle || end - _since >= boredTicks + frame) _since = end;
+        _busy = false;
+        (_pick, _pickTick) = (EntityId.Invalid, 0);
+        world.MarkDirty(entity);
+    }
+
     private static long NextFrameEnd(IWorldServices world, Entity entity)
     {
         for (var ahead = TickOrder.Next; ; ahead++)
@@ -253,6 +272,8 @@ public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
         SetMineClearingDetail(world, !WorkingAtTask);
         return _boredom.Look(world, this, hadTask, sleep, data.BoredTicks, data.BoredRange);
     }
+
+    internal override void OnDied(IWorldServices world, bool updatesRan) => _boredom.AtDeath(world, this, data.BoredTicks, updatesRan);
 
     public override void Describe(IStateWriter writer)
     {
@@ -654,6 +675,11 @@ internal sealed class WorkerAIUpdate(WorkerAIData data) : SupplyCarrierAI(data.C
         SetMineClearingDetail(world, _asTruck || !WorkingAtTask);
         if (_asTruck) return sleep;
         return _boredom.Look(world, this, hadTask, sleep, data.BoredTicks, data.BoredRange);
+    }
+
+    internal override void OnDied(IWorldServices world, bool updatesRan)
+    {
+        if (!_asTruck) _boredom.AtDeath(world, this, data.BoredTicks, updatesRan);
     }
 
     private void BecomeDozer(IWorldServices world)

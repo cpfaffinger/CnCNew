@@ -120,6 +120,7 @@ run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlli
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);
 run.Test("Phase 62 (F-147): a bored dozer sees a hurt that came before its update", Tests.BoredDozerSeesAHurtBeforeItsUpdate);
 run.Test("Phase 62 (F-147): a bored dozer looks before a heal of the same tick", Tests.BoredDozerLooksBeforeAHealOfTheSameTick);
+run.Test("#136 (F-139): a dozer killed after its update in its frame's first tick keeps the idle stamp of that frame", Tests.DozerKilledAfterItsUpdateKeepsTheStampOfItsFrame);
 run.Test("Phase 62 (F-148): a sinking body that walks ends each frame below the ground", Tests.ASinkingBodyThatWalksEndsEachFrameBelowTheGround);
 run.Test("Phase 50 (F-86): a walker sees its goal gone in the next frame", Tests.WalkerSeesItsGoalGoneInTheNextFrame);
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);

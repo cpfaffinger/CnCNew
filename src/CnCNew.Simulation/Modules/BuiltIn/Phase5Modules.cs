@@ -1412,6 +1412,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         StopForDeath(world);
     }
 
+    /// <summary>
+    /// The object has died in this tick, its frame's share settled, before its machine stops for the death (<see cref="StopAtDeath"/>); <paramref name="updatesRan"/>: the
+    /// updates of this tick have run (outside a step they are still to run).
+    /// </summary>
+    internal virtual void OnDied(IWorldServices world, bool updatesRan) { }
+
     // The tick the module last had its turn in (derived within a tick, not state), and the tick of a death whose stop waits for the step of that tick (written while it waits).
     private long _turnTick = -1;
     private long _dyingSince;
