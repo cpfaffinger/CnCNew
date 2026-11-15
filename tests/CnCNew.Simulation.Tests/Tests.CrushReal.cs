@@ -40,7 +40,7 @@ static partial class Tests
     /// <summary>
     /// Issue 350: a crusher's way does not go round what it can run over (<c>Object::canCrushOrSquish</c>, used by <c>Pathfinder::checkForMovement</c> for an enemy "fixed" unit and by <c>AIUpdateInterface::blockedBy</c>:
     /// "just run over them"). A tank ordered along a row of idle infantry that is not its ally's drives through it and crushes every soldier, whatever it is called and at every rate; a row of its ally's is gone round and
-    /// stays alive.
+    /// stays alive. Of a column across its line, 15 units apart, only the soldier under its box dies.
     /// </summary>
     public static void RealTanksRunIdleInfantryOver(string directory)
     {
@@ -52,7 +52,9 @@ static partial class Tests
                     var (dead, total, x) = CrushRun(data, rate, tank, "AmericaInfantryRanger", false, order, Relationship.Neutral, across: true);
                     Check.That(dead == total && x > 790, $"{tank} {order} at {rate}: the row of {total} idle soldiers in its way is crushed ({dead} dead), the tank arrives (x={x:F0}).");
                     var (spread, spreadTotal, _) = CrushRun(data, rate, tank, "AmericaInfantryRanger", false, order, Relationship.Neutral, across: false);
-                    Check.That(spread >= 2, $"{tank} {order} at {rate}: a column of soldiers beside its line loses some ({spread} of {spreadTotal}).");
+                    // SquishCollide tests the tank's box against the soldier's geometry with radius 1 (geomCollidesWithGeom, #363): only the soldier on its line is under it; the ones 15
+                    // and 30 off stand beside a box 18 to 26 wide, whose bounding circle they were inside.
+                    Check.That(spread == 1, $"{tank} {order} at {rate}: of a column of soldiers across its line only the one under its box is crushed ({spread} of {spreadTotal}).");
                 }
         var (allied, alliedTotal, alliedX) = CrushRun(data, SimulationRate.Hz30, "AmericaTankCrusader", "AmericaInfantryRanger", false, "move", Relationship.Allies, across: true);
         Check.That(allied == 0 && alliedX > 790, $"Allied infantry in the way is not crushed ({allied} of {alliedTotal} dead) and the tank goes round it (x={alliedX:F0}).");
