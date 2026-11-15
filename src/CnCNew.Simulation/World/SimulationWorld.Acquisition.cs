@@ -924,7 +924,7 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>getAbleToAttackSpecificObject(ATTACK_NEW_TARGET, victim, CMD_FROM_AI)</c>, reduced to the weapons: some weapon the unit may choose by itself can target the victim and would hurt
     /// it (a pinned slot is the only choice), and <paramref name="inRange"/> says whether such a weapon reaches it from here. With <paramref name="turretOnly"/> only weapons on a turret
-    /// count (the body is busy).
+    /// count (the body is busy). An object of kind <c>SPAWNS_ARE_THE_WEAPONS</c> (the stinger soldier) can attack only what it reaches from here.
     /// </summary>
     private bool CanAttack(Entity source, Entity victim, bool turretOnly, out bool inRange)
     {
@@ -948,6 +948,10 @@ public sealed partial class SimulationWorld
             if (WithinWeaponRange(source, weapon, victim) && !AttackViewBlocks(source, weapon, victim)) inRange = true;
         }
 
+        // "This will also fix stinger soldiers": an object of kind SPAWNS_ARE_THE_WEAPONS that no weapon reaches the victim from where it stands is refused
+        // (ATTACKRESULT_INVALID_SHOT) - its look takes no victim beyond its range and its attack ends when the victim leaves it, so it never walks away from its site (#380).
+        // The original takes the same branch for IMMOBILE objects and riders, which cannot walk here anyway.
+        if (can && !inRange && source.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS")) return false;
         return can;
     }
 
