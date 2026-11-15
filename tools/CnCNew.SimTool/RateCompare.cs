@@ -169,6 +169,25 @@ internal static class RateCompare
                         CultureInfo.CurrentCulture = culture;
                     }
                 });
+            // --ai-state F,G: every computer player's own state (outside the world, not compared) after each think whose frame lies in F..G, at both rates.
+            if (Value(args, "--ai-state") is { } span2 && span2.Split(',') is [var fromText, var toText])
+            {
+                var (aiFrom, aiTo) = (long.Parse(fromText, CultureInfo.InvariantCulture), long.Parse(toText, CultureInfo.InvariantCulture));
+                var seen = new string?[session.Ais.Length];
+                return new RateCompareFields.Match(session.World, () => session.IsOver, () =>
+                {
+                    var frame = session.World.Tick / rate.TicksPerOriginalFrame;
+                    var stepped = session.Step();
+                    if (frame < aiFrom || frame > aiTo) return stepped;
+                    for (var index = 0; index < session.Ais.Length; index++)
+                        if (session.Ais[index]?.DescribeState() is { } state && state != seen[index])
+                        {
+                            seen[index] = state;
+                            Console.WriteLine($"{rate.TicksPerSecond} Hz frame {frame} tick {session.World.Tick % rate.TicksPerOriginalFrame}/{rate.TicksPerOriginalFrame} ai {index}: {state}");
+                        }
+                    return stepped;
+                });
+            }
             return new RateCompareFields.Match(session.World, () => session.IsOver, session.Step);
         }
         var result = RateCompareFields.Run(args, Of(rates[0]), Of(rates[1]), rates[0], rates[1], int.Parse(Value(args, "--context") ?? "6", CultureInfo.InvariantCulture));
