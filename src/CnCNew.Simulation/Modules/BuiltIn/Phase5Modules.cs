@@ -1890,8 +1890,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary>
     /// The approach to the goal object of <see cref="OrderApproachGoal"/>: gone, dead or destroyed ends the order; a goal that has walked off is followed (the move is
-    /// re-aimed once it is two cells away from where the object is heading); when the move has ended close enough the object's collide modules act on the goal once,
-    /// the stand-in for the physics collision the reference waits for. The module may end the order itself (<see cref="OrderIdle"/>, destroying the object).
+    /// re-aimed once it is two cells away from where the object is heading). The collide modules act on the goal the way the reference's do: by the world's contacts
+    /// (<c>PartitionContactList::processContactList</c>, <see cref="IWorldServices.ResolveFootprintCollisions"/>) when the two shapes touch - the approach walks into its goal, which its
+    /// steps do not take for an obstacle (<c>AIEnterState</c>: <c>ignoreObstacle</c>). Nothing else in the reference calls them. One stand-in stays: a goal that blocks the grid (a
+    /// structure) cannot be walked into here, because the port's path search does not lift the goal's cells as the reference's <c>Pathfinder</c> does for the ignored obstacle; when
+    /// such an approach has ended close enough, the object's collide modules act on the goal once. The module may end the order itself (<see cref="OrderIdle"/>, destroying the object).
     /// </summary>
     private void UpdateGoal(IWorldServices world)
     {
@@ -1928,7 +1931,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var near = SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
         if (near && _frameTicksLeft > 0) SettleFrame(world.Tick);
         if (near && world.TakesOver(Entity, goal)) return;
-        if (near)
+        if (near && NavigationGrid.Blocks(goal.Template))
             foreach (var module in Entity.Modules)
             {
                 if (module is not ICollideModule collide) continue;

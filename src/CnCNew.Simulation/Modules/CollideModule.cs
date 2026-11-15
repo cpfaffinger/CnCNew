@@ -18,8 +18,8 @@ public enum CollideEntry : byte
 /// <c>CollideModuleInterface</c>: a collide module is told about the other object it touched (<c>onCollide</c>). The reference gets these calls from the
 /// physics partition manager (<c>PartitionManager::checkForCollisions</c> calls <c>obj->onCollide(other)</c> and then <c>other->onCollide(obj)</c>);
 /// this simulation has no physics, so <c>SimulationWorld.ResolveFootprintCollisions</c> delivers the same pair of calls whenever a ground mover's
-/// footprint overlaps another object's after a step, and an approach order (<c>AIUpdateInterface.OrderApproachGoal</c>) delivers the mover's side once
-/// on arrival. <c>Object::onCollide</c> stops asking an object's modules as soon as the object carries <c>NO_COLLISIONS</c>.
+/// footprint overlaps another object's after a step, and an approach order to a structure (<c>AIUpdateInterface.OrderApproachGoal</c>), which the port's path search
+/// cannot walk into, delivers the mover's side once on arrival. <c>Object::onCollide</c> stops asking an object's modules as soon as the object carries <c>NO_COLLISIONS</c>.
 /// </summary>
 public interface ICollideModule
 {

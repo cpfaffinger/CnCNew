@@ -16,7 +16,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// The <c>CrateCollide</c> family (<c>CrateCollide.cpp</c>) and the units that use it: the money and veterancy crates, the terrorist's car bomb conversion, the
 /// hijacker (<c>ConvertToHijackedVehicleCrateCollide</c> + <c>HijackerUpdate</c>), the five building saboteurs and the pilot that looks for a vehicle to enter
 /// (<c>PilotFindVehicleUpdate</c>). The reference fires them from the physics collision; here <see cref="ICollideModule"/> is driven by the footprint collision
-/// of the world or, for an order that names a goal object, by <c>AIUpdateInterface.OrderApproachGoal</c> (see <c>docs/SIMULATION-CORE.md</c>).
+/// of the world or, for an order that names a structure as its goal object, by <c>AIUpdateInterface.OrderApproachGoal</c> (see <c>docs/SIMULATION-CORE.md</c>).
 /// </summary>
 internal static class CrateModules
 {

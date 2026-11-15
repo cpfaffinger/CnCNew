@@ -632,6 +632,7 @@ run.Test("#370: a tank spares a hijacker running at it", Tests.SquishSparesAHija
 run.Test("#370: a tank spares a Tank Hunter placing TNT on it", Tests.SquishSparesATankHunter);
 run.Test("#370: a crusher without a physics module squishes nobody", Tests.SquishNeedsTheCrushersPhysics);
 run.Test("#370: the crusher's view of the victim decides a squish", Tests.SquishAsksTheCrushersView);
+run.Test("#370: an approach acts on its goal only by touching it", Tests.AnApproachActsOnlyByTouching);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
 run.Test("Group move: a click into the group gathers it", Tests.AClickIntoTheGroupGathersIt);
