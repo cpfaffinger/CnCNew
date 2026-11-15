@@ -393,7 +393,8 @@ internal static class AttachedEffectsTests
     /// </summary>
     private static void NuclearMissile(GameData data)
     {
-        var scenario = new DemoScenario("attached-nuke", "attached-nuke", "attached-nuke", 240,
+        // Long enough for the radiation field's own puddles, which its weapon's SuspendFXDelay holds back for 300 frames after the field appears (#355).
+        var scenario = new DemoScenario("attached-nuke", "attached-nuke", "attached-nuke", 540,
             [new ScenarioUnit("silo", "ChinaNuclearMissileLauncher", 1, -300f, 0f), new ScenarioUnit("power", "ChinaPowerPlant", 1, -300f, -200f),
              new ScenarioUnit("power2", "ChinaPowerPlant", 1, -300f, 200f), new ScenarioUnit("target", "AmericaBarracks", 2, 300f, 0f)],
             [new ScenarioOrder(30, "silo", ScenarioOrderKind.UsePower, X: 300f, Y: 0f, Template: "SuperweaponNeutronMissile")], 0f, 0f)
