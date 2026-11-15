@@ -45,10 +45,6 @@ internal readonly record struct CollideShape(CollideGeometry Kind, Fixed X, Fixe
         return geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase) ? CollideGeometry.Sphere : CollideGeometry.Cylinder;
     }
 
-    /// <summary><see cref="Reach"/> of an object of the template, however it stands.</summary>
-    public static Fixed ReachOf(CollideGeometry kind, ObjectTemplate template)
-        => kind == CollideGeometry.Box ? template.GeometryMajorRadius + template.GeometryMinorRadius : template.GeometryMajorRadius + template.GeometryMajorRadius;
-
     /// <summary>The same shape with both radii set (<c>GeometryInfo::setMajorRadius</c> and <c>setMinorRadius</c>), its kind and height kept.</summary>
     public CollideShape WithRadius(Fixed radius) => this with { Major = radius, Minor = radius };
 

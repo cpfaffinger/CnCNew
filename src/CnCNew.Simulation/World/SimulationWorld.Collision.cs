@@ -511,11 +511,12 @@ public sealed partial class SimulationWorld
         {
             // Only an object with a ToppleUpdate or a SquishCollide module or a crushable level can be toppled, squished or crushed; for every other object the calls below did nothing.
             var targets = _crushTargets;
+            var contact = ContactShape(mover);
             for (var index = 0; index < targets.Count; index++)
             {
                 var other = targets[index];
                 if (other.Id == mover.Id || other.EffectivelyDead) continue;
-                if (!FootprintsOverlap(mover, other)) continue;
+                if (!FootprintsOverlap(contact, other)) continue;
                 TryTopple(mover, other);
                 TrySquish(mover, other, stepX, stepY);
                 TryCrush(mover, other, stepX, stepY);
@@ -584,19 +585,23 @@ public sealed partial class SimulationWorld
     private void DeliverCollisions(Entity mover)
     {
         var touched = false;
+        // The mover's shape is formed again after each contact: a collide module may move it, turn it or take it out of the world.
+        var contact = ContactShape(mover);
         if (mover.CollideModules.Length > 0)
             foreach (var other in _entities)
             {
-                if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(mover, other)) continue;
+                if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(contact, other)) continue;
                 touched = true;
                 CallCollide(mover, other);
+                contact = ContactShape(mover);
             }
         for (var index = 0; index < _collidables.Count; index++)
         {
             var holder = _collidables[index];
-            if (holder.Id == mover.Id || !CanCollide(holder) || !CanCollide(mover) || !FootprintsOverlap(mover, holder)) continue;
+            if (holder.Id == mover.Id || !CanCollide(holder) || !CanCollide(mover) || !FootprintsOverlap(contact, holder)) continue;
             touched = true;
             CallCollide(holder, mover);
+            contact = ContactShape(mover);
         }
         // PartitionContactList::processContactList: "re-dirtying collision": what touched something is looked at again in the next frame, whether it moves or not.
         if (touched && !mover.Template.IsKindOf("IMMOBILE")) _contacts.Add(mover.Id.Value);
@@ -659,36 +664,69 @@ public sealed partial class SimulationWorld
     /// frame ends (<c>AIUpdateInterface.CollideWhereTheFrameEnds</c>), and the other object is read after its whole step if it has had its turn in this tick, after its previous one
     /// otherwise - what the 30 Hz step reads (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). 30 Hz: the positions.
     /// </summary>
-    private bool FootprintsOverlap(Entity a, Entity b)
+    private bool FootprintsOverlap(Entity a, Entity b) => FootprintsOverlap(ContactShape(a), b);
+
+    /// <summary><see cref="FootprintsOverlap(Entity, Entity)"/> with the first object's shape formed once for all the objects a scan tests it against.</summary>
+    private bool FootprintsOverlap(in Contact a, Entity b)
     {
-        if (OnAnotherLevel(a, b)) return false;
-        var tick = _tick;
-        var (ax, ay, az) = a.FrameEnd(tick);
-        var (bx, by, bz) = b.FrameEnd(tick);
-        var (aKind, aReach) = ShapeKind(a);
-        var (bKind, bReach) = ShapeKind(b);
-        var reach = aReach + bReach;
-        if (FurtherThan(ax, bx, reach) || FurtherThan(ay, by, reach)) return false;
-        return CollideShapes.Collides(a, CollideShape.Of(aKind, a.Template, ax, ay, az, a.FrameEndAngle(tick)), b, CollideShape.Of(bKind, b.Template, bx, by, bz, b.FrameEndAngle(tick)));
+        var (bx, by, bz) = b.FrameEnd(_tick);
+        ref readonly var bInfo = ref ShapeInfoOf(b);
+        // "we don't always want to": KINDOF_NO_COLLIDE on either object is no contact.
+        if (a.Info.NoCollide || bInfo.NoCollide) return false;
+        // Without a box the shapes meet as circles (or a sphere's smaller slice) and reach no further than the two radii. With one, a circle is tested as its square, and
+        // whatever touches lies within the two farthest corners (a box's half diagonal, a square's).
+        var box = a.Info.Kind == CollideGeometry.Box || bInfo.Kind == CollideGeometry.Box;
+        var limit = box ? a.Info.Corner + bInfo.Corner : a.Info.Radius + bInfo.Radius;
+        if (FurtherThan(a.Shape.X, bx, limit) || FurtherThan(a.Shape.Y, by, limit)) return false;
+        var (dx, dy) = (a.Shape.X - bx, a.Shape.Y - by);
+        // A unit of slack for the rounding of the corners the test computes.
+        if (!SquaredReach.Of(limit + Fixed.One).Contains(dx * dx + dy * dy) || OnAnotherLevel(a.Entity, b)) return false;
+        return CollideShapes.Collides(a.Shape, CollideShape.Of(bInfo.Kind, b.Template, bx, by, bz, b.FrameEndAngle(_tick)));
     }
 
-    // The kind of a template's geometry and how far its shape reaches (CollideShape.Reach), remembered per template like its bounding circle (CircleRadius).
-    private (CollideGeometry Kind, Fixed Reach)[] _shape = new (CollideGeometry, Fixed)[256];
+    /// <summary>An object's shape where the frame it has begun ends, with what its template says of it.</summary>
+    private readonly record struct Contact(Entity Entity, CollideShape Shape, ShapeInfo Info);
+
+    private Contact ContactShape(Entity entity)
+    {
+        var (x, y, z) = entity.FrameEnd(_tick);
+        var info = ShapeInfoOf(entity);
+        return new Contact(entity, CollideShape.Of(info.Kind, entity.Template, x, y, z, entity.FrameEndAngle(_tick)), info);
+    }
+
+    // An upper bound of the square root of two, for the corner of a circle's square.
+    private static readonly Fixed SquareCorner = Fixed.FromDecimal(1.41422m);
+
+    /// <summary>
+    /// A template's geometry kind, its major radius, how far its farthest corner reaches when the partition tests it as a rectangle (a box's half diagonal, the corner of a circle's
+    /// square) and whether it is <c>KINDOF_NO_COLLIDE</c>.
+    /// </summary>
+    private readonly record struct ShapeInfo(CollideGeometry Kind, Fixed Radius, Fixed Corner, bool NoCollide);
+
+    // Remembered per template like its bounding circle (CircleRadius).
+    private ShapeInfo[] _shape = new ShapeInfo[256];
     private bool[] _shapeKnown = new bool[256];
 
-    private (CollideGeometry Kind, Fixed Reach) ShapeKind(Entity entity)
+    private ref readonly ShapeInfo ShapeInfoOf(Entity entity)
     {
         var index = entity.Template.Index;
         var known = _shapeKnown;
-        return (uint)index < (uint)known.Length && known[index] ? _shape[index] : RememberShape(entity.Template);
+        if ((uint)index < (uint)known.Length && known[index]) return ref _shape[index];
+        return ref RememberShape(entity.Template);
     }
 
-    private (CollideGeometry Kind, Fixed Reach) RememberShape(Templates.ObjectTemplate template)
+    private ref readonly ShapeInfo RememberShape(Templates.ObjectTemplate template)
     {
         var kind = CollideShape.KindOf(template);
-        var shape = (kind, CollideShape.ReachOf(kind, template));
+        var radius = template.GeometryMajorRadius;
+        var shape = new ShapeInfo(kind, radius, kind == CollideGeometry.Box ? template.BoundingCircleRadius : radius * SquareCorner, template.IsKindOf("NO_COLLIDE"));
         var index = template.Index;
-        if (index < 0) return shape;
+        if (index < 0)
+        {
+            // A template outside the catalog is not remembered.
+            _shapeOutside = shape;
+            return ref _shapeOutside;
+        }
         if (index >= _shapeKnown.Length)
         {
             var size = Math.Max(index + 1, _shapeKnown.Length * 2);
@@ -697,8 +735,10 @@ public sealed partial class SimulationWorld
         }
         _shape[index] = shape;
         _shapeKnown[index] = true;
-        return shape;
+        return ref _shape[index];
     }
+
+    private ShapeInfo _shapeOutside;
 
     /// <summary><c>ToppleUpdate.cpp onCollide</c>: a crusher above level 1 running into a toppable, upright object pushes it over, away from itself.</summary>
     private void TryTopple(Entity mover, Entity other)
@@ -790,8 +830,8 @@ public sealed partial class SimulationWorld
         // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlap); 30 Hz: its position.
         var (otherX, otherY, otherZ) = other.FrameEnd(_tick);
         // "use a 1.0 crush radius so the tank has to actually hit the infantry": the crusher's shape against the victim's with both its radii 1 (geomCollidesWithGeom).
-        var crusher = CollideShape.Of(ShapeKind(mover).Kind, mover.Template, mover.X, mover.Y, mover.Z, mover.Angle);
-        var victim = CollideShape.Of(ShapeKind(other).Kind, other.Template, otherX, otherY, otherZ, other.FrameEndAngle(_tick)).WithRadius(SquishVictimRadius);
+        var crusher = CollideShape.Of(ShapeInfoOf(mover).Kind, mover.Template, mover.X, mover.Y, mover.Z, mover.Angle);
+        var victim = CollideShape.Of(ShapeInfoOf(other).Kind, other.Template, otherX, otherY, otherZ, other.FrameEndAngle(_tick)).WithRadius(SquishVictimRadius);
         if (!CollideShapes.GeometriesCollide(crusher, victim)) return;
         var dx = otherX - mover.X;
         var dy = otherY - mover.Y;
