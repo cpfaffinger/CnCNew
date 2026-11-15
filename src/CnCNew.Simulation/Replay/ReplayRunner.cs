@@ -78,6 +78,8 @@ public static class ReplayRunner
         {
             throw new ReplayRejectedException($"The replay's match description cannot be read: {exception.Message}");
         }
+        // A skirmish is a game of the original, where every rebuild hole sends out its worker (RebuildHoleBehavior); the live match and its bare-world replay alike.
+        if (description is not null) world.EnableHoleRebuilding();
         if (description is { Debug.IsDefault: false } options) world.ConfigureMatchOptions(options.Debug.BuildTimePercent, options.Debug.NeutralRespawnSeconds, options.Debug.StartingGeneralPoints, options.Debug.PlaceBuildingsInFog, options.Debug.QuickBuildHumansOnly, options.Debug.MoneyButtons, options.Debug.RechargePercent);
         return world;
     }

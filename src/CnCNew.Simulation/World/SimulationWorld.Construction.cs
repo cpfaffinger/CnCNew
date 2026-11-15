@@ -183,9 +183,9 @@ public sealed partial class SimulationWorld
     public bool HolesRebuild => _holesRebuild;
 
     /// <summary>
-    /// The rule of a world in which a rebuild hole sends out its worker, as <c>RebuildHoleBehavior</c> does in every game of the original. A mission and the session of the original skirmish AI
-    /// switch it on, whose AI players wait for their holes; it is off in a skirmish of the built-in AI, because a hole that rebuilds changes matches and manifests, and that is a step of its own.
-    /// Written only when set.
+    /// The rule of a world in which a rebuild hole sends out its worker, as <c>RebuildHoleBehavior</c> does in every game of the original. Every game switches it on: a mission, the
+    /// session of the original skirmish AI and every skirmish described by a <see cref="Skirmish.MatchDescription"/> (<see cref="Replay.ReplayRunner.CreateWorld"/>, #383). It stays off
+    /// only in a bare world without a match (the synthetic fixtures and the stress test), where a hole records its missing rebuild. Written only when set.
     /// </summary>
     public void EnableHoleRebuilding() => _holesRebuild = true;
 

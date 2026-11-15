@@ -461,7 +461,7 @@ public sealed record RebuildHoleBehaviorData(string WorkerName, long WorkerRespa
 
 /// <summary>
 /// <c>RebuildHoleBehavior.cpp</c>: the hole regenerates <c>HoleHealthRegen%PerSecond</c> of its maximum health per second and, once <c>WorkerRespawnDelay</c> has passed, spawns a worker that
-/// reconstructs the destroyed structure. Where the world's rule says so (<see cref="IWorldServices.HolesRebuild"/>, the session of the original skirmish AI) that happens: the worker comes up
+/// reconstructs the destroyed structure. Where the world's rule says so (<see cref="IWorldServices.HolesRebuild"/>: every skirmish, mission and session of the original AI) that happens: the worker comes up
 /// from the hole, builds free of charge where the hole lies, the hole is masked meanwhile, a worker or a site that is lost starts the wait over, and the finished building takes the hole away.
 /// Without the rule a <see cref="SimEventKind.CreationSkipped"/> event (<see cref="CreationSkipReasons.SettingNotSimulated"/>) records the missing rebuild and the countdown stops. The attackers of
 /// the hole go over to the site, and back to the hole when the site is lost (<c>transferAttack</c>), and so do the sticky bombs on it (<c>transferBombs</c>).
