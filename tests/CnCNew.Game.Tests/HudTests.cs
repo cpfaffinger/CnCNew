@@ -73,6 +73,7 @@ internal static class HudTests
         harness.Run("#348: a button of the bar of the special powers shows its description under the pointer, in both skins", () => { PowerBarTooltip(data, UiSkinName.Original); PowerBarTooltip(data, UiSkinName.Modern); });
         harness.Run("#348: the modern skin draws the bar of the special powers itself - trays, states, the recharge strip, a flash when a power becomes ready - and no tray picture", () => ModernPowerBar(data));
         harness.Run("#348: the flash of a power that has become ready: 60 frames, bright first, switching every 10, at every rate", PowerReadyFlashSchedule);
+        harness.Run("#386: a button of the bar of the special powers shows how many of its power are ready when more than one, in both skins", () => { PowerReadyCount(data, UiSkinName.Original); PowerReadyCount(data, UiSkinName.Modern); });
         harness.Run("A FIRE_WEAPON button at an object (#302): the unit attacks with the button's weapon slot, locked, and the attack carries the button's shot limit", () => FireButtonAtObject(data));
         harness.Run("A limited FIRE_WEAPON attack follows a victim that leaves its range and fires its shots (#328)", () => FireButtonChasesVictim(data));
         harness.Run("Hack, weapon switch, overcharge, hijack, car bomb, sabotage: a press does what the button says", () => ButtonsOfUnits(data));
@@ -826,6 +827,69 @@ internal static class HudTests
             var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains(name, StringComparison.Ordinal));
             TestHarness.Assert(drawn, $"{skin}: and the tooltip of {power.Button.Name} is drawn");
         }
+    }
+
+    /// <summary>
+    /// #386: <c>ControlBar::drawSpecialPowerShortcutMultiplierText</c> writes <c>Player::countReadyShortcutSpecialPowersOfType</c> on each button of the bar when it is more than one (the
+    /// owner's two ready Scud Storms showed nothing). Two ready Scud Storms show "2", one of them recharging shows nothing, a third ready one makes "3"; a disabled one is not counted.
+    /// </summary>
+    private static void PowerReadyCount(GameData data, UiSkinName skin)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionGLA", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }) { StarBlinks = false };
+        var world = match.World;
+        Advance(match, controller, (int)world.Time.OriginalFrames(4));
+        var center = world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        ulong sequence = 1_386_000;
+        Entity Spawn(int dx, int dy)
+        {
+            var known = world.Entities.Select(entity => entity.Id).ToHashSet();
+            TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, "GLAScudStorm", match.Human,
+                center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(dy), CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted,
+                "a Scud Storm is spawned");
+            Advance(match, controller, (int)world.Time.OriginalFrames(2));
+            return world.Entities.First(entity => entity.Template.Name == "GLAScudStorm" && !known.Contains(entity.Id));
+        }
+        ISpecialPowerModule Storm(Entity storm) => storm.Modules.OfType<ISpecialPowerModule>().Single(module => world.SpecialPowers[module.PowerIndex].Name == "SuperweaponScudStorm");
+        void Ready(Entity storm, bool ready)
+        {
+            Storm(storm).SetReadyFrame(ready ? 0 : world.Tick + world.Time.OriginalFrames(30 * 60));
+            world.MarkDirty(storm);
+        }
+        // What the button of the Scud Storm says after a few frames: the count the controller keeps and the text drawn on the button.
+        (int Count, string[] Drawn, bool Shown) Look()
+        {
+            Advance(match, controller, (int)world.Time.OriginalFrames(2));
+            var list = controller.BuildDrawList(1280, 720).Commands;
+            var index = controller.Powers.IndexOf(controller.Powers.FirstOrDefault(button => button.Button.SpecialPower == "SuperweaponScudStorm")!);
+            if (index < 0) return (0, [], false);
+            var rect = controller.PowerButtonRect(index + 1);
+            var drawn = list.OfType<UiTextDraw>().Where(text => text.X >= rect.X && text.X < rect.Right && text.Y >= rect.Y && text.Y < rect.Bottom && text.Text.All(char.IsAsciiDigit)).Select(text => text.Text).ToArray();
+            return (controller.PowerReadyCounts[index], drawn, true);
+        }
+
+        var first = Spawn(-220, 120);
+        var second = Spawn(-220, -120);
+        Ready(first, true);
+        Ready(second, true);
+        var two = Look();
+        TestHarness.Assert(two.Shown && two.Count == 2 && two.Drawn.SequenceEqual(["2"]), $"{skin}: two ready Scud Storms write 2 on the button (count {two.Count}, drawn [{string.Join(", ", two.Drawn)}])");
+
+        Ready(second, false);
+        var one = Look();
+        TestHarness.Assert(one.Shown && one.Count == 0 && one.Drawn.Length == 0, $"{skin}: one ready and one recharging write nothing (count {one.Count}, drawn [{string.Join(", ", one.Drawn)}])");
+
+        Ready(second, true);
+        var third = Spawn(-60, 220);
+        Ready(third, true);
+        var three = Look();
+        TestHarness.Assert(three.Count == 3 && three.Drawn.SequenceEqual(["3"]), $"{skin}: three ready ones write 3 (count {three.Count}, drawn [{string.Join(", ", three.Drawn)}])");
+
+        // "A disabled guy should only be considered as a last resort": an EMP'd Scud Storm is not counted.
+        world.DisableByEmpUntil(third, world.Tick + world.Time.OriginalFrames(30 * 60));
+        var disabled = Look();
+        TestHarness.Assert(disabled.Count == 2 && disabled.Drawn.SequenceEqual(["2"]), $"{skin}: a disabled one is not counted (count {disabled.Count}, drawn [{string.Join(", ", disabled.Drawn)}])");
     }
 
     private static void PowerReadyFlashSchedule()

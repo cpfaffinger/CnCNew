@@ -650,6 +650,31 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         }
     }
 
+    /// <summary>
+    /// <c>Player::countReadyShortcutSpecialPowersOfType</c> (<c>doCountSpecialPowersReady</c>): how many of the player's objects have the power type of <paramref name="power"/> ready -
+    /// an object not under construction, not sold, not dead and not disabled, whose first module of that type was ready before this frame of the original began (<c>readyFrame &lt;
+    /// getFrame()</c>). A <c>SharedSyncedTimer</c> power counts once. The original also leaves out a module that is <c>ScriptedSpecialPowerOnly</c>; the port does not type that key
+    /// (only cinematic units carry it).
+    /// </summary>
+    public static int ReadyShortcutPowersOfType(SimulationWorld world, PlayerId player, Simulation.Templates.SpecialPowerInfo power)
+    {
+        var count = 0;
+        foreach (var entity in world.Entities.Where(entity => entity.Owner == player && SimulationQueries.IsAlive(entity)).OrderBy(entity => entity.Id.Value))
+        {
+            if (entity.HasStatus(ObjectStatusBits.UnderConstruction) || entity.HasStatus(ObjectStatusBits.Sold)) continue;
+            var module = entity.Modules.OfType<ISpecialPowerModule>()
+                .FirstOrDefault(candidate => candidate.PowerIndex >= 0 && world.SpecialPowers[candidate.PowerIndex].Type.Equals(power.Type, StringComparison.OrdinalIgnoreCase));
+            if (module is null) continue;
+            var info = world.SpecialPowers[module.PowerIndex];
+            // "Shared powers don't stack after the first one is counted."
+            if (info.SharedSynced && count == 1) continue;
+            // "A disabled guy should only be considered as a last resort. We do not want him counted here."
+            if (world.DisabledFlagsOf(entity) != DisabledMask.None) continue;
+            if (world.Tick - ReadyFrameOf(world, player, (SimModule)module, info) >= world.Time.TicksPerOriginalFrame) count++;
+        }
+        return count;
+    }
+
     private static Entity? MostReadyCarrier(SimulationWorld world, PlayerId player, Simulation.Templates.SpecialPowerInfo power)
     {
         Entity? fallback = null;

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Presentation.Input;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Skins;
 using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Hud;
@@ -23,6 +24,14 @@ public sealed partial class MatchController
 
     /// <summary>The buttons of the bar as it stands.</summary>
     public ImmutableArray<CommandBarButton> Powers => _powers;
+
+    private ImmutableArray<int> _powerReadyCounts = [];
+
+    /// <summary>
+    /// The number written on each button of the bar (<c>ControlBar::drawSpecialPowerShortcutMultiplierText</c>): how many of the player's objects have its power type ready
+    /// (<see cref="CommandBarModel.ReadyShortcutPowersOfType"/>) when that is more than one, else 0 and no text ("Displaying a "1" is superfluous").
+    /// </summary>
+    public ImmutableArray<int> PowerReadyCounts => _powerReadyCounts;
 
     private void AddPowerBar()
     {
@@ -58,6 +67,41 @@ public sealed partial class MatchController
             if (_powerWas.TryGetValue(name, out var was) && was == ButtonAvailability.NotReady && power.Availability == ButtonAvailability.Available) _powerReadySince[name] = Match.World.Tick;
             _powerWas[name] = power.Availability;
         }
+        var counts = ImmutableArray.CreateBuilder<int>(_powers.Length);
+        foreach (var power in _powers)
+        {
+            var ready = power.Button.SpecialPower.Length > 0 && Match.World.SpecialPowers.TryGet(power.Button.SpecialPower, out var info)
+                ? CommandBarModel.ReadyShortcutPowersOfType(Match.World, Match.Human, info) : 0;
+            counts.Add(ready > 1 ? ready : 0);
+        }
+        _powerReadyCounts = counts.MoveToImmutable();
+    }
+
+    /// <summary>
+    /// The number of ready powers on a button of the bar. In the original skin as <c>drawButtonText</c> writes the text of a <c>WIN_STATUS_SHORTCUT_BUTTON</c>: in the button's own
+    /// font (Arial 12 bold in the three layouts) and text colours of its state, with their drop colour, at its top left corner (two pixels in at 800 x 600). In the modern skin the
+    /// skin's heading type in the text colour on a plate of the canvas colour in the same corner.
+    /// </summary>
+    private void AddPowerReadyCount(ImmutableArray<UiDrawCommand>.Builder commands, UiWindow window, int count)
+    {
+        if (count <= 1) return;
+        var text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var rect = window.Rect;
+        var inset = Math.Max(1, rect.Width / 20);
+        if (Skin.IsModern)
+        {
+            var palette = Skin.Style.Palette;
+            var font = Skin.Style.Font(UiTypeStep.Heading, _tree.Viewport, _scaleOptions.TextScale);
+            var width = _textMeasure.MeasureWidth(text, font) + 2 * inset;
+            commands.Add(new UiFillRect(new CnCNew.Ui.Layout.UiRect(rect.X, rect.Y, width, _textMeasure.LineHeight(font)), palette.Canvas));
+            commands.Add(new UiTextDraw(text, null, font, palette.Text, WndColor.Undefined, rect.X + inset, rect.Y, UiTextAlignment.Left, rect));
+            return;
+        }
+        var colors = window.Definition.TextColors;
+        var (color, drop) = !window.IsEnabled ? (colors.Disabled, colors.DisabledBorder)
+            : window.IsHilited ? (colors.Hilite, colors.HiliteBorder)
+            : (colors.Enabled, colors.EnabledBorder);
+        commands.Add(new UiTextDraw(text, null, window.Font, color, drop, rect.X + inset, rect.Y, UiTextAlignment.Left, _tree.Viewport.Bounds));
     }
 
     /// <summary>The power of the bar's button <paramref name="name"/> (<c>...:ButtonCommandN</c>), or null for any other window.</summary>
@@ -88,6 +132,7 @@ public sealed partial class MatchController
             if (Skin.IsModern)
             {
                 ModernPowerButton(commands, _tree.FindByName($"{_powerLayout}:ButtonParent{index + 1}")?.Rect ?? window.Rect, window, power, cooldown);
+                if (index < _powerReadyCounts.Length) AddPowerReadyCount(commands, window, _powerReadyCounts[index]);
                 continue;
             }
             // updateSpecialPowerShortcut: the buttons use the overlay states - a power that is not ready keeps its colours under the clock, one restricted is grey.
@@ -95,6 +140,7 @@ public sealed partial class MatchController
                 commands.Add(new UiImageDraw(power.Button.ButtonImage, window.Rect, power.Availability == ButtonAvailability.CantAfford ? CantAffordTint : WndColor.White, false, false)
                     { Grayscale = power.Availability == ButtonAvailability.Restricted });
             AddCameoState(commands, window, power, cooldown);
+            if (index < _powerReadyCounts.Length) AddPowerReadyCount(commands, window, _powerReadyCounts[index]);
         }
     }
 
