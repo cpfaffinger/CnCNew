@@ -376,7 +376,6 @@ static partial class Tests
         new("Presentation/Fx/SnowField.cs", RuleScaleLiteral, "public const int MaxFlakes = 65536;", "W3DSnowManager's limit of flakes"),
         new("Presentation/Fx/SnowField.cs", RuleScaleLiteral, "(float)(1 << 24)", "a random start height of 24 bits"),
         new("Presentation/Terrain/TerrainClouds.cs", RuleScaleLiteral, "bottom * fractionY) >> 16", "bilinear weights of 16 bits"),
-        new("Client.Stride/Layers/Fx/FxBuilder.cs", RuleScaleLiteral, "((uint)b << 16) | ((uint)ToByte(alpha) << 24)", "packs colour channels"),
         new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "(Steps << 16) | (Steps << 8) | Steps", "packs three tint steps into a key"),
         new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "(Quantise(tint.X) << 16)", "packs three tint steps into a key"),
         new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "((key >> 16) & 0xFF)", "unpacks the tint key"),
@@ -387,6 +386,10 @@ static partial class Tests
         new("Client.Stride/Layers/Terrain/TerrainVertex.cs", RuleScaleLiteral, "(byte)(packed >> 24)", "the alpha channel of a packed colour"),
         new("Client.Stride/Layers/Terrain/TerrainVertex.cs", RuleScaleLiteral, "((uint)alpha << 24)", "the alpha channel of a packed colour"),
         new("Presentation/Objects/FrameProjector.cs", RuleScaleLiteral, "(byte)(argb >> 16)", "the red channel of a house colour"),
+        new("Presentation/Fx/FrameBufferBlend.cs", RuleScaleLiteral, "((uint)VertexChannel(alpha, false) << 24)", "packs colour channels"),
+        new("Presentation/Fx/FrameBufferBlend.cs", RuleScaleLiteral, "((uint)table[(packed >> 16) & 0xFF] << 16)", "unpacks and packs colour channels"),
+        new("Presentation.Tests/FrameBufferBlendTests.cs", RuleScaleLiteral, "(255u << 16) | (191u << 24)", "packs colour channels of a test value"),
+        new("Presentation.Tests/FrameBufferBlendTests.cs", RuleScaleLiteral, "((uint)table[230] << 16) | (153u << 24)", "packs colour channels of a test value"),
         new("Audio.Tests/Tests.Decoding.cs", RuleScaleLiteral, "(byte)(value >> 16), (byte)(value >> 24)", "little-endian bytes of a test word"),
         // -- file formats
         new("Audio/Wav/WavReader.cs", RuleScaleLiteral, "((sbyte)data[at + 2] << 16)", "the top byte of a 24-bit PCM sample"),
