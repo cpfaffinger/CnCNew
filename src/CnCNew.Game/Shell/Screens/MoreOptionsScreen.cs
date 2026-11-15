@@ -313,39 +313,11 @@ public sealed class MoreOptionsScreen : ShellScreen
         ShowHotkeys(row);
     }
 
-    /// <summary>A key as a person reads it: <c>Ctrl+Alt+F1</c>; a binding of the modifiers alone says so; a binding on the release of a key says that.</summary>
-    public static string KeyText(KeyBinding binding)
-    {
-        var parts = new List<string>();
-        if ((binding.Modifiers & KeyModifiers.Control) != 0) parts.Add("Ctrl");
-        if ((binding.Modifiers & KeyModifiers.Alt) != 0) parts.Add("Alt");
-        if ((binding.Modifiers & KeyModifiers.Shift) != 0) parts.Add("Shift");
-        if (binding.Key != KeyCode.None)
-        {
-            var name = KeyNames.TryGetName(binding.Key, out var ini) ? ini : binding.Key.ToString();
-            if (name.StartsWith("KEY_", StringComparison.Ordinal)) name = name[4..];
-            name = name.StartsWith("KP", StringComparison.Ordinal) && name.Length > 2 ? "Keypad " + Words(name[2..]) : Words(name.Replace('_', ' '));
-            parts.Add(name);
-        }
-        var text = parts.Count == 0 ? "-" : string.Join("+", parts) + (binding.Key == KeyCode.None ? " (held)" : string.Empty);
-        return binding.Transition == KeyTransition.Up ? text + " (on release)" : text;
-    }
+    /// <summary>A key as a person reads it (<see cref="CnCNew.Game.Hud.HotkeyText.Key"/>, which the HUD's tooltips name as well).</summary>
+    public static string KeyText(KeyBinding binding) => CnCNew.Game.Hud.HotkeyText.Key(binding);
 
-    /// <summary><c>BeginCameraRotateLeft</c> as "Begin camera rotate left"; <c>LEFT</c> as "Left"; one letter or digit stays as it is.</summary>
-    public static string Words(string name)
-    {
-        if (name.Length <= 1) return name;
-        if (name.All(ch => !char.IsLower(ch))) return string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => word.Length <= 1 ? word : word[0] + word[1..].ToLowerInvariant()));
-        var builder = new System.Text.StringBuilder();
-        for (var index = 0; index < name.Length; index++)
-        {
-            var ch = name[index];
-            if (index > 0 && char.IsUpper(ch) && char.IsLower(name[index - 1])) builder.Append(' ').Append(char.ToLowerInvariant(ch));
-            else if (index > 0 && char.IsDigit(ch) && !char.IsDigit(name[index - 1])) builder.Append(' ').Append(ch);
-            else builder.Append(ch);
-        }
-        return builder.ToString();
-    }
+    /// <summary><c>BeginCameraRotateLeft</c> as "Begin camera rotate left" (<see cref="CnCNew.Game.Hud.HotkeyText.Words"/>).</summary>
+    public static string Words(string name) => CnCNew.Game.Hud.HotkeyText.Words(name);
 
     /// <summary>The number of hotkeys the view lists.</summary>
     public int HotkeyRows => W("ListHotkeys").ListBox!.Rows.Count;

@@ -1177,27 +1177,53 @@ public sealed partial class MatchController
         ["ControlBar.wnd:ButtonLarge"] = "NonCommand_UpDown",
     };
 
+    /// <summary>
+    /// The keys of the bar's own controls: each shares its click with a meta event of <c>CommandMap.ini</c> (<c>ControlBarCallback</c>: <c>ToggleQuitMenu</c> and
+    /// <c>OPTIONS</c>, <c>selectNextIdleWorker</c> and <c>SELECT_NEXT_IDLE_WORKER</c>, <c>Command_PlaceBeacon</c> and <c>PLACE_BEACON</c>, <c>ToggleDiplomacy</c> and
+    /// <c>DIPLOMACY</c>). The general's button, the size button and the minimap buttons have no key in the original or here.
+    /// </summary>
+    private static readonly Dictionary<string, MetaAction> ControlKeys = new(StringComparer.Ordinal)
+    {
+        ["ControlBar.wnd:ButtonOptions"] = MetaAction.Options,
+        ["ControlBar.wnd:ButtonIdleWorker"] = MetaAction.SelectNextIdleWorker,
+        ["ControlBar.wnd:ButtonPlaceBeacon"] = MetaAction.PlaceBeacon,
+        ["ControlBar.wnd:PopupCommunicator"] = MetaAction.Diplomacy,
+    };
+
+    /// <summary>The tooltip of a control of the bar: its description, and below it the key bound to it now when it has one (#388).</summary>
     private string? CommandButtonTooltip(UiWindow window)
+        => DescribeControl(window) is ({ } text, var key) ? HotkeyText.Append(text, key) : null;
+
+    /// <summary>
+    /// The key of a meta event as it is bound now (the shipped map with the player's own bindings over it), when it is bound in the game; a command button's key is the
+    /// letter of its label (<see cref="CommandBarButton.Hotkey"/>), which no setting rebinds.
+    /// </summary>
+    private string? BoundKey(MetaAction action)
+        => Input.Hotkeys.TryGetEntry(action, out var entry) && (entry.UsableIn & HotkeyContexts.Game) != 0 ? HotkeyText.Key(entry.Binding) : null;
+
+    private (string? Text, string? Key) DescribeControl(UiWindow window)
     {
         const string prefix = "ControlBar.wnd:ButtonCommand";
         if (PlateKindAt(_pointer) is { } cell && Input.Selection.Subgroups(Match.World).Contains(cell.Template, StringComparer.Ordinal))
-            return _descriptions.DisplayName(cell.Template) + "\n" + PlateText.KindClick + "\n" + PlateText.KindShiftClick;
-        if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
-        if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
-        if (window.Name == "ControlBar.wnd:PopupCommunicator") return CommunicatorTooltip();
-        if (window.Name == "ControlBar.wnd:GeneralsExp") return _descriptions.GeneralsExp().ToTooltip();
+            return (_descriptions.DisplayName(cell.Template) + "\n" + PlateText.KindClick + "\n" + PlateText.KindShiftClick, null);
+        if (window.Name == "ControlBar.wnd:MoneyDisplay") return (_descriptions.Money().ToTooltip(), null);
+        if (window.Name == "ControlBar.wnd:PowerWindow") return (_descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip(), null);
+        var key = ControlKeys.TryGetValue(window.Name, out var action) ? BoundKey(action) : null;
+        if (window.Name == "ControlBar.wnd:PopupCommunicator") return (CommunicatorTooltip(), key);
+        if (window.Name == "ControlBar.wnd:GeneralsExp") return (_descriptions.GeneralsExp().ToTooltip(), null);
         // ControlBar::init gives these buttons the same popup through their NonCommand_* command buttons (CommandButton.ini); ButtonSmall and ButtonMedium have none.
         if (NonCommandButtons.TryGetValue(window.Name, out var nonCommand) && Input.CommandBar!.Catalog.TryGetButton(nonCommand, out var nonCommandInfo))
-            return _descriptions.Plain(nonCommandInfo).ToTooltip() is { Length: > 0 } plain ? plain : null;
-        if (window.Name == CancelConstructionWindow) return CancelConstructionInfo is { } cancel ? _descriptions.Plain(cancel).ToTooltip() : null;
-        // ControlBar::populateSpecialPowerShortcut gives every button of the powers bar its command button, and with it the popup of commandButtonTooltip (#348).
-        if (PowerShortcut(window.Name) is { } shortcut) return _descriptions.Build(shortcut, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } described ? described : null;
-        if (GeneralsButton(window.Name) is { } science) return _descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null;
-        if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
-        if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;
+            return (_descriptions.Plain(nonCommandInfo).ToTooltip() is { Length: > 0 } plain ? plain : null, key);
+        if (window.Name == CancelConstructionWindow) return (CancelConstructionInfo is { } cancel ? _descriptions.Plain(cancel).ToTooltip() : null, null);
+        // ControlBar::populateSpecialPowerShortcut gives every button of the powers bar its command button, and with it the popup of commandButtonTooltip (#348). Its label's
+        // letter is no key here: only the slots of the command bar answer a letter.
+        if (PowerShortcut(window.Name) is { } shortcut) return (_descriptions.Build(shortcut, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } described ? described : null, null);
+        if (GeneralsButton(window.Name) is { } science) return (_descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null, null);
+        if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return (null, null);
+        if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return (null, null);
         var selected = Input.Selection.Selected.Select(Match.World.FindEntity).FirstOrDefault(entity => entity is not null);
         var tooltip = _descriptions.Build(button, Match.World, Match.Human, selected).ToTooltip();
-        return tooltip.Length == 0 ? null : tooltip;
+        return (tooltip.Length == 0 ? null : tooltip, button.Hotkey is { } letter ? HotkeyText.Letter(letter) : null);
     }
 
     /// <summary>

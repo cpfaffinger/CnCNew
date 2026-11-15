@@ -53,6 +53,7 @@ internal static class HudTests
         harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
         harness.Run("The money and the power window describe themselves; the power text carries production and consumption", () => MoneyAndPowerTooltips(data));
         harness.Run("The bar's own controls describe themselves as the original's NonCommand buttons and the experience bar do, in both skins (#335)", () => BarControlTooltips(data));
+        harness.Run("#388: the tooltip of every control of the bar names the key bound to it now - a command button its letter, the idle worker, options, beacon and communicator their keys, a rebound key the new one - and a control without a key names none, in both skins", () => { HotkeyTooltips(data, UiSkin.Original); HotkeyTooltips(data, UiSkin.Modern); });
         // The hash of baselines/hud-drawlist-1280x720.sha256 does not depend on the simulation rate (measured equal at 30, 60 and 120 Hz): the suite's data.
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
@@ -824,6 +825,8 @@ internal static class HudTests
             var description = controller.Assets.Text.Get(power.Button.DescriptLabel);
             TestHarness.Assert(tooltip is not null && name.Length > 0 && tooltip.Text.StartsWith(name, StringComparison.Ordinal) && (description.Length == 0 || tooltip.Text.Contains(description.Split('\n')[0].Trim(), StringComparison.Ordinal)),
                 $"{skin}: the pointer over {power.Button.Name} shows its name and description ({tooltip?.Text ?? "nothing"})");
+            // #388: only the slots of the command bar answer a letter here; the powers bar names no key.
+            TestHarness.Assert(tooltip?.Text.Contains(HotkeyText.Prefix, StringComparison.Ordinal) == false, $"{skin}: {power.Button.Name} names no key ({tooltip?.Text})");
             var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains(name, StringComparison.Ordinal));
             TestHarness.Assert(drawn, $"{skin}: and the tooltip of {power.Button.Name} is drawn");
         }
@@ -2021,6 +2024,90 @@ internal static class HudTests
                     TestHarness.Assert(controller.Tree.FindByName(none) is not { } minimap || controller.Tree.TooltipOverride?.Invoke(minimap) is null, $"{skin.Name}: {none} has no tooltip, as in the original");
             });
     }
+
+    /// <summary>
+    /// #388 (the owner's playtest of 15 November 2026): a tooltip of the HUD names the key of its control, as bound now. A command button's key is the letter after the
+    /// <c>&amp;</c> of its label (<c>HotKeyManager::searchHotKey</c>; the original underlines it in the popup's name, the port drops the <c>&amp;</c>); the bar's own
+    /// controls share their click with a meta event of <c>CommandMap.ini</c> and name its binding with the modifiers; a player's binding replaces the shipped one; the
+    /// general's button, the experience bar, the money and the powers bar have no key and name none.
+    /// </summary>
+    private static void HotkeyTooltips(GameData data, UiSkin skin) => SkinPins.With(skin, () =>
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        string? TooltipOf(string window) => controller.Tree.FindByName(window) is { } found ? controller.Tree.TooltipOverride?.Invoke(found) : null;
+        static string? KeyLine(string? tooltip) => tooltip?.Split('\n').LastOrDefault(line => line.StartsWith(HotkeyText.Prefix, StringComparison.Ordinal));
+
+        // The bar's own controls, with the shipped keys: CommandMap.ini's OPTIONS (Esc), DIPLOMACY (Tab), PLACE_BEACON (Ctrl+B) and the engine's Ctrl+I for the idle worker.
+        var controls = new (string Window, MetaAction Action, string Shipped)[]
+        {
+            ("ControlBar.wnd:ButtonIdleWorker", MetaAction.SelectNextIdleWorker, "Ctrl+I"),
+            ("ControlBar.wnd:ButtonOptions", MetaAction.Options, "Esc"),
+            ("ControlBar.wnd:ButtonPlaceBeacon", MetaAction.PlaceBeacon, "Ctrl+B"),
+            ("ControlBar.wnd:PopupCommunicator", MetaAction.Diplomacy, "Tab"),
+        };
+        foreach (var (window, action, shipped) in controls)
+        {
+            TestHarness.Assert(controller.Input.Hotkeys.TryGetEntry(action, out var entry) && HotkeyText.Key(entry.Binding) == shipped, $"{skin.Name}: premise: {action} is bound to {shipped}");
+            var tooltip = TooltipOf(window);
+            TestHarness.Assert(tooltip is not null && KeyLine(tooltip) == HotkeyText.Prefix + shipped && tooltip.EndsWith("\n" + HotkeyText.Prefix + shipped, StringComparison.Ordinal),
+                $"{skin.Name}: {window} names its key below its description ({tooltip?.Replace("\n", " / ", StringComparison.Ordinal)})");
+        }
+        var idle = TooltipOf("ControlBar.wnd:ButtonIdleWorker")!;
+        TestHarness.Assert(idle.StartsWith(controller.Assets.Text.Get("CONTROLBAR:IdleWorker") + "\n" + controller.Assets.Text.Get("CONTROLBAR:IdleWorkerDescription") + "\n", StringComparison.Ordinal),
+            $"{skin.Name}: the idle worker's name and description stay above the key ({idle.Replace("\n", " / ", StringComparison.Ordinal)})");
+
+        // Controls without a key name none.
+        foreach (var window in new[] { "ControlBar.wnd:ButtonGeneral", "ControlBar.wnd:GeneralsExp", "ControlBar.wnd:MoneyDisplay", "ControlBar.wnd:PowerWindow", "ControlBar.wnd:ButtonLarge" })
+            TestHarness.Assert(KeyLine(TooltipOf(window)) is null, $"{skin.Name}: {window} has no key and names none ({TooltipOf(window)?.Replace("\n", " / ", StringComparison.Ordinal)})");
+
+        // A command button names its letter; one whose letter an earlier slot took (HotKeyManager::addHotKey) or whose label has none names nothing.
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var withKey = 0;
+        for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
+        {
+            if (controller.CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) continue;
+            var line = KeyLine(TooltipOf($"ControlBar.wnd:ButtonCommand{slot:00}"));
+            if (button.Hotkey is { } letter)
+            {
+                withKey++;
+                TestHarness.Assert(line == HotkeyText.Prefix + char.ToUpperInvariant(letter), $"{skin.Name}: {button.Button.Name} names its letter {char.ToUpperInvariant(letter)} ({line})");
+                var label = controller.Assets.Text.Get(button.Button.TextLabel);
+                TestHarness.Assert(label.Contains("&" + letter, StringComparison.OrdinalIgnoreCase), $"{skin.Name}: the letter of {button.Button.Name} is the one after the & of '{label}'");
+            }
+            else TestHarness.Assert(line is null, $"{skin.Name}: {button.Button.Name} has no letter and names none ({line})");
+        }
+        TestHarness.Assert(withKey >= 3, $"{skin.Name}: the dozer's build buttons carry letters ({withKey})");
+
+        // The pointer shows it: the drawn tooltip of a build button ends with its key.
+        var slotWithKey = Enumerable.Range(1, CommandBarModel.GridSlots).First(slot => controller.CommandBar[slot] is { Availability: not ButtonAvailability.Hidden, Hotkey: not null });
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{slotWithKey:00}")!.Value;
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX, rect.CenterY)));
+        Advance(match, controller, 45);
+        var expected = HotkeyText.Prefix + char.ToUpperInvariant(controller.CommandBar[slotWithKey]!.Hotkey!.Value);
+        TestHarness.Assert(controller.Tree.Tooltip?.Text.EndsWith(expected, StringComparison.Ordinal) == true, $"{skin.Name}: the pointer's tooltip ends with '{expected}' ({controller.Tree.Tooltip?.Text.Replace("\n", " / ", StringComparison.Ordinal) ?? "nothing"})");
+        TestHarness.Assert(controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains(expected, StringComparison.Ordinal)), $"{skin.Name}: and the line is drawn");
+
+        // A rebound key shows the new key; an unbound one shows none; the shipped keys come back.
+        controller.ApplyHotkeys(GameSettings.Default with
+        {
+            Controls = GameSettings.Default.Controls with
+            {
+                Hotkeys = ImmutableSortedDictionary.CreateRange(StringComparer.Ordinal,
+                    [KeyValuePair.Create("SELECT_NEXT_IDLE_WORKER", "SHIFT_ALT KEY_W DOWN"), KeyValuePair.Create("DIPLOMACY", HotkeyMap.Unbound)]),
+            },
+        });
+        TestHarness.Assert(KeyLine(TooltipOf("ControlBar.wnd:ButtonIdleWorker")) == HotkeyText.Prefix + "Alt+Shift+W", $"{skin.Name}: the rebound idle worker names Alt+Shift+W ({KeyLine(TooltipOf("ControlBar.wnd:ButtonIdleWorker"))})");
+        TestHarness.Assert(KeyLine(TooltipOf("ControlBar.wnd:PopupCommunicator")) is null, $"{skin.Name}: the unbound communicator names no key ({TooltipOf("ControlBar.wnd:PopupCommunicator")?.Replace("\n", " / ", StringComparison.Ordinal)})");
+        TestHarness.Assert(KeyLine(TooltipOf("ControlBar.wnd:ButtonOptions")) == HotkeyText.Prefix + "Esc", $"{skin.Name}: a key nobody changed stays");
+        controller.ApplyHotkeys(GameSettings.Default);
+        TestHarness.Assert(KeyLine(TooltipOf("ControlBar.wnd:ButtonIdleWorker")) == HotkeyText.Prefix + "Ctrl+I" && KeyLine(TooltipOf("ControlBar.wnd:PopupCommunicator")) == HotkeyText.Prefix + "Tab",
+            $"{skin.Name}: the shipped keys again");
+    });
 
     private static void GoldenDrawListHash(GameData data)
     {
