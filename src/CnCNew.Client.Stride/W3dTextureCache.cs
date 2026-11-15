@@ -26,7 +26,8 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
     public int UnsupportedHouseColorCount => _unsupportedHouseColor.Count;
     private readonly HashSet<string> _unsupportedHouseColor = new(StringComparer.OrdinalIgnoreCase);
 
-    public Texture Resolve(W3dTextureReference reference)
+    /// <param name="raw">Read the texels as they are stored, never decoded from sRGB: for a pass that blends in display values (<see cref="Layers.Fx.FxMaterialKey.InGammaPass"/>).</param>
+    public Texture Resolve(W3dTextureReference reference, bool raw = false)
     {
         var resolution = _paths.Resolve(reference.Name);
         if (!resolution.Found)
@@ -64,6 +65,8 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
         }
 
         var cacheKey = recolor is { } color ? $"{path}|hc{color.Red:X2}{color.Green:X2}{color.Blue:X2}" : path;
+        var decode = graphicsDevice.ColorSpace == ColorSpace.Linear && !raw;
+        if (raw && graphicsDevice.ColorSpace == ColorSpace.Linear) cacheKey += "|raw";
         if (_textures.TryGetValue(cacheKey, out var cached))
         {
             return cached;
@@ -80,9 +83,7 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
                 image = image with { RgbaPixels = Layers.Objects.HouseColor.Recolor(image.RgbaPixels, teamColor) };
             }
 
-            var format = graphicsDevice.ColorSpace == ColorSpace.Linear
-                ? PixelFormat.R8G8B8A8_UNorm_SRgb
-                : PixelFormat.R8G8B8A8_UNorm;
+            var format = decode ? PixelFormat.R8G8B8A8_UNorm_SRgb : PixelFormat.R8G8B8A8_UNorm;
             texture = Texture.New2D(
                 graphicsDevice,
                 image.Width,
@@ -94,7 +95,7 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
         }
         else
         {
-            texture = Texture.Load(graphicsDevice, stream, loadAsSRGB: graphicsDevice.ColorSpace == ColorSpace.Linear);
+            texture = Texture.Load(graphicsDevice, stream, loadAsSRGB: decode);
         }
 
         _textures.Add(cacheKey, texture);

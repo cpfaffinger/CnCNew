@@ -63,6 +63,9 @@ internal sealed class FxGeometry : IDisposable
         return _vertices.AsSpan(QuadCount++ * 4, 4);
     }
 
+    /// <summary>The vertices of a range of quads already written this frame.</summary>
+    public Span<FxVertex> Vertices(int firstQuad, int quadCount) => _vertices.AsSpan(firstQuad * 4, quadCount * 4);
+
     /// <summary>Uploads the used prefix and returns the byte count.</summary>
     public int Upload(CommandList commandList)
     {

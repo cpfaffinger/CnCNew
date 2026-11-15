@@ -19,6 +19,7 @@ Func<string[], int>[] suites =
     VisionTests.Run,
     MinimapTests.Run,
     FogDimmingTests.Run,
+    FrameBufferBlendTests.Run,
     DependencyPlacementTests.Run,
     TreadMarksTests.Run,
     WorldRealDataTests.Run,

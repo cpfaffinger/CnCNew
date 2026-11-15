@@ -28,12 +28,20 @@ internal enum FxBlend
 }
 
 /// <summary>A draw state: texture name (null draws the vertex color only), blend equation, and whether it lies on the ground with the terrain, under the stencil shadows.</summary>
-internal readonly record struct FxMaterialKey(string? Texture, FxBlend Blend, bool Ground = false);
+internal readonly record struct FxMaterialKey(string? Texture, FxBlend Blend, bool Ground = false)
+{
+    /// <summary>
+    /// Drawn by <see cref="GammaEffectsRenderer"/>, which blends in display values as the original's frame buffer does (<see cref="CnCNew.Presentation.Fx.FrameBufferBlend"/>): every blended
+    /// sprite, streak, tracer and band. The ground layers keep their place under the stencil shadows, and an alpha-tested sprite is opaque, so its colour does not depend on the blend.
+    /// </summary>
+    public bool InGammaPass => !Ground && Blend != FxBlend.AlphaTest;
+}
 
 /// <summary>
 /// Unlit materials for effect quads: output is <c>texture * vertex color</c> (RGBA) as emissive color and alpha, blended with a manual
 /// blend state. They are registered with <see cref="RenderServices.DepthWrites"/> so the compositor's pipeline processor switches depth
-/// writes off for everything but alpha-tested sprites (depth test stays on, like the W3D sprite shaders).
+/// writes off for everything but alpha-tested sprites (depth test stays on, like the W3D sprite shaders). A material of
+/// <see cref="FxMaterialKey.InGammaPass"/> reads its texture undecoded; its blend state is applied by <see cref="GammaEffectsRenderer"/>'s stage.
 /// </summary>
 internal sealed class FxMaterials(RenderServices services)
 {
@@ -61,7 +69,8 @@ internal sealed class FxMaterials(RenderServices services)
         IComputeColor color = vertexColor;
         if (key.Texture is not null)
         {
-            var texture = services.Textures.Resolve(new W3dTextureReference(key.Texture));
+            // The pass that blends in display values reads the texels as they are stored, as the original's sprite shader does; the linear-light passes read them decoded.
+            var texture = services.Textures.Resolve(new W3dTextureReference(key.Texture), raw: key.InGammaPass);
             color = new ComputeBinaryColor(
                 new ComputeTextureColor(texture, TextureCoordinate.Texcoord0, Vector2.One, Vector2.Zero)
                 {

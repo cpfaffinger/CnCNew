@@ -8,7 +8,8 @@ namespace CnCNew.Client.Stride.Layers.Fx;
 /// <summary>
 /// Pooled one-mesh entities that each draw one run (a range of quads of the shared <see cref="FxGeometry"/>) with one material. The
 /// transparent stage orders render objects by the distance of their bounding box center to the camera, so a run is placed on the view
-/// axis at the run's depth: that is how the layer controls the back-to-front order without owning the compositor.
+/// axis at the run's depth: that is how the layer controls the back-to-front order without owning the compositor. A run of
+/// <see cref="FxMaterialKey.InGammaPass"/> is in the render group of <see cref="Rendering.GammaEffectsRenderer"/>'s stage, which orders it the same way.
 /// </summary>
 internal sealed class FxRunPool(Scene scene, FxGeometry geometry, FxMaterials materials) : IDisposable
 {
@@ -90,7 +91,7 @@ internal sealed class FxRunPool(Scene scene, FxGeometry geometry, FxMaterials ma
         var model = new Model();
         model.Materials.Add(materials.Get(key));
         model.Meshes.Add(mesh);
-        var component = new ModelComponent(model) { IsShadowCaster = false, Enabled = false };
+        var component = new ModelComponent(model) { IsShadowCaster = false, Enabled = false, RenderGroup = key.InGammaPass ? Rendering.GammaEffectsRenderer.Group : RenderGroup.Group0 };
         var entity = new Entity($"fx run {key.Blend} {key.Texture ?? "-"} #{ordinal}") { component };
         scene.Entities.Add(entity);
         _entities.Add(entity);

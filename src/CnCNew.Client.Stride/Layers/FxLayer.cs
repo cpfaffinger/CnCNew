@@ -30,6 +30,7 @@ internal sealed class FxLayer : IWorldLayer
     private bool _printed;
     private List<CnCNew.Presentation.Shadows.ShadowDecal>? _shadowDecals;
     private SnowField? _snow;
+    private RenderServices? _services;
 
     public FxLayer() => _isVisible = IsVisible;
 
@@ -49,6 +50,7 @@ internal sealed class FxLayer : IWorldLayer
 
     public void Attach(RenderServices services, LiveGame match)
     {
+        _services = services;
         _geometry = new FxGeometry(services.GraphicsDevice);
         _materials = new FxMaterials(services);
         _pool = new FxRunPool(services.Scene, _geometry, _materials);
@@ -118,6 +120,7 @@ internal sealed class FxLayer : IWorldLayer
         {
             _printed = true;
             Console.WriteLine(_totals.Format(Stats));
+            Console.WriteLine($"fx gamma pass: {_services?.GammaEffects?.FramesDrawn ?? 0} frames drawn in display values");
         }
 
         _pool?.Dispose();

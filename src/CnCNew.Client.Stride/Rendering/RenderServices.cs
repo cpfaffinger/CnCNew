@@ -46,7 +46,10 @@ internal sealed class RenderServices : IDisposable
     /// <summary>The shadow decals of the objects drawn this frame; the object layer fills it, the effect layer draws it.</summary>
     public List<CnCNew.Presentation.Shadows.ShadowDecal> ShadowDecals { get; } = [];
 
-    /// <summary>The default forward compositor with the W3D depth-write processor installed.</summary>
+    /// <summary>The pass of the blended effects, made with the compositor (null before).</summary>
+    public GammaEffectsRenderer? GammaEffects { get; private set; }
+
+    /// <summary>The default forward compositor with the W3D depth-write processor installed, and after the world the pass of the blended effects.</summary>
     public GraphicsCompositor CreateCompositor()
     {
         // W3DDisplay clears to black; where no terrain is and no sky box is shown, there is nothing.
@@ -57,6 +60,17 @@ internal sealed class RenderServices : IDisposable
         meshFeature.PipelineProcessors.Add(new ShadowStencilPipelineProcessor(StencilRoles));
         stageSelector.TransparentRenderStage.SortMode = TransparentOrder;
         stageSelector.OpaqueRenderStage.SortMode = OpaqueOrder;
+
+        // The blended effects leave the world's stages for a stage of their own, drawn after the world in display values (issue 356). Their runs are placed on the view axis
+        // in the builder's order, so back to front by that point is the order of DoParticles.
+        stageSelector.RenderGroup &= ~GammaEffectsRenderer.GroupMask;
+        var effectsStage = new RenderStage("GammaEffects", "Main") { SortMode = new BackToFrontSortMode() };
+        compositor.RenderStages.Add(effectsStage);
+        meshFeature.RenderStageSelectors.Add(new SimpleGroupToRenderStageSelector { RenderStage = effectsStage, EffectName = stageSelector.EffectName, RenderGroup = GammaEffectsRenderer.GroupMask });
+        meshFeature.PipelineProcessors.Add(new GammaEffectsPipelineProcessor { RenderStage = effectsStage });
+        var camera = (SceneCameraRenderer)compositor.Game;
+        GammaEffects = new GammaEffectsRenderer { RenderStage = effectsStage };
+        camera.Child = new SceneRendererCollection { camera.Child, GammaEffects };
         return compositor;
     }
 

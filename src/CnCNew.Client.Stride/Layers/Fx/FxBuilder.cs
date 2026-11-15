@@ -77,7 +77,6 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         public byte Group; // 0 decals and ground, 1 alpha test (opaque), 2 sorted blended
     }
 
-    private readonly byte[] _linearLut = BuildLut();
     private readonly List<FxMaterialKey> _materials = [];
     private Run[] _runs = new Run[256];
     private int _runCount;
@@ -940,6 +939,15 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             return;
         }
 
+        // The vertices carry the particle's colour as it is; a run drawn in a linear-light pass decodes it, since the hardware decodes its sRGB texture but not the vertex colour.
+        if (linearColorSpace && material >= 0 && !_materials[material].InGammaPass)
+        {
+            foreach (ref var vertex in geometry.Vertices(firstQuad, count))
+            {
+                vertex.Color = FrameBufferBlend.ToLinearLight(vertex.Color);
+            }
+        }
+
         if (_runCount > 0)
         {
             ref var last = ref _runs[_runCount - 1];
@@ -960,37 +968,9 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         _runs[_runCount++] = new Run { Material = material, First = firstQuad, Count = count, DepthSum = depth, Items = 1, Group = group };
     }
 
-    private uint PackParticle(in ParticleInstance particle)
+    private static uint PackParticle(in ParticleInstance particle)
         => Pack(new Vector3(particle.Color.X, particle.Color.Y, particle.Color.Z), particle.Color.W);
 
-    private uint Pack(Vector3 rgb, float alpha)
-    {
-        var r = ToByte(rgb.X);
-        var g = ToByte(rgb.Y);
-        var b = ToByte(rgb.Z);
-        if (linearColorSpace)
-        {
-            r = _linearLut[r];
-            g = _linearLut[g];
-            b = _linearLut[b];
-        }
-
-        return r | ((uint)g << 8) | ((uint)b << 16) | ((uint)ToByte(alpha) << 24);
-    }
-
-    private static byte ToByte(float value) => (byte)(Math.Clamp(value, 0f, 1f) * 255f + 0.5f);
-
-    /// <summary>W3D modulates sRGB texture and vertex colors without gamma handling; in a linear pipeline the vertex color must be linearized to match.</summary>
-    private static byte[] BuildLut()
-    {
-        var lut = new byte[256];
-        for (var index = 0; index < 256; index++)
-        {
-            var value = index / 255f;
-            var linear = value <= 0.04045f ? value / 12.92f : MathF.Pow((value + 0.055f) / 1.055f, 2.4f);
-            lut[index] = (byte)(linear * 255f + 0.5f);
-        }
-
-        return lut;
-    }
+    /// <summary>The colour as the vertex carries it into the pass that blends in display values (<see cref="FrameBufferBlend"/>); <see cref="EndItem"/> decodes it for a linear-light run.</summary>
+    private static uint Pack(Vector3 rgb, float alpha) => FrameBufferBlend.PackDisplay(rgb, alpha);
 }
