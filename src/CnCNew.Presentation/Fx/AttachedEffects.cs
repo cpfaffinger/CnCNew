@@ -579,6 +579,9 @@ public sealed record AttachedEffectStats(long ModelStateSystems, long BodySystem
 
     /// <summary>Systems of the tank and truck draws started because the vehicle moved.</summary>
     public long MotionSystems { get; init; }
+
+    /// <summary>W3D emitters started because a state's model is one (<see cref="AttachedEffects.Emitters"/>).</summary>
+    public long ModelEmitters { get; init; }
 }
 
 /// <summary>
@@ -595,6 +598,8 @@ public sealed record AttachedEffectStats(long ModelStateSystems, long BodySystem
 /// or again and again; systems are destroyed when the state changes.</item>
 /// <item><c>TransitionDamageFX</c> (<c>onBodyDamageStateChange</c>): on a worse damage state its particle systems at their bone (or a random numbered one, or a location) and its
 /// FX lists; the systems of a state end when the object leaves it.</item>
+/// <item>A state whose model is a W3D particle emitter (<c>EXHydrant</c>, the water spray of a broken hydrant): <c>W3DModelDraw::setModelState</c> makes the emitter its render object,
+/// and it emits at the object while the state is shown (<see cref="ModelEmitterWorld"/>); another state or the object's leaving the view stops it.</item>
 /// <item>A missile's exhaust (<c>MissileAIUpdate::doIgnitionState</c>, <c>NeutronMissileUpdate::doLaunch</c>): the launching weapon's <c>ProjectileExhaust</c> of the launcher's
 /// veterancy, attached to the projectile after its ignition delay (the neutron missile's at its launch).</item>
 /// </list>
@@ -610,6 +615,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     {
         public int[] StateKey = [];
         public readonly List<int> StateSystems = [];
+        public readonly List<int> StateEmitters = [];
         public int DamageState = -1;
         public bool Aflame;
         public readonly List<int> BodySystems = [];
@@ -643,6 +649,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     private ImmutableArray<StreamInstance> _streamFrame = [];
     private long _streamProjectiles;
     private long _motionSystems;
+    private long _modelEmitters;
 
     /// <summary>The player whose screen this is: a decal that only its owner sees (<c>OnlyVisibleToOwningPlayer</c>) is made for this player's objects only. Null: for nobody.</summary>
     public PlayerId? Viewer { get; set; }
@@ -665,7 +672,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     public IReadOnlyCollection<string> MissingBoneNames => _missingBoneNames;
 
     public AttachedEffectStats Stats => new(_modelStateSystems, _bodySystems, _boneFxSystems, _boneFxLists, _transitionSystems, _transitionFxLists, _exhaustSystems, _missingTemplates,
-        _missingBones, _tracked.Count) { StreamProjectiles = _streamProjectiles, StreamsNow = _streamFrame.Length, MotionSystems = _motionSystems };
+        _missingBones, _tracked.Count) { StreamProjectiles = _streamProjectiles, StreamsNow = _streamFrame.Length, MotionSystems = _motionSystems, ModelEmitters = _modelEmitters };
 
     /// <summary>The events of a tick: a projectile launched by a weapon with an exhaust gets it (<c>ProjectileLaunched</c>: the projectile, its launcher, the weapon).</summary>
     public void Observe(IReadOnlyList<SimEvent> events, SimulationWorld world)
@@ -1190,6 +1197,9 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         points.Clear();
     }
 
+    /// <summary>The W3D emitter a model is (by the model's name), or null for a model of meshes; without it no state's model emits.</summary>
+    public Func<string, ModelEmitterSpec?>? Emitters { get; init; }
+
     /// <summary>The bones of a model with its turrets turned (<c>ModelBoneTable.FindPosed</c>). Without it a bone stands in its rest pose.</summary>
     public Func<string, string, TurretPose, Matrix4x4?>? PosedBones { get; init; }
 
@@ -1287,6 +1297,12 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         systems.Clear();
     }
 
+    private void StopEmitters(List<int> emitters)
+    {
+        foreach (var emitter in emitters) fx.ModelEmitters.Stop(emitter);
+        emitters.Clear();
+    }
+
     private void Hide(Tracked tracked)
     {
         tracked.Shown = false;
@@ -1296,6 +1312,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         tracked.LastPosition = null;
         tracked.StateKey = [];
         Destroy(tracked.StateSystems);
+        StopEmitters(tracked.StateEmitters);
         Destroy(tracked.BodySystems);
         tracked.DamageState = -1;
         tracked.Aflame = false;
@@ -1318,12 +1335,18 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         for (var index = 0; index < key.Length; index++) key[index] = item.Selections[index].StateIndex;
         tracked.StateKey = key;
         Destroy(tracked.StateSystems);
+        StopEmitters(tracked.StateEmitters);
         for (var module = 0; module < item.Visual.Draws.Length && module < item.Selections.Length; module++)
         {
             var index = item.Selections[module].StateIndex;
             var draw = item.Visual.Draws[module];
             if (index < 0 || index >= draw.States.Length) continue;
             var state = draw.States[index];
+            if (state.Model is { } model && Emitters?.Invoke(model) is { } emitter)
+            {
+                tracked.StateEmitters.Add(fx.ModelEmitters.Start(emitter, item.Entity, Vector3.Zero));
+                _modelEmitters++;
+            }
             foreach (var entry in state.ParticleSysBones)
             {
                 var offset = Bone(state.Model, entry.Bone, item.Visual.Scale);

@@ -55,6 +55,7 @@ public sealed class FxExecutor
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _random = new FxRandom(seed);
         Particles = new ParticleWorld(budget ?? catalog.Settings.Budget, _random, catalog.FindParticleSystem);
+        ModelEmitters = new ModelEmitterWorld(new FxRandom(seed ^ 0x3E3172E5UL));
         Decals = new DecalBuffer();
         _deriver = new SoundCueDeriver(catalog, time);
     }
@@ -67,6 +68,9 @@ public sealed class FxExecutor
     /// <summary>The ropes of a combat drop, drawn as tracers.</summary>
     public Func<ImmutableArray<TracerInstance>>? Ropes { get; set; }
     public ParticleWorld Particles { get; }
+
+    /// <summary>The W3D particle emitters that models are (<see cref="ModelEmitterWorld"/>): their particles join the frame's particles.</summary>
+    public ModelEmitterWorld ModelEmitters { get; }
     public DecalBuffer Decals { get; }
 
     /// <summary>Who supplies the marks of the vehicles' treads (<see cref="TreadMarks"/>); null: none.</summary>
@@ -368,6 +372,7 @@ public sealed class FxExecutor
     public void Update(IFxWorldView view)
     {
         Particles.Step(view.GetPose, view.GroundHeight);
+        ModelEmitters.Step(view.GetPose);
         var frame = Frame;
         foreach (var tracer in _tracers) tracer.Advance(frame);
         _tracers.RemoveAll(tracer => frame >= tracer.ExpireFrame);
@@ -388,13 +393,23 @@ public sealed class FxExecutor
         var decals = Decals.Snapshot();
         if (ObjectDecals?.Invoke() is { IsDefaultOrEmpty: false } carried) decals = decals.AddRange(carried);
         if (CursorDecal is { } cursor) decals = decals.Add(cursor);
-        var frame = new FxFrame(Frame, Particles.Capture(isVisible),
+        var frame = new FxFrame(Frame, WithModelEmitters(Particles.Capture(isVisible), isVisible),
             [.._tracers.Select(tracer => tracer.ToInstance()), ..Ropes?.Invoke() ?? []],
             [.._lights.Select(light => light.ToInstance())],
             decals, [.._rays], [.._shakes]) { ProjectileStreams = ProjectileStreams?.Invoke() ?? [], TreadMarks = TreadMarks?.Invoke() ?? [] };
         _rays.Clear();
         _shakes.Clear();
         return frame;
+    }
+
+    private ParticleFrame WithModelEmitters(ParticleFrame frame, Func<Vector3, float, bool>? isVisible)
+    {
+        if (!ModelEmitters.HasParticles) return frame;
+        var particles = frame.Particles.ToBuilder();
+        var batches = frame.Batches.ToList();
+        var culled = frame.Culled;
+        ModelEmitters.AppendTo(particles, batches, isVisible, ref culled);
+        return frame with { Particles = particles.ToImmutable(), Batches = [.. batches], Culled = culled };
     }
 
     /// <summary>All sound cues since the last drain, in event order.</summary>

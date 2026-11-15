@@ -111,7 +111,7 @@ public abstract class LiveGame
             PreorderPlayers = preorderPlayers ?? [] };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
-        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed, DeployedBones = data.ModelBones.FindAtFinalFrame };
+        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed) { PosedBones = data.ModelBones.FindPosed, DeployedBones = data.ModelBones.FindAtFinalFrame, Emitters = data.ModelBones.FindEmitter };
         Fx.RequestPlace = Attached.UplinkLaunchPlace;
         Fx.ProjectileStreams = () => Attached.ProjectileStreams;
         Fx.Ropes = () => Attached.Ropes;

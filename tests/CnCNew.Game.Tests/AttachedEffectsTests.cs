@@ -41,8 +41,59 @@ internal static class AttachedEffectsTests
         harness.Run("A moving truck raises dust, a standing one none", () => TreadDebris(data));
         harness.Run("The Spectre's gattling strafes the ground with smoke while the gunship is seen", () => SpectreStrafe(data));
         harness.Run("A muzzle on a turret turns with the turret", () => TurretMuzzle(data));
+        harness.Run("#369: a broken hydrant sprays water - the model EXHydrant is a W3D emitter that runs at the WaterSpray object for its life", () => HydrantSpray(data));
         harness.Run("The acceptance scene acc-flames: what burns and smokes, by system", () => AcceptanceScene(data));
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// Issue 369: <c>WaterSpray</c> (<c>OCL_FireHydrantExplode</c>, made where a hydrant dies, gone after its <c>LifetimeUpdate</c> of 5 s) draws <c>EXHydrant</c>, a W3D file of one particle
+    /// emitter; the original's asset manager makes a <c>ParticleEmitterClass</c> of it. The emitter runs while the object stands and stops with it; its particles fly up and fall.
+    /// </summary>
+    private static void HydrantSpray(GameData data)
+    {
+        var spec = data.ModelBones.FindEmitter("EXHydrant");
+        TestHarness.Assert(spec is { Texture: "exhydrant.tga", Shader: ParticleShader.AlphaTest, BurstSize: 5 } && spec.NotReproduced.IsEmpty,
+            $"EXHydrant runs as an alpha-tested emitter of five-particle bursts ({spec}; problems: {string.Join("; ", data.ModelBones.EmitterProblems)})");
+        TestHarness.Assert(data.ModelBones.FindEmitter("AVCrusader") is null, "a model of meshes is no emitter");
+        var scene = Stage(data, "attached-hydrant",
+            [new ScenarioUnit("hydrant", "FireHydrantRed", 2, 60f, 0f), new ScenarioUnit("dozer", "ChinaVehicleDozer", 1, -40f, 0f)],
+            [new ScenarioOrder(10, "hydrant", ScenarioOrderKind.Damage, X: 200f)], 330);
+        var sprayFrames = 0;
+        var mostParticles = 0;
+        var highest = float.MinValue;
+        var sprayLived = false;
+        var stoppedAfterSpray = false;
+        var sprayTexture = true;
+        Run(scene, () =>
+        {
+            var spray = scene.World.Entities.FirstOrDefault(entity => entity.Template.Name == "WaterSpray" && !entity.EffectivelyDead);
+            var emitters = scene.Fx.ModelEmitters.Stats;
+            if (spray is not null)
+            {
+                sprayLived = true;
+                if (emitters.Emitting > 0) sprayFrames++;
+                mostParticles = Math.Max(mostParticles, emitters.Particles);
+                var ground = CnCNew.Presentation.FixedConvert.ToSingle(spray.Z);
+                var frame = scene.Fx.Capture().Particles;
+                // The emitter's particles carry its (negative) id and the batch of its texture; the hydrant's death effect adds particle systems of its own.
+                foreach (var particle in frame.Particles.Where(particle => particle.SystemId < 0))
+                {
+                    sprayTexture &= frame.Batches[particle.Batch].Texture == "exhydrant.tga";
+                    highest = Math.Max(highest, particle.Position.Z - ground);
+                }
+            }
+            else if (sprayLived && emitters.Emitting == 0) stoppedAfterSpray = true;
+        });
+        Console.WriteLine($"       hydrant: spray emitted in {sprayFrames} frames, at most {mostParticles} particles, highest {highest:F1} above the ground; {scene.Attached.Stats}");
+        TestHarness.Assert(sprayLived, "the dead hydrant leaves its WaterSpray");
+        TestHarness.Assert(scene.Attached.Stats.ModelEmitters >= 1 && sprayFrames > 100, $"the spray's model emits while it stands ({sprayFrames} frames)");
+        // 30.3 bursts of five a second for 1.5 s: about 225 particles at once (the buffer holds 378).
+        TestHarness.Assert(mostParticles is > 150 and <= 378, $"the buffer fills to its lifetime's worth ({mostParticles})");
+        TestHarness.Assert(sprayTexture, "the spray's particles draw its texture");
+        // Up at 80 a second against 100 down: 32 units; the outward 7 a second points along the creation place, which can point up: at most 87^2 / 200 = 37.8.
+        TestHarness.Assert(highest is > 32f and < 38f, $"the water climbs 32 to 38 units before it falls ({highest:F1})");
+        TestHarness.Assert(stoppedAfterSpray, "the emitter stops when the spray's life ends");
     }
 
     /// <summary>The owner saw every shot leave the barrel where it would be with the turret facing forward: effects read the rest pose of the model.</summary>

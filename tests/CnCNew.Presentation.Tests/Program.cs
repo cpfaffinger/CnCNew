@@ -10,6 +10,7 @@ Func<string[], int>[] suites =
     UpgradeVisualTests.Run,
     ObjectTests.Run,
     FxTests.Run,
+    ModelEmitterTests.Run,
     TerrainTests.Run,
     RoadTests.Run,
     BridgeMeshTests.Run,
