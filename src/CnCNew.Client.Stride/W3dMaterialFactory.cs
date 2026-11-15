@@ -51,7 +51,7 @@ internal sealed class W3dMaterialFactory(
         for (var passIndex = 0; passIndex < batch.Passes.Count; passIndex++)
         {
             var source = batch.Passes[passIndex];
-            var compiled = CreateSinglePass(mesh, source, passIndex);
+            var compiled = CreateSinglePass(mesh, batch, source, passIndex);
             var pass = compiled.Passes[0];
             compiled.Passes.RemoveAt(0);
             pass.PassIndex = passIndex;
@@ -61,7 +61,7 @@ internal sealed class W3dMaterialFactory(
         return material;
     }
 
-    private Material CreateSinglePass(W3dMesh mesh, W3dRenderPass source, int passIndex)
+    private Material CreateSinglePass(W3dMesh mesh, W3dRenderBatch batch, W3dRenderPass source, int passIndex)
     {
         if (source.MaterialPass.TextureStages.Count > 2)
         {
@@ -73,7 +73,7 @@ internal sealed class W3dMaterialFactory(
         var vertexColor = VertexColor(passIndex * 2);
         var hasTexture0 = shader?.TexturingEnabled != false && source.TextureIds.ElementAtOrDefault(0) is uint;
         IComputeColor texture0 = hasTexture0
-            ? TextureColor(mesh, source.TextureIds[0]!.Value, passIndex * 2)
+            ? TextureColor(mesh, source.TextureIds[0]!.Value, passIndex * 2, EnvironmentMapper(mesh, batch, source, 0))
             : new ComputeColor(Color4.White);
         var surface = ApplyPrimaryGradient(texture0, vertexColor, shader, hasTexture0);
 
@@ -88,7 +88,7 @@ internal sealed class W3dMaterialFactory(
         {
             surface = ApplyDetail(
                 surface,
-                TextureColor(mesh, detailId, passIndex * 2 + 1),
+                TextureColor(mesh, detailId, passIndex * 2 + 1, EnvironmentMapper(mesh, batch, source, 1)),
                 source.EffectiveDetailColorFunction,
                 source.EffectiveDetailAlphaFunction);
         }
@@ -157,15 +157,35 @@ internal sealed class W3dMaterialFactory(
         pass.AlphaToCoverage = false;
     }
 
-    private IComputeColor TextureColor(W3dMesh mesh, uint textureId, int coordinateIndex)
+    /// <summary>The environment mapper of a texture stage of the batch (the vertex material of its first vertex), or null when the stage maps otherwise.</summary>
+    private static W3dEnvironmentTextureMapper? EnvironmentMapper(W3dMesh mesh, W3dRenderBatch batch, W3dRenderPass source, int stage)
+    {
+        if (batch.TriangleIndices.Count == 0 || stage >= source.MaterialPass.TextureStages.Count) return null;
+        var vertex = checked((int)mesh.Triangles[batch.TriangleIndices[0]].Vertex0);
+        return W3dRenderPlan.GetTextureMapper(mesh, source.MaterialPass, vertex, stage) as W3dEnvironmentTextureMapper;
+    }
+
+    private IComputeColor TextureColor(W3dMesh mesh, uint textureId, int coordinateIndex, W3dEnvironmentTextureMapper? environment = null)
     {
         if (textureId >= mesh.Materials.Textures.Count)
         {
             throw new InvalidDataException($"Mesh '{mesh.Name}' references missing texture table entry {textureId}.");
         }
 
+        var texture = textures.Resolve(mesh.Materials.Textures[checked((int)textureId)]);
+        // An environment mapper's coordinates follow the camera (mapper.cpp): computed by the shader, not taken from the shared vertices.
+        if (environment is not null)
+        {
+            return new Rendering.EnvironmentMapColor(texture, (TextureCoordinate)coordinateIndex, environment.Reflection)
+            {
+                Filtering = TextureFilter.Linear,
+                AddressModeU = TextureAddressMode.Wrap,
+                AddressModeV = TextureAddressMode.Wrap,
+            };
+        }
+
         return new ComputeTextureColor(
-            textures.Resolve(mesh.Materials.Textures[checked((int)textureId)]),
+            texture,
             (TextureCoordinate)coordinateIndex,
             Vector2.One,
             Vector2.Zero)
