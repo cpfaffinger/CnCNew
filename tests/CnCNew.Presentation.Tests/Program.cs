@@ -45,6 +45,7 @@ Func<string[], int>[] suites =
     MissileJitterTests.Run,
     PreorderConditionTests.Run,
     AnimationStartTests.Run,
+    DynamicLightTests.Run,
 ];
 
 // "--only Suite[,Suite]" runs the named suites (the name of the class that holds `Run`), for a focused check while working.

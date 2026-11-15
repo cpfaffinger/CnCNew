@@ -96,6 +96,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.Placeholders = 0;
         _shadows?.Begin();
         _services.ShadowDecals.Clear();
+        _services.DynamicLights.BeginFrame();
         _shadowTicks = 0;
 
         foreach (var drawable in frame.Objects.Drawables)
@@ -418,6 +419,15 @@ internal sealed class ObjectLayerCore : IWorldLayer
         }
 
         UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, flash, opacity, frame);
+        // RTS3DScene::renderOneObject: a drawable that receives dynamic lights takes the pulses whose sphere meets its render object's.
+        if (drawable.Visual.ReceivesDynamicLights)
+        {
+            var center = Vector3.Transform(asset.BoundsCenter, instanceMatrix);
+            var reach = asset.BoundsRadius * scale;
+            _services.DynamicLights.Add(rigidComponent, center, reach);
+            foreach (var skin in part.Skins) _services.DynamicLights.Add(skin.Entity.Component, center, reach);
+        }
+
         Stats.Drawn++;
     }
 

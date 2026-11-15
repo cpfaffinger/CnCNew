@@ -17,7 +17,8 @@ internal sealed class RenderServices : IDisposable
         Scene = scene;
         Data = data;
         Textures = new W3dTextureCache(graphicsDevice, data.Content);
-        Materials = new W3dMaterialFactory(graphicsDevice, Textures, DepthWrites, displayValueBlending: true);
+        Materials = new W3dMaterialFactory(graphicsDevice, Textures, DepthWrites, displayValueBlending: true, dynamicLights: true);
+        DynamicLights = new DynamicLighting { ColorSpace = graphicsDevice.ColorSpace };
     }
 
     public GraphicsDevice GraphicsDevice { get; }
@@ -33,6 +34,9 @@ internal sealed class RenderServices : IDisposable
     public W3dMaterialFactory Materials { get; }
 
     public Dictionary<MaterialPass, bool> DepthWrites { get; } = [];
+
+    /// <summary>The light pulses of the frame and the objects that take them (<see cref="DynamicLightRenderFeature"/>).</summary>
+    public DynamicLighting DynamicLights { get; }
 
     /// <summary>The order of the transparent stage, with the ground layers and the stacking of the roads.</summary>
     public StackedBackToFrontSortMode TransparentOrder { get; } = new();
@@ -61,6 +65,7 @@ internal sealed class RenderServices : IDisposable
         var stageSelector = meshFeature.RenderStageSelectors.OfType<MeshTransparentRenderStageSelector>().Single();
         meshFeature.PipelineProcessors.Add(new W3dDepthWritePipelineProcessor(DepthWrites, stageSelector.OpaqueRenderStage, stageSelector.TransparentRenderStage));
         meshFeature.PipelineProcessors.Add(new ShadowStencilPipelineProcessor(StencilRoles));
+        meshFeature.RenderFeatures.Add(new DynamicLightRenderFeature(DynamicLights));
         stageSelector.TransparentRenderStage.SortMode = TransparentOrder;
         stageSelector.OpaqueRenderStage.SortMode = OpaqueOrder;
 

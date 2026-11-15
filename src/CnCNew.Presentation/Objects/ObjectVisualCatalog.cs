@@ -51,6 +51,9 @@ public sealed record ObjectVisual(
     public bool IsStructure => IsKindOf("STRUCTURE");
     public bool IsUnit => IsKindOf("INFANTRY") || IsKindOf("VEHICLE") || IsKindOf("AIRCRAFT") || IsKindOf("HUGE_VEHICLE");
 
+    /// <summary>Whether the template's drawables take the light pulses: unless one of its draw modules says no (<see cref="DrawSpec.ReceivesDynamicLights"/>).</summary>
+    public bool ReceivesDynamicLights => Draws.All(draw => draw.ReceivesDynamicLights);
+
     /// <summary>At least one draw module selects a model file (what scenery and the renderer can actually show).</summary>
     public bool HasModel => Draws.Any(draw => draw.States.Any(state => state.Model is not null));
 }

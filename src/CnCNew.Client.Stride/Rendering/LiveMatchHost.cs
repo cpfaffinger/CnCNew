@@ -21,6 +21,7 @@ internal sealed class LiveMatchHost : IDisposable
         Scene = new Scene();
         DisplayValueOutput.Register(game.EffectSystem, game.GraphicsDevice);
         EnvironmentMapColor.Register(game.EffectSystem, game.GraphicsDevice);
+        DynamicLightColor.Register(game.EffectSystem, game.GraphicsDevice);
         Services = new RenderServices(game.GraphicsDevice, game.GraphicsContext, Scene, data);
         game.SceneSystem.GraphicsCompositor = Services.CreateCompositor();
 
@@ -32,7 +33,9 @@ internal sealed class LiveMatchHost : IDisposable
         };
         Scene.Entities.Add(new Entity("Camera") { _camera });
 
-        SceneLighting.Install(Scene, CnCNew.Presentation.Terrain.TerrainLighting.ObjectsForMap(data.Graph, match.Map));
+        var lighting = CnCNew.Presentation.Terrain.TerrainLighting.ObjectsForMap(data.Graph, match.Map);
+        SceneLighting.Install(Scene, lighting);
+        Services.DynamicLights.SetScene(lighting);
 
         _layers = WorldLayers.CreateAll();
         foreach (var layer in _layers) layer.Attach(Services, match);

@@ -11,11 +11,16 @@ namespace CnCNew.Client.Stride;
 /// The passes that blend are drawn by <see cref="Rendering.DisplayValuePass"/> (the world of a match): they encode their shaded colour to display values (<see cref="Rendering.DisplayValueOutput"/>),
 /// so they keep their look and blend on the bytes as the original's frame buffer does. Off for the model viewer, whose compositor blends in linear light.
 /// </param>
+/// <param name="dynamicLights">
+/// The materials take the light pulses as an emissive term (<see cref="Rendering.DynamicLightColor"/>, whose values <see cref="Rendering.DynamicLightRenderFeature"/> writes); off for the model viewer,
+/// which has neither pulses nor the feature.
+/// </param>
 internal sealed class W3dMaterialFactory(
     GraphicsDevice graphicsDevice,
     W3dTextureCache textures,
     Dictionary<MaterialPass, bool> depthWrites,
-    bool displayValueBlending = false)
+    bool displayValueBlending = false,
+    bool dynamicLights = false)
 {
     /// <summary>
     /// Factor on the light of every material created while it is below one (fogged objects: <c>RTS3DScene</c> draws objects through the shroud texture, the terrain layer squares
@@ -119,6 +124,7 @@ internal sealed class W3dMaterialFactory(
             Diffuse = new MaterialDiffuseMapFeature(surface),
             DiffuseModel = new MaterialDiffuseLambertModelFeature(),
             Occlusion = (!opaque || translucent) && displayValueBlending ? Rendering.DisplayValueOutput.ForBlendedPass() : null,
+            Emissive = dynamicLights && Rendering.DynamicLightColor.Available ? new MaterialEmissiveMapFeature(new Rendering.DynamicLightColor()) : null,
             CullMode = mesh.IsTwoSided ? CullMode.None : CullMode.Back,
         };
         if (shader?.AlphaTestEnabled == true)

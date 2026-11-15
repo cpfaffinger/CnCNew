@@ -146,6 +146,10 @@ internal sealed class ModelAsset
     /// <summary>Approximate <c>GeometryInfo::getMaxHeightAbovePosition</c> (max rest-pose Z above the pivot), for the construction-rise offset.</summary>
     public float Height { get; }
 
+    /// <summary>The sphere around the rest pose of every part, in model space: what the original's render object has as its bounding sphere (the light pulses meet it).</summary>
+    public System.Numerics.Vector3 BoundsCenter { get; private init; }
+    public float BoundsRadius { get; private init; }
+
     /// <summary>How far the lowest point of the rest pose lies below the model origin (0 when nothing does): a grounded aircraft is lifted by this much so its landing gear stands on the surface.</summary>
     public float GroundClearance { get; private init; }
 
@@ -443,7 +447,12 @@ internal sealed class ModelAsset
         var hasHouseColor = meshInfos.Any(info => info.IsHouseColor) || skinParts.Any(part => part.Batches.Any(batch => batch.IsHouseColor));
 
         return new ModelAsset(name, services, model, neutralModel, rigidParts.ToArray(), meshInfos.ToArray(), skinParts.ToArray(),
-            radius, maxHeight <= 0 ? radius : maxHeight, hasHouseColor) { GroundClearance = minimum.Z < 0f && minimum.Z > -50f ? -minimum.Z : 0f };
+            radius, maxHeight <= 0 ? radius : maxHeight, hasHouseColor)
+        {
+            GroundClearance = minimum.Z < 0f && minimum.Z > -50f ? -minimum.Z : 0f,
+            BoundsCenter = minimum.X <= maximum.X ? (minimum + maximum) * 0.5f : System.Numerics.Vector3.Zero,
+            BoundsRadius = minimum.X <= maximum.X ? extent.Length() * 0.5f : 0f,
+        };
     }
 
     /// <summary>

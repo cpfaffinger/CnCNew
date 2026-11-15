@@ -76,7 +76,7 @@ public static class DrawSpecCompiler
             case "OkToChangeModelColor": b.OkToChangeModelColor = Bool(c, canonical, tokens, location, b.OkToChangeModelColor); break;
             case "AnimationsRequirePower": b.AnimationsRequirePower = Bool(c, canonical, tokens, location, b.AnimationsRequirePower); break;
             case "ParticlesAttachedToAnimatedBones": b.ParticlesAttached = Bool(c, canonical, tokens, location, b.ParticlesAttached); break;
-            case "ReceivesDynamicLights": Bool(c, canonical, tokens, location, true); break;
+            case "ReceivesDynamicLights": b.ReceivesDynamicLights = Bool(c, canonical, tokens, location, b.ReceivesDynamicLights); break;
             case "InitialRecoilSpeed" or "MaxRecoilDistance" or "RecoilDamping" or "RecoilSettleSpeed": Real(c, canonical, tokens, 0, location); Extra(c, canonical, tokens, 1, location); break;
             case "MinLODRequired": Index(c, canonical, tokens, LodNames, location); break;
             case "ProjectileBoneFeedbackEnabledSlots": BitString(c, canonical, tokens, WeaponSlots, 0, location); break;
@@ -494,6 +494,7 @@ public static class DrawSpecCompiler
         public bool OkToChangeModelColor;
         public bool AnimationsRequirePower = true;
         public bool ParticlesAttached;
+        public bool ReceivesDynamicLights = true;
         public string? TrackMarks;
         public List<string> ExtraPublicBones { get; } = [];
         public string? AttachToBone;
@@ -512,7 +513,7 @@ public static class DrawSpecCompiler
             }
             return new DrawSpec(Info.ModuleType, module.Tag, Info.Kind, states, defaultIndex,
                 [..Transitions.Select((state, index) => state.Build(index))], Ignore, OkToChangeModelColor, AnimationsRequirePower,
-                ParticlesAttached, TrackMarks, [..ExtraPublicBones], AttachToBone, [..Settings]);
+                ParticlesAttached, TrackMarks, [..ExtraPublicBones], AttachToBone, [..Settings]) { ReceivesDynamicLights = ReceivesDynamicLights };
         }
     }
 }

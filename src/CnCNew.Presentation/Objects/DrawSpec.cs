@@ -128,6 +128,12 @@ public sealed record DrawSpec(
 {
     public static string ModelPath(string model) => $"Art/W3D/{model}.w3d";
 
+    /// <summary>
+    /// <c>ReceivesDynamicLights</c> of a <c>W3DModelDraw</c> (default yes): a module that says no keeps its whole drawable out of the light pulses
+    /// (<c>W3DModelDraw::onDrawableBoundToObject</c> clears <c>Drawable::setReceivesDynamicLights</c>).
+    /// </summary>
+    public bool ReceivesDynamicLights { get; init; } = true;
+
     /// <summary>Every distinct turret bone name of the module's states (angle and pitch, main and alternate), ordinal order.</summary>
     public ImmutableArray<string> TurretBones => [..States.Concat(Transitions)
         .SelectMany(state => new[] { state.Turret.AngleBone, state.Turret.PitchBone, state.AltTurret.AngleBone, state.AltTurret.PitchBone })

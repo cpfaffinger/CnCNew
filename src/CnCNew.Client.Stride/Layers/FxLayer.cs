@@ -88,6 +88,7 @@ internal sealed class FxLayer : IWorldLayer
         var fx = frame.Match.Fx.Capture(_isVisible);
         var buildStart = Stopwatch.GetTimestamp();
         LastFrame = fx;
+        _services!.DynamicLights.Pulses = fx.Lights;
 
         var view = FxView.From(camera);
         // SnowManager keeps its own clock: game time, as far as it has run (W3DSnowManager::update takes the logic frame time).
@@ -122,6 +123,8 @@ internal sealed class FxLayer : IWorldLayer
             Console.WriteLine(_totals.Format(Stats));
             Console.WriteLine($"display-value pass: {_services?.DisplayValues?.FramesDrawn ?? 0} frames drawn, transparent stage {(_services?.DisplayValues?.TransparentStage is null ? "in linear light" : "included")}, encoding shader {DisplayValueOutput.State}");
             Console.WriteLine($"environment mapping: shader {EnvironmentMapColor.State}");
+            if (_services is { } services)
+                Console.WriteLine($"dynamic lights on objects: shader {DynamicLightColor.State}, {services.DynamicLights.FramesWithPulses} frames with pulses, {services.DynamicLights.ComponentsLit} model components and {services.DynamicLights.DrawsLit} draws lit (of {services.DynamicLights.DrawsWithShader} draws with the shader, {services.DynamicLights.DrawsOfTargets} of objects that take the pulses)");
         }
 
         _pool?.Dispose();
