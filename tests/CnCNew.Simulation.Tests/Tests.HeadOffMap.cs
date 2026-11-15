@@ -66,8 +66,8 @@ static partial class Tests
     }
 
     /// <summary>
-    /// The departing gunship flies on over the map's border and is deleted only in the frame that takes it beyond the border, not at the playable edge, in the same frame of the
-    /// original at 30, 60 and 120 Hz.
+    /// The departing gunship flies on over the map's border and is deleted only in the frame that takes it beyond the border, not at the playable edge, at the end of that frame,
+    /// in the same frame of the original at 30, 60 and 120 Hz.
     /// </summary>
     public static void ASpectreGunshipDepartsBeyondTheBorder()
     {
@@ -80,7 +80,7 @@ static partial class Tests
             Check.That(frames.Take(gone).Any(value => value.OffPlayable),
                 $"{rate}: the gunship still flies beyond the playable edge (last frame alive: {Describe(frames[gone - 1])}).");
             Check.That(frames.Take(gone).All(value => !value.OffBorder), $"{rate}: no frame of the alive gunship ends beyond the border (last: {Describe(frames[gone - 1])}).");
-            if (factor == 1) Check.That(frames[gone].OffBorder, $"{rate}: it is deleted in the frame that takes it beyond the border ({Describe(frames[gone])}).");
+            Check.That(frames[gone].OffBorder, $"{rate}: it is deleted at the end of the frame that takes it beyond the border ({Describe(frames[gone])}).");
             reference ??= gone;
             Check.That(gone == reference, $"{rate}: the gunship is deleted in departure frame {gone} (30 Hz: {reference}).");
         }

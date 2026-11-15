@@ -1233,6 +1233,12 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         // Observers read the ship where the frame it has begun ends.
         _flight.Publish(world.Time, world.Tick, Entity);
         world.MarkDirty(Entity);
+        if (_gone && world.Time.IsOriginalFrameBoundary(world.Tick + TickOrder.Next))
+        {
+            world.RequestDestroy(Entity.Id);
+            _status = GunshipStatus.Idle;
+            _gone = false;
+        }
         return SimulationTiming.SleepNone;
     }
 
@@ -1432,14 +1438,14 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     private (Fixed X, Fixed Y, Fixed Turn) Depart(IWorldServices world)
     {
         var step = Fly(world, Transit, Entity.X + FixedTrig.Cos(Entity.Angle) * Fixed.FromInt(99999), Entity.Y + FixedTrig.Sin(Entity.Angle) * Fixed.FromInt(99999));
-        var gone = world.Terrain is not null
+        _gone = world.Terrain is not null
             ? FlightModules.IsOffMapIncludingBorder(world, Entity.X, Entity.Y)
             : AirModules.Distance2D(Entity.X, Entity.Y, _initialTarget.X, _initialTarget.Y) > data.GunshipOrbitRadius * 4;
-        if (!gone) return step;
-        world.RequestDestroy(Entity.Id);
-        _status = GunshipStatus.Idle;
         return step;
     }
+
+    /// <summary>The departing ship's step of the running frame took it off the map: it is removed at the end of that frame (above 30 Hz its last tick, where the step is flown).</summary>
+    private bool _gone;
 
     /// <summary><c>cleanUp</c>: the gattling is destroyed.</summary>
     private void CleanUp(IWorldServices world)
@@ -1472,6 +1478,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             writer.Int("strafeLeft", _strafeLeft);
             DumbProjectileBehavior.WritePoint(writer, "strafeShare", _strafeShare);
         }
+        if (_gone) writer.Bool("gone", true);
     }
 
     public override void Load(IStateReader reader)
@@ -1494,5 +1501,6 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _flight.Load(reader, "flightStep");
         _strafeLeft = reader.Has("strafeLeft") ? checked((int)reader.Int("strafeLeft")) : 0;
         _strafeShare = _strafeLeft > 0 ? DumbProjectileBehavior.ReadPoint(reader, "strafeShare") : default;
+        _gone = reader.Has("gone") && reader.Bool("gone");
     }
 }
