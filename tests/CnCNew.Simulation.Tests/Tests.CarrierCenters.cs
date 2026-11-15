@@ -19,7 +19,7 @@ static partial class Tests
 {
     /// <summary>
     /// Real data (#319, the owner's playtest of 13 November 2026): a computer player with two supply centers sent every gatherer to one source and flew each load the whole way to its first
-    /// center. America against China on Alpine Assault (seed 10; seed 3 until #360), 15 game minutes at 30, 60 and 120 Hz: America builds a second center beside the other source (at 60 and
+    /// center. America against China on Alpine Assault (seed 10; seed 3 until #360), until five game minutes after the second center stands (at most 25), at 30, 60 and 120 Hz: America builds a second center beside the other source (at 60 and
     /// 120 Hz both centers have supplies in reach for about half a minute; since #339 the AI's second center mostly stands only as the first source runs dry, which most seeds show). Before the fix the first center's Chinooks (their home base was the center they delivered to last) gathered at the second source and flew
     /// 941 units back to the first center with every load, and the new Chinooks were made at the first center and stayed with it. Now every gatherer belongs to a center that has supplies
     /// in reach (<c>AIPlayer::onUnitProduced</c>, <c>queueSupplyTruck</c>): once two centers stand, (1) both centers receive deliveries while both have supplies in reach, and (2) at most
@@ -58,7 +58,8 @@ static partial class Tests
             var deliveries = 0;
             var twoCenters = false;
             var bothFedTicks = 0;
-            var end = rate.TicksPerSecond * 60 * 15;
+            // Until five minutes after the second center stands (#360: when it stands moves with every change of the match's course), at most 25 minutes.
+            var end = (long)rate.TicksPerSecond * 60 * 25;
             while (world.Tick < end && !session.IsOver)
             {
                 var result = session.Step();
@@ -74,6 +75,7 @@ static partial class Tests
                 }
                 var centers = Centers();
                 if (centers.Length < 2 || result.Events is not { } events) continue;
+                if (!twoCenters) end = Math.Min(end, world.Tick + rate.TicksPerSecond * 60 * 5);
                 twoCenters = true;
                 var fedNow = centers.Count(Fed) >= 2;
                 if (fedNow) bothFedTicks++;
