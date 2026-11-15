@@ -827,7 +827,8 @@ public sealed partial class SimulationWorld
         foreach (var module in other.ModuleArray)
             if (module is SquishCollide) { squishable = true; break; }
         if (!squishable || SpareFromSquish(other, mover)) return;
-        if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
+        // "Order matters: we want to know if IT considers ME to be an ally": the crusher's view of the victim (Object::getRelationship, with a script's team relationships).
+        if (RelationshipBetween(mover, other) == Relationship.Allies) return;
         if (Array.Find(mover.ModuleArray, module => module is PhysicsBehavior) is null) return;
         // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlap); 30 Hz: its position.
         var (otherX, otherY, otherZ) = other.FrameEnd(_tick);

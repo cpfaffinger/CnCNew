@@ -226,4 +226,14 @@ static partial class Tests
             Check.That(!RunOver(rate, "SquishTankWithoutPhysics", "SquishSoldier", "none").Crushed, $"{rate}: a tank without a physics module squishes nobody.");
         }
     }
+
+    /// <summary>
+    /// #370: "order matters: we want to know if IT considers ME to be an ally" - the crusher's view of the victim decides. A soldier whose player takes the tank's player for an ally, while the
+    /// tank's player takes it for an enemy, is squished. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void SquishAsksTheCrushersView()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+            Check.That(RunOver(rate, "SquishTank", "SquishSoldier", "none", [(2, 1, Relationship.Allies)]).Crushed, $"{rate}: a soldier that takes the tank for an ally, which takes it for an enemy, is squished.");
+    }
 }
