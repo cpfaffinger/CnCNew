@@ -818,7 +818,7 @@ public sealed partial class SimulationWorld
     /// this tick (<paramref name="stepX"/>/<paramref name="stepY"/>, exactly what was just added to its position) rather than
     /// a velocity rebuilt from <c>Angle</c>/<c>Speed</c> through <c>Sin</c>/<c>Cos</c>: close to a victim lying exactly on the
     /// heading, the rebuilt vector's fixed-point rounding can disagree in sign with the true step, which the real displacement
-    /// cannot.
+    /// cannot. A crusher without a physics module squishes nothing (<c>otherPhysics == NULL</c>).
     /// </summary>
     private void TrySquish(Entity mover, Entity other, Fixed stepX, Fixed stepY)
     {
@@ -827,6 +827,7 @@ public sealed partial class SimulationWorld
             if (module is SquishCollide) { squishable = true; break; }
         if (!squishable) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
+        if (Array.Find(mover.ModuleArray, module => module is PhysicsBehavior) is null) return;
         // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlap); 30 Hz: its position.
         var (otherX, otherY, otherZ) = other.FrameEnd(_tick);
         // "use a 1.0 crush radius so the tank has to actually hit the infantry": the crusher's shape against the victim's with both its radii 1 (geomCollidesWithGeom).
@@ -842,4 +843,5 @@ public sealed partial class SimulationWorld
         if (dx * dx + dy * dy >= beforeDx * beforeDx + beforeDy * beforeDy) return;
         Damage(other.Id, new DamageInfo(mover.Id, HugeDamage, CrushDamageType, DeathTypes.Crushed, false));
     }
+
 }

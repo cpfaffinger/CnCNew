@@ -35,6 +35,9 @@ static partial class Tests
         End
         Object AcqSlowTank
           CrusherLevel = 2
+          Behavior = PhysicsBehavior CrushPhysics01
+            Mass = 50.0
+          End
           KindOf = SELECTABLE VEHICLE
           VisionRange = 150.0
           Locomotor = SET_NORMAL ChaseLoco
@@ -135,6 +138,9 @@ static partial class Tests
         End
         Object AcqTank
           CrusherLevel = 2
+          Behavior = PhysicsBehavior CrushPhysics01
+            Mass = 50.0
+          End
           KindOf = SELECTABLE VEHICLE
           VisionRange = 150.0
           Locomotor = SET_NORMAL ChaseLoco

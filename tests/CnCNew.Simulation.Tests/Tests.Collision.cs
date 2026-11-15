@@ -43,6 +43,9 @@ static partial class Tests
         Object Crusher
           KindOf = SELECTABLE VEHICLE
           CrusherLevel = 2
+          Behavior = PhysicsBehavior CrushPhysics01
+            Mass = 50.0
+          End
           Geometry = CYLINDER
           GeometryMajorRadius = 5.0
           GeometryMinorRadius = 5.0
@@ -59,6 +62,9 @@ static partial class Tests
         Object WeakCrusher
           KindOf = SELECTABLE VEHICLE
           CrusherLevel = 1
+          Behavior = PhysicsBehavior CrushPhysics01
+            Mass = 50.0
+          End
           Geometry = CYLINDER
           GeometryMajorRadius = 5.0
           GeometryMinorRadius = 5.0
@@ -287,6 +293,9 @@ static partial class Tests
         Object Juggernaut
           KindOf = SELECTABLE VEHICLE
           CrusherLevel = 3
+          Behavior = PhysicsBehavior CrushPhysics01
+            Mass = 50.0
+          End
           CrushableLevel = 3
           Geometry = BOX
           GeometryMajorRadius = 15.0

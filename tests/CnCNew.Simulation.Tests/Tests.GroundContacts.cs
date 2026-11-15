@@ -34,6 +34,9 @@ static partial class Tests
         Object ContactTank
           KindOf = SELECTABLE VEHICLE
           CrusherLevel = 2
+          Behavior = PhysicsBehavior CrushPhysics01
+            Mass = 50.0
+          End
           Geometry = BOX
           GeometryMajorRadius = 15.0
           GeometryMinorRadius = 6.0
