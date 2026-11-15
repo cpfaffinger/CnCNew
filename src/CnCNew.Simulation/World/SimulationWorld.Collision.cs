@@ -22,8 +22,8 @@ public sealed partial class SimulationWorld
     private static readonly int CrushDamageType = NameTables.DamageType.TryIndexOf("CRUSH", out var crush)
         ? crush : throw new InvalidOperationException("CRUSH is not a damage type.");
 
-    // The victim-side crush test in SquishCollide.cpp forces the victim's geometry radius to 1.0 ("so the tank has to
-    // actually hit the infantry") regardless of its real bounding circle.
+    // The victim-side crush test in SquishCollide.cpp sets both radii of the victim's geometry to 1.0 ("so the tank has to
+    // actually hit the infantry") and tests it against the crusher's own geometry (geomCollidesWithGeom).
     private static readonly Fixed SquishVictimRadius = Fixed.One;
 
     // Rotation offsets AvoidLocalBlockers tries in order: right first (arbitrary but deterministic), then left, each
@@ -652,31 +652,52 @@ public sealed partial class SimulationWorld
         }
     }
 
+    /// <summary>
+    /// <c>PartitionData::collidesWith</c> (<see cref="CollideShapes"/>), which <c>PartitionContactList::processContactList</c> asks of every pair before it calls <c>onCollide</c>: the shapes -
+    /// a box with its angle, a cylinder with its height, a sphere - not the bounding circles, so a unit beside the corner of a long minefield or crate, inside its circle and outside its box,
+    /// touches nothing. Both objects are read where the frame they have begun ends: above 30 Hz the test runs in the first tick of the mover's frame with the mover standing where that
+    /// frame ends (<c>AIUpdateInterface.CollideWhereTheFrameEnds</c>), and the other object is read after its whole step if it has had its turn in this tick, after its previous one
+    /// otherwise - what the 30 Hz step reads (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). 30 Hz: the positions.
+    /// </summary>
     private bool FootprintsOverlap(Entity a, Entity b)
     {
         if (OnAnotherLevel(a, b)) return false;
-        if (_firstFrameTicks != TickOrder.Next) return FootprintsOverlapAtFrameEnd(a, b);
-        var limit = CircleRadius(a) + CircleRadius(b);
-        if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;
-        var dx = a.X - b.X;
-        var dy = a.Y - b.Y;
-        return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
+        var tick = _tick;
+        var (ax, ay, az) = a.FrameEnd(tick);
+        var (bx, by, bz) = b.FrameEnd(tick);
+        var (aKind, aReach) = ShapeKind(a);
+        var (bKind, bReach) = ShapeKind(b);
+        var reach = aReach + bReach;
+        if (FurtherThan(ax, bx, reach) || FurtherThan(ay, by, reach)) return false;
+        return CollideShapes.Collides(a, CollideShape.Of(aKind, a.Template, ax, ay, az, a.FrameEndAngle(tick)), b, CollideShape.Of(bKind, b.Template, bx, by, bz, b.FrameEndAngle(tick)));
     }
 
-    /// <summary>
-    /// Above 30 Hz: the overlap test of a mover's collision check, which runs in the first tick of the mover's frame with the mover standing where that frame ends
-    /// (<c>AIUpdateInterface.CollideWhereTheFrameEnds</c>). The other object is read where the frame it has begun ends: one that has had its turn in this tick after its
-    /// whole step, one that has not after its previous one - what the 30 Hz step reads (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3).
-    /// </summary>
-    private bool FootprintsOverlapAtFrameEnd(Entity a, Entity b)
+    // The kind of a template's geometry and how far its shape reaches (CollideShape.Reach), remembered per template like its bounding circle (CircleRadius).
+    private (CollideGeometry Kind, Fixed Reach)[] _shape = new (CollideGeometry, Fixed)[256];
+    private bool[] _shapeKnown = new bool[256];
+
+    private (CollideGeometry Kind, Fixed Reach) ShapeKind(Entity entity)
     {
-        var limit = CircleRadius(a) + CircleRadius(b);
-        var (ax, ay, _) = a.FrameEnd(_tick);
-        var (bx, by, _) = b.FrameEnd(_tick);
-        if (FurtherThan(ax, bx, limit) || FurtherThan(ay, by, limit)) return false;
-        var dx = ax - bx;
-        var dy = ay - by;
-        return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
+        var index = entity.Template.Index;
+        var known = _shapeKnown;
+        return (uint)index < (uint)known.Length && known[index] ? _shape[index] : RememberShape(entity.Template);
+    }
+
+    private (CollideGeometry Kind, Fixed Reach) RememberShape(Templates.ObjectTemplate template)
+    {
+        var kind = CollideShape.KindOf(template);
+        var shape = (kind, CollideShape.ReachOf(kind, template));
+        var index = template.Index;
+        if (index < 0) return shape;
+        if (index >= _shapeKnown.Length)
+        {
+            var size = Math.Max(index + 1, _shapeKnown.Length * 2);
+            Array.Resize(ref _shape, size);
+            Array.Resize(ref _shapeKnown, size);
+        }
+        _shape[index] = shape;
+        _shapeKnown[index] = true;
+        return shape;
     }
 
     /// <summary><c>ToppleUpdate.cpp onCollide</c>: a crusher above level 1 running into a toppable, upright object pushes it over, away from itself.</summary>
@@ -690,7 +711,7 @@ public sealed partial class SimulationWorld
             // The force is the pusher's speed per logic frame of the original (Entity.Speed is per tick: half the push at 60 Hz).
             var stride = Time.TicksPerOriginalFrame;
             var speed = stride == 1 ? mover.Speed : AiOf(mover) is { } ai ? ai.SpeedPerOriginalFrame(stride) : mover.Speed * stride;
-            // Above 30 Hz the test runs with the mover where its frame ends; the other object is read where its own begun frame ends (FootprintsOverlapAtFrameEnd).
+            // Above 30 Hz the test runs with the mover where its frame ends; the other object is read where its own begun frame ends (FootprintsOverlap).
             var (otherX, otherY, _) = other.FrameEnd(_tick);
             topple.ApplyTopplingForce(this, otherX - mover.X, otherY - mover.Y, speed);
             return;
@@ -766,12 +787,14 @@ public sealed partial class SimulationWorld
             if (module is SquishCollide) { squishable = true; break; }
         if (!squishable) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
-        var limit = CircleRadius(mover) + SquishVictimRadius;
-        // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlapAtFrameEnd); 30 Hz: its position.
-        var (otherX, otherY, _) = other.FrameEnd(_tick);
+        // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlap); 30 Hz: its position.
+        var (otherX, otherY, otherZ) = other.FrameEnd(_tick);
+        // "use a 1.0 crush radius so the tank has to actually hit the infantry": the crusher's shape against the victim's with both its radii 1 (geomCollidesWithGeom).
+        var crusher = CollideShape.Of(ShapeKind(mover).Kind, mover.Template, mover.X, mover.Y, mover.Z, mover.Angle);
+        var victim = CollideShape.Of(ShapeKind(other).Kind, other.Template, otherX, otherY, otherZ, other.FrameEndAngle(_tick)).WithRadius(SquishVictimRadius);
+        if (!CollideShapes.GeometriesCollide(crusher, victim)) return;
         var dx = otherX - mover.X;
         var dy = otherY - mover.Y;
-        if (!SquaredReach.Of(limit).Contains(dx * dx + dy * dy)) return;
         // The position just before this tick's step: a victim this close is "approached" unless the mover was moving away
         // from it even a moment ago.
         var beforeDx = otherX - (mover.X - stepX);

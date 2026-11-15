@@ -620,6 +620,7 @@ run.Test("Combat drop: the riders come down the ropes at a place", Tests.CombatD
 run.Test("Combat drop: into a building, and what is in it dies", Tests.CombatDropIntoABuilding);
 run.Test("Projectiles: a shell meets what stands in its way", Tests.ProjectilesMeetWhatStandsInTheirWay);
 run.Test("F-175: a projectile meets the shape of a building, not its sphere", Tests.AProjectileMeetsTheShapeOfABuilding);
+run.Test("#363: ground contacts meet the shapes, not the bounding circles", Tests.GroundContactsMeetTheShapes);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
 run.Test("Group move: a click into the group gathers it", Tests.AClickIntoTheGroupGathersIt);

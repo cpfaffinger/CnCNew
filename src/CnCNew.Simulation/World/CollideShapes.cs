@@ -23,16 +23,34 @@ internal readonly record struct CollideShape(CollideGeometry Kind, Fixed X, Fixe
     /// names none - the original's default is a sphere of radius 1 (<c>ThingTemplate</c>'s <c>m_geometryInfo(GEOMETRY_SPHERE, FALSE, 1, 1, 1)</c>), a difference of the template, not of
     /// this test.
     /// </summary>
-    public static CollideShape Of(ObjectTemplate template, Fixed x, Fixed y, Fixed z, Fixed angle)
+    public static CollideShape Of(ObjectTemplate template, Fixed x, Fixed y, Fixed z, Fixed angle) => Of(KindOf(template), template, x, y, z, angle);
+
+    /// <summary><see cref="Of(ObjectTemplate, Fixed, Fixed, Fixed, Fixed)"/> with the template's kind already known (<see cref="KindOf"/>).</summary>
+    public static CollideShape Of(CollideGeometry kind, ObjectTemplate template, Fixed x, Fixed y, Fixed z, Fixed angle)
+    {
+        var radius = template.GeometryMajorRadius;
+        return kind switch
+        {
+            CollideGeometry.Box => new(CollideGeometry.Box, x, y, z, radius, template.GeometryMinorRadius, template.GeometryHeight, angle),
+            CollideGeometry.Sphere => new(CollideGeometry.Sphere, x, y, z, radius, radius, radius, angle),
+            _ => new(CollideGeometry.Cylinder, x, y, z, radius, radius, template.GeometryHeight, angle),
+        };
+    }
+
+    /// <summary>The kind of the template's geometry as <see cref="Of(ObjectTemplate, Fixed, Fixed, Fixed, Fixed)"/> reads it: a template without a <c>Geometry</c> is a cylinder.</summary>
+    public static CollideGeometry KindOf(ObjectTemplate template)
     {
         var geometry = template.Geometry;
-        if (geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase))
-            return new(CollideGeometry.Box, x, y, z, template.GeometryMajorRadius, template.GeometryMinorRadius, template.GeometryHeight, angle);
-        var radius = template.GeometryMajorRadius;
-        return geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase)
-            ? new(CollideGeometry.Sphere, x, y, z, radius, radius, radius, angle)
-            : new(CollideGeometry.Cylinder, x, y, z, radius, radius, template.GeometryHeight, angle);
+        if (geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase)) return CollideGeometry.Box;
+        return geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase) ? CollideGeometry.Sphere : CollideGeometry.Cylinder;
     }
+
+    /// <summary><see cref="Reach"/> of an object of the template, however it stands.</summary>
+    public static Fixed ReachOf(CollideGeometry kind, ObjectTemplate template)
+        => kind == CollideGeometry.Box ? template.GeometryMajorRadius + template.GeometryMinorRadius : template.GeometryMajorRadius + template.GeometryMajorRadius;
+
+    /// <summary>The same shape with both radii set (<c>GeometryInfo::setMajorRadius</c> and <c>setMinorRadius</c>), its kind and height kept.</summary>
+    public CollideShape WithRadius(Fixed radius) => this with { Major = radius, Minor = radius };
 
     /// <summary><c>GeometryInfo::getMaxHeightAbovePosition</c>.</summary>
     public Fixed Top => Z + (Kind == CollideGeometry.Sphere ? Major : Height);
@@ -65,6 +83,21 @@ internal static class CollideShapes
     {
         // "invariant for all geometries: first do z collision check."
         if (a.Top < b.Bottom || a.Bottom > b.Top) return false;
+        return ShapesTouch(a, b);
+    }
+
+    /// <summary>
+    /// <c>PartitionManager::geomCollidesWithGeom</c>: the same tests for two shapes that need not be objects' (<c>SquishCollide</c> asks it with the victim's radii set to 1). Its height
+    /// check reads only what lies above each position - a sphere's lower half does not count, unlike <see cref="Collides(in CollideShape, in CollideShape)"/>.
+    /// </summary>
+    public static bool GeometriesCollide(in CollideShape a, in CollideShape b)
+    {
+        if (a.Top < b.Z || a.Z > b.Top) return false;
+        return ShapesTouch(a, b);
+    }
+
+    private static bool ShapesTouch(in CollideShape a, in CollideShape b)
+    {
         // Nothing the shapes can reach on either axis - not in the original, which has the partition's cells for this.
         var reach = a.Reach + b.Reach;
         if ((a.X - b.X).Abs() > reach || (a.Y - b.Y).Abs() > reach) return false;
