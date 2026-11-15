@@ -286,6 +286,7 @@ run.Test("Phase 41 (F-55e): the approach of an attack goes where it can fire (fi
 run.Test("Phase 63 (F-143): the approach of an attacker with a minimum range keeps the range (findAttackPath)", Tests.AttackApproachKeepsTheMinimumRange);
 run.Test("Phase 41: a destroyed rider leaves its container (Object::onDestroy)", Tests.DestroyedRiderLeavesItsContainer);
 run.Test("Phase 41 (F-61): a garrisoned building belongs to its occupants (recalcApparentControllingPlayer, canEnterObject)", Tests.GarrisonBelongsToItsOccupants);
+run.Test("#305: a garrison lets its dead rider go in the frame after its death, at 30, 60 and 120 Hz", Tests.AGarrisonLetsItsDeadRiderGoInTheNextFrame);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);
 run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED weapon bonus while inside", Tests.FireFromContainersGarrisonedBonus);

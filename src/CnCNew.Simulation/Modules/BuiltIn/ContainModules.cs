@@ -656,20 +656,23 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     public override long Update(IWorldServices world)
     {
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var frameBegins = ticks == TickOrder.Next || (world.Tick - Entity.SpawnTick) % ticks == 0;
+        // OpenContain::update prunes the dead once per logic frame of the original: a rider killed after the building's update is gone in its next frame. Above 30 Hz the
+        // building's update in a later tick of the same frame took it out a frame early, and the building changed hands a frame early (#305).
         var before = Riders.Count;
-        PruneDead(world);
+        if (frameBegins) PruneDead(world);
         if (Riders.Count != before) RecalcControllingPlayer(world);
         var waiting = _pendingRoster.Count > 0 && ContainChainModules.EnterPayload(world, Entity, _pendingRoster);
         // matchObjectsToGarrisonPoints, once per logic frame of the original, in the first tick of the building's own frame (the rider's acquisition decides there too).
-        var ticks = world.Time.TicksPerOriginalFrame;
-        if (data.IsEnclosingContainer && Riders.Count > 0 && (ticks == TickOrder.Next || (world.Tick - Entity.SpawnTick) % ticks == 0)) world.MatchGarrisonPoints(Entity, this);
+        if (data.IsEnclosingContainer && Riders.Count > 0 && frameBegins) world.MatchGarrisonPoints(Entity, this);
         if (data.HealObjects)
             foreach (var riderId in Riders.ToArray())
             {
                 var rider = world.FindEntity(riderId);
                 if (rider?.Body is not null) HealOne(world, rider);
             }
-        return waiting || data.HealObjects || (data.IsEnclosingContainer && Riders.Count > 0) ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return waiting || data.HealObjects || (data.IsEnclosingContainer && Riders.Count > 0) || (!frameBegins && Riders.Count > 0) ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
