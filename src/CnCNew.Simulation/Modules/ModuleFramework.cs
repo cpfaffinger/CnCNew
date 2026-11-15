@@ -405,6 +405,12 @@ public interface IWorldServices
     /// <summary><c>ActionManager::canEnterObject</c> with <c>DONT_CHECK_CAPACITY</c> (<c>privateEnter</c>'s test): whether <paramref name="actor"/> may enter <paramref name="container"/> if there were room.</summary>
     bool MayEnterIgnoringRoom(Entity actor, Entity container);
 
+    /// <summary>
+    /// <c>AIEnterState::update</c>'s special case for a container the object may no longer enter: when it belongs to an enemy (a building the enemy garrisoned first), the object attacks it
+    /// instead (<c>aiAttackObject</c> without a shot limit, with the enter order's command source); false when the container is no enemy's or the object cannot attack it.
+    /// </summary>
+    bool AttackInsteadOfEntering(Entity unit, Entity container, bool fromPlayer);
+
     /// <summary>The arrival half of <c>aiEnter</c>: puts <paramref name="actor"/> into <paramref name="container"/> when the container accepts it; false leaves both untouched.</summary>
     bool TryEnterContainer(Entity actor, Entity container);
 

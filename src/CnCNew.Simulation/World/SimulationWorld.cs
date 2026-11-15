@@ -509,6 +509,23 @@ public sealed partial class SimulationWorld : IWorldServices
     public bool MayEnterIgnoringRoom(Entity actor, Entity container)
         => container.Container is { } inside && MayEnterAsOwner(actor, container) && inside.IsValidContainerFor(this, actor, false);
 
+    /// <inheritdoc cref="IWorldServices.AttackInsteadOfEntering"/>
+    public bool AttackInsteadOfEntering(Entity unit, Entity container, bool fromPlayer)
+    {
+        if (AiOf(unit) is not { } ai || container.DestroyRequested || container.EffectivelyDead || container.Body is null) return false;
+        if (RelationshipBetween(unit, container) != Relationship.Enemies) return false;
+        // getCanAttackObject(ATTACK_NEW_TARGET): ATTACKRESULT_POSSIBLE or ATTACKRESULT_POSSIBLE_AFTER_MOVING - some weapon of the unit can hurt the container, from here or after a walk.
+        if (!CanAttack(unit, container, false, out var firesFromHere)) return false;
+        // aiAttackObject: what an attack order on an object does (the execution of a PursueCommand) - a unit that cannot fire from where it stands goes where it can.
+        var (x, y) = (container.X, container.Y);
+        if (!firesFromHere && FindAttackPosition(unit, container) is { } place) (x, y) = place;
+        ai.OrderMove(this, x, y, fromPlayer);
+        ai.NotePursuit(container.Id);
+        BeginPursuit(unit, container);
+        NoteOrderedAttack(unit, container);
+        return true;
+    }
+
     /// <summary><c>canEnterObject</c>'s capacity test: skipped for another player's building held by stealth riders only (it looks empty).</summary>
     private bool EnterChecksRoom(Entity actor, Entity container)
         => container.Owner == actor.Owner || container.Container is not { ContainCount: > 0 } inside || inside.StealthUnitsContained(this) == 0;

@@ -2017,6 +2017,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             _enterTarget = EntityId.Invalid;
             if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
+            // AIEnterState::update's special case (issue #372, "units stop instead of attacking if building they were trying to garrison is taken by enemy units first"): a
+            // container that belongs to an enemy now - a building the enemy garrisoned first - is attacked instead, with the enter order's command source.
+            if (!carriedAway) world.AttackInsteadOfEntering(Entity, container, _lastCommandFromPlayer);
             return;
         }
         if (Entity.HasMoveTarget)
