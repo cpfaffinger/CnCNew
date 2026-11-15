@@ -43,7 +43,58 @@ public static class ModelGeometryLoader
         }
 
         return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library), ReadRopes(graph, visuals, library),
-            ReadFlightDecks(graph, visuals, library));
+            ReadFlightDecks(graph, visuals, library), ReadDocks(graph, visuals, library));
+    }
+
+    /// <summary>The modules that derive from <c>DockUpdate</c> and so read their model's dock bones (<c>DockUpdate::loadDockPositions</c>).</summary>
+    private static readonly string[] DockModuleNames = ["SupplyCenterDockUpdate", "SupplyWarehouseDockUpdate", "RepairDockUpdate", "RailedTransportDockUpdate", "PrisonDockUpdate"];
+
+    /// <summary>
+    /// The dock bones of every object with a dock module (<see cref="DockBones"/>): <c>DockStart</c>, <c>DockAction</c> and <c>DockEnd</c> of the first draw module whose state without any
+    /// condition has them, and <c>DockWaiting01</c>, <c>DockWaiting02</c>, ... of each draw module's state until one is missing, in the draw modules' order
+    /// (<c>Drawable::getPristineBonePositions</c>, <c>W3DModelDraw::getPristineBonePositionsForConditionState</c>), scaled by the template's <c>Scale</c>. An object whose models have none of
+    /// them gets no entry. Whether the dock reads them at all (<c>KINDOF_IGNORE_DOCKING_BONES</c>) is the simulation's question.
+    /// </summary>
+    private static SortedDictionary<string, DockBones> ReadDocks(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        var docks = new SortedDictionary<string, DockBones>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            if (!definition.Modules.Any(value => DockModuleNames.Contains(value.Name, StringComparer.Ordinal)) || !visuals.TryGet(definition.OriginalName, out var visual)) continue;
+            var scale = Fixed.FromDecimal(ScaleOf(definition));
+            BonePose Scaled(BonePose pose) => pose with { X = pose.X * scale, Y = pose.Y * scale, Z = pose.Z * scale };
+            var skeletons = new List<(DrawSpec Draw, W3dSkeleton Skeleton)>();
+            foreach (var draw in visual.Draws)
+            {
+                if (BestStateSelector.FindBest(draw, ModelConditionSet.Empty) is not (var state and >= 0) || state >= draw.States.Length || draw.States[state].Model is not { } model) continue;
+                try
+                {
+                    skeletons.Add((draw, library.GetModel(model).Skeleton));
+                }
+                catch (W3dMissingAssetException exception)
+                {
+                    throw new InvalidDataException($"{definition.OriginalName}: model '{model}' cannot be loaded: {exception.Message}");
+                }
+            }
+            BonePose? Single(string name)
+            {
+                foreach (var (draw, skeleton) in skeletons)
+                    if (IsPublic(draw, name) && skeleton.FindBone(name) is var bone and >= 0) return Scaled(RestPose(skeleton, bone));
+                return null;
+            }
+            var waiting = ImmutableArray.CreateBuilder<BonePose>();
+            foreach (var (draw, skeleton) in skeletons)
+                for (var number = 1; number <= 99; number++)
+                {
+                    var name = "DockWaiting" + number.ToString("00", CultureInfo.InvariantCulture);
+                    if (!IsPublic(draw, name) || skeleton.FindBone(name) is not (var bone and >= 0)) break;
+                    waiting.Add(Scaled(RestPose(skeleton, bone)));
+                }
+            var (start, action, end) = (Single("DockStart"), Single("DockAction"), Single("DockEnd"));
+            if (start is null && action is null && end is null && waiting.Count == 0) continue;
+            docks[definition.OriginalName] = new DockBones(start, action, end, waiting.ToImmutable());
+        }
+        return docks;
     }
 
     /// <summary><c>FlightDeckBehavior::buildInfo</c>: the bones a carrier's module names, of its default model.</summary>
@@ -274,7 +325,7 @@ public static class ModelGeometryLoader
     }
 
     /// <summary>The bone names <c>GameData.ini</c>'s <c>StandardPublicBone</c> makes public for every model that matter here; any other name must be an <c>ExtraPublicBone</c> of the draw module.</summary>
-    private static readonly string[] StandardPublicBones = ["FirePoint"];
+    private static readonly string[] StandardPublicBones = ["FirePoint", "DockStart", "DockAction", "DockEnd", "DockWaiting"];
 
     /// <summary>The containers whose riders <c>OpenContain::redeployOccupants</c> puts at <c>FIREPOINTnn</c> (the Helix puts them above itself, <c>HelixContain::redeployOccupants</c>).</summary>
     private static readonly string[] FirePointTransports = ["TransportContain", "OverlordContain"];

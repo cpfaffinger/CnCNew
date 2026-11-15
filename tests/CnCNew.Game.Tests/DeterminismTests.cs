@@ -36,9 +36,9 @@ internal static class DeterminismTests
 
     /// <summary>
     /// SHA-256 of the airfield bone table (<c>ModelGeometry.Fingerprint</c>) of the retail content. It is part of the world fingerprint; a different value on another machine means the inputs differ before a single tick ran.
-    /// The table is hashed as raw fixed-point values: the value changed with the resolution (phase 22, 24 fraction bits; at 16 it was 93D5819B…F1DA47). The poses are the same numbers, quantised as before. Since phase 31 the table also carries the exit bones of the door containers (F-03); with the airfields alone it was EA1915EB…DAC858. Since phase 41 it carries the fire points and stations of garrisons and transports (F-60, step 1); before, 4ECE1638…A0C980A. Since the turret pivot of PassengersInTurret (F-60, step 4) it is 843CCD2C…1591514; with the points alone E1A2A799…88E484C7. Since Phase 58 it carries the flight deck's runway bones (FlightDeckLayout); before, 62ABC205…DFEBEDB1.
+    /// The table is hashed as raw fixed-point values: the value changed with the resolution (phase 22, 24 fraction bits; at 16 it was 93D5819B…F1DA47). The poses are the same numbers, quantised as before. Since phase 31 the table also carries the exit bones of the door containers (F-03); with the airfields alone it was EA1915EB…DAC858. Since phase 41 it carries the fire points and stations of garrisons and transports (F-60, step 1); before, 4ECE1638…A0C980A. Since the turret pivot of PassengersInTurret (F-60, step 4) it is 843CCD2C…1591514; with the points alone E1A2A799…88E484C7. Since Phase 58 it carries the flight deck's runway bones (FlightDeckLayout); before, 62ABC205…DFEBEDB1. Since #354 it carries the dock bones (DockBones); before, 60C5AF55…231BF32B.
     /// </summary>
-    private const string BoneTableGolden = "60C5AF5530FCB7FBF8790F558CBE8F7DBCE1AC72FEC84DCF4903A4D5231BF32B";
+    private const string BoneTableGolden = "316DBF2C1068477C48145156E0FB7328B7DE34A82577787BF6AD19A9491FFCF3";
 
     public static int Run(string[] args)
     {

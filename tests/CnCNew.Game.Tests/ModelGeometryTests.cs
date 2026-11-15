@@ -87,6 +87,20 @@ internal static class ModelGeometryTests
             TestHarness.Assert(ropes.TryGetValue("AmericaVehicleChinook", out var chinook) && chinook.Length >= 2 && chinook.All(rope => rope.Start is not null && rope.End is not null), $"the America Chinook has its rope bones ({ropes.Count} objects)");
         });
 
+        harness.Run("Model geometry: the dock bones of the docks (DockUpdate::loadDockPositions)", () =>
+        {
+            var docks = data.Templates.Geometry.Docks;
+            foreach (var pair in docks.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                Console.WriteLine($"       dock {pair.Key}: start {pair.Value.Start?.ToString() ?? "-"}, action {pair.Value.Action?.ToString() ?? "-"}, end {pair.Value.End?.ToString() ?? "-"}, {pair.Value.Waiting.Length} waiting");
+            // ABSUPPLYCT.W3D (tools/CnCNew.W3dTool bones): DOCKSTART = DOCKACTION = DOCKEND (20.198, -15.964, 0.607), DOCKWAITING01 (67.609, -16.578), DOCKWAITING09 (-79.493, -53.233).
+            static bool Near(Fixed value, decimal expected) => Math.Abs(value.ToDecimal() - expected) <= 0.07m;
+            var center = docks["AmericaSupplyCenter"];
+            TestHarness.Assert(center.Start is { } start && Near(start.X, 20.198m) && Near(start.Y, -15.964m) && Near(start.Z, 0.607m) && center.Action == center.Start && center.End == center.Start,
+                $"the American supply center's way in, action and way out are the model's: {center.Start}, {center.Action}, {center.End}");
+            TestHarness.Assert(center.Waiting.Length == 9 && Near(center.Waiting[0].X, 67.609m) && Near(center.Waiting[0].Y, -16.578m) && Near(center.Waiting[8].X, -79.493m) && Near(center.Waiting[8].Y, -53.233m),
+                $"its nine approach places DockWaiting01..09 in their order ({center.Waiting.Length})");
+        });
+
         harness.Run("Model geometry: the exit bones of the door containers (OpenContain::exitObjectViaDoor)", () =>
         {
             var exits = data.Templates.Geometry.ExitPaths;

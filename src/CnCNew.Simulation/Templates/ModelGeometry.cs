@@ -71,6 +71,14 @@ public sealed record LaunchSlot(ImmutableArray<LaunchBarrel> Barrels, ImmutableA
 /// <summary>The launch points of an object's weapon slots (<c>Weapon::calcProjectileLaunchPosition</c>), one entry per slot.</summary>
 public sealed record WeaponLaunchPoints(ImmutableArray<LaunchSlot> Slots);
 
+/// <summary>
+/// The bones of a dock's model that <c>DockUpdate::loadDockPositions</c> reads (<c>Drawable::getPristineBonePositions</c>, over the draw modules in order, in the object's frame and scaled by the
+/// template's <c>Scale</c>): <c>DockStart</c>, <c>DockAction</c>, <c>DockEnd</c> (the way into the dock, the place of its action, the way out; a bone the model does not have is
+/// <see langword="null"/>, which the original keeps as the zero vector) and the consecutive <c>DockWaitingNN</c> from <c>01</c> (the approach places, best first). The module takes at
+/// most its <c>NumberApproachPositions</c> of them.
+/// </summary>
+public sealed record DockBones(BonePose? Start, BonePose? Action, BonePose? End, ImmutableArray<BonePose> Waiting);
+
 /// <summary>The lateral extent of a bridge model's left section, unscaled (<c>W3DBridge::load</c>: <c>m_minY</c>, <c>m_maxY</c>): how wide the deck is around the line between the bridge's two points.</summary>
 public readonly record struct BridgeDeck(Fixed MinY, Fixed MaxY);
 
@@ -105,10 +113,13 @@ public sealed class ModelGeometry
     /// <summary>The ropes of a Chinook by template name (case-insensitive): the bones <c>RopeStartNN</c> and <c>RopeEndNN</c> in the object's frame (<c>ChinookCombatDropState::onEnter</c>).</summary>
     public ImmutableDictionary<string, ImmutableArray<ExitPath>> Ropes { get; }
 
+    /// <summary>The dock bones of the templates with a dock module by name (case-insensitive); a template without an entry has a model without any of them (a boneless dock).</summary>
+    public ImmutableDictionary<string, DockBones> Docks { get; }
+
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty && FlightDecks.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty && FlightDecks.IsEmpty && Docks.IsEmpty;
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
 
@@ -118,8 +129,9 @@ public sealed class ModelGeometry
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths,
         IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null,
         IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>>? ropes = null,
-        IEnumerable<KeyValuePair<string, FlightDeckLayout>>? flightDecks = null)
+        IEnumerable<KeyValuePair<string, FlightDeckLayout>>? flightDecks = null, IEnumerable<KeyValuePair<string, DockBones>>? docks = null)
     {
+        Docks = (docks ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         FlightDecks = (flightDecks ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Ropes = (ropes ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Airfields = airfields.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
@@ -181,6 +193,13 @@ public sealed class ModelGeometry
             static string Barrel(LaunchBarrel value) => string.Create(CultureInfo.InvariantCulture, $"{value.X.Raw},{value.Y.Raw},{value.Z.Raw},{value.ForwardX.Raw},{value.ForwardY.Raw},{value.ForwardZ.Raw}");
             static string Turret(LaunchTurret value) => string.Create(CultureInfo.InvariantCulture, $"{value.AngleX.Raw},{value.AngleY.Raw},{value.AngleZ.Raw},{value.PitchX.Raw},{value.PitchY.Raw},{value.PitchZ.Raw},{value.ArtAngle.Raw},{value.ArtPitch.Raw}");
             text.Append(CultureInfo.InvariantCulture, $"launch {pair.Key.ToUpperInvariant()} {string.Join("|", pair.Value.Slots.Select(slot => string.Join(";", slot.Barrels.Select(Barrel)) + "/" + string.Join(";", slot.Turrets.Select(Turret))))}\n");
+        }
+        // Written only when the table has docks: a table without them keeps its fingerprint.
+        foreach (var pair in Docks.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
+        {
+            static string Bone(BonePose? pose) => pose is { } value ? Pose(value) : "-";
+            var dock = pair.Value;
+            text.Append(CultureInfo.InvariantCulture, $"dock {pair.Key.ToUpperInvariant()} {Bone(dock.Start)}|{Bone(dock.Action)}|{Bone(dock.End)}|{string.Join(";", dock.Waiting.Select(Pose))}\n");
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
