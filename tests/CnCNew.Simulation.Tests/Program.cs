@@ -973,6 +973,7 @@ if (contentDirectory is not null) run.Test("Real data: instantiate compiled ship
 if (contentDirectory is not null) run.Test("Real data: word descriptions of every shipped object equal the sequential hash, every update moves the description", () => Tests.HashWorkOnRealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
+if (contentDirectory is not null) run.Test("#376 real data: the Spectre gunship and the Chinook leave the map only beyond its border", () => Tests.RealHeadOffMapBeyondTheBorder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every airfield takes as many aircraft as it has spaces (#347)", () => Tests.RealAirfieldsTakeAsManyAircraftAsTheyHaveSpaces(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the nuclear missile needs a propaganda center (#346)", () => Tests.RealNuclearMissileNeedsAPropagandaCenter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: helicopters take goals of their own at the rally point and at one ordered point", () => Tests.RealHelicoptersTakeGoalsOfTheirOwn(contentDirectory));
