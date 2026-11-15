@@ -22,6 +22,7 @@ Func<string[], int>[] suites =
     FrameBufferBlendTests.Run,
     DependencyPlacementTests.Run,
     TreadMarksTests.Run,
+    GroundDrapeTests.Run,
     WorldRealDataTests.Run,
     RoadRealDataTests.Run,
     InputTests.Run,

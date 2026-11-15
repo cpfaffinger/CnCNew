@@ -50,9 +50,6 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
     private const float MinTracerPixels = 1.5f;
     private const float RunDepthStep = 0.01f;
 
-    /// <summary>Cells per side of the grid under a light pulse.</summary>
-    private const int LightPulseCells = 10;
-
     private static readonly FxMaterialKey TracerKey = new(null, FxBlend.Alpha);
 
     private enum BatchClass : byte { Skip, Ground, AlphaTest, Billboard, Streak, Smudge }
@@ -90,6 +87,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
     private bool[] _deferred = new bool[1024];
     private FxView _view;
     private Vector3[]? _flakes;
+    private readonly List<DrapedQuad> _draped = [];
     private int _particlesDrawn, _streaks, _tracers, _decals, _skippedDrawable, _skippedSmudge, _skippedUnusable, _skippedShort, _deferredItems;
 
     public int RunCount => _runCount;
@@ -330,32 +328,27 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             var reach = light.OuterRadius;
             var center = light.Position;
             if (reach <= 0f || !frustum.Intersects(new Aabb(center - new Vector3(reach, reach, reach + 50f), center + new Vector3(reach, reach, reach + 50f)))) continue;
-            var cells = Math.Clamp((int)MathF.Ceiling(2f * reach / TerrainHeightSampler.CellSize), 2, LightPulseCells);
             var first = geometry.QuadCount;
-            for (var row = 0; row < cells; row++)
+            Drape(new Vector2(center.X, center.Y), Vector2.UnitX, Vector2.UnitY, 2f * reach, 2f * reach);
+            foreach (var piece in _draped)
             {
-                for (var column = 0; column < cells; column++)
-                {
-                    var quad = geometry.NextQuad();
-                    if (quad.IsEmpty) return;
-                    SetLightCorner(ref quad[0], light, cells, column, row);
-                    SetLightCorner(ref quad[1], light, cells, column, row + 1);
-                    SetLightCorner(ref quad[2], light, cells, column + 1, row + 1);
-                    SetLightCorner(ref quad[3], light, cells, column + 1, row);
-                }
+                var quad = geometry.NextQuad();
+                if (quad.IsEmpty) break;
+                SetLightCorner(ref quad[0], light, piece.A);
+                SetLightCorner(ref quad[1], light, piece.B);
+                SetLightCorner(ref quad[2], light, piece.C);
+                SetLightCorner(ref quad[3], light, piece.D);
             }
 
             EndItem(material, first, _view.Far, 0);
         }
     }
 
-    private void SetLightCorner(ref FxVertex vertex, in LightPulseInstance light, int cells, int column, int row)
+    private static void SetLightCorner(ref FxVertex vertex, in LightPulseInstance light, in DrapedCorner corner)
     {
-        var x = light.Position.X + (column / (float)cells * 2f - 1f) * light.OuterRadius;
-        var y = light.Position.Y + (row / (float)cells * 2f - 1f) * light.OuterRadius;
-        var distance = MathF.Sqrt((x - light.Position.X) * (x - light.Position.X) + (y - light.Position.Y) * (y - light.Position.Y));
+        var distance = Vector2.Distance(new Vector2(corner.Position.X, corner.Position.Y), new Vector2(light.Position.X, light.Position.Y));
         var strength = light.OuterRadius > light.InnerRadius ? Math.Clamp((light.OuterRadius - distance) / (light.OuterRadius - light.InnerRadius), 0f, 1f) : 1f;
-        vertex.Position = new Vector3(x, y, heights.HeightAt(x, y) + GroundLift);
+        vertex.Position = corner.Position;
         vertex.Color = Pack(light.Color * strength, 1f);
         vertex.Uv = default;
     }
@@ -372,20 +365,15 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             var decal = decals[index];
             var material = MaterialId(new FxMaterialKey(decal.Texture, FxBlend.Multiply, Ground: true));
             var first = geometry.QuadCount;
-            var columns = Math.Clamp((int)MathF.Ceiling(decal.SizeX / TerrainHeightSampler.CellSize), 1, 8);
-            var rows = Math.Clamp((int)MathF.Ceiling(decal.SizeY / TerrainHeightSampler.CellSize), 1, 8);
-            for (var row = 0; row < rows; row++)
+            Drape(decal.Center, decal.U, decal.V, decal.SizeX, decal.SizeY);
+            foreach (var piece in _draped)
             {
-                for (var column = 0; column < columns; column++)
-                {
-                    var quad = geometry.NextQuad();
-                    if (quad.IsEmpty) return;
-                    var (u0, u1, v0, v1) = (column / (float)columns, (column + 1) / (float)columns, row / (float)rows, (row + 1) / (float)rows);
-                    SetShadowCorner(ref quad[0], decal, u0, v0, white);
-                    SetShadowCorner(ref quad[1], decal, u0, v1, white);
-                    SetShadowCorner(ref quad[2], decal, u1, v1, white);
-                    SetShadowCorner(ref quad[3], decal, u1, v0, white);
-                }
+                var quad = geometry.NextQuad();
+                if (quad.IsEmpty) return;
+                SetCorner(ref quad[0], piece.A, white);
+                SetCorner(ref quad[1], piece.B, white);
+                SetCorner(ref quad[2], piece.C, white);
+                SetCorner(ref quad[3], piece.D, white);
             }
 
             EndItem(material, first, _view.Far, 0);
@@ -422,49 +410,42 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         EndItem(material, first, _view.Far, 0);
     }
 
-    private void SetShadowCorner(ref FxVertex vertex, in ShadowDecal decal, float u, float v, uint color)
-    {
-        var point = decal.At(u, v);
-        vertex.Position = new Vector3(point.X, point.Y, heights.HeightAt(point.X, point.Y) + GroundLift);
-        vertex.Color = color;
-        vertex.Uv = new Vector2(u, v);
-    }
-
+    /// <summary>
+    /// <c>W3DProjectedShadowManager::queueDecal</c>, which lays every ground decal - a radius cursor, a missile's delivery decal, a scorch, a shadow - on the terrain's own cells
+    /// (<see cref="GroundDrape"/>): the decal follows the ground through every cell and no rise inside it hides a part of it (#367). Turned by <see cref="DecalInstance.Rotation"/>, its
+    /// texture's v running against the turned Y axis, and mapped onto <see cref="DecalInstance.UvRect"/>.
+    /// </summary>
     private void EmitDraped(in DecalInstance decal, uint color)
     {
-        var cells = Math.Clamp((int)MathF.Ceiling(2f * decal.Radius / TerrainHeightSampler.CellSize), 1, 8);
         var cos = MathF.Cos(decal.Rotation);
         var sin = MathF.Sin(decal.Rotation);
+        Drape(new Vector2(decal.Position.X, decal.Position.Y), new Vector2(cos, sin), new Vector2(sin, -cos), 2f * decal.Radius, 2f * decal.Radius);
         var uv = decal.UvRect;
-        for (var row = 0; row < cells; row++)
+        foreach (var piece in _draped)
         {
-            for (var column = 0; column < cells; column++)
-            {
-                var quad = geometry.NextQuad();
-                if (quad.IsEmpty)
-                {
-                    return;
-                }
-
-                SetDrapedCorner(ref quad[0], decal, cos, sin, cells, column, row, uv, color);
-                SetDrapedCorner(ref quad[1], decal, cos, sin, cells, column, row + 1, uv, color);
-                SetDrapedCorner(ref quad[2], decal, cos, sin, cells, column + 1, row + 1, uv, color);
-                SetDrapedCorner(ref quad[3], decal, cos, sin, cells, column + 1, row, uv, color);
-            }
+            var quad = geometry.NextQuad();
+            if (quad.IsEmpty) return;
+            SetCorner(ref quad[0], Mapped(piece.A, uv), color);
+            SetCorner(ref quad[1], Mapped(piece.B, uv), color);
+            SetCorner(ref quad[2], Mapped(piece.C, uv), color);
+            SetCorner(ref quad[3], Mapped(piece.D, uv), color);
         }
+
+        static DrapedCorner Mapped(in DrapedCorner corner, Vector4 rect)
+            => corner with { Uv = new Vector2(rect.X + (rect.Z - rect.X) * corner.Uv.X, rect.Y + (rect.W - rect.Y) * corner.Uv.Y) };
     }
 
-    private void SetDrapedCorner(ref FxVertex vertex, in DecalInstance decal, float cos, float sin, int cells, int column, int row, Vector4 uv, uint color)
+    private void Drape(Vector2 center, Vector2 axisU, Vector2 axisV, float sizeU, float sizeV)
     {
-        var u = column / (float)cells;
-        var v = row / (float)cells;
-        var x = (u * 2f - 1f) * decal.Radius;
-        var y = (1f - v * 2f) * decal.Radius;
-        var worldX = decal.Position.X + x * cos - y * sin;
-        var worldY = decal.Position.Y + x * sin + y * cos;
-        vertex.Position = new Vector3(worldX, worldY, heights.HeightAt(worldX, worldY) + GroundLift);
+        _draped.Clear();
+        GroundDrape.Drape(heights, center, axisU, axisV, sizeU, sizeV, GroundLift, _draped);
+    }
+
+    private static void SetCorner(ref FxVertex vertex, in DrapedCorner corner, uint color)
+    {
+        vertex.Position = corner.Position;
         vertex.Color = color;
-        vertex.Uv = new Vector2(uv.X + (uv.Z - uv.X) * u, uv.Y + (uv.W - uv.Y) * v);
+        vertex.Uv = corner.Uv;
     }
 
     // ------------------------------------------------------------------------------------------------ unsorted particles
