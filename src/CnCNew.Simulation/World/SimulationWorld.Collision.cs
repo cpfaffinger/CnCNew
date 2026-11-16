@@ -832,7 +832,10 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>PhysicsBehavior::checkForOverlapCollision</c>, called by the crusher's own <c>PhysicsBehavior</c> (<see cref="CollideAsCrusher"/>): a mover with a crusher level above the victim's crushable level kills it when it has passed the victim's crush point nearest its line of
     /// travel, of the front, the middle and the back, half the major radius apart, and no further from it than one and a half of that. The victim needs a physics module or to be immobile
-    /// (<c>onCollide</c>), and an unmanned crusher crushes nothing. Not done: the first contact's damage of 0, which only triggers the minor <c>DamageFX</c>; a victim that survives no crush, so its
+    /// (<c>onCollide</c>), and an unmanned crusher crushes nothing. <c>onCollide</c> returns before the crush for an object either AI ignores as its obstacle (<c>getIgnoredObstacleID</c>: the
+    /// container a unit enters, the goal of its approach, the dock it drives through), so a unit is not crushed by the goal it walks to. Its two other exceptions cannot meet a crush here: two
+    /// parachutes (<c>OBJECT_STATUS_PARACHUTING</c>) crush nothing, and <c>setIgnoreCollisionsWith</c> (a creation list's <c>IgnorePrimaryObstacle</c>) pairs on the shipped data only what a structure
+    /// or a dead vehicle throws out (soldiers, an ejected pilot) with a source that crushes nothing, and a drone, which neither crushes nor can be crushed, with its vehicle. Not done: the first contact's damage of 0, which only triggers the minor <c>DamageFX</c>; a victim that survives no crush, so its
     /// crushed ends never lead the next crush. The ends a crushed car shows are the presentation's.
     /// </summary>
     private void TryCrush(Entity mover, Entity other, Fixed stepX, Fixed stepY)
@@ -840,6 +843,8 @@ public sealed partial class SimulationWorld
         if (mover.Template.CrusherLevel <= other.Template.CrushableLevel || (stepX.Abs() < CrushingStep && stepY.Abs() < CrushingStep)) return;
         if (RelationshipOf(mover.Owner, other.Owner) == Relationship.Allies || (mover.DisabledFlags(_tick) & DisabledMask.Unmanned) != 0) return;
         if (other.ContainedBy.IsValid || mover.ContainedBy == other.Id || IsAirborneTargetAtFrameEnd(other)) return;
+        // "ignore collisions with our 'ignore' thingie, if any (and vice versa)": neither crushes the object its AI does not take for an obstacle (#395).
+        if (AiOf(mover)?.IgnoredObstacle == other.Id || AiOf(other)?.IgnoredObstacle == mover.Id) return;
         if (!other.Template.IsKindOf("IMMOBILE") && Array.Find(other.ModuleArray, module => module is PhysicsBehavior) is null) return;
         var (otherX, otherY, _) = other.FrameEnd(_tick);
         var offset = other.Template.GeometryMajorRadius / Fixed.FromInt(2);

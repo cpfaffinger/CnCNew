@@ -644,6 +644,7 @@ run.Test("#370: a tank spares a Tank Hunter placing TNT on it", Tests.SquishSpar
 run.Test("#370: a crusher without a physics module squishes nobody", Tests.SquishNeedsTheCrushersPhysics);
 run.Test("#370: the crusher's view of the victim decides a squish", Tests.SquishAsksTheCrushersView);
 run.Test("#373: a crusher spares what does not collide", Tests.CrushSparesWhatDoesNotCollide);
+run.Test("#395: a crusher spares the goal of an approach", Tests.CrushSparesTheGoalOfAnApproach);
 run.Test("#373: a contact calls the collide modules in module order", Tests.CollideModulesActInModuleOrder);
 run.Test("#370: an approach acts on its goal only by touching it", Tests.AnApproachActsOnlyByTouching);
 run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapalmMakeAFirestorm);
