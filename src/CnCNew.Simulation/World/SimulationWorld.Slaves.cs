@@ -43,6 +43,24 @@ public sealed partial class SimulationWorld
         }
     }
 
+    /// <inheritdoc cref="Modules.IWorldServices.AttackAsAi"/>
+    public void AttackAsAi(Entity unit, Entity victim)
+    {
+        if (AiOf(unit) is not { } ai) return;
+        // A new state replaces the old one (its move, guard or attack), and the command source is the AI's.
+        ai.OrderIdle(this, false);
+        if (!IsAttackable(unit, victim) || !CanAttack(unit, victim, false, out _)) return;
+        var state = unit.Acquisition ??= new AcquisitionState();
+        state.Victim = victim.Id;
+        AimTurretsForAttack(unit, victim, TurretAimOrder.Attack);
+        _acquirers.Add(unit.Id.Value);
+        MarkDirty(unit);
+    }
+
+    /// <inheritdoc cref="Modules.IWorldServices.MoodTargetAskedFor"/>
+    public Entity? MoodTargetAskedFor(Entity unit)
+        => unit.EffectivelyDead || unit.DestroyRequested || AiOf(unit) is not { } ai ? null : FindMoodTarget(unit, ai, AcquireMode.Idle, calledByAi: false);
+
     /// <summary><c>SpawnBehavior::orderSlavesToAttackPosition</c>: every slave attacks the place (F-64).</summary>
     private void PassPlaceToSlaves(Entity spawner, Fixed x, Fixed y, int shots)
     {

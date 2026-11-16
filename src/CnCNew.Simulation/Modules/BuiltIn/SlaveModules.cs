@@ -61,6 +61,12 @@ public interface ISpawnerModule
     /// - a selected slave selects every slave and the spawner - which is the presentation's to do (<c>SelectionModel</c>).
     /// </summary>
     bool AggregatesSlaves { get; }
+
+    /// <summary>
+    /// <c>maySpawnSelfTaskAI(maxSelfTaskersRatio)</c>: whether one more slave may pick a victim of its own - the spawner has slaves, the ratio is not zero, the spawner's last command is
+    /// the AI's ("if my last attack command was from player or script, I need to forbid my spawn from disobeying that command") and fewer than that share of its slaves are self-tasking.
+    /// </summary>
+    bool MaySpawnSelfTaskAi(IWorldServices world, Fixed maxSelfTaskersRatio);
 }
 
 /// <summary>The part of a spawn-point exit that remembers who stands on which spawn point (<c>m_spawnPointOccupier</c>), told by the spawner once it asked for the entity.</summary>
@@ -538,7 +544,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
 
 /// <summary>
 /// <c>MobMemberSlavedUpdateModuleData</c> (<c>MobMemberSlavedUpdate.h</c>): <c>MustCatchUpRadius</c> (default 50), <c>NoNeedToCatchUpRadius</c> (default 25, read by no code path of the
-/// reference's <c>update</c>), <c>Squirrelliness</c> (clamped to [0, 1]; steers self-tasking, not simulated) and <c>CatchUpCrisisBailTime</c> (default 999999 updates).
+/// reference's <c>update</c>), <c>Squirrelliness</c> (clamped to [0, 1]: the share of the mob that may pick victims of its own) and <c>CatchUpCrisisBailTime</c> (default 999999 updates).
 /// </summary>
 public sealed record MobMemberData(int MustCatchUpRadius, int NoNeedToCatchUpRadius, Fixed Squirrelliness, long CatchUpCrisisBailTime) : ModuleData
 {
@@ -557,9 +563,14 @@ public sealed record MobMemberData(int MustCatchUpRadius, int NoNeedToCatchUpRad
 /// <c>MobMemberSlavedUpdate.cpp</c>: a member of an angry mob keeps up with its nexus (the master). Every 16th tick it measures the distance to the nexus: beyond
 /// <c>MustCatchUpRadius</c> it walks to where the nexus is going (its move destination, unless it is already headed within five cells of it) or, when the nexus stands
 /// still, to the nexus itself; beyond three times that radius for more than <c>CatchUpCrisisBailTime / 3</c> checks it walks straight to the nexus, and for more than
-/// <c>CatchUpCrisisBailTime</c> checks it dies. Without a master (it was never enslaved, or the nexus is gone) the member dies at its first check. Not simulated: the member's
-/// colour tint, locomotor-set shuffling (the walking/panic/wander sets do not exist; the random draw that picks one is kept), the victim bookkeeping (members auto-acquire
-/// targets like every armed object; see <c>MissionSession.DriveCombat</c>) and the squirrelliness self-tasking.
+/// <c>CatchUpCrisisBailTime</c> checks it dies. Without a master (it was never enslaved, or the nexus is gone) the member dies at its first check.
+/// <para>
+/// A member close to its nexus that stands (#392, the idle branch of <c>update</c>): it remembers the nexus' victim as its primary victim at every check. When the nexus is idle - the
+/// player pressed stop, or it has nothing to attack - the member goes idle too and forgets that victim. Otherwise a member that the player commanded last may pick a victim of its own
+/// (<see cref="MobMemberData.Squirrelliness"/>: the spawner allows it while fewer than that share of the mob are self-tasking and its own last command is the AI's,
+/// <c>maySpawnSelfTaskAI</c>), and a member that then has no victim attacks the primary one. Not simulated: the member's colour tint and locomotor-set shuffling (the
+/// walking/panic/wander sets do not exist; the random draw that picks one is kept).
+/// </para>
 /// </summary>
 public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpdateModule, ISlavedModule
 {
@@ -573,11 +584,16 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
     private EntityId _slaver;
     private int _framesToWait;
     private long _crisisTimer;
+    private EntityId _primaryVictim;
+    private bool _selfTasking;
 
     public override string ModuleName => "MobMemberSlavedUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public EntityId Slaver => _slaver;
-    public bool IsSelfTasking => false;
+    public bool IsSelfTasking => _selfTasking;
+
+    /// <summary><c>m_primaryVictimID</c>: the victim of the nexus the member saw last, invalid when the member forgot it.</summary>
+    public EntityId PrimaryVictim => _primaryVictim;
 
     public override void OnSpawn(IWorldServices world)
     {
@@ -607,6 +623,13 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
         if (++_framesToWait < world.Time.OriginalFrames(CheckIntervalFrames)) return SimulationTiming.SleepNone;
         _framesToWait = 0;
         if (Entity.Template.Locomotor is null) return SimulationTiming.SleepNone;
+
+        var victim = Entity.Acquisition?.Victim ?? EntityId.Invalid;
+        if (master.Acquisition is { Victim.IsValid: true } masterAttack && _primaryVictim != masterAttack.Victim)
+        {
+            _primaryVictim = masterAttack.Victim;
+            world.MarkDirty(Entity);
+        }
 
         var radius = Fixed.FromInt(data.MustCatchUpRadius);
         // The member and its nexus where the logic frame of the original each has begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the nexus had its turn
@@ -645,8 +668,50 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
             // The reference rolls which locomotor set to walk with (wander, panic, normal or none of them); there is one locomotor here, the draw stays.
             _ = world.LogicRandom.Range(0, 10);
         }
-        else _crisisTimer = 0;
+        else
+        {
+            // "give me something to do while I'm standing here..."
+            _crisisTimer = 0;
+            if (master.ModuleArray.OfType<ISpawnerModule>().FirstOrDefault() is not { } spawner) return SimulationTiming.SleepNone;
+            if (world.IsAiIdle(master))
+            {
+                // "if controlling player has pressed stop, we stop! That's it!"
+                ai.OrderIdle(world, false);
+                ForgetPrimaryVictim(world);
+                return SimulationTiming.SleepNone;
+            }
+
+            // "if mommy says it is okay", and "I may have been told to attack directly more recently".
+            if (spawner.MaySpawnSelfTaskAi(world, data.Squirrelliness) && ai.LastCommandFromPlayer
+                && world.MoodTargetAskedFor(Entity) is { } target && target.Id != victim)
+            {
+                victim = target.Id;
+                world.AttackAsAi(Entity, target);
+                SetSelfTasking(world, true);
+            }
+
+            if (!victim.IsValid)
+            {
+                // "I remember the last target"; a primary victim that is gone is no longer found.
+                if (_primaryVictim.IsValid && world.FindEntity(_primaryVictim) is { DestroyRequested: false } primary) world.AttackAsAi(Entity, primary);
+                SetSelfTasking(world, false);
+            }
+        }
         return SimulationTiming.SleepNone;
+    }
+
+    private void ForgetPrimaryVictim(IWorldServices world)
+    {
+        if (!_primaryVictim.IsValid) return;
+        _primaryVictim = EntityId.Invalid;
+        world.MarkDirty(Entity);
+    }
+
+    private void SetSelfTasking(IWorldServices world, bool selfTasking)
+    {
+        if (_selfTasking == selfTasking) return;
+        _selfTasking = selfTasking;
+        world.MarkDirty(Entity);
     }
 
     public override void Describe(IStateWriter writer)
@@ -655,6 +720,9 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
         writer.UInt("slaver", _slaver.Value);
         writer.Int("framesToWait", _framesToWait);
         writer.Int("crisisTimer", _crisisTimer);
+        // Written only when set, so a member that never saw its nexus attack keeps its serialized form (and hash).
+        if (_primaryVictim.IsValid) writer.UInt("primaryVictim", _primaryVictim.Value);
+        if (_selfTasking) writer.Bool("selfTasking", true);
     }
 
     public override void Load(IStateReader reader)
@@ -663,6 +731,8 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
         _slaver = new EntityId(checked((uint)reader.UInt("slaver")));
         _framesToWait = checked((int)reader.Int("framesToWait"));
         _crisisTimer = reader.Int("crisisTimer");
+        _primaryVictim = reader.Has("primaryVictim") ? new EntityId(checked((uint)reader.UInt("primaryVictim"))) : EntityId.Invalid;
+        _selfTasking = reader.Has("selfTasking") && reader.Bool("selfTasking");
     }
 }
 

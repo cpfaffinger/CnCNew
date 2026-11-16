@@ -429,6 +429,23 @@ public interface IWorldServices
     /// <summary><c>aiForceAttackObject</c> for an order that does not come from a player's command.</summary>
     void AttackFor(Entity unit, Entity victim);
 
+    /// <summary>
+    /// <c>aiAttackObject(victim, shots, CMD_FROM_AI)</c> of a module (<c>MobMemberSlavedUpdate::update</c>): the unit's state is replaced by an attack on the victim that it runs as one it
+    /// chose itself - in range it fires, out of range a computer player's unit walks to it and a human player's unit gives it up (<c>isAllowedToChase</c>); its last command is the AI's.
+    /// A victim it cannot attack leaves it idle.
+    /// </summary>
+    void AttackAsAi(Entity unit, Entity victim);
+
+    /// <summary>
+    /// <c>getNextMoodTarget(FALSE, FALSE)</c>, the look a module asks for at once: the victim the unit would pick by itself (<see cref="AttackAsAi"/>), but without the wait for the next
+    /// mood check, within the unit's vision range times the guard-outer factor of its player's kind, and for a human player's unit neither limited to its weapon range nor to what its
+    /// player sees (<c>WITHIN_ATTACK_RANGE</c> and <c>UNFOGGED</c> belong to the AI's own calls). Null when there is none.
+    /// </summary>
+    Entity? MoodTargetAskedFor(Entity unit);
+
+    /// <summary><c>AIUpdateInterface::isIdle</c>: the object's AI stands in its idle state - no move, dock, task, guard or attack.</summary>
+    bool IsAiIdle(Entity entity);
+
     /// <summary><c>aiGuardPosition(GUARDMODE_NORMAL)</c> for an order that does not come from a player's command.</summary>
     void GuardPlaceFor(Entity unit, Fixed x, Fixed y);
 

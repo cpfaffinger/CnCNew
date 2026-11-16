@@ -719,6 +719,8 @@ public sealed partial class SimulationWorld
         // localApplyBattlePlanBonusesToObject: Search & Destroy sets the vision range of the army, not its shroud alone.
         var seen = entity.Template.VisionRange * BattlePlanSightScalarOf(entity);
         if (!chase) return IsComputerPlayer(entity.Owner) ? reach : Fixed.Min(reach, seen * AcquireVisionFactorHuman);
+        // AI_VISIONFACTOR_OWNERTYPE: a human player's unit looks this far only when a module asks (getNextMoodTarget without calledByAI); its own looks do not walk.
+        if (!IsComputerPlayer(entity.Owner)) return seen * AcquireVisionFactorHuman;
         var vision = seen * AcquireVisionFactorComputer;
         if (IsComputerPlayer(entity.Owner))
         {
@@ -758,7 +760,11 @@ public sealed partial class SimulationWorld
     /// <c>AIUpdateInterface::getNextMoodTarget</c> with <c>AI::findClosestEnemy</c>: the closest enemy the unit can attack — or, for a unit with a script's attack priority set, the one
     /// with the highest priority after one point is taken off per <c>AttackPriorityDistanceModifier</c> of distance (priority 0 is never attacked). Ties go to the lower id.
     /// </summary>
-    private Entity? FindMoodTarget(Entity entity, AIUpdateInterface ai, AcquireMode mode)
+    /// <para>
+    /// <paramref name="calledByAi"/> false is <c>getNextMoodTarget(FALSE, …)</c>, a module's look on request (<see cref="MoodTargetAskedFor"/>): a human player's unit then looks as far as
+    /// a computer player's would walk - its vision times its guard-outer factor -, and neither its weapon range (<c>AI::WITHIN_ATTACK_RANGE</c>) nor the fog (<c>AI::UNFOGGED</c>) limit it.
+    /// </para>
+    private Entity? FindMoodTarget(Entity entity, AIUpdateInterface ai, AcquireMode mode, bool calledByAi = true)
     {
         // "we are doing a special ability. Shouldn't auto-acquire a target at this time."
         if (entity.HasStatus(UsingAbilityBit)) return null;
@@ -772,7 +778,7 @@ public sealed partial class SimulationWorld
         if (attitude == Attitude.Passive)
             return !entity.LastDamageHealing && FindEntity(entity.LastDamageSource) is { } attacker && IsAttackable(entity, attacker) ? attacker : null;
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
-        var chase = mode != AcquireMode.Turret && MayChase(entity, aircraft);
+        var chase = mode != AcquireMode.Turret && (!calledByAi || MayChase(entity, aircraft));
         var radius = AcquireRadius(entity, chase);
         if (radius <= Fixed.Zero) return null;
         var turretOnly = mode == AcquireMode.Turret;
@@ -782,7 +788,7 @@ public sealed partial class SimulationWorld
         var frameEnd = _firstFrameTicks != TickOrder.Next;
         var (ownX, ownY, _) = ShooterPosition(entity, frameEnd);
         var collect = PicksByDamagePotential;
-        var search = new MoodSearch { Radius = radius, OwnRadius = CircleRadius(entity), TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd, Collect = collect };
+        var search = new MoodSearch { Radius = radius, OwnRadius = CircleRadius(entity), TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, Unfogged = calledByAi && !computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd, Collect = collect };
         if (collect) _victimCandidates.Clear();
 
         if (RelationshipOverride is not null)
@@ -815,6 +821,8 @@ public sealed partial class SimulationWorld
         public bool Chase;
         public bool Buildings;
         public bool Computer;
+        /// <summary><c>AI::UNFOGGED</c>: only what the unit's player sees is a candidate.</summary>
+        public bool Unfogged;
         public Entity? Best;
         public Fixed BestDistance;
         public int BestEffective;
@@ -845,7 +853,7 @@ public sealed partial class SimulationWorld
         if (candidate.HasStatus(NoAttackFromAiBit)) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(entity, candidate, search.Buildings, search.Computer) || IsHiddenStealthGarrison(entity, candidate)) return;
         // AI::UNFOGGED: "Instead of shroud affecting the ability to attack, it affects the ability to target" - for a human player's unit only.
-        if (!search.Computer && !CanPlayerSee(entity.Owner, candidate)) return;
+        if (search.Unfogged && !CanPlayerSee(entity.Owner, candidate)) return;
         if (AcquisitionViewBlocked(entity, candidate)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
 

@@ -99,6 +99,22 @@ internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdate
     public bool SlavesHaveFreeWill => data.SlavesHaveFreeWill;
     public bool AggregatesSlaves => data.AggregateHealth;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The original's spawner counts its self-tasking slaves once per frame in <c>computeAggregateStates</c>; here they are counted when a slave asks, so a second slave that asks in the
+    /// frame the first began to self-task already sees it. The spawner's own look orders its attack with <c>CMD_FROM_AI</c> (<c>AIIdleState::update</c>), which this port does not
+    /// record as a command source: a spawner that attacks a victim it picked itself counts as commanded by its AI.
+    /// </remarks>
+    public bool MaySpawnSelfTaskAi(IWorldServices world, Fixed maxSelfTaskersRatio)
+    {
+        if (_spawns.Count == 0 || maxSelfTaskersRatio == Fixed.Zero || SlaveSupport.AiOf(Entity) is not { } ai) return false;
+        if (ai.LastCommandFromPlayer && Entity.Acquisition is not { Victim.IsValid: true, Ordered: false, Forced: false }) return false;
+        var selfTasking = 0;
+        foreach (var id in _spawns)
+            if (world.FindEntity(id) is { } spawn && SlavedModuleOf(spawn) is { IsSelfTasking: true }) selfTasking++;
+        return Fixed.FromInt(selfTasking) / Fixed.FromInt(_spawns.Count) < maxSelfTaskersRatio;
+    }
+
     public override void OnSpawn(IWorldServices world)
     {
         _oneShotCountdown = data.OneShot ? data.SpawnNumber : -1;
