@@ -293,7 +293,8 @@ public sealed partial class SimulationWorld
     private static Fixed MaxHeightAbovePosition(ObjectTemplate template)
         => template.Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase) ? template.GeometryMajorRadius : template.GeometryHeight;
 
-    private static EntityId SlaverOf(Entity entity)
+    /// <summary><c>SlavedUpdateInterface::getSlaverID</c> of the object's slaved module: its master while it is a slave of a spawner or a creation list, otherwise invalid.</summary>
+    internal static EntityId SlaverOf(Entity entity)
     {
         foreach (var module in entity.ModuleArray)
             if (module is ISlavedModule slaved && slaved.Slaver.IsValid) return slaved.Slaver;

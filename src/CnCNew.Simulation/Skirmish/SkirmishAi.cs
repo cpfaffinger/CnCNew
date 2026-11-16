@@ -271,7 +271,7 @@ public sealed partial class SkirmishAi
     private Fixed _objectiveReserve;
 
     /// <summary>Whether this AI gives <paramref name="unit"/> its marching orders (it counts it as army).</summary>
-    public bool LeadsUnit(Entity unit) => unit.Owner == _player && (RoleOf(unit.Template) & Role.Army) != 0 && AiOf(unit) is not null;
+    public bool LeadsUnit(Entity unit) => unit.Owner == _player && (RoleOf(unit.Template) & Role.Army) != 0 && AiOf(unit) is not null && !SimulationWorld.SlaverOf(unit).IsValid;
 
     /// <summary>Where the army gathers while it is not attacking (diagnostics).</summary>
     public (Fixed X, Fixed Y)? RallyPoint => _rally;
@@ -366,7 +366,8 @@ public sealed partial class SkirmishAi
                     if (entity.HasStatus(ObjectStatusBits.UnderConstruction)) _sites.Add(entity);
                     else if (!entity.HasStatus(ObjectStatusBits.Sold)) _structures.Add(entity);
                 }
-                else if (!entity.ContainedBy.IsValid && !entity.HasStatus(ObjectStatusBits.UnderConstruction)) _units.Add(entity);
+                // A slave (an angry mob's member, a drone, a stinger soldier) is its master's to command: the AI leads the master, never the slave by itself.
+                else if (!entity.ContainedBy.IsValid && !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !SimulationWorld.SlaverOf(entity).IsValid) _units.Add(entity);
                 continue;
             }
             // A warehouse of the system player or of any side that is not an enemy (mission maps give their supply docks to a civilian side) is one to gather from,
