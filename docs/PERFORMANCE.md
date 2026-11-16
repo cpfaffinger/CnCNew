@@ -379,6 +379,44 @@ that can pause costs nothing in one piece.
 
 The binaries of `fc464d62` did not finish the 8-player run: `IsAttackLineBlocked` left the map (`docs/SIMULATION-CORE.md` §78.10). The figures above are that commit with the one bound added.
 
+## 6f. Phase 66 (16 November 2026): the profile against `3f19aa96` (#284)
+
+`scripts/perf-profile.ps1` with the binaries of `3f19aa96` (Phase 63, the last profile before the wide changes of Phases 64 to 66) and of `71956ffe`, one after the other on a quiet machine
+(AMD Ryzen 3 PRO 4350GE, 60 Hz, 30 game minutes per skirmish, cold - no warm-up). Every run is another match on the two sides (other final hashes: the queue limit, the target priority,
+fixes 27 to 29, the donut timer, the flattened sites, the rate corrections and the playtest fixes change what the computer players do), so the table says how much the simulation costs
+for the match it now plays, not how fast the same work is done.
+
+| Run | mean old / new (us per tick) | change | 99 % old / new (us) | bytes per tick old / new |
+|---|---:|---:|---:|---:|
+| small-2p (Scorched Earth) | 220.6 / 249.7 | +13.2 % | 906 / 806 | 2,837 / 3,986 |
+| medium-2p (Tournament Tundra) | 246.3 / 270.6 | +9.9 % | 758 / 930 | 2,521 / 2,963 |
+| medium-4p | 526.7 / 343.6 | -34.8 % | 1,878 / 1,253 | 5,437 / 4,130 |
+| large-2p (Twilight Flame) | 314.7 / 291.1 | -7.5 % | 879 / 795 | 2,729 / 2,799 |
+| large-4p | 558.7 / 457.4 | -18.1 % | 1,571 / 1,388 | 4,610 / 4,892 |
+| large-8p | 1,155.4 / 893.2 | -22.7 % | 3,544 / 3,090 | 18,253 / 15,511 |
+| MD_USA05, 100 s | 1,805.1 / 1,909.3 | +5.8 % | 7,516 / 9,020 | 4,302 / 4,703 |
+| MD_USA05, 300 s | 1,675.1 / 1,669.5 | -0.3 % | 3,574 / 6,351 | 4,972 / 5,049 |
+| MD_GLA05, 100 s | 2,676.7 / 2,803.4 | +4.7 % | 11,559 / 14,599 | 10,325 / 10,078 |
+| MD_GLA05, 300 s | 2,348.6 / 2,370.6 | +0.9 % | 7,260 / 7,555 | 7,644 / 7,750 |
+
+The longest tick of every skirmish run is its first (60 to 80 ms, the first calls of the code); the eight-player match takes 5.4 % of one core at 60 Hz (21.4-fold catch-up speed).
+Where the two-player matches cost more (small-2p), `perf-compare` puts it in the hash (+19 %), the AI (+30 %) and vision (+19 %) phases - more objects alive, `ChinookAIUpdate` +55 % (a Chinook
+that gathers for good, #173) and `GarrisonContain` new - while `PhysicsBehavior` falls by 54 %.
+
+**The site flattening (#169) and the donut timer (#170)**, measured with a throwaway build of `71956ffe` that timed `ClearAndFlatten` and `DonutBrakes` (`Stopwatch` around the call, the
+timer's own cost included; the same final hashes as the profile; not committed):
+
+| Run | sites flattened | their time | donut checks | their time | share of the run |
+|---|---:|---:|---:|---:|---:|
+| large-8p (95 s of simulation) | 100 | 14.8 ms | 457,130 | 24.0 ms | 0.016 % / 0.025 % |
+| medium-4p (35 s) | 54 | 8.7 ms | 158,288 | 9.5 ms | 0.025 % / 0.027 % |
+| small-2p (26 s) | 23 | 6.3 ms | 71,367 | 5.2 ms | 0.024 % / 0.020 % |
+
+A site costs 0.15 to 0.28 ms when it is begun (the first one of a world also makes the world's own copy of the heights) and nothing afterwards except its share of the snapshot; a donut check
+costs about 50 ns, most of it the timer. Neither is visible in the profile.
+
+**The other checks of #284** at `71956ffe`: the clean room (`scripts/clean-room.ps1 -Commit 71956ffe`, a fresh clone of 1,637 files, an empty NuGet cache: 259 packages, 0 warnings, the 600 files of the patch fetched afresh from GitHub, 25,562 runtime files - the known export, input manifest identical, the quick reference set 9 of 9, `Simulation.Tests` and `Data.Tests` with that content green, the client package (1,158 files, 407 MB) and both server packages (204 files, 82 and 84 MB) free of original data); the campaign at 60 Hz (reachability clean 24/24 and 24/24, audit 24 of 24 identical on a second run and after save/restore with end probes 13/24 and 16/24 - exit code 1 as before, `MD_CAMPEA_DEMO` names a map the master installation does not have -, objective driver victory 24/24 and defeat 24/24); the AI survey (`SimTool ai-survey --seeds 4 --minutes 45 --jobs 2`, 64 matches): 59 decided (56 at Phase 60), GLA wins 17 of its 32, the median end of a decided match 950 s. One match of the survey, Death Valley ChinaTankGeneral against AirForce seed 4, ran to its limit with 176,911 orders and took an hour to compute: the computer did not find its enemy's last three soldiers in a garrison while its army grew to about 800 units (#408).
+
 ## 7. Preliminary, not measured quietly
 
 Everything in this section dates from 6 October 2026, state `b6b7454` plus tool, **from a machine on which
