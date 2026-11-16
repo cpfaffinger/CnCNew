@@ -158,6 +158,30 @@ public sealed class ModelBoneTable(ContentFileSystem content)
         return pose.GetBoneWorldTransform(index);
     }
 
+    private readonly Dictionary<string, double?> _animationSeconds = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The seconds a W3D animation (<c>Hierarchy.Name</c>) takes from its first frame to its last at its own frame rate (<c>isAnimationComplete</c> of a clip played once), or null when it
+    /// cannot be loaded.
+    /// </summary>
+    public double? AnimationSeconds(string animation)
+    {
+        if (_animationSeconds.TryGetValue(animation, out var known)) return known;
+        double? seconds;
+        try
+        {
+            seconds = animation.Contains('.', StringComparison.Ordinal) && _library.GetAnimation(animation) is { } binding && binding.Animation.FrameRate > 0
+                ? Math.Max(0, binding.Animation.FrameCount - 1) / (double)binding.Animation.FrameRate
+                : null;
+        }
+        catch (Exception exception) when (exception is W3dMissingAssetException or InvalidDataException or IOException)
+        {
+            seconds = null;
+        }
+        _animationSeconds[animation] = seconds;
+        return seconds;
+    }
+
     private W3dSkeleton? Skeleton(string model)
     {
         if (!_skeletons.TryGetValue(model, out var skeleton))

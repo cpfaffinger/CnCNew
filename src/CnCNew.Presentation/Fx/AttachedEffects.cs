@@ -614,6 +614,9 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     private sealed class Tracked
     {
         public int[] StateKey = [];
+        public ModelStateFollower?[]? Followers;
+        public int[] Playing = [];
+        public long[] PlayingSince = [];
         public readonly List<int> StateSystems = [];
         public readonly List<int> StateEmitters = [];
         public int DamageState = -1;
@@ -733,7 +736,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             if (world.FindEntity(item.Entity) is not { } entity) continue;
             if (!_tracked.TryGetValue(id, out var tracked)) _tracked[id] = tracked = new Tracked();
             tracked.Shown = true;
-            UpdateModelState(item, tracked);
+            UpdateModelState(item, tracked, world);
             catalog.Objects.TryGetValue(item.Visual.TemplateName, out var template);
             var damage = entity.HasStatus(ObjectStatusBits.UnderConstruction) ? tracked.DamageState : entity.DamageState();
             var aflame = entity.HasStatus(AflameStatus);
@@ -1207,6 +1210,13 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     public Func<string, string, string, Matrix4x4?>? DeployedBones { get; init; }
 
     /// <summary>
+    /// The seconds a W3D animation (<c>Hierarchy.Name</c>) takes from its first frame to its last (<c>ModelBoneTable.AnimationSeconds</c>), or null when it cannot be loaded. With it the model
+    /// state systems follow what <c>W3DModelDraw::setModelState</c> draws - a transition state between two real ones, a state that waits for the playing one to finish (#391); without it
+    /// they follow the state the conditions select.
+    /// </summary>
+    public Func<string, double?>? AnimationSeconds { get; init; }
+
+    /// <summary>
     /// A bone of the object's model as its DEPLOYED state shows it - the state's animation at its last frame (<c>START_FRAME_LAST</c>) - in world space, or null: what
     /// <c>ParticleUplinkCannonUpdate::calculateUpBonePositions</c> asks the drawable for when the dish is up.
     /// </summary>
@@ -1311,6 +1321,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         tracked.Moving = false;
         tracked.LastPosition = null;
         tracked.StateKey = [];
+        tracked.Followers = null;
         Destroy(tracked.StateSystems);
         StopEmitters(tracked.StateEmitters);
         Destroy(tracked.BodySystems);
@@ -1326,22 +1337,25 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
 
     // ---------------------------------------------------------------------------------------------------- W3DModelDraw ParticleSysBone
 
-    private void UpdateModelState(ProjectedEntity item, Tracked tracked)
+    private readonly List<int> _shownScratch = [];
+    private readonly Dictionary<ModelStateSpec, double> _playSeconds = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// <c>W3DModelDraw::setModelState</c>: entering a state stops the systems of the last one and starts the <c>ParticleSysBone</c> systems of the new one - also of a transition state, which
+    /// plays between two real states until its animation is complete (<c>doDrawModule</c>), and of a state that waits for the playing one to finish (#391).
+    /// </summary>
+    private void UpdateModelState(ProjectedEntity item, Tracked tracked, SimulationWorld world)
     {
-        var same = tracked.StateKey.Length == item.Selections.Length;
-        for (var index = 0; same && index < item.Selections.Length; index++) same = tracked.StateKey[index] == item.Selections[index].StateIndex;
+        ShownStates(item, tracked, world);
+        var same = tracked.StateKey.Length == _shownScratch.Count;
+        for (var index = 0; same && index < _shownScratch.Count; index++) same = tracked.StateKey[index] == _shownScratch[index];
         if (same) return;
-        var key = new int[item.Selections.Length];
-        for (var index = 0; index < key.Length; index++) key[index] = item.Selections[index].StateIndex;
-        tracked.StateKey = key;
+        tracked.StateKey = [.. _shownScratch];
         Destroy(tracked.StateSystems);
         StopEmitters(tracked.StateEmitters);
         for (var module = 0; module < item.Visual.Draws.Length && module < item.Selections.Length; module++)
         {
-            var index = item.Selections[module].StateIndex;
-            var draw = item.Visual.Draws[module];
-            if (index < 0 || index >= draw.States.Length) continue;
-            var state = draw.States[index];
+            if (ModelStateFollower.StateAt(item.Visual.Draws[module], tracked.StateKey[module]) is not { } state) continue;
             if (state.Model is { } model && Emitters?.Invoke(model) is { } emitter)
             {
                 tracked.StateEmitters.Add(fx.ModelEmitters.Start(emitter, item.Entity, Vector3.Zero));
@@ -1361,6 +1375,67 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
                 _modelStateSystems++;
             }
         }
+    }
+
+    /// <summary>
+    /// The state every draw module shows now, into <see cref="_shownScratch"/>: the selected one, or - for a module with transition or waiting states (<see cref="ModelStateFollower.Needed"/>)
+    /// and with <see cref="AnimationSeconds"/> known - what <see cref="ModelStateFollower"/> answers, the playing state's animation complete once its clip has run for its length in game time.
+    /// </summary>
+    private void ShownStates(ProjectedEntity item, Tracked tracked, SimulationWorld world)
+    {
+        _shownScratch.Clear();
+        var count = item.Selections.Length;
+        if (tracked.Followers is null || tracked.Followers.Length != count)
+        {
+            tracked.Followers = new ModelStateFollower?[count];
+            tracked.Playing = new int[count];
+            tracked.PlayingSince = new long[count];
+            for (var module = 0; module < count; module++)
+            {
+                tracked.Playing[module] = -1;
+                if (AnimationSeconds is not null && module < item.Visual.Draws.Length && ModelStateFollower.Needed(item.Visual.Draws[module]))
+                    tracked.Followers[module] = new ModelStateFollower(item.Visual.Draws[module]);
+            }
+        }
+        for (var module = 0; module < count; module++)
+        {
+            var requested = item.Selections[module].StateIndex;
+            if (tracked.Followers[module] is not { } follower || requested < 0)
+            {
+                _shownScratch.Add(requested);
+                continue;
+            }
+            var draw = item.Visual.Draws[module];
+            var playing = tracked.Playing[module];
+            var complete = ModelStateFollower.StateAt(draw, playing) is not { } current
+                || world.Tick - tracked.PlayingSince[module] >= PlaySeconds(current) * world.Time.TicksPerSecond;
+            var now = follower.Follow(requested, complete);
+            if (now != playing)
+            {
+                tracked.Playing[module] = now;
+                tracked.PlayingSince[module] = world.Tick;
+            }
+            _shownScratch.Add(now);
+        }
+    }
+
+    /// <summary>
+    /// How long a state plays until <c>isAnimationComplete</c>: a clip played once (<c>ONCE</c>, <c>ONCE_BACKWARDS</c>) from its first frame to its last at the state's slowest speed
+    /// (<c>AnimationSpeedFactorRange</c>); a looping or manual clip never completes; a state without a clip that loads is complete at once.
+    /// </summary>
+    private double PlaySeconds(ModelStateSpec state)
+    {
+        if (_playSeconds.TryGetValue(state, out var known)) return known;
+        double seconds = 0;
+        foreach (var clip in state.Animations)
+        {
+            if (clip.File is null || AnimationSeconds?.Invoke(clip.Name) is not { } length) continue;
+            seconds = state.Mode is AnimationMode.Once or AnimationMode.OnceBackwards
+                ? length / (state.AnimationSpeedMin > 0 ? (double)state.AnimationSpeedMin : 1.0)
+                : double.PositiveInfinity;
+            break;
+        }
+        return _playSeconds[state] = seconds;
     }
 
     // ---------------------------------------------------------------------------------------------------- W3DTankDraw / W3DTruckDraw

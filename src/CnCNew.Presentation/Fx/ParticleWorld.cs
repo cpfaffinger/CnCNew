@@ -128,6 +128,9 @@ public sealed class ParticleWorld
     /// <summary>The template names of the systems that run now, in creation order (a check of what is shown).</summary>
     public ImmutableArray<string> RunningTemplates => [.. _systems.Where(system => !system.Removed).Select(system => system.Template.Name)];
 
+    /// <summary>The template names of the systems that still emit - running and not destroyed (<see cref="Destroy"/> lets a system's particles finish) - in creation order.</summary>
+    public ImmutableArray<string> EmittingTemplates => [.. _systems.Where(system => !system.Removed && !system.Destroyed).Select(system => system.Template.Name)];
+
     /// <summary>The template name of a running system, or null.</summary>
     public string? TemplateNameOf(int systemId)
     {

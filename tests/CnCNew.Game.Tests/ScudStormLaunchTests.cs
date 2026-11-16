@@ -35,13 +35,14 @@ internal static class ScudStormLaunchTests
         harness.Run("The site is ATTACKING from the order to its last missile and shows the raised state throughout, the lying one before and after", () => AttackingThroughout(strike.Value));
         harness.Run("The draw module raises the missiles with Trans_READY -> Trans_ATTACKING during the wind-up and lowers the rails with Trans_ATTACKING -> Trans_READY after the last", () => RaisedAndLowered(strike.Value));
         harness.Run("The rails show the rounds left: each fired missile is hidden, all nine while the clip reloads, all nine again once it has", () => RoundsOnTheRails(strike.Value));
+        harness.Run("The transitions' own particle systems run while they play: goo while the missiles rise, the vent's steam only while the rails go down (#391)", () => TransitionSystems(strike.Value));
         harness.Run("Each of the nine missiles leaves its own rail, is drawn and carries its exhaust from its launch", () => MissilesFromTheirRails(strike.Value, data));
         return harness.Failures;
     }
 
     /// <summary>One drawn frame of the staged strike.</summary>
     private sealed record Sample(long Frame, bool Ordered, bool Attacking, bool AttackingCondition, int Selected, int Shown, int Hidden, int RuleCount, int Launched, bool Reloading,
-        int MissilesAlive, int ExhaustSystems, int MissilesWithoutModel);
+        int MissilesAlive, int ExhaustSystems, int MissilesWithoutModel, int SteamVent, int Goo);
 
     private sealed record Launch(uint Id, long Frame, Vector3 Offset);
 
@@ -118,7 +119,8 @@ internal static class ScudStormLaunchTests
                 var clip = scene.World.ClipStatusOf(storm, 1);
                 samples.Add(new Sample(frame, ordered, attackingNow, drawable.Conditions.Contains(ModelConditions.Attacking), drawable.Selections[0].StateIndex, shown,
                     rules.IsDefaultOrEmpty ? 0 : rules.Count(rule => rule.Hide), rules.IsDefaultOrEmpty ? 0 : rules.Length, seen.Count, clip is { Remaining: 0 },
-                    alive.Count, scene.Fx.Particles.RunningTemplates.Count(name => name == "ScudMissileExhaust"), withoutModel));
+                    alive.Count, scene.Fx.Particles.RunningTemplates.Count(name => name == "ScudMissileExhaust"), withoutModel,
+                    scene.Fx.Particles.EmittingTemplates.Count(name => name == "SteamVent"), scene.Fx.Particles.EmittingTemplates.Count(name => name == "ScudStormBuildingGoo")));
             }
             foreach (var index in new[] { none, attacking, draw.States.Length + raise, draw.States.Length + lower }) SecondsOf(index);
             return new Strike
@@ -166,6 +168,29 @@ internal static class ScudStormLaunchTests
         TestHarness.Assert(lowering.Count > 0 && lowering[0].Frame <= lastAttack.Frame + 2 && Math.Abs(lowering.Count - drawnFrames) <= 2,
             $"the end of the attack lowers the rails ({lowering.Count} frames, {drawnFrames} expected, from {lowering.FirstOrDefault()?.Frame}, attack until {lastAttack.Frame})");
         TestHarness.Assert(strike.Samples.Last().Shown == strike.None, "and the site lies around again");
+    }
+
+    /// <summary>
+    /// #391: <c>W3DModelDraw::setModelState</c> stops the systems of the state it leaves and starts the <c>ParticleSysBone</c> systems of the one it enters, transition states included. The lying
+    /// and the raised state blow <c>SteamLarge</c> and <c>SteamMedium</c>; <c>Trans_READY Trans_ATTACKING</c> adds the goo of <c>FXBone01</c> to <c>FXBone03</c>, and <c>Trans_ATTACKING Trans_READY</c>
+    /// blows <c>SteamVent</c> from both steam bones instead - the only state that does. The attached effects follow the transitions in game time, the drawn module in drawn frames: a frame
+    /// or two apart at either end.
+    /// </summary>
+    private static void TransitionSystems(Strike strike)
+    {
+        var lowering = strike.Samples.Where(sample => sample.Shown == strike.LowerTransition).ToList();
+        var raising = strike.Samples.Where(sample => sample.Shown == strike.RaiseTransition).ToList();
+        Console.WriteLine($"       vent steam in {strike.Samples.Count(sample => sample.SteamVent > 0)} frames, {lowering.Count} lowering; goo while raising {raising.Count(sample => sample.Goo >= 3)} of {raising.Count}");
+        TestHarness.Assert(lowering.Count > 10, $"the rails go down ({lowering.Count} frames)");
+        var inner = lowering.Skip(2).SkipLast(2).ToList();
+        var missing = inner.Where(sample => sample.SteamVent != 2).Select(sample => $"{sample.Frame}:{sample.SteamVent}").ToList();
+        TestHarness.Assert(missing.Count == 0, $"both vents steam while the rails go down ({string.Join(", ", missing.Take(10))})");
+        var first = lowering[0].Frame;
+        var last = lowering[^1].Frame;
+        var outside = strike.Samples.Where(sample => (sample.Frame < first - 2 || sample.Frame > last + 2) && sample.SteamVent > 0).Select(sample => sample.Frame).ToList();
+        TestHarness.Assert(outside.Count == 0, $"and at no other time ({string.Join(", ", outside.Take(10))})");
+        var dry = raising.Skip(2).Where(sample => sample.Goo < 3).Select(sample => $"{sample.Frame}:{sample.Goo}").ToList();
+        TestHarness.Assert(raising.Count > 10 && dry.Count == 0, $"the three goo bones drip while the missiles rise ({string.Join(", ", dry.Take(10))})");
     }
 
     private static void RoundsOnTheRails(Strike strike)
