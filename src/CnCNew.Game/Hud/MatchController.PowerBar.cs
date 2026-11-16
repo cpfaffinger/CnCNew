@@ -49,18 +49,14 @@ public sealed partial class MatchController
                 window.SetDrawImage(kind, 0, null);
     }
 
-    private void RefreshPowerBar()
+    /// <summary>
+    /// The bar's state - which powers, whether each can be pressed, how far each has recharged, how many are ready - from the world as it stands (#401). <c>ControlBar::update</c>
+    /// refreshes the bar every client frame whether or not it is drawn, so a key or a click acts on the bar of this frame: it runs in <see cref="Update"/>, and drawing only reads it.
+    /// </summary>
+    private void UpdatePowerBar()
     {
         if (_powerLayout.Length == 0) return;
         _powers = Input.CommandBar!.PowerShortcuts(Match.World, Match.Human, _powerSet);
-        for (var index = 0; index < MaxPowerButtons; index++)
-        {
-            var shown = index < _powers.Length;
-            _tree.FindByName($"{_powerLayout}:ButtonParent{index + 1}")?.SetHidden(!shown);
-            if (_tree.FindByName($"{_powerLayout}:ButtonCommand{index + 1}") is not { } window) continue;
-            window.SetHidden(!shown);
-            if (shown) window.SetEnabled(_powers[index].IsEnabled);
-        }
         foreach (var power in _powers)
         {
             var name = power.Button.Name;
@@ -75,6 +71,20 @@ public sealed partial class MatchController
             counts.Add(ready > 1 ? ready : 0);
         }
         _powerReadyCounts = counts.MoveToImmutable();
+    }
+
+    /// <summary>The bar's windows as its state (<see cref="UpdatePowerBar"/>) says: a button for every power, packed from the bottom, enabled when it can be pressed.</summary>
+    private void RefreshPowerBar()
+    {
+        if (_powerLayout.Length == 0) return;
+        for (var index = 0; index < MaxPowerButtons; index++)
+        {
+            var shown = index < _powers.Length;
+            _tree.FindByName($"{_powerLayout}:ButtonParent{index + 1}")?.SetHidden(!shown);
+            if (_tree.FindByName($"{_powerLayout}:ButtonCommand{index + 1}") is not { } window) continue;
+            window.SetHidden(!shown);
+            if (shown) window.SetEnabled(_powers[index].IsEnabled);
+        }
     }
 
     /// <summary>

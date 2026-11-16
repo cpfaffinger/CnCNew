@@ -30,6 +30,7 @@ internal static class ShortcutLetterTests
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("The general's window: a science answers its label's letter while the window is open, after the command bar's letters, and its tooltip names it (#389)", () => Sciences(data));
         harness.Run("The powers bar: a button answers its label's letter when no slot of the command bar holds it, and its tooltip names it (#389)", () => PowersBar(data));
+        harness.Run("The powers bar answers a letter with the bar of this frame, also when the HUD is not drawn (#401)", () => PowersBarWithoutDrawing(data));
         return harness.Failures;
     }
 
@@ -108,7 +109,7 @@ internal static class ShortcutLetterTests
         var live = LiveMission.Create(data, run, new Vector2(1280, 720));
         var mission = new MissionController(live, SkinPins.Settings);
         var controller = mission.Hud;
-        // The client builds the HUD's picture every frame, and with it the powers bar (MatchController.RefreshPowerBar): what it shows is what answers.
+        // The client builds the HUD's picture every frame; the powers bar's state comes from the update (MatchController.UpdatePowerBar, #401), and what it shows is what answers.
         void Advance()
         {
             mission.Update(CnCNew.Tests.TestTime.FrameSeconds);
@@ -154,6 +155,45 @@ internal static class ShortcutLetterTests
         TestHarness.Assert(presses.Count == 2 && presses[1] == rangerF.IsEnabled && controller.Input.Commands.Mode != CommandModeKind.ButtonTarget,
             $"F is the ranger's {rangerF.Button.Name} ({rangerF.Availability}), not the bombardment ({string.Join(",", presses)}, {controller.Input.Commands.Mode})");
         controller.Input.Commands.Cancel();
+    }
+
+    /// <summary>
+    /// #401: <c>ControlBar::update</c> refreshes the powers bar every client frame whether or not it is drawn, so a letter acts on the bar of this frame. The mission whose bar carries
+    /// the battleships' bombardment (&amp;F), with a battleship put to sea, played without ever drawing the HUD: the bombardment is on the bar, F aims it, and the first picture shows it.
+    /// </summary>
+    private static void PowersBarWithoutDrawing(GameData data)
+    {
+        var run = MissionRun.Load(MissionContext.From(data), "Maps/MD_USA02/MD_USA02.map", MissionOptions.Standard);
+        var live = LiveMission.Create(data, run, new Vector2(1280, 720));
+        var mission = new MissionController(live, SkinPins.Settings);
+        var controller = mission.Hud;
+        void Advance() => mission.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        var world = live.World;
+        var human = live.Human;
+        for (var frame = 0; frame < 6000 && (mission.Director.InputLocked || mission.Director.Letterbox || world.Tick < world.Time.TicksPerSecond * 2); frame++) Advance();
+        TestHarness.Assert(!mission.Director.InputLocked, "the opening cinematic is over");
+
+        var anchor = world.Entities.Where(entity => entity.Owner == human && !entity.EffectivelyDead).OrderBy(entity => entity.Id.Value).First();
+        TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, 4_100_000, world.Tick, "AmericaVehicleBattleShip", human,
+            anchor.X, anchor.Y, CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, "a battleship is spawned");
+        controller.Input.Selection.Clear();
+        var limit = world.Tick + world.Time.TicksPerSecond * 40;
+        while (world.Tick < limit && controller.Powers.FirstOrDefault(power => power.Hotkey == 'f') is not { IsEnabled: true }) Advance();
+        var battleship = controller.Powers.FirstOrDefault(power => power.Hotkey == 'f');
+        TestHarness.Assert(battleship is { IsEnabled: true } && battleship.Button.TextLabel == "CONTROLBAR:BattleshipFire",
+            $"updated, not drawn: the bar carries the bombardment, ready, with F ({string.Join(", ", controller.Powers.Select(power => $"{power.Button.Name}:{power.Hotkey}:{power.Availability}"))})");
+        TestHarness.Assert(controller.CommandBar.Slots.All(slot => slot?.Hotkey != 'f'), "no slot of the command bar holds F");
+
+        var presses = new List<bool>();
+        controller.Input.CommandHotkeyPressed += activated => presses.Add(activated);
+        Press(controller, Advance, KeyCode.F);
+        TestHarness.Assert(presses is [true] && controller.Input.Commands.Mode == CommandModeKind.ButtonTarget,
+            $"F aims the bombardment without the HUD ever drawn ({string.Join(",", presses)}, {controller.Input.Commands.Mode})");
+        controller.Input.Commands.Cancel();
+
+        // Drawing reads the state the update made: the first picture shows the bombardment's button.
+        mission.BuildDrawList(1280, 720);
+        TestHarness.Assert(controller.Tree.FindByName(PowerWindow(controller, controller.Powers.First(power => power.Hotkey == 'f'))) is { IsHidden: false, IsEnabled: true }, "the first picture shows its button, enabled");
     }
 
     /// <summary>The window of the powers bar that shows <paramref name="power"/>.</summary>

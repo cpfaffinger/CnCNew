@@ -161,6 +161,7 @@ public sealed partial class MatchController
         CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(match.World, match.Human);
         Generals = Input.CommandBar.Generals(match.World, match.Human);
+        UpdatePowerBar();
         Overlay = HudOverlay.Empty;
     }
 
@@ -646,6 +647,7 @@ public sealed partial class MatchController
         Input.Selection.SelectNewGunships(Match.World);
         CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
+        UpdatePowerBar();
         UpdateGenerals();
         DrainFeedback();
         Overlay = ComputeOverlay();
