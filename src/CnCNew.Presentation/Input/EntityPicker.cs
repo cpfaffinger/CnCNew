@@ -25,22 +25,6 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
 
     public float MinRadiusPixels { get; } = minRadiusPixels;
 
-    private readonly HashSet<uint> _scriptUnselectable = [];
-
-    /// <summary>
-    /// <c>Object::setSelectable</c> from a mission script (<c>UNIT_AFFECT_OBJECT_PANEL_FLAGS</c> "Selectable"): an object the script made unselectable is neither picked nor kept in a selection. A
-    /// presentation switch; the simulation's own <c>UNSELECTABLE</c> status is untouched.
-    /// </summary>
-    public void SetScriptSelectable(EntityId entity, bool selectable)
-    {
-        if (selectable) _scriptUnselectable.Remove(entity.Value);
-        else _scriptUnselectable.Add(entity.Value);
-    }
-
-    public bool IsScriptUnselectable(uint entity) => _scriptUnselectable.Contains(entity);
-
-    public int ScriptUnselectableCount => _scriptUnselectable.Count;
-
     /// <summary>
     /// <c>Object::isSelectable</c> plus the <c>CanSelectDrawable</c> filters that exist here: <c>ALWAYS_SELECTABLE</c> or <c>SELECTABLE</c> without the
     /// <c>UNSELECTABLE</c>/<c>MASKED</c> status, alive, not being removed, not inside a container. A rider its container leaves in the world (a fire base's soldier, a portable
@@ -51,7 +35,7 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
     {
         if (entity.DestroyRequested || entity.ContainedBy.IsValid) return false;
         if (entity.Template.IsKindOf("ALWAYS_SELECTABLE")) return true;
-        // Object::m_isSelectable starts as the template's KINDOF_SELECTABLE; a map's objectSelectable overrides it (updateObjValuesFromMapProperties).
+        // Object::m_isSelectable starts as the template's KINDOF_SELECTABLE; a map's objectSelectable (updateObjValuesFromMapProperties) and a script's panel flag "Selectable" override it.
         var own = (entity.ScriptDisableMask & Entity.ScriptUnselectable) != 0 ? false : (entity.ScriptDisableMask & Entity.ScriptSelectable) != 0 ? true : entity.Template.IsKindOf("SELECTABLE");
         return own && !entity.EffectivelyDead && !entity.HasStatus(UnselectableBit) && !entity.HasStatus(MaskedBit);
     }
@@ -88,7 +72,7 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
         ScreenEntity? best = null;
         foreach (var entity in world.Entities)
         {
-            if (!IsPickable(world, viewer, entity) || _scriptUnselectable.Contains(entity.Id.Value) || !TryProject(view, entity, out var candidate)) continue;
+            if (!IsPickable(world, viewer, entity) || !TryProject(view, entity, out var candidate)) continue;
             var distance = Vector2.Distance(candidate.Center, screen);
             if (RayEnters(entity, origin, direction) is { } enter) candidate = candidate with { Depth = enter };
             else if (distance > MinRadiusPixels) continue;
@@ -161,7 +145,7 @@ public sealed class EntityPicker(float minRadiusPixels = 8f)
     {
         var result = new List<Entity>();
         foreach (var entity in world.Entities)
-            if (IsPickable(world, viewer, entity) && !_scriptUnselectable.Contains(entity.Id.Value) && view.TryWorldToScreen(CenterOf(entity), out var screen) && rect.Contains(screen)) result.Add(entity);
+            if (IsPickable(world, viewer, entity) && view.TryWorldToScreen(CenterOf(entity), out var screen) && rect.Contains(screen)) result.Add(entity);
         result.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
         return [..result];
     }

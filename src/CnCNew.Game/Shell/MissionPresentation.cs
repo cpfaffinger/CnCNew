@@ -1307,21 +1307,6 @@ public sealed class MissionPresentationDirector
                 iconHud.SetIconUiEnabled(icons != 0f);
                 Handled(action, Channel.Hud);
                 return;
-            case "UNIT_AFFECT_OBJECT_PANEL_FLAGS" or "TEAM_AFFECT_OBJECT_PANEL_FLAGS":
-            {
-                if (Hud is not { } hud) { Problem(action, "no HUD connected"); return; }
-                var flag = Argument(output, 1);
-                if (!Number(output, 2, out var on)) { Problem(action, "flag value missing"); return; }
-                // The script engine executes every other flag itself and hands out only the player's selection.
-                if (!flag.Equals("Selectable", StringComparison.Ordinal)) { Problem(action, $"flag '{flag}' is the simulation's, not the presentation's"); return; }
-                var targets = Targets(action.StartsWith("UNIT", StringComparison.Ordinal), Argument(output, 0));
-                if (targets.Count == 0) { Problem(action, "unknown named object or empty team"); return; }
-                var acted = false;
-                foreach (var target in targets) acted |= hud.SetObjectSelectable(target, on != 0f);
-                if (acted) Handled(action, Channel.Hud);
-                return;
-            }
-
             // ---- state a later screen reads (no consumer in this client, see MissionOutputCatalog)
             case "ENABLE_SCORING" or "DISABLE_SCORING":
                 ScoringEnabled = action == "ENABLE_SCORING";

@@ -509,8 +509,8 @@ public sealed partial class ScriptEngine
     /// <summary>
     /// <c>ScriptActions::changeObjectPanelFlagForSingleObject</c> for each object: "Enabled" and "Powered" set or clear <c>OBJECT_STATUS_SCRIPT_DISABLED</c> and <c>OBJECT_STATUS_SCRIPT_UNPOWERED</c>
     /// (the object is disabled as <c>DISABLED_SCRIPT_DISABLED</c> or <c>DISABLED_SCRIPT_UNDERPOWERED</c> while the flag is off), "Indestructible" is the body's, "Unsellable" and "Player Targetable"
-    /// the script statuses, "AI Recruitable" the AI's recruitability. "Selectable" (<c>Object::setSelectable</c>) is the player's selection, which this port keeps outside the simulation: the
-    /// action goes to the presentation as an output once. A flag the original does not name changes nothing there either; here it is counted.
+    /// the script statuses, "AI Recruitable" the AI's recruitability, "Selectable" the object's own selectability (<c>Object::setSelectable</c>, only where <c>isSelectable</c> differs from
+    /// the value), which <see cref="SimulationWorld.IsSelectable"/> reads and the presentation with it. A flag the original does not name changes nothing there either; here it is counted.
     /// </summary>
     private void ChangePanelFlags(MapScriptAction action, IReadOnlyList<Entity> objects, string flag, bool value)
     {
@@ -540,7 +540,8 @@ public sealed partial class ScriptEngine
                 }
                 return;
             case PanelSelectable:
-                _outputs.Add(new ScriptOutput(_tick, action.TypeName, [..OutputArguments(action)]));
+                foreach (var entity in objects)
+                    if (SimulationWorld.IsSelectable(entity) != value) _world.SetSelectable(entity, value);
                 return;
             default:
                 Diagnose($"{action.TypeName}: unknown flag '{flag}'");

@@ -106,6 +106,23 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Issue 404: the panel flag "Selectable" is <c>Object::setSelectable</c>, which <c>Squad::getLiveObjects</c> reads for a team attack's victim on hard. The script makes the member that
+    /// joined last unselectable before the attack, so the attacker takes the one before it.
+    /// </summary>
+    public static void SquadVictimSkipsWhatAScriptMadeUnselectable()
+    {
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [
+                Scr.Do("UNIT_AFFECT_OBJECT_PANEL_FLAGS", Scr.Unit("Last"), Scr.Named(CnCNew.Data.World.MapScriptParameterType.ObjectPanelFlag, "Selectable"), Scr.Bool(false)),
+                Scr.Do("NAMED_ATTACK_TEAM", Scr.Unit("Hunter"), Scr.Team("teamB"))], oneShot: true)],
+            objects: [Placed("MoodGunner", 100m, 200m, "teamA", "Hunter"), Placed("Bystander", 100m, 330m, "teamB", "Near"), Placed("Bystander", 320m, 200m, "teamB", "Last")], extraFiles: RoamFiles());
+        var session = CnCNew.Simulation.Mission.MissionSession.Start(CnCNew.Simulation.Mission.MissionOptions.Standard with { Difficulty = CnCNew.Simulation.Scripting.ScriptDifficulty.Hard },
+            fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(450));
+        Check.That(!SimulationWorld.IsSelectable(NamedIn(session, "Last")!), "The script made the last member unselectable.");
+        Check.That(Hurt(session, "Near") && !Hurt(session, "Last"), "On hard the attacker takes the last selectable member, not the one the script made unselectable.");
+    }
+
+    /// <summary>
     /// Issue 405: on normal difficulty <c>AIAttackSquadState::chooseVictim</c> asks the partition for the closest member of the squad, with <c>PartitionFilterSameMapStatus</c>. A rider its
     /// transport encloses is not in the partition (<c>OpenContain::addOrRemoveObjFromWorld</c>), and a member off the map is not where an attacker on the map looks: both are closer to the
     /// attacker than the member it takes, the one that stands on the map in the open.

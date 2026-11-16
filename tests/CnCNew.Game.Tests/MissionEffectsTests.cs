@@ -50,7 +50,6 @@ file sealed class FakeHud : IMissionHudControl
     public bool AddCommandButton(string buttonName, string objectType, int slot) { Calls.Add($"add {buttonName} {objectType} {slot}"); return true; }
     public bool SetScienceAvailability(string science, string availability) { Calls.Add($"science {science} {availability}"); return true; }
     public void SetIconUiEnabled(bool enabled) => Calls.Add($"icons {enabled}");
-    public bool SetObjectSelectable(EntityId entity, bool selectable) { Calls.Add($"selectable {selectable}"); return true; }
     public void FlashCommandButton(string buttonName, int count) => Calls.Add($"flash {buttonName} {count}");
     public void SetSpecialPowerDisplay(bool enabled) => Calls.Add($"power display {enabled}");
     public bool SetObjectSpecialPowerDisplay(EntityId entity, bool visible) { Calls.Add($"object power display {visible}"); return true; }
@@ -216,15 +215,15 @@ internal static class MissionEffectsTests
         StepFrame(again, host);
 
         TestHarness.Assert(objects.Calls.SequenceEqual(["flash 1,1,1 5s", "flash house 3s", "color FF00FFFF"]), $"flash white, flash in the house colour and the custom colour (an ARGB integer) reach the object layer ({string.Join(" | ", objects.Calls)})");
-        TestHarness.Assert(hud.Calls.SequenceEqual(["remove Command_A TypeA", "add Command_B TypeA 3", "science SCIENCE_X Hidden", "icons False", "selectable False", "power display False"]),
-            $"the HUD got the removals, the science of the local player only, the icon switch, the Selectable flag and the superweapon list switch ({string.Join(" | ", hud.Calls)})");
+        TestHarness.Assert(hud.Calls.SequenceEqual(["remove Command_A TypeA", "add Command_B TypeA 3", "science SCIENCE_X Hidden", "icons False", "power display False"]),
+            $"the HUD got the removals, the science of the local player only, the icon switch and the superweapon list switch ({string.Join(" | ", hud.Calls)})");
         counts = host.Counts().ToDictionary(count => count.Action);
         TestHarness.Assert(counts["NAMED_FLASH_WHITE"] is { Displayed: 1 } && counts["NAMED_CUSTOM_COLOR"] is { Displayed: 1 }, "flashes and colours are displayed once the object layer acted");
         TestHarness.Assert(counts["COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"] is { Displayed: 1 } && counts["COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT"] is { Displayed: 1 } && counts["OPTIONS_SET_DRAWICON_UI_MODE"] is { Displayed: 1 }, "the control bar and the icon switch are displayed once the HUD acted");
         TestHarness.Assert(counts["PLAYER_SCIENCE_AVAILABILITY"] is { Emitted: 2, Forwarded: 1, Displayed: 1 }, $"the science of the local player reaches the window of the general ({counts["PLAYER_SCIENCE_AVAILABILITY"]})");
         TestHarness.Assert(host.Problems.ContainsKey("PLAYER_SCIENCE_AVAILABILITY: unknown player 'Nobody'"), "a side that does not exist is reported");
-        TestHarness.Assert(counts["UNIT_AFFECT_OBJECT_PANEL_FLAGS"] is { Emitted: 1, Forwarded: 1, Displayed: 1 } && !host.Problems.Keys.Any(key => key.StartsWith("UNIT_AFFECT_OBJECT_PANEL_FLAGS", StringComparison.Ordinal)),
-            $"only the Selectable flag reaches the presentation ({counts["UNIT_AFFECT_OBJECT_PANEL_FLAGS"]})");
+        TestHarness.Assert(!counts.ContainsKey("UNIT_AFFECT_OBJECT_PANEL_FLAGS") && !host.Problems.Keys.Any(key => key.StartsWith("UNIT_AFFECT_OBJECT_PANEL_FLAGS", StringComparison.Ordinal)),
+            "every panel flag is the simulation's, Selectable too (issue 404): nothing reaches the presentation as an output");
         TestHarness.Assert(again.World.Entities.Single(entity => entity.Template.Name == "Barrel").Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: true },
             "the Indestructible flag is the simulation's: the barrel's body takes no damage");
         TestHarness.Assert(!host.ScoringEnabled && host.ScoreScreenExcluded.Contains("Hero") && !host.SpecialPowerDisplayEnabled, "the scoring and display switches are kept for the screens that read them");
@@ -634,11 +633,14 @@ internal static class MissionEffectsTests
         var mine = live.World.Entities.Where(candidate => candidate.Owner == live.Human && !candidate.EffectivelyDead && CnCNew.Presentation.Input.EntityPicker.IsSelectable(candidate)).OrderBy(candidate => candidate.Id.Value).Take(2).ToArray();
         controller.Hud.Input.Selection.Replace(mine.Select(candidate => candidate.Id));
         TestHarness.Assert(controller.Hud.Input.Selection.Contains(mine[0].Id), "selectable by default");
-        TestHarness.Assert(controller.SetObjectSelectable(mine[0].Id, false) && !controller.Hud.Input.Selection.Contains(mine[0].Id) && controller.Hud.Input.Selection.Contains(mine[1].Id), "an object the script made unselectable leaves the selection, the other stays");
+        // The panel flag "Selectable" is the simulation's (issue 404); the presentation reads it from the object and drops it from the selection at the next tick.
+        live.World.SetSelectable(mine[0], false);
+        for (var frame = 0; frame < 2; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+        TestHarness.Assert(!controller.Hud.Input.Selection.Contains(mine[0].Id) && controller.Hud.Input.Selection.Contains(mine[1].Id), "an object the script made unselectable leaves the selection, the other stays");
+        TestHarness.Assert(!CnCNew.Presentation.Input.EntityPicker.IsSelectable(mine[0]), "and the picker does not take it");
+        live.World.SetSelectable(mine[0], true);
         controller.Hud.Input.Selection.Replace(mine.Select(candidate => candidate.Id));
-        TestHarness.Assert(!controller.Hud.Input.Selection.Contains(mine[0].Id), "and cannot be selected again");
-        TestHarness.Assert(controller.SetObjectSelectable(mine[0].Id, true), "the script gives it back");
-        controller.Hud.Input.Selection.Replace(mine.Select(candidate => candidate.Id));
+        for (var frame = 0; frame < 2; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(controller.Hud.Input.Selection.Contains(mine[0].Id), "selectable again");
         controller.SetIconUiEnabled(false);
         TestHarness.Assert(!controller.Hud.IconUiEnabled, "the icon switch reached the HUD");

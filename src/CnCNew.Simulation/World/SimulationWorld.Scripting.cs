@@ -124,6 +124,19 @@ public sealed partial class SimulationWorld
         MarkDirty(entity);
     }
 
+    /// <summary>
+    /// <c>Object::setSelectable</c> (the panel flag "Selectable"): <c>m_isSelectable</c>, kept as its deviation from the template's <c>SELECTABLE</c> (<see cref="Entity.ScriptSelectable"/>,
+    /// <see cref="Entity.ScriptUnselectable"/>), so an object whose value is its template's again writes nothing.
+    /// </summary>
+    public void SetSelectable(Entity entity, bool selectable)
+    {
+        var mask = (byte)(entity.ScriptDisableMask & ~(Entity.ScriptSelectable | Entity.ScriptUnselectable));
+        if (selectable != entity.Template.IsKindOf("SELECTABLE")) mask |= selectable ? Entity.ScriptSelectable : Entity.ScriptUnselectable;
+        if (mask == entity.ScriptDisableMask) return;
+        entity.ScriptDisableMask = mask;
+        MarkDirty(entity);
+    }
+
     /// <summary><c>ActiveBody::setIndestructible</c> (the panel flag "Indestructible"): the body takes no damage, and a bridge gives the same to its towers. Nothing for a body that is no <c>ActiveBody</c>.</summary>
     public void SetIndestructible(Entity entity, bool indestructible)
     {
@@ -166,7 +179,7 @@ public sealed partial class SimulationWorld
     /// <c>Object::isSelectable</c>, as the simulation knows it: an <c>ALWAYS_SELECTABLE</c> object always; otherwise one whose own selectability (the template's <c>SELECTABLE</c>, which a map's
     /// <c>objectSelectable</c> overrides) holds, without the <c>UNSELECTABLE</c> status - which a slave carries while its master lives (<c>SlavedUpdate::startSlavedEffects</c>) and a rider
     /// while it is contained (<c>Object::onContainedBy</c>; here the container itself says so) - and not dead. The angry mob's members never set the status (it is commented out of
-    /// <c>MobMemberSlavedUpdate::startSlavedEffects</c>), so they are selectable when their template is. A script's "Selectable" panel flag is kept by the presentation, not here.
+    /// <c>MobMemberSlavedUpdate::startSlavedEffects</c>), so they are selectable when their template is. A script's "Selectable" panel flag sets the object's own selectability (<see cref="SetSelectable"/>).
     /// </summary>
     public static bool IsSelectable(Entity entity)
     {

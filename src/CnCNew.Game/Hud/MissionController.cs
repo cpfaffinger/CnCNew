@@ -80,15 +80,6 @@ public sealed class MissionController : IMissionHudControl
 
     public void SetIconUiEnabled(bool enabled) => Hud.IconUiEnabled = enabled;
 
-    public bool SetObjectSelectable(EntityId entity, bool selectable)
-    {
-        if (Mission.World.FindEntity(entity) is null) return false;
-        Hud.Input.Selection.Picker.SetScriptSelectable(entity, selectable);
-        // Object::setSelectable(false) drops the object from the selection.
-        if (!selectable) Hud.Input.Selection.Replace(Hud.Input.Selection.Selected);
-        return true;
-    }
-
     private long _lastInputTime;
 
     /// <summary><c>ScriptActions::doDisableInput</c>: besides dropping input the original clears the selection, the pending command modes and every held key and button.</summary>

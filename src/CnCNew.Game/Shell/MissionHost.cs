@@ -73,9 +73,6 @@ public interface IMissionHudControl
     /// <summary><c>OPTIONS_SET_DRAWICON_UI_MODE</c> (<c>GameLogic::setDrawIconUI</c>): the icon overlay (heal icons and selection marks) of the drawables.</summary>
     void SetIconUiEnabled(bool enabled);
 
-    /// <summary><c>UNIT_AFFECT_OBJECT_PANEL_FLAGS</c> "Selectable" (<c>Object::setSelectable</c>): the object can or cannot be selected by the player.</summary>
-    bool SetObjectSelectable(EntityId entity, bool selectable);
-
     /// <summary><c>DISABLE_SPECIAL_POWER_DISPLAY</c>/<c>ENABLE_SPECIAL_POWER_DISPLAY</c> (<c>InGameUI::setSuperweaponDisplayEnabledByScript</c>): the whole superweapon timer list.</summary>
     void SetSpecialPowerDisplay(bool enabled);
 

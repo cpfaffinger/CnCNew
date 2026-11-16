@@ -80,7 +80,8 @@ static partial class Tests
 
     /// <summary>
     /// <c>UNIT_AFFECT_OBJECT_PANEL_FLAGS</c> and <c>TEAM_AFFECT_OBJECT_PANEL_FLAGS</c>: "Enabled" and "Powered" off disable the object as a script disable and a script underpower, on
-    /// again release it; "Indestructible", "Unsellable" and "Player Targetable" set what they name; "Selectable" goes to the presentation; a flag the original does not name is counted.
+    /// again release it; "Indestructible", "Unsellable" and "Player Targetable" set what they name; "Selectable" is the object's own selectability (issue 404), which the simulation's
+    /// <c>isSelectable</c> reads and the presentation with it; a flag the original does not name is counted.
     /// </summary>
     public static void ScriptPanelFlags()
     {
@@ -93,7 +94,7 @@ static partial class Tests
                 Flag(Team, Scr.Team("Squad"), "Powered", false), Flag(Unit, Scr.Unit("Bunker"), "powered", true), Flag(Unit, Scr.Unit("Nobody"), "Enabled", false)], oneShot: true),
             Scr.Script("On", [Scr.And(Scr.If("FLAG", Scr.Flag("on"), Scr.Bool(true)))], [
                 Flag(Unit, Scr.Unit("Bunker"), "Powered", true), Flag(Unit, Scr.Unit("Bunker"), "Enabled", true), Flag(Unit, Scr.Unit("Bunker"), "Indestructible", false),
-                Flag(Team, Scr.Team("Squad"), "Powered", true)], oneShot: true),
+                Flag(Team, Scr.Team("Squad"), "Powered", true), Flag(Unit, Scr.Unit("Bunker"), "Selectable", true)], oneShot: true),
         ], objects: [Placed("AlphaBunker", 100m, 60m, "teamA", "Bunker"), Placed("AlphaSoldier", 100m, 140m, "Squad", "Trooper1"), Placed("AlphaSoldier", 120m, 140m, "Squad", "Trooper2")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Run(session, session.Frames(10));
@@ -105,8 +106,9 @@ static partial class Tests
         Check.That(bunker.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: true }, "Indestructible is the body's.");
         Check.That((bunker.ScriptDisableMask & (Entity.ScriptUnsellable | Entity.ScriptTargetable)) == (Entity.ScriptUnsellable | Entity.ScriptTargetable), "Unsellable and Player Targetable are script statuses.");
         Check.That(troopers.All(trooper => session.World.DisabledFlagsOf(trooper) == DisabledMask.ScriptUnderpowered), "The team's flag reaches every member.");
-        var outputs = session.Engine.DrainOutputs().Where(output => output.Action == Unit).ToArray();
-        Check.That(outputs.Length == 1 && outputs[0].Arguments is ["Bunker", "Selectable", "0"], $"Only Selectable goes to the presentation ({string.Join(" | ", outputs.Select(output => string.Join(",", output.Arguments)))}).");
+        Check.That(!session.Engine.DrainOutputs().Any(output => output.Action == Unit), "No flag goes to the presentation as an output.");
+        Check.That(!SimulationWorld.IsSelectable(bunker) && (bunker.ScriptDisableMask & (Entity.ScriptSelectable | Entity.ScriptUnselectable)) == Entity.ScriptUnselectable,
+            "Selectable off makes the object unselectable to the simulation (Object::setSelectable).");
         Check.That(session.Engine.Diagnostics.ContainsKey($"{Unit}: unknown flag 'powered'"), $"A flag the original does not name (it compares exactly) changes nothing and is counted ({string.Join("; ", session.Engine.Diagnostics.Keys)}).");
         Check.That(session.Engine.MissingActionHits.Count == 0, "Nothing is missing.");
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
@@ -116,6 +118,8 @@ static partial class Tests
         Run(session, session.Frames(10));
         Check.That(session.World.DisabledFlagsOf(bunker) == DisabledMask.None && bunker.Body is CnCNew.Simulation.Modules.BuiltIn.ActiveBody { Indestructible: false },
             "On again, the object is enabled, powered and destructible.");
+        Check.That(SimulationWorld.IsSelectable(bunker) && (bunker.ScriptDisableMask & (Entity.ScriptSelectable | Entity.ScriptUnselectable)) == 0,
+            "And selectable again, which is its template's value: nothing is kept for it.");
         Check.That(troopers.All(trooper => session.World.DisabledFlagsOf(trooper) == DisabledMask.None), "And the team is powered.");
     }
 
