@@ -431,7 +431,22 @@ public sealed partial class ScriptEngine
         }
     }
 
-    /// <summary>The factory that finished this object in the step being observed (<c>onUnitProduced</c>'s <c>factory</c>), or 0: whatever else appears came out of none.</summary>
+    /// <summary>
+    /// <c>onUnitProduced</c>'s <c>factory</c>, or 0 when the original makes no such call. <c>Player::onUnitCreated</c> is called by <c>ProductionUpdate::update</c> with the factory and by
+    /// <c>SpawnBehavior::createSpawn</c> with the spawner (the supply centre's first gatherer comes that way); what a creation list, a script, a reinforcement or a rebuild hole makes reaches neither.
+    /// </summary>
+    private uint ProducerOf(Entity unit)
+    {
+        foreach (var spawner in _world.EntitiesWithModule<ISpawnerModule>().AsSpan())
+            foreach (var module in spawner.ModuleArray)
+                if (module is ISpawnerModule spawns && spawns.Slaves.Contains(unit.Id)) return spawner.Id.Value;
+        // The worker of a hole comes up where the hole lies: it must not take the entry of a factory that finished a unit of its type in the same step.
+        foreach (var hole in _world.EntitiesOfKind("REBUILD_HOLE").AsSpan())
+            if (hole.X == unit.X && hole.Y == unit.Y) return 0;
+        return TakeFactoryOf(unit);
+    }
+
+    /// <summary>The factory that finished this object in the step being observed, or 0.</summary>
     private uint TakeFactoryOf(Entity unit)
     {
         var made = _madeByFactories.FindIndex(entry => entry.Template == unit.Template.Index);

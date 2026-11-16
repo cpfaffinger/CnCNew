@@ -186,6 +186,10 @@ public sealed partial class ScriptEngine
     /// <summary>The rebuilds left per entry of an AI player's build list, in list order, -1 for unlimited; for tools and tests.</summary>
     public ImmutableArray<int> AiRebuildsOf(PlayerId player) => AiOfPlayer(player) is { } state ? [..state.BuildList.Select(entry => entry.Rebuilds)] : [];
 
+    /// <summary>The units an AI player has ordered for itself (<c>queueDozer</c>, <c>queueSupplyTruck</c>) and the factory each waits at, 0 for none yet; for tools and tests.</summary>
+    public ImmutableArray<(string Template, bool Gatherer, uint Factory)> AiUnitOrdersOf(PlayerId player)
+        => AiOfPlayer(player) is { } state ? [..state.UnitOrders.Select(order => (order.Template, order.Gatherer, order.Factory))] : [];
+
     /// <summary><c>AIPlayer::m_baseCenter</c>; for tools and tests.</summary>
     public (Fixed X, Fixed Y) AiBaseCentreOf(PlayerId player) => AiOfPlayer(player) is { } state ? (state.BaseX, state.BaseY) : (Fixed.Zero, Fixed.Zero);
 
@@ -560,39 +564,35 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::onUnitProduced</c>: something of an AI player came out of a factory, so its queues are looked at again at once. A skirmish takes whatever appears for that; in a mission most of
-    /// it is a script's, and that does not shorten the five seconds.
+    /// <c>AIPlayer::onUnitProduced</c>, which <c>Player::onUnitCreated</c> calls for what a factory made and for what a spawner made (<paramref name="factory"/>, see <see cref="ProducerOf"/>): the
+    /// queues are looked at again at once, and an order of that factory for that type is filled. "factory could be NULL at the start of the game": what was placed, and whatever else appears - a
+    /// creation list's, a script's, a reinforcement, the worker of a hole -, reaches none of it (issue 407).
     /// </summary>
-    private void AiObserveSpawn(Entity entity, bool fromFactory)
+    private void AiObserveSpawn(Entity entity, uint factory)
     {
         if (AiOfPlayer(entity.Owner) is not { } state) return;
-        if (fromFactory || IsSkirmish) state.TeamCheckTick = _tick;
+        if (factory != 0)
+        {
+            AiUnitProduced(state, entity, factory);
+            state.TeamCheckTick = _tick;
+        }
         if (entity.Template.IsKindOf("STRUCTURE")) return;
-        // "factory could be null at the start of the game." Nor does the worker of a hole count as produced: it comes up where the hole lies, and no order waits for it.
-        if (entity.SpawnTick > 0 && !StandsOnAHole(entity)) AiUnitProduced(state, entity);
         // A unit that no team asked for belongs to the player's default team (every object of the reference has a team; recruiting takes from there).
         if (FirstTeamOf(entity.Id.Value) is not null) return;
         if (PlayerById(state.Setup.Player) is { } owner && FindTeamInstance("team" + owner.Name) is { } defaultTeam) defaultTeam.Members.Add(entity.Id.Value);
     }
 
-    private bool StandsOnAHole(Entity unit)
-    {
-        foreach (var hole in _world.EntitiesOfKind("REBUILD_HOLE").AsSpan())
-            if (hole.X == unit.X && hole.Y == unit.Y) return true;
-        return false;
-    }
-
     /// <summary>
     /// The half of <c>AIPlayer::onUnitProduced</c> for the orders of <see cref="AiUnitOrder"/>. A gatherer gets to work and is sent to every centre that lacks one, so it ends at the last of them. A
-    /// dozer no gatherer order asked for looks at the base at once. The reference matches an order by factory and type; an object here does not say where it comes from, so by type.
+    /// dozer no gatherer order asked for looks at the base at once. An order is matched by its factory and the type, as the reference does: a like unit from elsewhere fills none.
     /// </summary>
-    private void AiUnitProduced(AiPlayer state, Entity unit)
+    private void AiUnitProduced(AiPlayer state, Entity unit, uint factory)
     {
         var gatherer = false;
         for (var index = 0; index < state.UnitOrders.Count; index++)
         {
             var order = state.UnitOrders[index];
-            if (order.Factory == 0 || !string.Equals(order.Template, unit.Template.Name, StringComparison.Ordinal)) continue;
+            if (order.Factory != factory || !string.Equals(order.Template, unit.Template.Name, StringComparison.Ordinal)) continue;
             gatherer = order.Gatherer;
             state.UnitOrders.RemoveAt(index);
             if (AiOf(unit) is ISupplyCarrier carrier)

@@ -747,6 +747,7 @@ run.Test("Mission AI: it trains the teams of its production conditions by priori
 run.Test("Mission AI: it reads the priority a script changed", Tests.TheAiReadsTheChangedPriorityOfATeam);
 run.Test("Mission AI: a script builds a second instance of a team, not of a singleton", Tests.AScriptBuildsAnotherInstanceOfATeam);
 run.Test("Mission AI: a team takes the unit of its factory, not a like one a script made", Tests.ATeamTakesTheUnitOfItsFactory);
+run.Test("Mission AI (issue 407): an order of the AI waits for the unit of its factory, not a like one a script made", Tests.AnOrderOfTheAiWaitsForTheUnitOfItsFactory);
 run.Test("Mission AI: its team timer is the script's, without a cap", Tests.MissionAiTeamTimerIsTheScripts);
 run.Test("Mission AI: it recruits around the home of the team", Tests.MissionAiRecruitsAroundTheHomeOfTheTeam);
 run.Test("Mission AI: it buys the sciences of the first skill set or of the chosen one", Tests.MissionAiBuysTheSciencesOfItsSkillSet);

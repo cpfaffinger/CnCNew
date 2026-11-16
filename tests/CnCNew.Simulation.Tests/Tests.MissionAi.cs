@@ -294,6 +294,31 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>AIPlayer::onUnitProduced</c> is reached through <c>Player::onUnitCreated</c>, which only a factory and a spawner call, and it matches the AI's own order by factory and type: a dozer a
+    /// script makes while the ordered one is trained takes no order, and the trained one does (issue 407). Before, every object that appeared was handed to it and the order was taken by type.
+    /// </summary>
+    public static void AnOrderOfTheAiWaitsForTheUnitOfItsFactory()
+    {
+        var session = StartAiMission([], objects: [Placed("BetaCenter", 300m, 100m, "teamB", "Hq")],
+            buildList: [AiEntry("BetaPlant", 400m, 160m, rebuilds: 1)], files: AiMissionFiles());
+        var hq = NamedIn(session, "Hq")!;
+        var ordered = 0;
+        while (session.Engine.AiUnitOrdersOf(ComputerOfAiMission).IsEmpty && ordered++ < 200) Run(session, session.Frames(1));
+        var orders = session.Engine.AiUnitOrdersOf(ComputerOfAiMission);
+        Check.That(orders.Length == 1 && orders[0] is { Template: "BetaDozer", Gatherer: false } && orders[0].Factory == hq.Id.Value && CountOf(session, "BetaDozer") == 0,
+            $"The AI orders a dozer at its centre ({string.Join(", ", orders)}).");
+        Check.That(session.World.Templates.TryGet("BetaDozer", out var dozer), "The fixture has the dozer.");
+        var stray = session.World.RequestSpawn(dozer.Index, ComputerOfAiMission, Fixed.FromInt(100), Fixed.FromInt(300), Fixed.Zero, Fixed.Zero);
+        Run(session, session.Frames(1));
+        Check.That(session.World.FindEntity(stray) is not null, "The script's dozer stands.");
+        orders = session.Engine.AiUnitOrdersOf(ComputerOfAiMission);
+        Check.That(orders.Length == 1 && orders[0].Factory == hq.Id.Value, $"It fills no order: the order waits for the dozer of its factory ({string.Join(", ", orders)}).");
+        var trained = 0;
+        while (CountOf(session, "BetaDozer") < 2 && trained++ < 300) Run(session, session.Frames(1));
+        Check.That(CountOf(session, "BetaDozer") == 2 && session.Engine.AiUnitOrdersOf(ComputerOfAiMission).IsEmpty, $"The trained dozer takes it ({CountOf(session, "BetaDozer")}, {string.Join(", ", session.Engine.AiUnitOrdersOf(ComputerOfAiMission))}).");
+    }
+
+    /// <summary>
     /// <c>doTeamBuilding</c> of <c>AIPlayer</c> looks at the queues every five seconds (<c>AISkirmishPlayer</c> every two) and its team timer has no cap of three seconds; <c>SET_BASE_CONSTRUCTION_SPEED</c> sets it.
     /// </summary>
     public static void MissionAiTeamTimerIsTheScripts()
