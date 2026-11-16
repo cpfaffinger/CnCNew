@@ -201,6 +201,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         ArgumentNullException.ThrowIfNull(world);
         if (world.FactionOf(player) is not { } faction || !Catalog.TryGetSet(faction.ScienceSetRank1, out var rank1) || !Catalog.TryGetSet(faction.ScienceSetRank3, out var rank3)
             || !Catalog.TryGetSet(faction.ScienceSetRank8, out var rank8)) return null;
+        // ControlBar::setControlCommand gives every button it sets up its label's letter (HotKeyManager::addHotKey), in the order rank 1, 3, 8, and a hidden one too: it hides a
+        // science of another branch only after that. A letter an earlier button took stays that button's (#389).
+        var hotkeys = new HashSet<char>();
         return new GeneralsView(world.RankLevelOf(player), world.SciencePointsOf(player), world.RankProgressPercentOf(player),
             Places(rank1, GeneralsRank1Buttons), Places(rank3, GeneralsRank3Buttons), Places(rank8, GeneralsRank8Buttons));
 
@@ -211,9 +214,11 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             {
                 var button = index < set.Slots.Length ? set.Slots[index] : null;
                 if (button is null || button.Has(CommandOptions.ScriptOnly) || button.Sciences.IsEmpty) { places.Add(null); continue; }
+                var hotkey = text is null ? null : CommandButtonCatalog.HotkeyOf(button, text);
+                if (hotkey is { } key && !hotkeys.Add(key)) hotkey = null;
                 var (availability, reason) = EvaluateScience(world, player, button);
                 var hidden = availability == ButtonAvailability.Hidden || !world.Sciences.TryGet(button.Sciences[0], out var science) || !world.Sciences.RootsSatisfied(world.PlayerSciences(player), science);
-                places.Add(hidden ? null : new CommandBarButton(index + 1, button, availability, reason, null, default, 0, null, []));
+                places.Add(hidden ? null : new CommandBarButton(index + 1, button, availability, reason, hotkey, default, 0, null, []));
             }
             return places.MoveToImmutable();
         }

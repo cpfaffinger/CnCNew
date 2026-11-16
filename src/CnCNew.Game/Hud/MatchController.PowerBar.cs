@@ -191,6 +191,36 @@ public sealed partial class MatchController
     /// <summary>A press on button <paramref name="number"/> (from 1) of the bar, as a click on it would be.</summary>
     public bool PressPowerButton(int number) => PressPower($"{_powerLayout}:ButtonCommand{number}");
 
+    /// <summary>
+    /// <c>HotKeyTranslator</c> for the buttons outside the command bar (#389): <c>ControlBar::setControlCommand</c> gives every button it sets up the letter after its label's
+    /// <c>&amp;</c> (<c>HotKeyManager::addHotKey</c>) - the command bar's first (<c>evaluateContextUI</c>), then the powers bar's (<c>populateSpecialPowerShortcut</c>), then the general's
+    /// window's when it opens (<c>populatePurchaseScience</c>) - and a letter stays with the first button that took it. Asked only for a letter no slot of the command bar holds.
+    /// A visible button that is disabled answers with <c>GUIClickDisabled</c> and does nothing. The sciences answer while the window is open; the original keeps their letters from
+    /// the window's opening to the next refresh of the control bar (<c>switchToContext</c> empties the map, a selection or a bought science refreshes it), even with the window shut.
+    /// </summary>
+    private HotkeyActivation ActivateOtherHotkey(CnCNew.Simulation.World.SimulationWorld world, char letter)
+    {
+        if (OtherHotkeyButton(letter) is not { } button) return HotkeyActivation.None;
+        if (!button.IsEnabled) return HotkeyActivation.Disabled;
+        Input.Commands.Activate(world, button.Button, []);
+        return HotkeyActivation.Activated;
+    }
+
+    /// <summary>The button of the powers bar, or else of the open general's window, that holds <paramref name="letter"/>; each list has given a letter to its first button only.</summary>
+    private CommandBarButton? OtherHotkeyButton(char letter)
+    {
+        foreach (var power in _powers)
+            if (power.Hotkey == letter) return power;
+        if (!IsGeneralsWindowOpen || Generals is not { } view) return null;
+        foreach (var science in view.Rank1.Concat(view.Rank3).Concat(view.Rank8))
+            if (science?.Hotkey == letter) return science;
+        return null;
+    }
+
+    /// <summary>The letter <paramref name="button"/> of the powers bar or the general's window answers now, for its tooltip: none when an earlier button holds it.</summary>
+    private char? OtherHotkeyOf(CommandBarButton button)
+        => button.Hotkey is { } letter && !CommandBar.Slots.Any(slot => slot?.Hotkey == letter) && ReferenceEquals(OtherHotkeyButton(letter), button) ? letter : null;
+
     /// <summary>A press on a button of the bar: true when it was one.</summary>
     private bool PressPower(string name)
     {

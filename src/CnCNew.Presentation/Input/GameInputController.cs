@@ -63,6 +63,13 @@ public sealed class GameInputController
     /// <summary>A key pressed a button of the command bar, or found it disabled (<c>HotKeyManager::executeHotKey</c>: <c>GUIClick</c> or <c>GUIClickDisabled</c>).</summary>
     public event Action<bool>? CommandHotkeyPressed;
 
+    /// <summary>
+    /// The buttons outside the command bar that answer their label's letter too (#389): the HUD's bar of special powers and its general's window, whose buttons
+    /// <c>ControlBar::setControlCommand</c> registers after the command bar's (<c>populateSpecialPowerShortcut</c> after <c>evaluateContextUI</c>). Asked with the lowercase letter only
+    /// when no button of the command bar holds it; the first registration of a letter keeps it (<c>HotKeyManager::addHotKey</c>).
+    /// </summary>
+    public Func<SimulationWorld, char, HotkeyActivation>? OtherHotkeys { get; set; }
+
     /// <summary>Metas for the UI layer (options menu, pause, chat, diplomacy, screenshots, control bar toggle, ...), in the order they fired.</summary>
     public event Action<MetaAction>? UiRequest;
 
@@ -196,6 +203,7 @@ public sealed class GameInputController
             var lower = char.ToLowerInvariant(character);
             if (stopped && buttons.Slots.FirstOrDefault(button => button?.Hotkey == lower) is { Button.Kind: GuiCommandKind.Stop }) return;
             var activation = bar.ActivateHotkey(world, buttons, character, Commands, out _);
+            if (activation == HotkeyActivation.None && OtherHotkeys is { } others) activation = others(world, lower);
             if (activation != HotkeyActivation.None) CommandHotkeyPressed?.Invoke(activation == HotkeyActivation.Activated);
         }
     }

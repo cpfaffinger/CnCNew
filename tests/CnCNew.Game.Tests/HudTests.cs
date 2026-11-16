@@ -825,8 +825,8 @@ internal static class HudTests
             var description = controller.Assets.Text.Get(power.Button.DescriptLabel);
             TestHarness.Assert(tooltip is not null && name.Length > 0 && tooltip.Text.StartsWith(name, StringComparison.Ordinal) && (description.Length == 0 || tooltip.Text.Contains(description.Split('\n')[0].Trim(), StringComparison.Ordinal)),
                 $"{skin}: the pointer over {power.Button.Name} shows its name and description ({tooltip?.Text ?? "nothing"})");
-            // #388: only the slots of the command bar answer a letter here; the powers bar names no key.
-            TestHarness.Assert(tooltip?.Text.Contains(HotkeyText.Prefix, StringComparison.Ordinal) == false, $"{skin}: {power.Button.Name} names no key ({tooltip?.Text})");
+            // #388, #389: a button of the bar names the letter of its label when it has one; the scan's and the paradrop's labels carry no & (ShortcutLetterTests has one that does).
+            TestHarness.Assert(power.Hotkey is null && tooltip?.Text.Contains(HotkeyText.Prefix, StringComparison.Ordinal) == false, $"{skin}: {power.Button.Name} names no key ({tooltip?.Text})");
             var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains(name, StringComparison.Ordinal));
             TestHarness.Assert(drawn, $"{skin}: and the tooltip of {power.Button.Name} is drawn");
         }
@@ -2029,7 +2029,7 @@ internal static class HudTests
     /// #388 (the owner's playtest of 15 November 2026): a tooltip of the HUD names the key of its control, as bound now. A command button's key is the letter after the
     /// <c>&amp;</c> of its label (<c>HotKeyManager::searchHotKey</c>; the original underlines it in the popup's name, the port drops the <c>&amp;</c>); the bar's own
     /// controls share their click with a meta event of <c>CommandMap.ini</c> and name its binding with the modifiers; a player's binding replaces the shipped one; the
-    /// general's button, the experience bar, the money and the powers bar have no key and name none.
+    /// general's button, the experience bar and the money have no key and name none (the powers bar and the general's window: ShortcutLetterTests, #389).
     /// </summary>
     private static void HotkeyTooltips(GameData data, UiSkin skin) => SkinPins.With(skin, () =>
     {

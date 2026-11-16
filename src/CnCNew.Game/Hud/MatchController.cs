@@ -135,6 +135,7 @@ public sealed partial class MatchController
             label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
             new GameInputSettings(MapMouseScheme(settings), Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
         Input.UiRequest += OnInputUiRequest;
+        Input.OtherHotkeys = ActivateOtherHotkey;
         // InGameUI::selectMatchingAcrossScreen and friends tell the player what a selection of many units did, in the message list.
         Input.Selection.Announced += announcement => Messages.Message(announcement switch
         {
@@ -1215,15 +1216,18 @@ public sealed partial class MatchController
         if (NonCommandButtons.TryGetValue(window.Name, out var nonCommand) && Input.CommandBar!.Catalog.TryGetButton(nonCommand, out var nonCommandInfo))
             return (_descriptions.Plain(nonCommandInfo).ToTooltip() is { Length: > 0 } plain ? plain : null, key);
         if (window.Name == CancelConstructionWindow) return (CancelConstructionInfo is { } cancel ? _descriptions.Plain(cancel).ToTooltip() : null, null);
-        // ControlBar::populateSpecialPowerShortcut gives every button of the powers bar its command button, and with it the popup of commandButtonTooltip (#348). Its label's
-        // letter is no key here: only the slots of the command bar answer a letter.
-        if (PowerShortcut(window.Name) is { } shortcut) return (_descriptions.Build(shortcut, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } described ? described : null, null);
-        if (GeneralsButton(window.Name) is { } science) return (_descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null, null);
+        // ControlBar::populateSpecialPowerShortcut gives every button of the powers bar its command button, and with it the popup of commandButtonTooltip (#348) and its label's
+        // letter, as populatePurchaseScience does for the general's window (#389): the key named is the letter the button answers now.
+        if (PowerShortcut(window.Name) is { } shortcut)
+            return (_descriptions.Build(shortcut, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } described ? described : null, LetterOf(shortcut));
+        if (GeneralsButton(window.Name) is { } science) return (_descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null, LetterOf(science));
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return (null, null);
         if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return (null, null);
         var selected = Input.Selection.Selected.Select(Match.World.FindEntity).FirstOrDefault(entity => entity is not null);
         var tooltip = _descriptions.Build(button, Match.World, Match.Human, selected).ToTooltip();
         return (tooltip.Length == 0 ? null : tooltip, button.Hotkey is { } letter ? HotkeyText.Letter(letter) : null);
+
+        string? LetterOf(CommandBarButton other) => OtherHotkeyOf(other) is { } letter ? HotkeyText.Letter(letter) : null;
     }
 
     /// <summary>
