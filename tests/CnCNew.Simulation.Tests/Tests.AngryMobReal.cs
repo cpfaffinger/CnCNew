@@ -107,16 +107,22 @@ static partial class Tests
     /// #392, <c>Squirrelliness</c>: a member that its player commanded last may pick a victim of its own while its nexus fights one it picked itself, as long as fewer than that share of the
     /// mob is self-tasking (<c>maySpawnSelfTaskAI</c>) - the real mob's 0.05 lets exactly one of its members at a time. A computer player's mob is moved by its player towards a dozen
     /// Red Guards and left to itself: one member at a time, never two, takes a victim of its own, at 30, 60 and 120 Hz; a world saved during the fight plays on to the live world's hashes.
-    /// (The fight itself is not the same game at the three rates - it parts in its first shots on the code before #392 as well.)
+    /// <para>#402: the fight is the same game at the three rates - every shot of the mob and of the Red Guards falls in the same frame of the original, by the same shooter at the same
+    /// victim. The order and the Red Guards come in the first tick of a frame: <c>SpawnReal</c> steps the world once, which leaves it at the start of frame 1 at 30 Hz but in the second tick
+    /// of frame 0 above it, so twelve seconds later was frame 361 at 30 Hz and the second tick of frame 360 above it. A command in a frame's second tick acts on the mob from the next
+    /// frame (its members' frames begin in the world's first ticks), but the Red Guards made in that tick begin their own frames there - half a frame earlier than any 30 Hz world can
+    /// make them - and their first shot fell 22 frames earlier; the two halves of that game exist at 30 Hz only apart (an order in frame 361, Red Guards made in frame 360).</para>
     /// </summary>
     public static void RealAngryMobOneMemberSelfTasks(string directory)
     {
         var real = new RealTargets(directory);
+        string? shotsAt30 = null;
         foreach (var rate in TargetRates)
         {
             var world = real.World(rate, withFix: true, computer: true);
             var nexus = SpawnReal(world, ("GLAInfantryAngryMobNexus", 1, 400, 400)).Single();
             for (var step = 0; step < world.Frames(30 * 12); step++) world.Step();
+            while (world.Tick % world.Time.TicksPerOriginalFrame != 0) world.Step();
             var members = MobMembersOf(world, nexus);
             foreach (var unit in members.Prepend(nexus))
                 Check.That(world.Submit(new SetMoveTargetCommand(new PlayerId(1), ++_sequence, world.Tick, unit.Id, Fixed.FromInt(500), Fixed.FromInt(400))).Accepted, $"{rate}: the mob is moved.");
@@ -125,9 +131,11 @@ static partial class Tests
             var ever = 0;
             SimulationWorld? restored = null;
             var total = world.Frames(30 * 60);
+            var shots = new System.Text.StringBuilder();
             for (var step = 0; step < total; step++)
             {
-                world.Step();
+                foreach (var shot in world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired))
+                    shots.Append($"{world.Time.ToOriginalFrames(shot.Tick)}:{shot.Entity.Value}>{shot.Other.Value} ");
                 if (restored is not null)
                 {
                     restored.Step();
@@ -139,6 +147,15 @@ static partial class Tests
                 if (now > 0) ever++;
             }
             Check.That(ever > 0 && most == 1, $"{rate}: one member at a time picks a victim of its own ({most}).");
+            var here = shots.ToString();
+            Check.That(here.Length > 0, $"{rate}: the mob and the Red Guards fight.");
+            if (shotsAt30 is not null && here != shotsAt30)
+            {
+                var (left, right) = (shotsAt30.Split(' '), here.Split(' '));
+                var first = Enumerable.Range(0, Math.Min(left.Length, right.Length)).FirstOrDefault(index => left[index] != right[index], Math.Min(left.Length, right.Length));
+                Check.That(false, $"{rate}: shot {first} (frame:shooter>victim) is {(first < right.Length ? right[first] : "none")}, at 30 Hz {(first < left.Length ? left[first] : "none")}.");
+            }
+            shotsAt30 ??= here;
         }
     }
 }
