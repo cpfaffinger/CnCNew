@@ -116,10 +116,17 @@ public sealed class ModelGeometry
     /// <summary>The dock bones of the templates with a dock module by name (case-insensitive); a template without an entry has a model without any of them (a boneless dock).</summary>
     public ImmutableDictionary<string, DockBones> Docks { get; }
 
+    /// <summary>
+    /// The spawn points of the templates with a <c>SpawnPointProductionExitUpdate</c> by name (case-insensitive): the bones <c>NAME01</c>, <c>NAME02</c>, ... of its <c>SpawnPointBoneName</c>
+    /// in the object's frame (<c>SpawnPointProductionExitUpdate::initializeBonePositions</c>). A template without an entry has a model without any of them.
+    /// </summary>
+    public ImmutableDictionary<string, ImmutableArray<BonePose>> SpawnPoints { get; }
+
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty && FlightDecks.IsEmpty && Docks.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty && Ropes.IsEmpty && FlightDecks.IsEmpty && Docks.IsEmpty
+        && SpawnPoints.IsEmpty;
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
 
@@ -129,8 +136,10 @@ public sealed class ModelGeometry
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths,
         IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null,
         IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>>? ropes = null,
-        IEnumerable<KeyValuePair<string, FlightDeckLayout>>? flightDecks = null, IEnumerable<KeyValuePair<string, DockBones>>? docks = null)
+        IEnumerable<KeyValuePair<string, FlightDeckLayout>>? flightDecks = null, IEnumerable<KeyValuePair<string, DockBones>>? docks = null,
+        IEnumerable<KeyValuePair<string, ImmutableArray<BonePose>>>? spawnPoints = null)
     {
+        SpawnPoints = (spawnPoints ?? []).Where(pair => !pair.Value.IsEmpty).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Docks = (docks ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         FlightDecks = (flightDecks ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Ropes = (ropes ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
@@ -201,6 +210,9 @@ public sealed class ModelGeometry
             var dock = pair.Value;
             text.Append(CultureInfo.InvariantCulture, $"dock {pair.Key.ToUpperInvariant()} {Bone(dock.Start)}|{Bone(dock.Action)}|{Bone(dock.End)}|{string.Join(";", dock.Waiting.Select(Pose))}\n");
         }
+        // Written only when the table has spawn points: a table without them keeps its fingerprint.
+        foreach (var pair in SpawnPoints.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
+            text.Append(CultureInfo.InvariantCulture, $"spawnpoints {pair.Key.ToUpperInvariant()} {string.Join(";", pair.Value.Select(Pose))}\n");
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
 }

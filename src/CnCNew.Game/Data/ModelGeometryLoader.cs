@@ -43,7 +43,50 @@ public static class ModelGeometryLoader
         }
 
         return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library), ReadWeaponLaunches(graph, visuals, library), ReadRopes(graph, visuals, library),
-            ReadFlightDecks(graph, visuals, library), ReadDocks(graph, visuals, library));
+            ReadFlightDecks(graph, visuals, library), ReadDocks(graph, visuals, library), ReadSpawnPoints(graph, visuals, library));
+    }
+
+    /// <summary>
+    /// The spawn points of every object with a <c>SpawnPointProductionExitUpdate</c>: its <c>SpawnPointBoneName</c> numbered <c>01</c>, <c>02</c>, ... of each draw module's state without any
+    /// condition until one is missing, in the draw modules' order, at most <c>MAX_SPAWN_POINTS</c> (<c>SpawnPointProductionExitUpdate::initializeBonePositions</c>,
+    /// <c>Drawable::getPristineBonePositions</c>), scaled by the template's <c>Scale</c>. An object whose models have none gets no entry: the original's exit then never has room.
+    /// </summary>
+    private static SortedDictionary<string, ImmutableArray<BonePose>> ReadSpawnPoints(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        const int maxSpawnPoints = 10;
+        var points = new SortedDictionary<string, ImmutableArray<BonePose>>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            var module = definition.Modules.FirstOrDefault(value => value.Name.Equals("SpawnPointProductionExitUpdate", StringComparison.Ordinal));
+            if (module is null || !visuals.TryGet(definition.OriginalName, out var visual)) continue;
+            var prefix = module.Fields.LastOrDefault(field => field.Name.Equals("SpawnPointBoneName", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;
+            if (prefix.Length == 0) continue;
+            var scale = Fixed.FromDecimal(ScaleOf(definition));
+            var found = ImmutableArray.CreateBuilder<BonePose>();
+            foreach (var draw in visual.Draws)
+            {
+                if (found.Count >= maxSpawnPoints) break;
+                if (BestStateSelector.FindBest(draw, ModelConditionSet.Empty) is not (var state and >= 0) || state >= draw.States.Length || draw.States[state].Model is not { } model) continue;
+                W3dSkeleton skeleton;
+                try
+                {
+                    skeleton = library.GetModel(model).Skeleton;
+                }
+                catch (W3dMissingAssetException exception)
+                {
+                    throw new InvalidDataException($"{definition.OriginalName}: model '{model}' cannot be loaded: {exception.Message}");
+                }
+                for (var number = 1; number <= 99 && found.Count < maxSpawnPoints; number++)
+                {
+                    var name = prefix + number.ToString("00", CultureInfo.InvariantCulture);
+                    if (!IsPublic(draw, name) || skeleton.FindBone(name) is not (var bone and >= 0)) break;
+                    var pose = RestPose(skeleton, bone);
+                    found.Add(pose with { X = pose.X * scale, Y = pose.Y * scale, Z = pose.Z * scale });
+                }
+            }
+            if (found.Count > 0) points[definition.OriginalName] = found.ToImmutable();
+        }
+        return points;
     }
 
     /// <summary>The modules that derive from <c>DockUpdate</c> and so read their model's dock bones (<c>DockUpdate::loadDockPositions</c>).</summary>
@@ -325,7 +368,7 @@ public static class ModelGeometryLoader
     }
 
     /// <summary>The bone names <c>GameData.ini</c>'s <c>StandardPublicBone</c> makes public for every model that matter here; any other name must be an <c>ExtraPublicBone</c> of the draw module.</summary>
-    private static readonly string[] StandardPublicBones = ["FirePoint", "DockStart", "DockAction", "DockEnd", "DockWaiting"];
+    private static readonly string[] StandardPublicBones = ["FirePoint", "DockStart", "DockAction", "DockEnd", "DockWaiting", "SpawnPoint"];
 
     /// <summary>The containers whose riders <c>OpenContain::redeployOccupants</c> puts at <c>FIREPOINTnn</c> (the Helix puts them above itself, <c>HelixContain::redeployOccupants</c>).</summary>
     private static readonly string[] FirePointTransports = ["TransportContain", "OverlordContain"];

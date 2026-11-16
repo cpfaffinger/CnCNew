@@ -789,9 +789,11 @@ public sealed record SpawnPointExitData(string SpawnPointBoneName) : ModuleData
 
 /// <summary>
 /// <c>SpawnPointProductionExitUpdate.cpp</c>: a production exit with a fixed number of spawn points (at most <c>MAX_SPAWN_POINTS</c> = 10) that each hold one object: it is
-/// free while a point is unoccupied (a point whose occupant no longer exists is released), the object appears on the first free point, facing outwards, on the ground.
-/// The points are the bones of the model in the reference; here there is no model, so their number is the owner's <c>SpawnNumber</c> and they lie on the owner's bounding
-/// circle, evenly spaced from its heading. The reference holds the new object (<c>DISABLED_HELD</c>), which has no counterpart: held spawns stay where they are because the
+/// free while a point is unoccupied (a point whose occupant no longer exists is released), the object appears on the first free point, on the ground.
+/// The points are the bones <c>SpawnPointBoneName</c>01, 02, ... of the model (<c>initializeBonePositions</c>, <see cref="ModelGeometry.SpawnPoints"/>): the Stinger Site's three lie
+/// under its net, some 16 units from its centre, and the object faces the bone's heading in the world. A model without such bones has no point, so the exit never has room. Only a
+/// world without any model table (the synthetic fixtures, <see cref="ModelGeometry.None"/>) puts the owner's <c>SpawnNumber</c> points on its bounding circle, evenly spaced from its
+/// heading and facing outwards. The reference holds the new object (<c>DISABLED_HELD</c>), which has no counterpart: held spawns stay where they are because the
 /// shipped slaves (<c>SlavedUpdate</c> without ranges) never walk by themselves.
 /// </summary>
 public sealed class SpawnPointProductionExitUpdate(SpawnPointExitData data) : SimModule, IProductionExit, IProductionExitOccupancy, IWorldAttached
@@ -805,7 +807,16 @@ public sealed class SpawnPointProductionExitUpdate(SpawnPointExitData data) : Si
     public string BoneName => data.SpawnPointBoneName;
 
     /// <summary>How many spawn points the object has (see the class summary).</summary>
-    public int SpawnPointCount => Math.Min(MaxSpawnPoints, Entity.ModuleArray.OfType<SpawnBehavior>().FirstOrDefault()?.SpawnNumber ?? 0);
+    public int SpawnPointCount => Bones() is { } bones
+        ? Math.Min(MaxSpawnPoints, bones.Length)
+        : Math.Min(MaxSpawnPoints, Entity.ModuleArray.OfType<SpawnBehavior>().FirstOrDefault()?.SpawnNumber ?? 0);
+
+    /// <summary>The model's spawn point bones; empty for a model without them, <see langword="null"/> for a world without any model table (the computed points).</summary>
+    private ImmutableArray<BonePose>? Bones()
+    {
+        if (_world is null || _world.Templates.Geometry.IsEmpty) return null;
+        return _world.Templates.Geometry.SpawnPoints.TryGetValue(Entity.Template.Name, out var bones) ? bones : ImmutableArray<BonePose>.Empty;
+    }
 
     private IWorldServices? _world;
 
@@ -846,6 +857,15 @@ public sealed class SpawnPointProductionExitUpdate(SpawnPointExitData data) : Si
         var slot = FreeSlot();
         if (slot < 0) throw new InvalidOperationException("A spawn point exit thought it had room but then failed.");
         _claimed = slot;
+        if (Bones() is { } bones)
+        {
+            // initializeBonePositions: the pristine bone in the world (convertBonePosToWorldPos), its z rotation the object's heading; the height is the ground's at creation.
+            var pose = bones[slot];
+            var (cos, sin) = (FixedTrig.Cos(Entity.Angle), FixedTrig.Sin(Entity.Angle));
+            var boneX = Entity.X + pose.X * cos - pose.Y * sin;
+            var boneY = Entity.Y + pose.X * sin + pose.Y * cos;
+            return (boneX, boneY, world.GroundHeightAt(boneX, boneY), FixedTrig.Normalize(Entity.Angle + pose.Heading));
+        }
         var angle = FixedTrig.Normalize(Entity.Angle + FixedTrig.TwoPi * Fixed.FromInt(slot) / Fixed.FromInt(Math.Max(SpawnPointCount, 1)));
         var radius = Entity.Template.BoundingCircleRadius;
         var x = Entity.X + radius * FixedTrig.Cos(angle);
