@@ -29,7 +29,7 @@ internal static class DockOrderTests
             return 0;
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
-        harness.Run("A supply truck docks by a right click only at a warehouse with boxes that is no enemy's, at its own supply center only with boxes, and never under the shroud (#393)", () => DockTargets(data));
+        harness.Run("A supply truck docks by a right click only at a warehouse with boxes that is no enemy's, at its own supply center only with boxes, and never under the shroud (#393); a fogged warehouse is the ground to the pointer and a dock order to the logic (#400)", () => DockTargets(data));
         return harness.Failures;
     }
 
@@ -127,6 +127,23 @@ internal static class DockOrderTests
         TestHarness.Assert(mixed.Action != ContextAction.Dock, $"a loaded and an empty truck over the supply center: no dock - every selected carrier must be able to (SELECTION_ALL) ({mixed.Action})");
         TestHarness.Assert(rig.Over(stocked, truck, empty) is { Action: ContextAction.Dock }, "both over the warehouse with boxes: dock");
         TestHarness.Assert(rig.Click(supply, truck) is [{ } toSupply] && toSupply.Actor == truck.Id && toSupply.Dock == supply.Id, "a right click on the supply center sends the loaded truck there");
+
+        // The fog (#400): a warehouse in ground the player has explored but does not see now is the original's ghost, which carries no drawable (W3DGhostObjectManager::addGhostObject),
+        // so W3DView::pickDrawable finds nothing there: the pointer and the click see the ground. The logic still takes a dock order to it (canTransferSuppliesAt: "Fogged is okay for player").
+        var enemyCenter = world.Entities.First(entity => entity.Owner == rig.Enemy && entity.Template.IsKindOf("COMMANDCENTER"));
+        var far = rig.Spawn("SupplyWarehouse", PlayerId.System, center, (int)((enemyCenter.X - center.X).ToDecimal() / 2), (int)((enemyCenter.Y - center.Y).ToDecimal() / 2));
+        world.ExploreMap(human);
+        rig.Advance(2);
+        TestHarness.Assert(!world.CanPlayerSee(human, far) && world.IsPositionExploredBy(human, far.X, far.Y) && far.WarehouseSupplyBoxes() > 0,
+            $"a warehouse with boxes halfway to the enemy lies under the fog: explored, not seen ({world.CanPlayerSee(human, far)}, {world.IsPositionExploredBy(human, far.X, far.Y)})");
+        TestHarness.Assert(!EntityPicker.IsPickable(world, human, far), "the fogged warehouse is no pick target");
+        var ground = new Vector3((float)far.X.ToDecimal(), (float)far.Y.ToDecimal(), 0f);
+        rig.Controller.Input.Selection.Replace([empty.Id]);
+        var fogged = rig.Controller.Input.Commands.Evaluate(world, null, ground);
+        TestHarness.Assert(fogged is { Action: ContextAction.Move, Cursor: CursorKind.Move }, $"an empty truck over the fogged warehouse: the ground, a move ({fogged.Action}, {fogged.Cursor})");
+        var docksBefore = rig.Docks.Count;
+        TestHarness.Assert(rig.Controller.Input.Commands.IssueContext(world, fogged, null) && rig.Docks.Count == docksBefore, "the right click there moves the truck and gives no dock order");
+        TestHarness.Assert(world.Check(new DockCommand(human, 0, 0, empty.Id, far.Id)).Accepted, "the logic takes a dock order at the fogged warehouse");
 
         // The shroud: a human player's carrier never docks at what lies in ground its player has not explored (the fog is fine).
         world.ShroudMap(human);

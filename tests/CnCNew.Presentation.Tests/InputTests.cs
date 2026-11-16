@@ -45,6 +45,7 @@ static class InputTests
         run.Test("Input: acceptance sequence through the event pipeline is replayable", AcceptanceSequence);
         run.Test("Input: the alternate mouse setup is the default, the original's setup stays selectable", MouseSchemes);
         run.Test("Input: over another player's object without an order the move pointer, and the click orders nothing (#399)", ForeignObjectWithoutOrder);
+        run.Test("Input: a remembered structure under the fog is ground to the pointer and the click, as the original's ghost (#400)", RememberedStructureIsGround);
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) run.Test("Input real data: CommandMap, command buttons and command bars of shipped objects", () => RealData(contentDirectory));
         return run.Finish();
@@ -1556,6 +1557,44 @@ static class InputTests
             var still = input.Commands.Evaluate(world, neutral, new Vector3(100, 40, 0));
             Assert(still is { Action: ContextAction.Select, Cursor: CursorKind.GenericInvalid }, $"{scheme}: a structure that cannot move over the neutral plant: the invalid pointer (MSG_DO_INVALID_HINT) ({still.Cursor})");
         }
+    }
+
+    /// <summary>
+    /// #400: a structure under the fog that the player has seen is drawn as the original's ghost (<c>W3DGhostObject::snapShot</c> takes the drawable's models out of the scene and puts
+    /// copies in), and a ghost carries no drawable ("these dummy render objects don't have drawables", <c>W3DGhostObjectManager::addGhostObject</c>): <c>W3DView::pickDrawable</c> returns
+    /// none, and the pointer and the click see the ground - the move pointer, a move to the point under it, no attack order.
+    /// </summary>
+    private static void RememberedStructureIsGround()
+    {
+        var arena = new Arena(money: 500);
+        arena.Spawn("Ranger", Me, 40, 40);
+        arena.Spawn("Plant", Enemy, 100, 40);
+        arena.StepFrames(2);
+        var world = arena.World;
+        var view = new TopDownView();
+        var input = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText).WithEngineDefaults(), CommandButtonCatalog.Build(Fixture.Graph), _ => null,
+            new GameInputSettings(MouseScheme.RightClickCommands));
+        var (scout, plant) = (arena.Find("Ranger", Me, 40, 40), arena.Find("Plant", Enemy, 100, 40));
+        Assert(world.CanPlayerSee(Me, plant) && input.Selection.Picker.Pick(world, Me, view, Screen(100, 40)) == plant, "the enemy plant is seen and picked while the scout stands beside it");
+
+        arena.System(sequence => new KillCommand(PlayerId.System, sequence, world.Tick, scout.Id));
+        arena.Spawn("Ranger", Me, 40, 190);
+        // A dead scout's last look stays for UnlookPersistDuration (30 frames without the key).
+        arena.StepFrames(40);
+        var ranger = arena.Find("Ranger", Me, 40, 190);
+        Assert(!world.CanPlayerSee(Me, plant) && world.IsPositionExploredBy(Me, plant.X, plant.Y), $"with the scout gone the plant lies under the fog: seen once, not now (seen {world.CanPlayerSee(Me, plant)}, explored {world.IsPositionExploredBy(Me, plant.X, plant.Y)}, scout {world.FindEntity(scout.Id) is not null})");
+        Assert(input.Selection.Picker.Pick(world, Me, view, Screen(100, 40)) is null, "the remembered plant is no pick target (the ghost has no drawable)");
+
+        input.Selection.Replace([ranger.Id]);
+        long time = 10_000;
+        input.Process(new MouseMoveEvent(time += 16, Screen(100, 40)), world, view);
+        Assert(input.Cursor(pointerOverWindow: false).Kind == CursorKind.Move, $"over the remembered plant: the move pointer ({input.Cursor(pointerOverWindow: false).Kind})");
+        var issued = arena.Sink.Issued.Count;
+        input.Process(new MouseButtonEvent(time += 16, MouseButton.Right, true, Screen(100, 40)), world, view);
+        input.Process(new MouseButtonEvent(time += 50, MouseButton.Right, false, Screen(100, 40)), world, view);
+        var orders = arena.Sink.Issued.Skip(issued).ToList();
+        Assert(orders is [SetMoveTargetCommand move] && move.Target == ranger.Id && move.X == Fixed.FromInt(100) && move.Y == Fixed.FromInt(40),
+            $"a right click on it moves the ranger to the point under it ({string.Join(",", orders.Select(order => order.GetType().Name))})");
     }
 
     private static void MouseSchemes()
