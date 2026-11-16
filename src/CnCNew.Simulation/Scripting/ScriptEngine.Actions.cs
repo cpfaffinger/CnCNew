@@ -851,17 +851,25 @@ public sealed partial class ScriptEngine
     /// <c>AIAttackSquadState::chooseVictim</c>: the attacker keeps its victim until it is dead (<c>AI_ATTACK_OBJECT</c> of the sub-machine), then chooses by the difficulty of its player: on
     /// easy a random unit of the team, on normal the closest, on hard the one every attacker picks, the first of the team's list - the last that joined, as a team's list is prepended to.
     /// <c>CHOOSE_VICTIM_ALWAYS_USES_NORMAL</c> makes it the closest at every difficulty. Easy and hard take <c>Squad::getLiveObjects</c>, which leaves out what is not selectable
-    /// (<see cref="SimulationWorld.IsSelectable"/>: a drone or a stinger soldier of a living master, a rider); normal asks the partition for the closest member of the squad, which does not.
+    /// (<see cref="SimulationWorld.IsSelectable"/>: a drone or a stinger soldier of a living master, a rider); normal asks the partition for the closest member of the squad, which does not,
+    /// but finds only what the partition holds - not a rider its container encloses (<c>OpenContain::addOrRemoveObjFromWorld</c>) - and only what is on the map when the attacker is, off
+    /// it when the attacker is not (<c>PartitionFilterSameMapStatus</c>).
     /// </summary>
     private Entity? SquadVictim(Follower follower, Entity attacker, int teamId)
     {
         if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept) return kept;
         var difficulty = _chooseVictimAlwaysNormal ? ScriptDifficulty.Normal : AiOfPlayer(attacker.Owner)?.Setup.Difficulty ?? _options.Difficulty;
         var liveObjectsOnly = difficulty != ScriptDifficulty.Normal;
+        var attackerOffMap = Modules.BuiltIn.FlightModules.IsOffMap(_world, attacker.X, attacker.Y);
         var squad = new List<Entity>();
         if (_teams.TryGetValue(teamId, out var team))
             foreach (var member in LiveMembers(team))
-                if (!member.EffectivelyDead && (!liveObjectsOnly || SimulationWorld.IsSelectable(member))) squad.Add(member);
+            {
+                if (member.EffectivelyDead) continue;
+                if (liveObjectsOnly ? !SimulationWorld.IsSelectable(member)
+                        : Modules.BuiltIn.Enclosure.IsEnclosed(_world, member) || Modules.BuiltIn.FlightModules.IsOffMap(_world, member.X, member.Y) != attackerOffMap) continue;
+                squad.Add(member);
+            }
         follower.Victim = 0;
         if (squad.Count == 0) return null;
         var victim = difficulty switch

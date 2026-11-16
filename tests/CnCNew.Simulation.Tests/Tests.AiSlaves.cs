@@ -106,6 +106,35 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Issue 405: on normal difficulty <c>AIAttackSquadState::chooseVictim</c> asks the partition for the closest member of the squad, with <c>PartitionFilterSameMapStatus</c>. A rider its
+    /// transport encloses is not in the partition (<c>OpenContain::addOrRemoveObjFromWorld</c>), and a member off the map is not where an attacker on the map looks: both are closer to the
+    /// attacker than the member it takes, the one that stands on the map in the open.
+    /// </summary>
+    public static void SquadVictimOnNormalSkipsEnclosedAndOffMap()
+    {
+        var (enclosedMap, enclosedFixture, enclosedTerrain) = MissionMap([
+                Scr.Script("Board", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_ENTER_NAMED", Scr.Unit("Rider"), Scr.Unit("Carrier"))], oneShot: true),
+                Scr.Script("Go", [Scr.And(Scr.If("FLAG", Scr.Flag("go"), Scr.Bool(true)))], [Scr.Do("NAMED_ATTACK_TEAM", Scr.Unit("Hunter"), Scr.Team("teamB"))], oneShot: true)],
+            objects: [Placed("MoodGunner", 100m, 200m, "teamA", "Hunter"), Placed("MoodCarrier", 215m, 200m, "Raiders", "Carrier"), Placed("MoodGunner", 230m, 200m, "teamB", "Rider"),
+                      Placed("Bystander", 100m, 340m, "teamB", "Far")], extraFiles: RoamFiles());
+        var enclosed = CnCNew.Simulation.Mission.MissionSession.Start(CnCNew.Simulation.Mission.MissionOptions.Standard with { Difficulty = CnCNew.Simulation.Scripting.ScriptDifficulty.Normal },
+            enclosedFixture.Templates, enclosedFixture.Fingerprint, enclosedTerrain, enclosedMap);
+        Run(enclosed, enclosed.Frames(90));
+        Check.That(NamedIn(enclosed, "Rider")!.ContainedBy == NamedIn(enclosed, "Carrier")!.Id, "The rider has boarded its transport.");
+        enclosed.Engine.SignalUiInteraction("go");
+        Run(enclosed, enclosed.Frames(450));
+        Check.That(Hurt(enclosed, "Far") && !Hurt(enclosed, "Carrier"), $"On normal the attacker takes the closest member in the open, not the closer rider its transport encloses (far {Hurt(enclosed, "Far")}, carrier {Hurt(enclosed, "Carrier")}, rider {Hurt(enclosed, "Rider")}).");
+
+        var (offMap, offFixture, offTerrain) = MissionMap([Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_ATTACK_TEAM", Scr.Unit("Hunter"), Scr.Team("teamB"))], oneShot: true)],
+            objects: [Placed("MoodGunner", 100m, 30m, "teamA", "Hunter"), Placed("Bystander", 100m, -15m, "teamB", "Outside"), Placed("Bystander", 100m, 160m, "teamB", "Far")], extraFiles: RoamFiles());
+        var outside = CnCNew.Simulation.Mission.MissionSession.Start(CnCNew.Simulation.Mission.MissionOptions.Standard with { Difficulty = CnCNew.Simulation.Scripting.ScriptDifficulty.Normal },
+            offFixture.Templates, offFixture.Fingerprint, offTerrain, offMap);
+        Check.That(NamedIn(outside, "Outside")!.Y < Fixed.Zero, "The member stands off the map.");
+        Run(outside, outside.Frames(450));
+        Check.That(Hurt(outside, "Far") && !Hurt(outside, "Outside"), "On normal an attacker on the map takes the closest member on the map, not the closer one off it.");
+    }
+
+    /// <summary>
     /// Issue 397: <c>Object::isSelectable</c> in the simulation. A spawner's drone carries <c>UNSELECTABLE</c> while its master lives (<c>SlavedUpdate::startSlavedEffects</c>) and is not
     /// selectable; the angry mob's members do not (<c>MobMemberSlavedUpdate</c> leaves the status out), so a member of a <c>SELECTABLE</c> template is; the masters are.
     /// </summary>
