@@ -186,8 +186,10 @@ public sealed class CommandModeController
         var own = Selection.OwnSelected(world);
         var targetId = target?.Id ?? EntityId.Invalid;
         ContextHint Hint(ContextAction action, CursorKind cursor) => new(action, cursor, targetId, ground);
+        // InGameUI::createMouseoverHint without a commandable selection: the select pointer only over an object the player controls, the arrow over anything else (#399). The click still
+        // selects it (SelectionXlat: an enemy, an ally or a civilian alone is selected for its information).
         if (own.IsEmpty || !Selection.IsCommandable(world))
-            return target is null ? Hint(ContextAction.None, CursorKind.Normal) : Hint(ContextAction.Select, CursorKind.Select);
+            return target is null ? Hint(ContextAction.None, CursorKind.Normal) : Hint(ContextAction.Select, target.Owner == Player ? CursorKind.Select : CursorKind.Normal);
         if (target is not null && target.Owner == Player && PreferSelection) return Hint(ContextAction.Select, CursorKind.Select);
 
         // canSelectedObjectsOverrideSpecialPowerDestination: while a beam or a gunship of the selection runs, a click anywhere - the point under the pointer, whatever stands on it - drives it, and the
@@ -230,7 +232,11 @@ public sealed class CommandModeController
         // canSelectedObjectsDoAction(ACTIONTYPE_SET_RALLY_POINT): the kind of object, not its production queue. The patch gives many a unit a queue for its own upgrades, and those are to move.
         if (target is null && ground is not null && own.All(entity => entity.Template.IsKindOf("AUTO_RALLYPOINT")))
             return Hint(ContextAction.SetRallyPoint, CursorKind.SetRallyPoint);
-        if (target is not null) return Hint(ContextAction.Select, CursorKind.Select);
+        // Nothing to do with the object: evaluateContextCommand ends in MSG_DO_MOVETO_HINT (MSG_DO_INVALID_HINT when nothing selected can go there), and createCommandHint shows the select
+        // pointer only over an object the player controls - over another player's the move pointer (#399). The click orders nothing: "if draw is valid ... lets not issue a move command", so
+        // the original's mouse selects the object with its left click and the alternate mouse's right click does nothing.
+        if (target is not null)
+            return Hint(ContextAction.Select, target.Owner == Player ? CursorKind.Select : movers.Count > 0 ? CursorKind.Move : CursorKind.GenericInvalid);
         if (ground is not null && movers.Count > 0) return Hint(ContextAction.Move, CursorKind.Move);
         return Hint(ContextAction.Invalid, CursorKind.GenericInvalid);
     }

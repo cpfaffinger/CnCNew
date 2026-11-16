@@ -44,6 +44,7 @@ static class InputTests
         run.Test("Input: camera intent from keys, edges, drag, wheel and metas", CameraIntents);
         run.Test("Input: acceptance sequence through the event pipeline is replayable", AcceptanceSequence);
         run.Test("Input: the alternate mouse setup is the default, the original's setup stays selectable", MouseSchemes);
+        run.Test("Input: over another player's object without an order the move pointer, and the click orders nothing (#399)", ForeignObjectWithoutOrder);
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) run.Test("Input real data: CommandMap, command buttons and command bars of shipped objects", () => RealData(contentDirectory));
         return run.Finish();
@@ -1162,7 +1163,7 @@ static class InputTests
         selection.Replace([arena.Find("Ranger", Me, 140, 175).Id]);
         var targetable = controller.Hover(world, view, Screen(120, 160));
         Assert(targetable is { Action: ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving }, $"a neutral object the map made targetable: attack ({targetable.Action}, {world.FindEntity(targetable.Target)?.Template.Name}, tick {world.Tick})");
-        Assert(controller.Hover(world, view, Screen(170, 160)) is { Action: ContextAction.Select }, "another neutral object: select");
+        Assert(controller.Hover(world, view, Screen(170, 160)) is { Action: ContextAction.Select, Cursor: CursorKind.Move }, "another neutral object: no order, the move pointer (#399)");
     }
 
     private static void StandingOrderBehaviour()
@@ -1498,6 +1499,64 @@ static class InputTests
     }
 
     // ============================================================================================ acceptance
+
+    /// <summary>
+    /// #399: over an object of another player that the selection can do nothing with, <c>evaluateContextCommand</c> ends in <c>MSG_DO_MOVETO_HINT</c> and <c>InGameUI::createCommandHint</c>
+    /// shows the move pointer - the select pointer only over an object the player controls (<c>isLocallyControlled</c>), the invalid one when nothing selected can move. The click orders
+    /// nothing there ("if draw is valid ... lets not issue a move command"): the original's mouse selects the object with its left click, the alternate mouse's right click does nothing.
+    /// Without a commandable selection the pointer over another player's object is the arrow (<c>createMouseoverHint</c>).
+    /// </summary>
+    private static void ForeignObjectWithoutOrder()
+    {
+        foreach (var scheme in new[] { MouseScheme.RightClickCommands, MouseScheme.LeftClickCommands })
+        {
+            var arena = new Arena(money: 500);
+            arena.Spawn("Ranger", Me, 40, 40);
+            arena.Spawn("Plant", Me, 40, 100);
+            arena.System(sequence => new PlaceMapObjectCommand(PlayerId.System, sequence, arena.World.Tick, "Plant", PlayerId.System, SimulationQueries.ToFixed(100), SimulationQueries.ToFixed(40),
+                Fixed.Zero, Fixed.Zero, 100, MapObjectFlags.None, 0));
+            arena.StepFrames(2);
+            var world = arena.World;
+            var view = new TopDownView();
+            var input = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText).WithEngineDefaults(), CommandButtonCatalog.Build(Fixture.Graph), _ => null, new GameInputSettings(scheme));
+            var (ranger, plant, neutral) = (arena.Find("Ranger", Me, 40, 40), arena.Find("Plant", Me, 40, 100), arena.Find("Plant", PlayerId.System, 100, 40));
+            Assert(world.CanPlayerSee(Me, neutral) && input.Selection.Picker.Pick(world, Me, view, Screen(100, 40)) == neutral, $"{scheme}: the neutral plant is seen and picked");
+            long time = 10_000;
+            void Send(InputEvent inputEvent) => input.Process(inputEvent, world, view);
+            CursorKind Over(float x, float y)
+            {
+                Send(new MouseMoveEvent(time += 16, Screen(x, y)));
+                return input.Cursor(pointerOverWindow: false).Kind;
+            }
+            void Click(MouseButton button, float x, float y)
+            {
+                Send(new MouseMoveEvent(time += 16, Screen(x, y)));
+                Send(new MouseButtonEvent(time += 16, button, true, Screen(x, y)));
+                Send(new MouseButtonEvent(time += 50, button, false, Screen(x, y)));
+                time += 1000;
+            }
+
+            Assert(Over(40, 100) == CursorKind.Select, $"{scheme}: nothing selected, an own structure: select");
+            var bare = Over(100, 40);
+            Assert(bare == CursorKind.Normal, $"{scheme}: nothing selected, another player's object: the arrow ({bare})");
+
+            input.Selection.Replace([ranger.Id]);
+            var hint = input.Commands.Evaluate(world, neutral, new Vector3(100, 40, 0));
+            Assert(hint is { Action: ContextAction.Select, Cursor: CursorKind.Move } && !hint.IsOrder, $"{scheme}: a ranger over a neutral plant it can do nothing with: the move pointer, no order ({hint.Action}, {hint.Cursor})");
+            var over = Over(100, 40);
+            Assert(over == CursorKind.Move, $"{scheme}: the pointer the player sees there is the move pointer ({over})");
+            Assert(Over(40, 100) == CursorKind.Select, $"{scheme}: over an own structure it stays the select pointer");
+            var issued = arena.Sink.Issued.Count;
+            Click(scheme == MouseScheme.RightClickCommands ? MouseButton.Right : MouseButton.Left, 100, 40);
+            Assert(arena.Sink.Issued.Count == issued, $"{scheme}: the click on the neutral plant orders nothing ({arena.Sink.Issued.Count - issued})");
+            Assert(scheme == MouseScheme.RightClickCommands ? input.Selection.Selected.SequenceEqual([ranger.Id]) : input.Selection.Selected.SequenceEqual([neutral.Id]),
+                $"{scheme}: the alternate mouse's right click keeps the ranger selected, the original's left click selects the plant ({string.Join(",", input.Selection.Selected)})");
+
+            input.Selection.Replace([plant.Id]);
+            var still = input.Commands.Evaluate(world, neutral, new Vector3(100, 40, 0));
+            Assert(still is { Action: ContextAction.Select, Cursor: CursorKind.GenericInvalid }, $"{scheme}: a structure that cannot move over the neutral plant: the invalid pointer (MSG_DO_INVALID_HINT) ({still.Cursor})");
+        }
+    }
 
     private static void MouseSchemes()
     {
