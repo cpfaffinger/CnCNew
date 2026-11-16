@@ -166,6 +166,8 @@ public sealed partial class SimulationWorld
     public void RequestStepAside(Entity mover, Fixed dx, Fixed dy)
     {
         if (mover.Template.IsKindOf("INFANTRY") || (dx == Fixed.Zero && dy == Fixed.Zero)) return;
+        // processCollision, where the original asks, returns before it for a unit that paths through units (a dock order, #394).
+        if (AiOf(mover) is { CanPathThroughUnits: true }) return;
         foreach (var claim in _stepAsides)
             if (claim.Mover == mover.Id) return;
         _stepAsides.Add(new StepAsideClaim(mover.Id, _tick + _firstFrameTicks - TickOrder.Next - (_tick - mover.SpawnTick) % _firstFrameTicks, dx, dy));
@@ -280,10 +282,13 @@ public sealed partial class SimulationWorld
     public bool PreferWayThroughAllies(Entity mover, IReadOnlyList<PathPoint> path, int index, IReadOnlyList<PathPoint>? detour, Fixed reach)
     {
         if (index >= path.Count) return false;
-        var allies = AlliesOnWay(mover, path, index, reach, out var blocked);
+        var passes = AiOf(mover) is { CanPathThroughUnits: true };
+        var allies = AlliesOnWay(mover, path, index, reach, passes, out var blocked);
         if (blocked || allies == 0) return false;
         var through = PathLength(mover.X, mover.Y, path, index, Fixed.MaxValue) + AllyCellCost * Fixed.FromInt(allies);
         if (detour is { Count: > 0 } && PathLength(mover.X, mover.Y, detour, 0, Fixed.MaxValue) <= through) return false;
+        // A unit that paths through units (a dock order, #394) goes through the allies at the same cost, but its path is not "blocked by ally": nobody is told to make way.
+        if (passes) return true;
         foreach (var claim in _wayThroughs)
             if (claim.Mover == mover.Id) return true;
         _wayThroughs.Add(new WayThroughClaim(mover.Id, _tick + _firstFrameTicks - TickOrder.Next - (_tick - mover.SpawnTick) % _firstFrameTicks, reach));
@@ -332,8 +337,12 @@ public sealed partial class SimulationWorld
         => RelationshipOf(mover.Owner, other.Owner) == Relationship.Allies && !other.HasStatus(UsingAbilityBit) && other.Acquisition is not { Victim.IsValid: true }
            && DisabledFlagsOf(other) == DisabledMask.None && AiOf(other) is { IsIdle: true, IsBuilding: false };
 
-    /// <summary>The cells allies stand on along the way ahead, as the original's search counts them; <paramref name="blocked"/> when something stands there that does not make way.</summary>
-    private int AlliesOnWay(Entity mover, IReadOnlyList<PathPoint> path, int index, Fixed reach, out bool blocked)
+    /// <summary>
+    /// The cells allies stand on along the way ahead, as the original's search counts them; <paramref name="blocked"/> when something stands there that does not make way. A mover that
+    /// <paramref name="passes"/> through units (<c>canPathThroughUnits</c>) tells nobody to make way and goes through every ally with an AI (<c>checkForMovement</c>: "can't path through" only an ally
+    /// without one).
+    /// </summary>
+    private int AlliesOnWay(Entity mover, IReadOnlyList<PathPoint> path, int index, Fixed reach, bool passes, out bool blocked)
     {
         blocked = false;
         var cells = 0;
@@ -345,7 +354,7 @@ public sealed partial class SimulationWorld
             var radius = CircleRadius(other);
             var (x, y, _) = other.FrameEnd(_tick);
             if (!TouchesWay(mover, x, y, moverRadius + radius + StandingBlockerMargin, path, index, reach)) continue;
-            if (!MakesWay(mover, other))
+            if (passes ? RelationshipOf(mover.Owner, other.Owner) != Relationship.Allies || AiOf(other) is null : !MakesWay(mover, other))
             {
                 blocked = true;
                 return 0;

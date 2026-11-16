@@ -1241,6 +1241,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     internal bool IgnoresCollisions(long tick) => tick < _ignoreCollisionsUntil;
 
     /// <summary>
+    /// <c>AIUpdateInterface::canPathThroughUnits</c> as the dock order sets it: <c>AIDockState::update</c> turns it on for the whole order, <c>onExit</c> off (#394). A unit that can path through units
+    /// is held up by nobody (<c>processCollision</c> returns at once: no blocked state, no speed of the unit ahead, nobody told to move away), and its path does not count as blocked by the allies
+    /// it leads through (<c>examineNeighboringCells</c>: <c>setBlockedByAlly</c> only without it), so <c>moveAllies</c> moves none of them for it - a dozer or harvester still asks for its clear path
+    /// (<see cref="IWorldServices.RequestClearPath"/>), which does not depend on that mark. The original's other users of the flag (the exit
+    /// path of a factory, a jet taxiing, the fallback of <c>aiMoveAwayFromUnit</c>) are not this.
+    /// </summary>
+    internal bool CanPathThroughUnits => _dock is not null;
+
+    /// <summary>
     /// The rider's half of <c>OpenContain::exitObjectViaDoor</c> and of <c>OpenContain::scatterToNearbyPosition</c>: <c>aiFollowPath</c> / <c>aiMoveToPosition</c> to
     /// (<paramref name="x"/>, <paramref name="y"/>) with <paramref name="container"/> as the ignored obstacle, then on to the container's rally point when it has one. With
     /// <paramref name="viaDoor"/> the rider also ignores collisions with other units for one second of game time (<c>setIgnoreCollisionTime</c>), which the scatter of a dead

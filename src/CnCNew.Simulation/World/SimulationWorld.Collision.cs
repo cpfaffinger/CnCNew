@@ -51,6 +51,8 @@ public sealed partial class SimulationWorld
         var ai = AiOf(mover);
         // A rider that has just come out of its transport walks through whoever stands at the door (OpenContain::exitObjectViaDoor, setIgnoreCollisionTime).
         if (ai is not null && ai.IgnoresCollisions(_tick)) return (dx, dy);
+        // A unit on a dock order paths through units (AIUpdateInterface::processCollision: "if (m_canPathThroughUnits) return FALSE"): nothing it touches shoves its step aside (#394).
+        if (ai is { CanPathThroughUnits: true }) return (dx, dy);
         var goal = ai?.IgnoredObstacle ?? EntityId.Invalid;
         if (!StepBlocked(mover, dx, dy, goal)) return (dx, dy);
         foreach (var angle in AvoidanceAngles)
@@ -328,7 +330,8 @@ public sealed partial class SimulationWorld
                 && ai.SpeedPerOriginalFrame(stride) > Fixed.Zero;
             var blocked = false;
             var limit = Fixed.MaxValue;
-            if (moving && !ai.IgnoresCollisions(tick)) blocked = HeldBehindAMover(mover, ai, stride, out limit);
+            // processCollision returns at once for a unit that ignores collisions or paths through units (a dock order, #394): nobody holds it up.
+            if (moving && !ai.IgnoresCollisions(tick) && !ai.CanPathThroughUnits) blocked = HeldBehindAMover(mover, ai, stride, out limit);
             ai.SetBlocked(this, blocked, limit);
         }
     }
