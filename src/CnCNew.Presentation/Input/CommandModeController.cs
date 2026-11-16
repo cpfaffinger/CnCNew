@@ -6,6 +6,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Views;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Presentation.Input;
@@ -206,7 +207,7 @@ public sealed class CommandModeController
         else if (target is not null)
         {
             if (ResumeBuilders(own, target).Any()) return Hint(ContextAction.ResumeConstruction, CursorKind.ResumeConstruction);
-            if (CanDockAll(own, target)) return Hint(ContextAction.Dock, CursorKind.Dock);
+            if (CanDockAll(world, own, target)) return Hint(ContextAction.Dock, CursorKind.Dock);
             if (RepairBuilders(own, target).Any()) return Hint(ContextAction.Repair, CursorKind.DoRepair);
             if (RepairPadCandidates(world, own, target).Any()) return Hint(ContextAction.GetRepaired, CursorKind.GetRepaired);
             if (Infiltrators(world, own, target).Any()) return Hint(ContextAction.EnterAggressively, CursorKind.EnterAggressive);
@@ -242,13 +243,26 @@ public sealed class CommandModeController
             ? own.Where(entity => SimulationQueries.AiOf(entity) is { CanRepair: true } && !entity.HasStatus(ObjectStatusBits.UnderConstruction))
             : [];
 
-    /// <summary><c>canDockAt</c> for every selected object (<c>SELECTION_ALL</c>): supply carriers at an own supply center or any warehouse.</summary>
-    private static bool CanDockAll(ImmutableArray<Entity> own, Entity target)
+    /// <summary>
+    /// <c>canDockAt</c> for every selected object (<c>SELECTION_ALL</c>), <c>ActionManager::canTransferSuppliesAt</c> of each: a carrier available for supplying, at a warehouse
+    /// that still holds boxes and is no enemy's, or at a supply center of its own player ("not merely an ally") only while it carries boxes; never at what is under construction,
+    /// sold or dead, and for a human player never at a target the shroud still covers (the fog is fine). A dock the original refuses is no order: the click goes on to the checks
+    /// after it (#393).
+    /// </summary>
+    private bool CanDockAll(SimulationWorld world, ImmutableArray<Entity> own, Entity target)
     {
-        if (target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold)) return false;
-        var center = SimulationQueries.HasModule(target, "SupplyCenterDockUpdate") && target.Owner == own[0].Owner;
+        if (!SimulationQueries.IsAlive(target) || target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold)) return false;
+        var center = SimulationQueries.HasModule(target, "SupplyCenterDockUpdate");
         var warehouse = SimulationQueries.HasModule(target, "SupplyWarehouseDockUpdate");
-        return (center || warehouse) && own.All(SimulationQueries.IsAvailableForSupplying);
+        if (!center && !warehouse) return false;
+        if (!world.IsPositionExploredBy(Player, target.X, target.Y)) return false;
+        foreach (var unit in own)
+        {
+            if (unit.HasStatus(ObjectStatusBits.UnderConstruction) || !SimulationQueries.IsAvailableForSupplying(unit)) return false;
+            if (warehouse && (target.WarehouseSupplyBoxes() <= 0 || world.RelationshipBetween(target, unit) == Relationship.Enemies)) return false;
+            if (center && (unit.CarriedSupplyBoxes() <= 0 || target.Owner != unit.Owner)) return false;
+        }
+        return true;
     }
 
     /// <summary><c>canGetRepairedAt</c>: hurt mobile objects at a finished own or allied repair dock.</summary>

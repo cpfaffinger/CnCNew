@@ -1108,8 +1108,9 @@ static class InputTests
         Assert(!controller.Orders.TryGet(r1.Id, out _), "a new order replaces the standing attack");
 
         selection.Replace([hauler.Id]);
-        Assert(controller.Hover(world, view, Screen(90, 110)) is { Action: ContextAction.Dock, Cursor: CursorKind.Dock }, "a hauler over its supply center: dock");
-        Assert(Issued(() => controller.IssueContext(world, view, Screen(90, 110))) is [DockCommand dock] && dock.Actor == hauler.Id && dock.Dock == depot.Id, "DockCommand");
+        // ActionManager::canTransferSuppliesAt: at a supply center the carrier must hold boxes - an empty hauler gives no dock order there (#393; the real data's DockOrderTests dock a loaded one).
+        Assert(controller.Hover(world, view, Screen(90, 110)) is { Action: ContextAction.Select } && CnCNew.Simulation.Views.EntityPresentationView.CarriedSupplyBoxes(hauler) == 0, "an empty hauler over its supply center: no dock");
+        Assert(Issued(() => controller.IssueContext(world, view, Screen(90, 110))) is [], $"no DockCommand at {depot.Template.Name}");
 
         arena.System(sequence => new DamageCommand(PlayerId.System, sequence, world.Tick, plant.Id, Fixed.FromInt(100), 0, 0));
         arena.Step();
