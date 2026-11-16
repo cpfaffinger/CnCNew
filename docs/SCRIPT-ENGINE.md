@@ -996,3 +996,7 @@ Why it takes 14 minutes longer than the earlier run has not been investigated. T
 ## A script's FIRE_WEAPON at an object out of range (#328)
 
 The script's FIRE_WEAPON attack at an object is no longer refused out of range: the limited attack approaches the victim as the original's `AIAttackState` does (`docs/SIMULATION-CORE.md` 90.4).
+
+## A team attack's victim among the selectable members (#397)
+
+`TEAM_ATTACK_TEAM` and `NAMED_ATTACK_TEAM`: on easy and hard the victim comes from the team's selectable members only (`AIAttackSquadState::chooseVictim` through `Squad::getLiveObjects`; `SimulationWorld.IsSelectable` after `Object::isSelectable`: a mob member is selectable, since the original never set the unselectable status on it; a drone or stinger soldier of a living master, a rider and a template that is not selectable are not); on normal the closest member of all. The team orders themselves are not filtered, as in the original (`Team::getTeamAsAIGroup`, `AIGroup::add`), so the premise of #397 was half wrong. Tests "Scripts (issue 397): a team's attacker on easy and hard chooses among the selectable members only" and "Slaves (issue 397): a drone of a living master is not selectable, a mob member is". The missions of the reference manifest run at normal and do not move. Open: a computer player's slaves join its default team, not the spawner's (#403); the script flag "Selectable" stays in the presentation (#404); on normal enclosed riders and objects of another map status are considered (#405).

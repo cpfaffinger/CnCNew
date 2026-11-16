@@ -382,3 +382,7 @@ Three things the Scud Storm showed, each general. **`ATTACKING`:** `AIAttackStat
 ## The nuclear missile's shake (#361)
 
 `NeutronMissileUpdate::doAttack` gives the drawable an instance matrix for every logic frame of `SpecialSpeedTime` after the launch: a translation by (0, y, z) in the missile's own space, y and z in [-1, 1] times (1 - elapsed / `SpecialSpeedTime`) times `SpecialJitterDistance`. The port drew no shake. The projector adds that offset after the interpolation, stepped once per logic frame (`MissileLaunchJitter`); the two values come from a hash of the object and the frame since the launch instead of the logic stream (the original notes they need not be synced), so the simulation is untouched apart from two read-only accessors. Test `MissileJitterTests` (Presentation.Tests).
+
+## Weapon states only in an attack (#390)
+
+The weapon states follow `Object::adjustModelConditionForWeaponStatus`: FIRING for the shot; RELOADING, BETWEEN_FIRING_SHOTS and PREATTACK only while the object attacks. A ready weapon shows BETWEEN_FIRING_SHOTS while the unit aims or fires (`SimulationWorld.IsAimingOrFiring`, read-only: in an attack and not approaching - the port keeps no aim status of its own), not while it approaches; an empty clip that never reloads by time shows nothing. Before, a unit that had left its attack showed RELOADING while its clip refilled. Test `ObjectTests` "Condition derivation from simulation state".

@@ -5423,7 +5423,7 @@ Sixteen findings of a skirmish (#306 to #321), each read in the original; the pr
 
 ### 90.6 The rounds of 15 November 2026
 
-Findings of the owner's play of 15 November 2026 and of the machine, one subsection per issue; what belongs to the presentation, the interface or the setup is in the documents 90.26 names. **No human has seen, heard or played the fixes.** **Reference values after the third round** (`d7850121`, measured at the code of `63cdd788`, one measurement for #355, #172, #354, #305, #363, #365, #366, #370, #371, #372 and #374 together): reference match a stalemate at tick 108,000, `30A66C50A3DF2544` / `3AD535A460333976`; stress test unchanged (`20359BA8A2093B99` / `2967E6B3B1BCFDDD`); 11 of 16 pairings decided (10 before; balance not judged); every mission keeps its outcome; the input manifest moved with #355 (`WeaponInfo.SuspendFxDelayTicks`) and #354 (the dock bones; world fingerprint `7C75647E07238CA6`).
+Findings of the owner's play of 15 November 2026 and of the machine, one subsection per issue; what belongs to the presentation, the interface or the setup is in the documents 90.29 names. **No human has seen, heard or played the fixes.** **Reference values after the third round** (`d7850121`, measured at the code of `63cdd788`, one measurement for #355, #172, #354, #305, #363, #365, #366, #370, #371, #372 and #374 together): reference match a stalemate at tick 108,000, `30A66C50A3DF2544` / `3AD535A460333976`; stress test unchanged (`20359BA8A2093B99` / `2967E6B3B1BCFDDD`); 11 of 16 pairings decided (10 before; balance not judged); every mission keeps its outcome; the input manifest moved with #355 (`WeaponInfo.SuspendFxDelayTicks`) and #354 (the dock bones; world fingerprint `7C75647E07238CA6`).
 
 ### 90.7 A builder that dies inside its frame (#136, F-139)
 
@@ -5503,7 +5503,19 @@ A transport sent home with exit (`AIMoveAndDeleteState`) is deleted in the logic
 
 `RebuildHoleBehavior` rebuilt only where the world's rule (`HolesRebuild`) was on - in missions and the original AI's session; in a skirmish of the built-in AI a destroyed GLA building left its hole for good, burning. `ReplayRunner.CreateWorld` switches the rule on for every world with a match description (a live, joined or replayed skirmish); only bare worlds without a match (the synthetic fixtures, the stress test) keep the hole and record `CreationSkipped`. The worker is made and given its order in the same update (`IWorldServices.SpawnAtHole`), as the original's `update` does; before, the order came a tick later and a rebuilt building stood a frame earlier above 30 Hz. A rebuild now runs the same in original frames at 30, 60 and 120 Hz: on real data the worker 600 frames after the kill, a replacement 600 frames after the killed worker's body is removed. The built-in AI leaves `RECONSTRUCTING` sites to the hole (`docs/SKIRMISH-AI.md` 7g). Tests "Real data (#383): a destroyed GLA building is rebuilt by its hole in a skirmish" and "Real data (#383): a computer player leaves a building rising on its hole to the hole's worker".
 
-### 90.26 Elsewhere
+### 90.26 An angry mob left to itself (#392)
+
+A budded spawn's rally move takes the nearest free place (`AIInternalMoveToState::onEnter`, `Pathfinder::adjustDestination`; `FindDestination` as for a single move order), so a new mob spreads around its nexus instead of standing on one spot; a factory unit with a rally point and no exit path does the same. A mob member standing within `MustCatchUpRadius` follows the idle branch of `MobMemberSlavedUpdate::update`: it remembers the nexus' victim as its primary victim; when the nexus is idle (after Stop, or with nothing to attack) it goes idle and forgets it; with `maySpawnSelfTaskAI` (the `Squirrelliness` share, the spawner's last command the AI's) a member its player commanded last takes a victim of its own (`getNextMoodTarget(FALSE,FALSE)`, the look on request with vision x 2.2 for a human player's unit); otherwise it attacks the primary victim as an attack of the AI (a human player's member does not chase, `isAllowedToChase`). `primaryVictim` and `selfTasking` are written only when set. Differences: a spawner's attack on a victim it picked itself counts as the AI's command, and self-taskers are counted when a member asks, not once per frame; catch-up moves keep the nexus' exact point. Tests "Real data (#392): a new angry mob spreads around its nexus", "... angry mob members attack their nexus' victim and stand when the nexus is idle", "... one angry mob member at a time picks a victim of its own (Squirrelliness)" at 30, 60 and 120 Hz; a mob's second shot against Red Guards is a frame later above 30 Hz, older than this (#402).
+
+### 90.27 A dock order paths through units (#394)
+
+`AIDockState::update` sets `setCanPathThroughUnits(true)` for the whole order; the port's derived flag `AIUpdateInterface.CanPathThroughUnits` (no state) is true while a unit has a dock order. Such a unit is not held up in `StepBlockedMovers`, skips the local avoidance (`AvoidLocalBlockers`), asks no infantry to step aside (`RequestStepAside`) and weighs the way through allies at the original's cost without moving them (`PreferWayThroughAllies`); dozers and harvesters still clear their path (`moveAllies`). The flag's other users in the original (a factory's exit path, a jet taxiing, the `aiMoveAwayFromUnit` fallback) are not ported. Test "Real data (#394): a supply truck on a dock order paths through a soldier of its own" at 30, 60 and 120 Hz: a Chinese supply truck behind a Red Guard reaches its warehouse in 491 frames (742 before). The owner's #384 (several GLA workers at one depot, one gathers) is still not reproduced: six workers from four layouts all gathered, before and after. On a plain move the truck is still held up behind the soldier (#406).
+
+### 90.28 A crush spares an ignored obstacle (#395)
+
+`TryCrush` follows `PhysicsBehavior::onCollide`: nothing is crushed that either object's AI ignores as its obstacle (`getIgnoredObstacleID`: the goal of an approach such as a hijacker's vehicle, a container being entered, the container just left, a dock driven through). The two other exceptions (both objects parachuting; `setIgnoreCollisionsWith` from a creation list's `IgnorePrimaryObstacle`) meet no crusher on the shipped data and are named, not built. Test "#395: a crusher spares the goal of an approach" at 30, 60 and 120 Hz.
+
+### 90.29 Elsewhere
 
 - The patcher finds Steam outside its default place (#175): `docs/INSTALLATION.md` "Limits".
 - Effects and the transparent stage blend in display values (#356, #359): `docs/CLIENT-FX.md`.
@@ -5515,3 +5527,9 @@ A transport sent home with exit (`AIMoveAndDeleteState`) is deleted in the logic
 - A model that is a W3D particle emitter (#369): `docs/W3D-SKELETONS.md`, `docs/PRESENTATION-FX.md`.
 - The saving rule against every purchase (#373) and the AI at a rising hole (#383): `docs/SKIRMISH-AI.md` 7g.
 - A pending command mode outlives a unit that leaves the selection (#381); an angry mob is selected as one unit (#382): `docs/PRESENTATION-INPUT.md` §5.
+- A dock order only where the original allows one (#393): `docs/PRESENTATION-INPUT.md`.
+- The letters of the powers bar and the general's window (#389): `docs/GAME-HUD.md`.
+- Weapon model states only in an attack (#390): `docs/PRESENTATION-OBJECTS.md`.
+- A transition's particle systems, and nothing that outlives its object (#391, #398): `docs/PRESENTATION-FX.md`.
+- The built-in AI leaves slaves to their master (#396): `docs/SKIRMISH-AI.md` 7h.
+- A team attack's victim on easy and hard among the selectable members (#397): `docs/SCRIPT-ENGINE.md`.
