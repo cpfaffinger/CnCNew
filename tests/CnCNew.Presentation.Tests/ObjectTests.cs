@@ -509,7 +509,22 @@ static partial class ObjectTests
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
         Check.That(entity.WeaponClip == 0 && Conditions() == ModelConditionSet.Parse("ATTACKING RELOADING_A USING_WEAPON_A"), $"An empty clip reloads ({Conditions()}).");
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 40); i++) world.Step();
-        Check.That(Conditions() == ModelConditionSet.Parse("ATTACKING"), $"Ready again: no weapon bits, the attack on the bunker goes on ({Conditions()}).");
+        // Object::adjustModelConditionForWeaponStatus: a ready weapon of a unit that aims or fires shows BETWEEN_FIRING_SHOTS, so a burst does not pop back to idle (#390).
+        Check.That(world.IsAimingOrFiring(entity) && Conditions() == ModelConditionSet.Parse("ATTACKING BETWEEN_FIRING_SHOTS_A USING_WEAPON_A"),
+            $"Ready again while the attack on the bunker aims: between shots ({Conditions()}).");
+        // Empty the clip again, then leave the attack while the clip reloads: the original shows no weapon state on a unit that is not attacking (#390).
+        Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 3) && !world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == rover); i++) { }
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 12); i++) world.Step();
+        Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
+        world.Step();
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
+        Check.That(entity.WeaponClip == 0 && Conditions() == ModelConditionSet.Parse("ATTACKING RELOADING_A USING_WEAPON_A"), $"The clip reloads again ({Conditions()}).");
+        Submit(world, sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, world.Tick, rover, Fixed.FromInt(10), Fixed.FromInt(30)));
+        world.Step();
+        Check.That(world.Tick < entity.WeaponReadyTick && !ConditionDeriver.IsAttacking(entity, world), "The move order ends the attack while the clip still reloads.");
+        Check.That(!Conditions().Contains(ModelConditions.Reloading[0]) && !Conditions().Contains(ModelConditions.UsingWeapon[0]) && !Conditions().Contains(ModelConditions.Attacking),
+            $"A unit that left its attack shows no weapon state, though its clip reloads ({Conditions()}).");
 
         Submit(world, sequence => new DamageCommand(PlayerId.System, sequence, world.Tick, rover, Fixed.FromInt(95), 0, 0));
         world.Step();

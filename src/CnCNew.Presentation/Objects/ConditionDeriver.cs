@@ -2,6 +2,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.Views;
 using CnCNew.Simulation.World;
 
@@ -153,20 +154,28 @@ public static partial class ConditionDeriver
         => entity.HasStatus(AttackingStatus) || world.AcquiredVictimOf(entity).IsValid || world.IsAttackingPlace(entity);
 
     /// <summary>
-    /// The current weapon slot only (<c>Object::adjustModelConditionForWeaponStatus</c> sets nothing for a slot that is not the current weapon).
-    /// <c>WeaponSet::getModelConditionForWeaponSlot</c> maps the weapon status to FIRING (the shot happened within the last original frame: on the last simulated tick at 30 Hz, on one of the last two at 60 Hz),
-    /// RELOADING (empty clip, not ready), BETWEEN_FIRING_SHOTS (not ready) or PREATTACK (winding up), each with USING_WEAPON_A/B/C for the slot.
+    /// <c>Object::adjustModelConditionForWeaponStatus</c>, for the current weapon slot only (it sets nothing for a slot that is not the current weapon).
+    /// FIRING (the shot happened within the last original frame: on the last simulated tick at 30 Hz, on one of the last two at 60 Hz) overrides everything. Every other weapon
+    /// state is shown only while the unit attacks (<c>OBJECT_STATUS_IS_ATTACKING</c>): a unit that was attacking and got a move order would otherwise keep its firing pose while
+    /// its weapon reloads, so a unit that left its attack shows none. In the attack <c>WeaponSet::getModelConditionForWeaponSlot</c> maps the weapon's status: PREATTACK
+    /// (winding up), RELOADING (empty clip, reloading), BETWEEN_FIRING_SHOTS (not ready), nothing when out of ammunition or ready - except that a ready weapon of a unit that
+    /// aims or fires (not one that approaches its target) shows BETWEEN_FIRING_SHOTS, so a burst does not pop back to idle for a frame. Each with USING_WEAPON_A/B/C for the slot.
     /// </summary>
     private static ModelConditionSet Weapon(Entity entity, SimulationWorld world, ModelConditionSet set)
     {
-        // PRE_ATTACK: the weapon winds up (Weapon::preFireWeapon); it is the slot the attack chose, which becomes the current weapon with the shot.
-        if (world.PreAttackSlotOf(entity) is >= 0 and var winding) return set.With(ModelConditions.PreAttack[winding]).With(ModelConditions.UsingWeapon[winding]);
         var slot = entity.CurrentWeaponSlot;
         var clip = entity.ClipOf(slot);
         var lastFire = entity.LastFireTickOf(slot);
-        if (clip < 0 || lastFire < 0) return set;
-        if (world.Tick - 1 - lastFire is >= 0 and var sinceShot && sinceShot < world.Time.TicksPerOriginalFrame) return set.With(ModelConditions.Firing[slot]).With(ModelConditions.UsingWeapon[slot]);
-        if (world.Tick >= entity.ReadyTickOf(slot)) return set;
+        if (clip >= 0 && lastFire >= 0 && world.Tick - 1 - lastFire is >= 0 and var sinceShot && sinceShot < world.Time.TicksPerOriginalFrame)
+            return set.With(ModelConditions.Firing[slot]).With(ModelConditions.UsingWeapon[slot]);
+        if (!IsAttacking(entity, world)) return set;
+        // PRE_ATTACK: the weapon winds up (Weapon::preFireWeapon); it is the slot the attack chose, which becomes the current weapon with the shot.
+        if (world.PreAttackSlotOf(entity) is >= 0 and var winding) return set.With(ModelConditions.PreAttack[winding]).With(ModelConditions.UsingWeapon[winding]);
+        if (clip < 0) return set;
+        if (world.Tick >= entity.ReadyTickOf(slot))
+            return world.IsAimingOrFiring(entity) ? set.With(ModelConditions.BetweenFiringShots[slot]).With(ModelConditions.UsingWeapon[slot]) : set;
+        // An empty clip that is never reloaded by time is OUT_OF_AMMO (Weapon::fireWeaponTemplate without AutoReloadsClip), which shows nothing.
+        if (clip == 0 && entity.ReadyTickOf(slot) >= SimulationTiming.SleepForever) return set;
         return set.With(clip == 0 ? ModelConditions.Reloading[slot] : ModelConditions.BetweenFiringShots[slot]).With(ModelConditions.UsingWeapon[slot]);
     }
 

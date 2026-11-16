@@ -220,6 +220,13 @@ public sealed partial class SimulationWorld
     /// <summary>The slot whose weapon is winding up right now (<c>MODELCONDITION_PREATTACK_A/B/C</c>), or -1.</summary>
     public int PreAttackSlotOf(Entity entity) => entity.Firing is { PreSlot: >= 0 } state && _tick <= state.PreFinish ? state.PreSlot : -1;
 
+    /// <summary>
+    /// <c>OBJECT_STATUS_IS_AIMING_WEAPON</c> or <c>OBJECT_STATUS_IS_FIRING_WEAPON</c>: the unit's attack has its target in range and runs its aim or fire state
+    /// (<c>AIAttackAimAtTargetState</c>, <c>AIAttackFireWeaponState</c>), not its approach (<c>AIAttackApproachTargetState</c>).
+    /// </summary>
+    public bool IsAimingOrFiring(Entity entity)
+        => entity.Acquisition is { Chasing: false } attack && attack.Victim.IsValid || entity.AttackPlace is { Chasing: false };
+
     private void EndPreAttack(Entity entity)
     {
         if (entity.Firing is not { PreSlot: >= 0 } state) return;
