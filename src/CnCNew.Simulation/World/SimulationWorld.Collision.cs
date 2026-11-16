@@ -364,8 +364,61 @@ public sealed partial class SimulationWorld
             if (speed == Fixed.Zero) continue;
             blocked = true;
             limit = Fixed.Min(limit, MaxBlockedSpeed(x, y, angle, otherX, otherY, otherAngle, speed));
+            // "if (!aiOther->isMovingAwayFrom(getObject()))": a unit that is no infantry tells infantry in its way to move out of it (aiMoveAwayFromUnit) - not a busy one (Patch 1.01:
+            // "Prevent busy units from being told to move out of the way!") - and is held up for this frame all the same (#406).
+            if (!mover.Template.IsKindOf("INFANTRY") && other.Template.IsKindOf("INFANTRY") && !otherAi.StepsAsideFor(mover.Id) && !other.HasStatus(UsingAbilityBit))
+                TellToStepAside(mover, ai, x, y, other, otherAi, otherX, otherY);
         }
         return blocked;
+    }
+
+    /// <summary>
+    /// <c>AIUpdateInterface::privateMoveAwayFromUnit</c> for infantry on its way: with the mover's path (none: nothing happens) the place off it (<c>getMoveAwayFromPath</c>, here
+    /// <see cref="FindPlaceAway"/>), and the temporary state that walks there before the infantry goes on with its order. The original's second path to avoid (<c>m_moveOutOfWay2</c>) and its
+    /// fallback through units when no place is found are not ported.
+    /// </summary>
+    private void TellToStepAside(Entity mover, AIUpdateInterface ai, Fixed x, Fixed y, Entity other, AIUpdateInterface otherAi, Fixed otherX, Fixed otherY)
+    {
+        if (other.EffectivelyDead || other.Template.Locomotor is null || ai.PathNodes.Count == 0) return;
+        if (FindPlaceAway(mover, x, y, ai.PathNodes, ai.PathIndex, other, otherX, otherY, out var placeX, out var placeY)) otherAi.OrderStepAside(this, mover.Id, placeX, placeY);
+    }
+
+    /// <summary>Cells around the unit told to move away that <see cref="FindPlaceAway"/> looks at, in each direction (own value: 21 by 21 cells).</summary>
+    private const int PlaceAwayReach = 10;
+
+    /// <summary>
+    /// <c>Pathfinder::getMoveAwayFromPath</c>: its search expands the cells around the unit by path cost (10 straight, 14 diagonal) and takes the first whose box, the two units' radii wide, does not
+    /// touch the mover's path. Here the way begins where the mover's frame ends (<paramref name="moverX"/>, <paramref name="moverY"/>), the cells within <see cref="PlaceAwayReach"/> are weighed by that cost without the search; the cheapest that keeps off the mover's way ahead and is a free goal
+    /// wins, and of two alike the one on the unit's own side of the way. The ground on the way there is the path search's when the unit plans it.
+    /// </summary>
+    private bool FindPlaceAway(Entity mover, Fixed moverX, Fixed moverY, IReadOnlyList<CnCNew.Simulation.Terrain.PathPoint> path, int index, Entity other, Fixed otherX, Fixed otherY, out Fixed placeX, out Fixed placeY)
+    {
+        (placeX, placeY) = (otherX, otherY);
+        var limit = CircleRadius(mover) + CircleRadius(other) + StandingBlockerMargin;
+        // The side of the way the unit is on: across the line from the mover to the next node of its path.
+        var next = path[Math.Min(index, path.Count - 1)];
+        var (wayX, wayY) = (next.X - moverX, next.Y - moverY);
+        var side = wayX * (otherY - moverY) - wayY * (otherX - moverX);
+        var (i0, j0) = (CnCNew.Simulation.Terrain.TerrainMap.CellOf(otherX), CnCNew.Simulation.Terrain.TerrainMap.CellOf(otherY));
+        var best = int.MaxValue;
+        var found = false;
+        for (var dj = -PlaceAwayReach; dj <= PlaceAwayReach; dj++)
+        {
+            for (var di = -PlaceAwayReach; di <= PlaceAwayReach; di++)
+            {
+                var (absI, absJ) = (Math.Abs(di), Math.Abs(dj));
+                // Twice the cost, plus one for a cell on the other side of the way than the unit.
+                var cost = (10 * Math.Max(absI, absJ) + 4 * Math.Min(absI, absJ)) * 2;
+                if (cost >= best) continue;
+                var (x, y) = (CnCNew.Simulation.Terrain.TerrainMap.CellCenter(i0 + di), CnCNew.Simulation.Terrain.TerrainMap.CellCenter(j0 + dj));
+                var across = wayX * (y - moverY) - wayY * (x - moverX);
+                if (side != Fixed.Zero && across != Fixed.Zero && (side < Fixed.Zero) != (across < Fixed.Zero)) cost++;
+                if (cost >= best) continue;
+                if (TouchesWay(moverX, moverY, x, y, limit, path, index, Fixed.MaxValue) || !GoalIsFree(other, x, y)) continue;
+                (best, placeX, placeY, found) = (cost, x, y, true);
+            }
+        }
+        return found;
     }
 
     private static long GroundPlanExtent(Templates.ObjectTemplate template)

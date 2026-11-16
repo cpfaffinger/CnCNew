@@ -126,7 +126,8 @@ static partial class Tests
 
     /// <summary>
     /// UNIT-02: a tank behind infantry that walks the same way stuttered: the bounded avoidance shoved its step aside by 45 degrees, the path pulled it back, frame after frame.
-    /// <c>AIUpdateInterface::processCollision</c> holds it behind the soldier at his speed instead (<c>calculateMaxBlockedSpeed</c>, <c>m_bumpSpeedLimit</c>).
+    /// <c>AIUpdateInterface::processCollision</c> holds it behind the soldier at his speed instead (<c>calculateMaxBlockedSpeed</c>, <c>m_bumpSpeedLimit</c>), and tells the soldier, who is not
+    /// moving away from it, to move out of its way (<c>aiMoveAwayFromUnit</c>, #406): the tank waits while the soldier steps off the line, then drives on along it, past him.
     /// </summary>
     public static void TankBehindInfantryFollowsWithoutAStutter()
     {
@@ -139,13 +140,28 @@ static partial class Tests
             var tank = world.Entities.Single(value => value.Template.Name == "MotionTank");
             var man = world.Entities.Single(value => value.Template.Name == "MotionMan");
             Check.That(feeder.SetMoveTarget(1, tank.Id.Value, 500, 300).Accepted && feeder.SetMoveTarget(1, man.Id.Value, 500, 300).Accepted, $"{rate}: both are ordered along the line.");
-            var (turn, aside) = WatchLine(world, tank, factor, 600, 300);
+            double turn = 0, aside = 0, manAside = 0, slowest = double.MaxValue;
+            double? heading = null;
+            var last = (X: tank.X, Y: tank.Y);
+            for (var frame = 0; frame < 600; frame++)
+            {
+                for (var tick = 0; tick < factor; tick++) world.Step();
+                double D(Fixed value) => value.Raw / (double)Fixed.ScaleRaw;
+                var (dx, dy) = (D(tank.X - last.X), D(tank.Y - last.Y));
+                last = (tank.X, tank.Y);
+                aside = Math.Max(aside, Math.Abs(D(tank.Y - Fixed.FromInt(300))));
+                manAside = Math.Max(manAside, Math.Abs(D(man.Y - Fixed.FromInt(300))));
+                if (frame >= 10) slowest = Math.Min(slowest, tank.Speed.Raw * factor / (double)Fixed.ScaleRaw);
+                if (Math.Abs(dx) + Math.Abs(dy) < 1e-6) { heading = null; continue; }
+                var now = Math.Atan2(dy, dx);
+                if (heading is { } before) turn = Math.Max(turn, Math.Abs(Math.IEEERemainder(now - before, 2 * Math.PI)));
+                heading = now;
+            }
             Check.That(aside < 0.01, $"{rate}: the tank stays on its line ({aside:F3} units aside).");
             Check.That(turn < 0.01, $"{rate}: the tank does not change direction ({turn:F3} rad between two frames).");
-            Check.That(man.X - tank.X < Fixed.FromInt(25), $"{rate}: the tank has caught up with the soldier ({(man.X - tank.X).Raw / Fixed.ScaleRaw}).");
-            Check.That(man.X > tank.X, $"{rate}: and stays behind him, on his line.");
-            var perFrame = tank.Speed.Raw * factor / (double)Fixed.ScaleRaw;
-            Check.That(perFrame <= 0.75, $"{rate}: it drives at his 0.6 units per frame, not its own 1.0 ({perFrame:F3}).");
+            Check.That(slowest <= 0.75, $"{rate}: once at its own 1.0 units per frame the tank is held up behind the soldier ({slowest:F3}).");
+            Check.That(manAside > 10, $"{rate}: the soldier steps off the tank's line ({manAside:F3} units).");
+            Check.That(tank.X > man.X, $"{rate}: and the tank drives on past him.");
         }
     }
 

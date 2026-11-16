@@ -1160,6 +1160,32 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _exitRallyY = rallyY;
     }
 
+    // AI_MOVE_OUT_OF_THE_WAY, the temporary state of aiMoveAwayFromUnit: the unit that asked (m_moveOutOfWay1), the place off its way, and the tick the state runs out
+    // (10 seconds of the original). Invalid when the unit is not stepping aside.
+    private EntityId _asideOf;
+    private Fixed _asideX;
+    private Fixed _asideY;
+    private long _asideUntil;
+
+    /// <summary><c>AIUpdateInterface::isMovingAwayFrom</c>: the unit is stepping out of the way of <paramref name="mover"/>.</summary>
+    internal bool StepsAsideFor(EntityId mover) => _asideOf.IsValid && _asideOf == mover && Entity.HasMoveTarget;
+
+    /// <summary>
+    /// <c>AIUpdateInterface::privateMoveAwayFromUnit</c> for a unit on its way: the temporary state <c>AI_MOVE_OUT_OF_THE_WAY</c> walks to (<paramref name="x"/>, <paramref name="y"/>) off the
+    /// way of <paramref name="mover"/> and keeps the order underneath; when it is there or ten seconds of the original have passed, the state ends with its path (<c>onExit</c>:
+    /// <c>destroyPath</c>) and the order goes on from where the unit stands. The path to the place is searched at once (<c>getMoveAwayFromPath</c>), not through the path queue.
+    /// </summary>
+    internal void OrderStepAside(IWorldServices world, EntityId mover, Fixed x, Fixed y)
+    {
+        _asideOf = mover;
+        _asideX = x;
+        _asideY = y;
+        // Asked at the end of a logic frame of the original: the state runs out with the decision of the frame ten seconds after the one it was asked in, at every rate.
+        _asideUntil = world.Tick + TickOrder.Next - world.Time.TicksPerOriginalFrame + world.Time.OriginalFrames(10 * SimulationRate.OriginalFramesPerSecond);
+        InvalidatePath();
+        world.MarkDirty(Entity);
+    }
+
     // The points of the unit's lane in a column of its group, the last one its goal; gone with any other order.
     private ImmutableArray<PathPoint> _column = [];
     private bool _columnPlanned;
@@ -1228,6 +1254,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _exitRallyPending = false;
         _viaPending = false;
         _exitFrom = EntityId.Invalid;
+        _asideOf = EntityId.Invalid;
     }
 
     // The container the object is walking out of (OpenContain::exitObjectViaDoor: aiFollowPath with the container as the ignored object); gone with the first leg or any other order.
@@ -2173,6 +2200,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             var viaY = _viaY - Entity.Y;
             if (air || SquaredReach.Of(Fixed.FromInt(TerrainMap.CellSize)).Contains(viaX * viaX + viaY * viaY)) _viaPending = false;
         }
+        if (_asideOf.IsValid)
+        {
+            // AI_MOVE_OUT_OF_THE_WAY ends at its place or when its time is up; onExit destroys the path, and the order underneath plans again from here.
+            var asideX = _asideX - Entity.X;
+            var asideY = _asideY - Entity.Y;
+            if (air || world.Tick >= _asideUntil || SquaredReach.Of(Fixed.FromInt(TerrainMap.CellSize)).Contains(asideX * asideX + asideY * asideY))
+            {
+                _asideOf = EntityId.Invalid;
+                InvalidatePath();
+                world.MarkDirty(Entity);
+            }
+        }
         // Close to a goal somebody else has taken: head for the nearest free place instead (SimulationWorld.ExitGoals.cs, the reference's adjustDestination).
         if (!air && GoalSpotCheckDue(world) && world.TryFreeGoalSpot(Entity, out var freeX, out var freeY))
         {
@@ -2180,7 +2219,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             Entity.MoveTargetY = freeY;
             InvalidatePath();
         }
-        if (!air && !_viaPending && world.PathsQueued)
+        if (!air && !_viaPending && !_asideOf.IsValid && world.PathsQueued)
         {
             if (!QueuedPath(world, navigation, locomotor)) return;
         }
@@ -2303,7 +2342,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var aroundMovers = held && _blockedFrames > BlockedRepathFrames;
         // Standing units on the way (a dozer at work, a halted group) are unknown to the static path: plan once around them instead of rubbing along them while the local avoidance
         // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per second; a plan that no longer reaches the goal is dropped and the old path kept.
-        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && (speed > Fixed.Zero || aroundMovers) && _pathWait == PathWait.None)
+        // AIMoveOutOfTheWayState::computePath: "just use the existing path" - a unit stepping aside plans nothing around anybody.
+        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && (speed > Fixed.Zero || aroundMovers) && _pathWait == PathWait.None && !_asideOf.IsValid)
         {
             // Look-ahead: the travel of about 25 logic frames of the original (a walking infantry sees 17 units, a fast vehicle 60).
             // AIInternalMoveToState::update: blocked for two seconds, the path is computed again; the port's paths do not see units, so it is told the ones around.
@@ -2622,7 +2662,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private bool GoalSpotCheckDue(IWorldServices world)
     {
         // Not on the way out of a factory either: the first leg ends at the place the exit path chose, and the rally point is adjusted when the second leg is ordered.
-        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitAfterEvacuate || _exitRallyPending || _viaPending || _exitFrom.IsValid) return false;
+        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitAfterEvacuate || _exitRallyPending || _viaPending || _exitFrom.IsValid || _asideOf.IsValid) return false;
         if ((world.Time.FramesIn(world.Tick) + Entity.Id.Value) % GoalSpotCheckFrames != 0) return false;
         // A slave or mob member is sent onto its master's place by its own module, again and again: it keeps the goal it is given.
         _follows ??= Entity.Modules.Any(module => module is ISlavedModule);
@@ -3143,6 +3183,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     private void PlanPath(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor, bool air)
     {
+        if (!air && _asideOf.IsValid && PlanAside(world, navigation, locomotor)) return;
         if (!air && !_column.IsDefaultOrEmpty)
         {
             PlanColumn(world, navigation, locomotor);
@@ -3174,6 +3215,28 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor)));
         _pathComplete = result.Status == PathStatus.Found;
         _path.AddRange(result.Points);
+    }
+
+    /// <summary>
+    /// The path of <c>AI_MOVE_OUT_OF_THE_WAY</c>: to the place off the other's way, and on to the goal of the order underneath, which the state's end plans again from where it stands.
+    /// False, and the state is over, when the place cannot be reached.
+    /// </summary>
+    private bool PlanAside(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor)
+    {
+        var toAside = navigation.FindPath(Entity.X, Entity.Y, _asideX, _asideY, PathSurfaces(locomotor), Entity.Layer, Entity.Layer);
+        if (toAside.Status != PathStatus.Found)
+        {
+            _asideOf = EntityId.Invalid;
+            return false;
+        }
+        InvalidatePath();
+        _pathValid = true;
+        _pathObstacles = navigation.ObstacleSum;
+        var onward = navigation.FindPath(_asideX, _asideY, Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor), Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, PathSurfaces(locomotor)));
+        _pathComplete = onward.Status == PathStatus.Found;
+        _path.AddRange(toAside.Points);
+        _path.AddRange(onward.Points);
+        return true;
     }
 
     private Fixed TailLength()
@@ -3344,6 +3407,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             writer.Fixed("viaX", _viaX);
             writer.Fixed("viaY", _viaY);
         }
+        if (_asideOf.IsValid)
+        {
+            writer.UInt("asideOf", _asideOf.Value);
+            writer.Fixed("asideX", _asideX);
+            writer.Fixed("asideY", _asideY);
+            writer.Int("asideUntil", _asideUntil);
+        }
         if (_exitFrom.IsValid) writer.UInt("exitFrom", _exitFrom.Value);
         if (_dyingSince != 0) writer.Int("dyingSince", _dyingSince);
         if (_ignoreCollisionsUntil != 0) writer.Int("ignoreCollisionsUntil", _ignoreCollisionsUntil);
@@ -3423,6 +3493,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _viaPending = reader.Has("viaX");
         _viaX = _viaPending ? reader.Fixed("viaX") : Fixed.Zero;
         _viaY = _viaPending ? reader.Fixed("viaY") : Fixed.Zero;
+        _asideOf = reader.Has("asideOf") ? new EntityId(checked((uint)reader.UInt("asideOf"))) : EntityId.Invalid;
+        _asideX = _asideOf.IsValid ? reader.Fixed("asideX") : Fixed.Zero;
+        _asideY = _asideOf.IsValid ? reader.Fixed("asideY") : Fixed.Zero;
+        _asideUntil = _asideOf.IsValid ? reader.Int("asideUntil") : 0;
         _dyingSince = reader.Has("dyingSince") ? reader.Int("dyingSince") : 0;
         _exitFrom = reader.Has("exitFrom") ? new EntityId(checked((uint)reader.UInt("exitFrom"))) : EntityId.Invalid;
         _ignoreCollisionsUntil = reader.Has("ignoreCollisionsUntil") ? reader.Int("ignoreCollisionsUntil") : 0;

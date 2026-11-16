@@ -309,8 +309,11 @@ public sealed partial class SimulationWorld
 
     /// <summary>Whether a standing unit touches the way of <paramref name="mover"/> from its place along <paramref name="path"/> for <paramref name="reach"/> (all of it when that is <see cref="Fixed.MaxValue"/>).</summary>
     private bool TouchesWay(Entity mover, Fixed x, Fixed y, Fixed limit, IReadOnlyList<PathPoint> path, int index, Fixed reach)
+        => TouchesWay(mover.X, mover.Y, x, y, limit, path, index, reach);
+
+    /// <summary><see cref="TouchesWay(Entity, Fixed, Fixed, Fixed, IReadOnlyList{PathPoint}, int, Fixed)"/> for a way that begins at (<paramref name="fromX"/>, <paramref name="fromY"/>).</summary>
+    private static bool TouchesWay(Fixed fromX, Fixed fromY, Fixed x, Fixed y, Fixed limit, IReadOnlyList<PathPoint> path, int index, Fixed reach)
     {
-        var (fromX, fromY) = (mover.X, mover.Y);
         var walked = Fixed.Zero;
         for (var node = index; node < path.Count && walked < reach; node++)
         {
