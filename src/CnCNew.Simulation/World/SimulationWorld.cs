@@ -2275,7 +2275,14 @@ public sealed partial class SimulationWorld : IWorldServices
                 _exitClaims.Add(new ExitClaim(entity.Id, _tick + _firstFrameTicks - TickOrder.Next));
             }
         }
-        else if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi) rallyAi.OrderMove(this, setup.RallyX, setup.RallyY, false);
+        else if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi)
+        {
+            // aiMoveToPosition: AIInternalMoveToState::onEnter adjusts the goal to a place nobody holds (Pathfinder::adjustDestination) - a spawn that buds on its host's place
+            // walks to the nearest free one ("I cant stay here, if somebody else is here", exitObjectByBudding), so a new mob spreads.
+            var (rallyX, rallyY) = (setup.RallyX, setup.RallyY);
+            if (IsGroundMover(entity)) FindDestination(entity, ref rallyX, ref rallyY, true);
+            rallyAi.OrderMove(this, rallyX, rallyY, false);
+        }
         if (setup.SetCreator)
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.SpecialPowerCompletionDie completion) completion.SetCreator(setup.Creator);

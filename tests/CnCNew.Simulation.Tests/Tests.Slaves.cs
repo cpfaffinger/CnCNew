@@ -682,7 +682,9 @@ static partial class Tests
         var members = world.Entities.Where(value => value.Template.Name == "SvMobMember").OrderBy(value => value.Id.Value).ToArray();
         Check.That(members.Length == 4, $"The nexus produced its four members ({members.Length}).");
         Check.That(members.All(member => ModuleOf<MobMemberSlavedUpdate>(member).Slaver == nexus.Id), "Every member was enslaved to the nexus.");
-        Check.That(members.All(member => Gap2D(member, nexus) < Fixed.FromInt(10)), "Budded members start on the nexus (or on a member standing there).");
+        // exitObjectByBudding orders a budded member onto the place it appeared on, and the move's goal is adjusted to a place nobody holds (#392): the mob spreads around its nexus.
+        Check.That(members.All(member => Gap2D(member, nexus) < Fixed.FromInt(40)), "Budded members stand close to the nexus.");
+        Check.That(members.Select(member => (member.X, member.Y)).Distinct().Count() == members.Length, "Budded members do not stand on one spot.");
         Check.That(nexus.HasStatus(ObjectStatusBits.Index("MASKED")), "A nexus \"doesn't exist\": enemies cannot shoot at it.");
         Check.That(nexus.Body!.Health == nexus.Body.MaxHealth, "A full mob is a full-health nexus.");
 
