@@ -736,7 +736,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             if (world.FindEntity(item.Entity) is not { } entity) continue;
             if (!_tracked.TryGetValue(id, out var tracked)) _tracked[id] = tracked = new Tracked();
             tracked.Shown = true;
-            UpdateModelState(item, tracked, world);
+            UpdateModelState(item, tracked, originalFrame);
             catalog.Objects.TryGetValue(item.Visual.TemplateName, out var template);
             var damage = entity.HasStatus(ObjectStatusBits.UnderConstruction) ? tracked.DamageState : entity.DamageState();
             var aflame = entity.HasStatus(AflameStatus);
@@ -1344,9 +1344,9 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
     /// <c>W3DModelDraw::setModelState</c>: entering a state stops the systems of the last one and starts the <c>ParticleSysBone</c> systems of the new one - also of a transition state, which
     /// plays between two real states until its animation is complete (<c>doDrawModule</c>), and of a state that waits for the playing one to finish (#391).
     /// </summary>
-    private void UpdateModelState(ProjectedEntity item, Tracked tracked, SimulationWorld world)
+    private void UpdateModelState(ProjectedEntity item, Tracked tracked, long originalFrame)
     {
-        ShownStates(item, tracked, world);
+        ShownStates(item, tracked, originalFrame);
         var same = tracked.StateKey.Length == _shownScratch.Count;
         for (var index = 0; same && index < _shownScratch.Count; index++) same = tracked.StateKey[index] == _shownScratch[index];
         if (same) return;
@@ -1379,9 +1379,10 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
 
     /// <summary>
     /// The state every draw module shows now, into <see cref="_shownScratch"/>: the selected one, or - for a module with transition or waiting states (<see cref="ModelStateFollower.Needed"/>)
-    /// and with <see cref="AnimationSeconds"/> known - what <see cref="ModelStateFollower"/> answers, the playing state's animation complete once its clip has run for its length in game time.
+    /// and with <see cref="AnimationSeconds"/> known - what <see cref="ModelStateFollower"/> answers, the playing state's animation complete once its clip has run for its length in game time,
+    /// counted in logic frames of the original so that a clip ends in the same frame at every tick rate.
     /// </summary>
-    private void ShownStates(ProjectedEntity item, Tracked tracked, SimulationWorld world)
+    private void ShownStates(ProjectedEntity item, Tracked tracked, long originalFrame)
     {
         _shownScratch.Clear();
         var count = item.Selections.Length;
@@ -1408,12 +1409,12 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             var draw = item.Visual.Draws[module];
             var playing = tracked.Playing[module];
             var complete = ModelStateFollower.StateAt(draw, playing) is not { } current
-                || world.Tick - tracked.PlayingSince[module] >= PlaySeconds(current) * world.Time.TicksPerSecond;
+                || originalFrame - tracked.PlayingSince[module] >= PlaySeconds(current) * CnCNew.Data.OriginalFrame.PerSecond;
             var now = follower.Follow(requested, complete);
             if (now != playing)
             {
                 tracked.Playing[module] = now;
-                tracked.PlayingSince[module] = world.Tick;
+                tracked.PlayingSince[module] = originalFrame;
             }
             _shownScratch.Add(now);
         }
