@@ -56,7 +56,7 @@ public sealed record HealContainData(OpenContainData Base, int ContainMax, long 
 /// <c>OpenContain::exitObjectViaDoor</c>, which an <c>OpenContain</c> always grants): it is set on the exit path and walks to its end, as a rider of a transport does
 /// (fidelity finding F-34, Phase 34; before it was put on the building's position).
 /// </summary>
-public sealed class HealContain(HealContainData data) : ContainModuleBase(data.Base)
+public sealed class HealContain(HealContainData data) : ContainModuleBase(data.Base), IContainerModule
 {
     /// <summary>An <c>OpenContain</c>: it does not hold its occupants.</summary>
     public override bool HoldsRiders => false;
@@ -84,6 +84,19 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
     {
         base.Remove(world, candidate, positionAtContainer);
         _containedSinceTick.Remove(candidate.Id.Value);
+    }
+
+    /// <summary>
+    /// <c>aiExit</c> of an occupant that is told to leave a living building - the building is sold (<c>OpenContain::onSelling</c>) or evacuated
+    /// (<c>AIGroup::groupEvacuate</c> of a structure, <c>orderAllPassengersToExit</c>): <c>AIExitState::update</c> asks <c>isExitBusy</c> (never, for an
+    /// <c>OpenContain</c>) and <c>reserveDoorForExit</c> (always <c>DOOR_1</c>) and leaves through <c>OpenContain::exitObjectViaDoor</c>, the same door a healed occupant
+    /// takes. Before, such an occupant was put on the building's centre (#409).
+    /// </summary>
+    public bool ExitViaDoor(IWorldServices world, Entity rider)
+    {
+        if (Entity.EffectivelyDead || !Riders.Contains(rider.Id)) return false;
+        ExitObjectViaDoor(world, rider, data.NumberOfExitPaths, ref _whichExitPath);
+        return true;
     }
 
     public override long Update(IWorldServices world)
