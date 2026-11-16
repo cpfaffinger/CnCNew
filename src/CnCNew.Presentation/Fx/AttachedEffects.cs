@@ -727,7 +727,11 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             if (entity is null || entity.EffectivelyDead && !_current.ContainsKey(id)) { gone.Add(id); continue; }
             if (!_current.ContainsKey(id) && tracked.Shown) Hide(tracked);
         }
-        foreach (var id in gone) _tracked.Remove(id);
+        foreach (var id in gone)
+        {
+            Forget(_tracked[id]);
+            _tracked.Remove(id);
+        }
         UpdateStreams(world, view);
         UpdateGunshipDecals(world, originalFrame);
         foreach (var item in _ordered)
@@ -1327,6 +1331,20 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         Destroy(tracked.BodySystems);
         tracked.DamageState = -1;
         tracked.Aflame = false;
+    }
+
+    /// <summary>
+    /// The object left the world, or died and is no longer drawn (#398): everything it carries stops - <c>W3DModelDraw</c>'s destructor <c>stopClientParticleSystems</c>,
+    /// <c>ActiveBody::onDelete</c>'s <c>deleteAllParticleSystems</c>, <c>BoneFXUpdate</c>'s <c>killRunningParticleSystems</c>, and <c>TransitionDamageFX</c>'s systems, which die with the object they are
+    /// attached to. Each is <c>ParticleSystem::destroy</c>: the emission stops, the particles in the air finish. Should the dead object be drawn again, its effects are made anew from its state.
+    /// </summary>
+    private void Forget(Tracked tracked)
+    {
+        Hide(tracked);
+        Destroy(tracked.BoneFxSystems);
+        tracked.BoneFxState = -1;
+        tracked.BoneFxDue = [];
+        foreach (var systems in tracked.TransitionSystems) Destroy(systems);
     }
 
     private Vector3? Bone(string? model, string bone, float scale)

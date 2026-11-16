@@ -42,8 +42,93 @@ internal static class AttachedEffectsTests
         harness.Run("The Spectre's gattling strafes the ground with smoke while the gunship is seen", () => SpectreStrafe(data));
         harness.Run("A muzzle on a turret turns with the turret", () => TurretMuzzle(data));
         harness.Run("#369: a broken hydrant sprays water - the model EXHydrant is a W3D emitter that runs at the WaterSpray object for its life", () => HydrantSpray(data));
+        harness.Run("#398: nothing an object carries emits after the object has left - model state systems, emitters, the body's fire and smoke, bone and transition effects", () => NothingOutlivesItsObject(data));
         harness.Run("The acceptance scene acc-flames: what burns and smokes, by system", () => AcceptanceScene(data));
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// #398: when an object is deleted the original stops everything it carries - <c>W3DModelDraw</c>'s destructor <c>stopClientParticleSystems</c>, <c>ActiveBody::onDelete</c>'s
+    /// <c>deleteAllParticleSystems</c>, <c>BoneFXUpdate</c>'s <c>killRunningParticleSystems</c>, and a system attached to an object that is gone destroys itself (<c>TransitionDamageFX::onDelete</c>
+    /// relies on that); each calls <c>ParticleSystem::destroy</c>, which stops the emission and lets the particles in the air finish. A W3D emitter that was a state's model leaves the scene with
+    /// the drawable. A scene where things die in every way: a GLA building burnt and destroyed (its rebuild hole stays), a hydrant whose spray ends, missiles with their exhaust, a Dragon's
+    /// flame with its trail. Every system and emitter attached to an object is noted while the object is there; two drawn frames after it left the world, or after it died and is no
+    /// longer drawn, none of them may still emit.
+    /// </summary>
+    private static void NothingOutlivesItsObject(GameData data)
+    {
+        var scene = Stage(data, "attached-outlives",
+            [new ScenarioUnit("barracks", "GLABarracks", 2, 120f, 60f), new ScenarioUnit("hydrant", "FireHydrantRed", 2, 60f, -60f), new ScenarioUnit("dragon", "ChinaTankDragon", 1, 0f, 60f),
+             new ScenarioUnit("hunter", "ChinaInfantryTankHunter", 1, 0f, -140f), new ScenarioUnit("tank", "AmericaTankCrusader", 2, 120f, -140f)],
+            [new ScenarioOrder(10, "hydrant", ScenarioOrderKind.Damage, X: 200f), new ScenarioOrder(10, "barracks", ScenarioOrderKind.Damage, X: 60f),
+             new ScenarioOrder(15, "dragon", ScenarioOrderKind.Attack, "barracks"), new ScenarioOrder(15, "hunter", ScenarioOrderKind.Attack, "tank"),
+             new ScenarioOrder(240, "barracks", ScenarioOrderKind.Damage, X: 100f)], 480);
+        var systems = new Dictionary<uint, HashSet<int>>();
+        var emitters = new Dictionary<uint, HashSet<int>>();
+        var goneFor = new Dictionary<uint, int>();
+        var outlived = new List<string>();
+        var departed = 0;
+        Run(scene, () =>
+        {
+            var drawn = scene.ObjectFrame.Drawables.Select(drawable => drawable.Entity.Value).ToHashSet();
+            foreach (var entity in scene.World.Entities)
+            {
+                foreach (var id in scene.Fx.Particles.EmittingAttachedTo(entity.Id)) (systems.TryGetValue(entity.Id.Value, out var set) ? set : systems[entity.Id.Value] = []).Add(id);
+                foreach (var id in scene.Fx.ModelEmitters.EmittingAt(entity.Id)) (emitters.TryGetValue(entity.Id.Value, out var set) ? set : emitters[entity.Id.Value] = []).Add(id);
+            }
+            foreach (var id in systems.Keys.Union(emitters.Keys).ToList())
+            {
+                var entity = scene.World.FindEntity(new CnCNew.Simulation.Ids.EntityId(id));
+                var gone = entity is null || (entity.EffectivelyDead && !drawn.Contains(id));
+                if (!gone) { goneFor.Remove(id); continue; }
+                var frames = goneFor[id] = goneFor.GetValueOrDefault(id) + 1;
+                if (frames == 1) departed++;
+                if (frames <= 2) continue;
+                var name = entity?.Template.Name ?? "removed";
+                foreach (var system in systems.GetValueOrDefault(id) ?? [])
+                    if (scene.Fx.Particles.IsEmitting(system)) outlived.Add($"{id} {name}: system {system} {scene.Fx.Particles.TemplateNameOf(system)}");
+                foreach (var emitter in emitters.GetValueOrDefault(id) ?? [])
+                    if (scene.Fx.ModelEmitters.IsEmitting(emitter)) outlived.Add($"{id} {name}: emitter {emitter}");
+            }
+        });
+        var stats = scene.Attached.Stats;
+        Console.WriteLine($"       {systems.Count} objects carried systems, {emitters.Count} emitters, {departed} departures; {stats}");
+        TestHarness.Assert(departed >= 4 && stats.BodySystems > 0 && stats.ModelEmitters > 0 && stats.ExhaustSystems > 0 && stats.BoneFxSystems > 0,
+            $"objects with fire, smoke, an emitter, an exhaust and a trail left the scene ({departed}; {stats})");
+        TestHarness.Assert(outlived.Count == 0, $"nothing still emits for an object that left ({outlived.Count}: {string.Join("; ", outlived.Distinct().Take(8))})");
+
+        // A dead object stays in the world while it is no longer drawn: the Dragon's hull smokes (TransitionDamageFX's RubbleParticleSystem) through its slow death of 18 s, and a
+        // script takes the viewer's sight of the map away (the staging's reveal undone, SHROUD_MAP) while it sinks. What it carried stops then; it does not run on until the hull is removed.
+        var dying = Stage(data, "attached-dying-unseen",
+            [new ScenarioUnit("hull", "ChinaTankDragonDeadHull", 2, 0f, 0f), new ScenarioUnit("dozer", "ChinaVehicleDozer", 1, -900f, -900f)], [], 150);
+        var carried = new HashSet<int>();
+        var switched = -1L;
+        var unseenFrames = 0;
+        var stillEmitting = new List<string>();
+        Run(dying, () =>
+        {
+            if (!dying.Tags.TryGetValue("hull", out var id)) return;
+            var hull = dying.World.FindEntity(id);
+            if (switched < 0)
+            {
+                foreach (var system in dying.Fx.Particles.EmittingAttachedTo(id)) carried.Add(system);
+                if (hull is { EffectivelyDead: true } && dying.ObjectFrame.Drawables.Any(drawable => drawable.Entity == id) && dying.Fx.Particles.EmittingAttachedTo(id).Length > 0)
+                {
+                    switched = dying.World.Tick;
+                    var viewer = new CnCNew.Simulation.Ids.PlayerId(1);
+                    dying.World.RevealMapPermanently(viewer, false);
+                    dying.World.ShroudMap(viewer);
+                }
+                return;
+            }
+            if (hull is null || dying.ObjectFrame.Drawables.Any(drawable => drawable.Entity == id)) return;
+            if (++unseenFrames <= 2) return;
+            foreach (var system in carried)
+                if (dying.Fx.Particles.IsEmitting(system)) stillEmitting.Add($"{system} {dying.Fx.Particles.TemplateNameOf(system)}");
+        });
+        Console.WriteLine($"       the dying hull carried {carried.Count} systems; the map shrouded at tick {switched}, then {unseenFrames} drawn frames in the world and not drawn");
+        TestHarness.Assert(carried.Count > 0 && switched >= 0 && unseenFrames > 2, $"the hull smoked, died in view and stayed in the world unseen ({carried.Count}, {switched}, {unseenFrames})");
+        TestHarness.Assert(stillEmitting.Count == 0, $"nothing it carried emits while it dies unseen ({string.Join("; ", stillEmitting.Distinct().Take(8))})");
     }
 
     /// <summary>

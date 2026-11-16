@@ -149,6 +149,9 @@ public sealed class ModelEmitterWorld(FxRandom random)
     /// <summary>Whether the emitter of this id still emits.</summary>
     public bool IsEmitting(int id) => _emitters.Any(emitter => emitter.Id == id && emitter.Emitting);
 
+    /// <summary>The ids of the emitters at <paramref name="entity"/> that still emit, in creation order.</summary>
+    public ImmutableArray<int> EmittingAt(EntityId entity) => [.. _emitters.Where(emitter => emitter.Emitting && emitter.Entity == entity).Select(emitter => emitter.Id)];
+
     /// <summary>One drawn frame of the W3D clock: every emitter emits for it and its particles move.</summary>
     public void Step(Func<EntityId, FxEntityPose?> poses)
     {
