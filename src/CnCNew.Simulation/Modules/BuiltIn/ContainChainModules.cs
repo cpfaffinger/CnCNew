@@ -483,11 +483,6 @@ public sealed class OverlordContain(OverlordContainData data) : TransportContain
         base.OnDie(world, info);
     }
 
-    public override void OnRemove(IWorldServices world)
-    {
-        foreach (var id in Riders.ToArray()) world.RequestDestroy(id);
-    }
-
     public override void Describe(IStateWriter writer)
     {
         base.Describe(writer);

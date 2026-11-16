@@ -389,6 +389,8 @@ run.Test("Repair: RepairDockUpdate heals over TimeForFullHeal", Tests.RepairDock
 run.Test("Repair: RepairDockUpdate snapshot mid-repair", Tests.RepairDockSnapshot);
 run.Test("Repair: AutoFindHealingUpdate walks a hurt computer unit into a pad", Tests.AutoFindHealingWalksToPad);
 run.Test("Healing: a healed occupant leaves a heal pad through its door (F-34)", Tests.HealContainReleasesThroughTheDoor);
+run.Test("Containers: a sold building lets its riders out (#408)", Tests.SoldContainersLetTheirRidersOut);
+run.Test("Containers: a container removed without dying takes its riders (#408)", Tests.RemovedContainerTakesItsRiders);
 run.Test("Repair: AutoFindHealingUpdate refusals", Tests.AutoFindHealingRefusals);
 run.Test("Phase 51 (F-87): the dying look for no pad", Tests.AutoFindHealingLeavesTheDyingAlone);
 run.Test("Phase 51 (F-17): a computer player's unit walks to its victim from rest", Tests.AcquisitionComputerUnitWalksToItsVictim);
@@ -1031,6 +1033,7 @@ if (contentDirectory is not null) run.Test("Real data (owner decision): units pi
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value leaves ordered attacks and lone victims alone", () => Tests.RealTargetValueLeavesOrdersAndLoneVictimsAlone(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value numbers follow the armour table and the threat", () => Tests.RealTargetValueNumbersFollowTheRule(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered to garrison a building goes in at its wall", () => Tests.RealGarrisonEntryAtTheWall(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the soldiers of a sold fire base come out (#408)", () => Tests.RealSoldFireBaseLetsItsSoldiersOut(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: units ordered into a full bunker stop where they are", () => Tests.RealUnitsStopWhenTheirContainerIsFull(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered into a bunker that is full stops at once", () => Tests.RealUnitOrderedIntoAFullBunkerStops(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a hurt computer ranger is healed in its barracks, not sent into an ally's (#375)", () => Tests.RealHurtRangerIsHealedInItsBarracks(contentDirectory));

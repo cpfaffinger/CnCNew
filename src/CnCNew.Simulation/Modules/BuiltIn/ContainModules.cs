@@ -60,7 +60,7 @@ public sealed record OpenContainData(
 /// <c>DamagePercentToUnits</c> to each occupant's current health, then <c>killRidersWhoAreNotFreeToExit</c> (a no-op but for
 /// <see cref="TransportContain"/>) and <c>removeAllContained</c>. Capacity and the periodic <see cref="Update"/> behavior are subtype-specific.
 /// </summary>
-public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpdateModule, IDieModule, IContainerModule
+public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpdateModule, IDieModule, IContainerModule, ISellModule
 {
     protected readonly List<EntityId> Riders = [];
     private long _nextWake = -1;
@@ -225,6 +225,21 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
             }
         KillRidersWhoAreNotFreeToExit(world);
         EjectAll(world);
+    }
+
+    /// <summary>
+    /// <c>OpenContain::onSelling</c>: a container that is sold tells everybody inside to leave (<c>orderAllPassengersToExit</c>). Without it the riders of a sold barracks or
+    /// Internet Center stayed inside a building that was gone - unseen by everybody, never hurt, and their player never defeated (#408).
+    /// </summary>
+    public virtual void OnSelling(IWorldServices world) => world.EvacuateContainer(Entity);
+
+    /// <summary>
+    /// <c>OpenContain::onDelete</c>, "last possible moment cleanup": whoever is still inside a container that leaves the world goes with it (<c>destroyObject</c> of every rider).
+    /// A container that dies or is sold has let its riders out before; this is for one that is removed without either.
+    /// </summary>
+    public override void OnRemove(IWorldServices world)
+    {
+        foreach (var id in Riders.ToArray()) world.RequestDestroy(id);
     }
 
     /// <summary><c>OpenContain::killRidersWhoAreNotFreeToExit</c>: nothing; only a transport has riders that may not leave.</summary>
@@ -586,6 +601,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     /// <summary><c>GarrisonContain::m_evacDisposition</c> (<c>NAMED_SET_EVAC_LEFT_OR_RIGHT</c>): 1 = leave to the left, 2 = to the right, anything else bursts from the centre.</summary>
     public int EvacDisposition { get; set; }
+
+    /// <summary><c>GarrisonContain::onSelling</c>: everybody is taken out at once (<c>removeAllContained</c>), where a dying building puts them (#408: the occupants of a sold fire base stayed inside).</summary>
+    public override void OnSelling(IWorldServices world) => EjectAll(world);
 
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
