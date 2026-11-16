@@ -34,7 +34,7 @@ internal static class ObserverTests
     private static readonly DateTimeOffset RecordedAt = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
     /// <summary>The match of these tests: two computer players with the rush profile on Alpine Assault, seed 1, for this long.</summary>
-    // 15 minutes since #373: a crusher no longer runs over riders inside a vehicle or a building, and China's rush on America first takes a building at 14:14 (it was 5:20).
+    // 15 minutes since #373: a crusher no longer runs over riders inside a vehicle or a building, and China's rush on America first takes a building at 14:14 (it was 5:20); since #392 to #397 at 6:11.
     private const int MatchSeconds = 900;
     private const int Seed = 1;
 
