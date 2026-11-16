@@ -160,6 +160,21 @@ public sealed partial class SimulationWorld
         if (attitude != 0 && AiOf(entity) is not null) SetAttitude(entity, attitude);
     }
 
+    private static readonly int UnselectableStatusBit = Modules.ObjectStatusBits.Index("UNSELECTABLE");
+
+    /// <summary>
+    /// <c>Object::isSelectable</c>, as the simulation knows it: an <c>ALWAYS_SELECTABLE</c> object always; otherwise one whose own selectability (the template's <c>SELECTABLE</c>, which a map's
+    /// <c>objectSelectable</c> overrides) holds, without the <c>UNSELECTABLE</c> status - which a slave carries while its master lives (<c>SlavedUpdate::startSlavedEffects</c>) and a rider
+    /// while it is contained (<c>Object::onContainedBy</c>; here the container itself says so) - and not dead. The angry mob's members never set the status (it is commented out of
+    /// <c>MobMemberSlavedUpdate::startSlavedEffects</c>), so they are selectable when their template is. A script's "Selectable" panel flag is kept by the presentation, not here.
+    /// </summary>
+    public static bool IsSelectable(Entity entity)
+    {
+        if (entity.Template.IsKindOf("ALWAYS_SELECTABLE")) return true;
+        var own = (entity.ScriptDisableMask & Entity.ScriptUnselectable) == 0 && ((entity.ScriptDisableMask & Entity.ScriptSelectable) != 0 || entity.Template.IsKindOf("SELECTABLE"));
+        return own && !entity.HasStatus(UnselectableStatusBit) && !entity.ContainedBy.IsValid && !entity.EffectivelyDead;
+    }
+
     /// <param name="flags">A mission's map object brings its yes-or-no properties (<c>Object::updateObjValuesFromMapProperties</c>, as <see cref="ApplyMapProperties"/> sets them).</param>
     public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, int healthPercent, Commands.MapObjectFlags flags = Commands.MapObjectFlags.None)
     {

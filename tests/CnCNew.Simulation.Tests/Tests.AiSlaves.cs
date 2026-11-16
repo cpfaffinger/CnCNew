@@ -66,3 +66,60 @@ static partial class Tests
         }
     }
 }
+
+static partial class Tests
+{
+    private const string HiddenBystanderIni = """
+        Object HiddenBystander
+          KindOf = INFANTRY
+          VisionRange = 60.0
+          Locomotor = SET_NORMAL RoamWalk
+          Body = ActiveBody Body01
+            MaxHealth = 5000.0
+            InitialHealth = 5000.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """;
+
+    /// <summary>
+    /// Issue 397: <c>AIAttackSquadState::chooseVictim</c> takes the attacked team's <c>Squad::getLiveObjects</c> on easy and hard, which leaves out every member that is not selectable. The team
+    /// holds a selectable bystander (joined first) and one whose template is not <c>SELECTABLE</c> (joined last): hard, which takes the last that joined, and easy, a random one, both take the
+    /// selectable one; normal still takes the closest member, selectable or not (the partition's closest object of the squad).
+    /// </summary>
+    private static (bool Near, bool Hidden) SquadVictimAmongUnselectable(CnCNew.Simulation.Scripting.ScriptDifficulty difficulty, decimal hiddenX)
+    {
+        var files = new Dictionary<string, string>(RoamFiles()) { ["Data/INI/Object/HiddenBystander.ini"] = HiddenBystanderIni };
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_ATTACK_TEAM", Scr.Unit("Hunter"), Scr.Team("teamB"))], oneShot: true)],
+            objects: [Placed("MoodGunner", 100m, 200m, "teamA", "Hunter"), Placed("Bystander", 100m, 330m, "teamB", "Near"), Placed("HiddenBystander", hiddenX, 200m, "teamB", "Hidden")], extraFiles: files);
+        var session = CnCNew.Simulation.Mission.MissionSession.Start(CnCNew.Simulation.Mission.MissionOptions.Standard with { Difficulty = difficulty }, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(450));
+        return (Hurt(session, "Near"), Hurt(session, "Hidden"));
+    }
+
+    public static void SquadVictimSkipsWhatIsNotSelectable()
+    {
+        Check.That(SquadVictimAmongUnselectable(CnCNew.Simulation.Scripting.ScriptDifficulty.Hard, 320m) is (true, false), "On hard the attacker takes the last selectable member, not the unselectable one that joined after it.");
+        Check.That(SquadVictimAmongUnselectable(CnCNew.Simulation.Scripting.ScriptDifficulty.Easy, 320m) is (true, false), "On easy the random member is a selectable one.");
+        Check.That(SquadVictimAmongUnselectable(CnCNew.Simulation.Scripting.ScriptDifficulty.Normal, 160m) is (false, true), "On normal the closest member is taken, selectable or not.");
+    }
+
+    /// <summary>
+    /// Issue 397: <c>Object::isSelectable</c> in the simulation. A spawner's drone carries <c>UNSELECTABLE</c> while its master lives (<c>SlavedUpdate::startSlavedEffects</c>) and is not
+    /// selectable; the angry mob's members do not (<c>MobMemberSlavedUpdate</c> leaves the status out), so a member of a <c>SELECTABLE</c> template is; the masters are.
+    /// </summary>
+    public static void SlavesAreSelectableAsTheOriginalSays()
+    {
+        var world = SlaveWorld(out _, out var feeder);
+        feeder.Spawn(1, "SvMaster", x: 100, y: 100);
+        feeder.Spawn(1, "SvNexus", x: 300, y: 300);
+        StepN(world, 40);
+        var drone = SlaveEntity(world, "SvScoutDrone");
+        var member = SlaveEntity(world, "SvMobMember");
+        Check.That(SimulationWorld.SlaverOf(drone).IsValid && SimulationWorld.SlaverOf(member).IsValid, "Both are slaves of a living master.");
+        Check.That(SimulationWorld.IsSelectable(SlaveEntity(world, "SvMaster")) && SimulationWorld.IsSelectable(SlaveEntity(world, "SvNexus")), "The masters are selectable.");
+        Check.That(!SimulationWorld.IsSelectable(drone), "The drone of a living master is not selectable.");
+        Check.That(SimulationWorld.IsSelectable(member), "A mob member of a SELECTABLE template is selectable.");
+    }
+}

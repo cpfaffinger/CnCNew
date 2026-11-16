@@ -532,6 +532,8 @@ run.Test("Roaming: an armed enemy repulses, an unarmed one does not (F-22)", Tes
 run.Test("Roaming: a panicking team runs its path on the panic locomotors and a repulsor turns it aside (F-22)", Tests.PanicRunsOnThePanicLocomotors);
 run.Test("Original skirmish AI: a script sets the skill set and the time between teams (F-22)", Tests.OriginalAiObeysItsScriptedSettings);
 run.Test("Scripts: a team's attacker chooses its victim by difficulty; a script makes every difficulty normal (F-22)", Tests.SquadAttackersChooseByDifficulty);
+run.Test("Scripts (issue 397): a team's attacker on easy and hard chooses among the selectable members only", Tests.SquadVictimSkipsWhatIsNotSelectable);
+run.Test("Slaves (issue 397): a drone of a living master is not selectable, a mob member is", Tests.SlavesAreSelectableAsTheOriginalSays);
 run.Test("Scripts: a weapon able to follow waypoints flies a path and detonates at its end (F-22)", Tests.WeaponFollowsAWaypointPath);
 run.Test("Scripts: a team attack-moves to the nearest place of enemy value (F-22)", Tests.TeamAttacksTheNearestGroupWithValue);
 run.Test("Scripts: a team uses its button on the most valuable enemy in range (F-22)", Tests.TeamUsesItsButtonOnTheMostValuable);
