@@ -122,4 +122,25 @@ static partial class Tests
         Check.That(!SimulationWorld.IsSelectable(drone), "The drone of a living master is not selectable.");
         Check.That(SimulationWorld.IsSelectable(member), "A mob member of a SELECTABLE template is selectable.");
     }
+
+    /// <summary>
+    /// Issue 403: <c>SpawnBehavior::createSpawn</c> makes a spawn on its spawner's team (<c>parent->getTeam()</c>), for every player. A drone master placed in the human player's
+    /// <c>teamA</c> and one in the computer player's <c>teamB</c>: each drone joins its master's team - not the computer player's default team, and not no team at all.
+    /// </summary>
+    public static void SpawnsJoinTheirSpawnersTeam()
+    {
+        var scripted = ScriptFiles();
+        var files = SlaveFiles().Where(file => !scripted.ContainsKey(file.Key)).ToDictionary(file => file.Key, file => file.Value);
+        var (map, fixture, terrain) = MissionMap([], objects: [Placed("SvMaster", 100m, 200m, "teamA", "MasterA"), Placed("SvMaster", 400m, 200m, "teamB", "MasterB")], extraFiles: files);
+        var session = CnCNew.Simulation.Mission.MissionSession.Start(CnCNew.Simulation.Mission.MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(60));
+        foreach (var (master, team) in new[] { ("MasterA", "teamA"), ("MasterB", "teamB") })
+        {
+            var owner = NamedIn(session, master)!;
+            var drones = session.World.Entities.Where(entity => entity.Template.Name == "SvScoutDrone" && SimulationWorld.SlaverOf(entity) == owner.Id).ToArray();
+            Check.That(drones.Length == 1, $"{master} has made its drone ({drones.Length}).");
+            var teams = session.Engine.TeamInstances.Where(instance => instance.Members.Contains(drones[0].Id.Value)).Select(instance => instance.Prototype).ToArray();
+            Check.That(teams.SequenceEqual([team]), $"The drone of {master} is a member of {team} only ({string.Join(", ", teams)}).");
+        }
+    }
 }

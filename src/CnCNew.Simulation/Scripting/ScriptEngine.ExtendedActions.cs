@@ -409,6 +409,28 @@ public sealed partial class ScriptEngine
         if (_teamBuilds.Where(other => other.TeamId == order.TeamId).All(other => other.Joined >= other.Total)) _teamBuilds.RemoveAll(other => other.TeamId == order.TeamId);
     }
 
+    /// <summary>
+    /// <c>SpawnBehavior::createSpawn</c> makes its spawn on the spawner's own team (<c>newObject(..., parent->getTeam())</c>), so a script's orders to that team reach the spawn with
+    /// its master - a stinger soldier, a mob member, a tunnel defender, a supply centre's first truck - for every player. A creation list's object joins its player's default team instead
+    /// (<c>getDefaultTeam</c>), which <see cref="AiObserveSpawn"/> does for a computer player. A spawner that is in no team, or in one of another player, leaves the spawn to that.
+    /// </summary>
+    private void JoinSpawnerTeam(Entity spawn)
+    {
+        if (FirstTeamOf(spawn.Id.Value) is not null) return;
+        foreach (var spawner in _world.EntitiesWithModule<Modules.BuiltIn.ISpawnerModule>().AsSpan())
+        {
+            if (spawner.Owner != spawn.Owner) continue;
+            foreach (var module in spawner.ModuleArray)
+            {
+                if (module is not Modules.BuiltIn.ISpawnerModule spawning || !spawning.Slaves.Contains(spawn.Id)) continue;
+                if (FirstTeamOf(spawner.Id.Value) is not { } team || team.Owner != spawn.Owner) return;
+                team.Members.Add(spawn.Id.Value);
+                if (team.AttackPriority.Length > 0) _prioritySetOf[spawn.Id.Value] = team.AttackPriority;
+                return;
+            }
+        }
+    }
+
     /// <summary>The factory that finished this object in the step being observed (<c>onUnitProduced</c>'s <c>factory</c>), or 0: whatever else appears came out of none.</summary>
     private uint TakeFactoryOf(Entity unit)
     {

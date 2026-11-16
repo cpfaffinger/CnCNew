@@ -228,6 +228,7 @@ public sealed partial class ScriptEngine
                 {
                     var factory = TakeFactoryOf(produced);
                     JoinProducedUnit(produced, factory);
+                    JoinSpawnerTeam(produced);
                     AiObserveSpawn(produced, factory != 0);
                 }
                 break;
