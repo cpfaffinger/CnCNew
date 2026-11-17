@@ -47,8 +47,10 @@ public sealed record CleanupHazardData(long ScanTicks, Fixed ScanRange, int Slot
 
 /// <summary>
 /// <c>CleanupHazardUpdate.cpp</c> (the ambulance, the bio-hazard tech): every <c>ScanRate</c> it looks for the closest <c>CLEANUP_HAZARD</c> object within <c>ScanRange</c> and attacks it
-/// with its weapon until it is gone. The reference orders the AI to attack (<c>aiAttackObject</c>), which walks to weapon range and fires; here the module does both — it moves to
-/// three quarters of the weapon's range from the target and then orders an attack on it (<see cref="IWorldServices.OrderModuleAttack"/>: the attack machine fires it on its frames, F-140, with the slot locked temporarily as the reference does before its attack order). <see cref="SetCleanupAreaParameters"/>
+/// with its weapon until it is gone. The reference orders the AI to attack (<c>aiAttackObject</c>), which walks to weapon range and fires; here the module does both — out of the attack's
+/// reach (<see cref="IWorldServices.SlotReaches"/>, between the bounding circles, #433) it walks as the attack's approach does (<c>AIAttackApproachTargetState</c>: at the target, or where
+/// <c>findAttackPath</c> lets it fire from) and stops where the weapon reaches, in reach it orders an attack on it (<see cref="IWorldServices.OrderModuleAttack"/>: the attack machine fires it
+/// on its frames, F-140, with the slot locked temporarily as the reference does before its attack order). <see cref="SetCleanupAreaParameters"/>
 /// (from <see cref="CleanupAreaPower"/>) makes it clean an <em>area</em> instead: it walks to the point, scans around the point with <c>ScanRange + move range</c>, ignores weapon range while
 /// it is hunting and goes back to the point when nothing is left, ending the mode within 25 units of it; a new order from the player or a script (not issued by the module itself) abandons it.
 /// Not modelled: the reference sets the veteran weapon-set flag on creation (no shipped cleaner has such a set), the "busy" AI state that keeps a cleaning unit from reporting idle to
@@ -155,18 +157,13 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         if (target is null || ai is null) return;
         // aiAttackObject is only given to a unit that is idle or already doing the module's own approach; any other (player or script) order has priority.
         if (!(ai.IsIdle || (Entity.HasMoveTarget && !ai.LastCommandFromPlayer))) return;
-        Attack(world, ai, target, weapon);
+        Attack(world, ai, target);
     }
 
-    private void Attack(IWorldServices world, AIUpdateInterface ai, Entity target, WeaponInfo weapon)
+    private void Attack(IWorldServices world, AIUpdateInterface ai, Entity target)
     {
-        var (targetX, targetY, _) = target.FrameEnd(_frameTick);
-        var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
-        var dx = targetX - ownX;
-        var dy = targetY - ownY;
-        var distance = Fixed.Sqrt(dx * dx + dy * dy);
-        // Within the attack's own reach (a quarter cell short, between the centres, so the attack measuring between the circles fires from here, #422).
-        if (distance <= weapon.AttackRangeWithoutBonus())
+        // Within the attack's own reach (Weapon::isWithinAttackRange: between the bounding circles, #433): the attack fires from here.
+        if (world.SlotReaches(Entity, data.Slot, target))
         {
             // In range where its frame ends: the unit stops there, as it does after the whole 30 Hz step.
             if (Entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(world);
@@ -174,10 +171,9 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
             world.OrderModuleAttack(Entity, data.Slot, target);
             return;
         }
-        // Walk to three quarters of the range from the target along the line between them; re-plan only when the target moved away from the old stand-off point.
-        var standOff = weapon.AttackRange * Fixed.FromDecimal(0.75m);
-        var gx = targetX - dx * standOff / distance;
-        var gy = targetY - dy * standOff / distance;
+        // AIAttackApproachTargetState: walk at the target - or where findAttackPath lets it fire from - and stop where it reaches (above); re-plan only when the goal moved.
+        var (targetX, targetY, _) = target.FrameEnd(_frameTick);
+        var (gx, gy) = world.FindAttackPosition(Entity, target) ?? (targetX, targetY);
         var slack = Fixed.FromInt(2 * Terrain.TerrainMap.CellSize);
         if (Entity.HasMoveTarget && (Entity.MoveTargetX - gx).Abs() <= slack && (Entity.MoveTargetY - gy).Abs() <= slack) return;
         ai.OrderMove(world, gx, gy, false);

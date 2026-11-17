@@ -290,6 +290,17 @@ public sealed partial class SimulationWorld
         return false;
     }
 
+    /// <summary>
+    /// <c>Weapon::isWithinAttackRange</c> of the weapon in <paramref name="slot"/> at <paramref name="victim"/> (<see cref="WithinWeaponRange"/>, with the attack's view): what an attack a module
+    /// orders with that slot fires by (<see cref="OrderModuleAttack"/>, #433). False when the slot is empty.
+    /// </summary>
+    public bool SlotReaches(Entity source, int slot, Entity victim)
+    {
+        if (ActiveWeaponSet(source) is not { } set || !set.HasWeapon(slot)) return false;
+        var weapon = _templates.Weapons[set.Weapons[slot]];
+        return WithinWeaponRange(source, weapon, victim) && !AttackViewBlocks(source, weapon, victim);
+    }
+
     private static bool IsPreferredAgainst(WeaponSetInfo set, int slot, Entity victim)
     {
         foreach (var kind in set.PreferredAgainst[slot])

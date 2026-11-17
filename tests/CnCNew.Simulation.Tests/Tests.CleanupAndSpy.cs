@@ -238,7 +238,7 @@ static partial class Tests
         var far = CsSpawn(world, feeder, "FixtureHazard", 0, 400);
         var module = ambulance.Modules.OfType<CleanupHazardUpdate>().Single();
 
-        // Passive: the closest hazard within ScanRange is attacked; the unit walks to three quarters of its weapon range and fires until it is gone.
+        // Passive: the closest hazard within ScanRange is attacked; the unit walks at it until its weapon reaches it between the bounding circles (#433) and fires until it is gone.
         CsRun(world, 200, () => !CsExists(world, near));
         Check.That(!CsExists(world, near), "The ambulance cleaned the hazard within its scan range.");
         Check.That(ambulance.X > Fixed.FromInt(25) && ambulance.X < Fixed.FromInt(45), $"It walked to weapon range of the hazard ({ambulance.X}).");

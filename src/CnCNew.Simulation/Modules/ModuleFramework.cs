@@ -681,6 +681,15 @@ public interface IWorldServices
     /// </summary>
     bool OrderModuleAttack(Entity source, int slot, Entity victim, int shots = 0);
 
+    /// <summary>
+    /// <c>Weapon::isWithinAttackRange</c> of the weapon in <paramref name="slot"/> of the active set at <paramref name="victim"/> (#422, #433): between the two bounding circles, outside the
+    /// minimum range, with the attack's view (F-55) - the test an attack the module orders (<see cref="OrderModuleAttack"/>) fires by. False when the slot is empty.
+    /// </summary>
+    bool SlotReaches(Entity source, int slot, Entity victim);
+
+    /// <summary><c>Pathfinder::findAttackPath</c>: where <paramref name="unit"/> walks to fire at <paramref name="victim"/>; null when it walks at the victim itself.</summary>
+    (Fixed X, Fixed Y)? FindAttackPosition(Entity unit, Entity victim);
+
     /// <summary><c>Object::reloadAllAmmo(true)</c>: every clipped weapon of the active weapon set is full again and ready now (an aircraft that landed at its airfield).</summary>
     void ReloadAllAmmo(Entity entity);
 
