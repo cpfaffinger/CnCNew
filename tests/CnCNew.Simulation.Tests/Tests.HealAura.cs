@@ -30,6 +30,7 @@ static partial class Tests
           Behavior = AutoHealBehavior Heal01
             StartsActive = Yes
             HealingAmount = 5
+            HealingDelay = 0
             Radius = 100.0
             KindOf = VEHICLE
           End
@@ -46,7 +47,10 @@ static partial class Tests
         End
         """;
 
-    /// <summary>A hurt truck drives fast out of an aura that heals every frame: it is healed in the same frames at 30, 60 and 120 Hz, the last time in the frame before it leaves.</summary>
+    /// <summary>
+    /// A hurt truck drives fast out of an aura that heals every frame (a zero <c>HealingDelay</c>; without one an aura that starts active never wakes, #438): it is healed in the
+    /// same frames at 30, 60 and 120 Hz, the last time in the frame before it leaves.
+    /// </summary>
     public static void HealAuraJudgesTheRadiusWhereTheFramesEnd()
     {
         string? reference = null;
