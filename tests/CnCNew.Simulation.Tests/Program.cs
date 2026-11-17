@@ -262,6 +262,7 @@ run.Test("Rule fix chinook-unloads-one-by-one: an unload at a place goes through
 run.Test("Shock wave (F-63), step 1: the weapon's shock wave keys and the physics keys of the flight are read", Tests.ShockWaveFieldsAreRead);
 run.Test("Shock wave (F-63), step 2: a shocked object flies, turns, lands and is hurt by the fall, the same at every rate", Tests.ShockWaveFlight);
 run.Test("Shock wave (F-63), step 3: the stun - lost in the first step off the ground, the flailing kept, a stunned landing, death off the map", Tests.ShockWaveStun);
+run.Test("Shock wave (#420): a held object is not thrown, neither held nor let go; its stun stays, at 30, 60 and 120 Hz", Tests.ShockWaveLeavesAHeldObject);
 run.Test("Phase 40: a disable other than held pauses the special powers (pauseAllSpecialPowers)", Tests.DisablePausesSpecialPowers);
 run.Test("Phase 40 (F-50): the player's radar", Tests.PlayerRadar);
 run.Test("Phase 40 (F-48): the body applies the armour to raw damage and healing", Tests.ArmourIsAppliedByTheBody);

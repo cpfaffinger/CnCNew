@@ -241,4 +241,42 @@ static partial class Tests
             Check.That(thrown.EffectivelyDead && thrown.X < Fixed.Zero, $"{rate}: landing off the map while stunned kills it ({thrown.X}, dead {thrown.EffectivelyDead}).");
         }
     }
+
+    /// <summary>
+    /// #420: <c>PhysicsBehavior::update</c> integrates nothing while the object is held and zeroes the acceleration afterwards, so a shock wave throws no held object - not while it is
+    /// held and not once it is let go. The shock's stun is set (<c>Object::attemptDamage</c>) and stays: only the integration ends it. The port threw a held tank as any other.
+    /// At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void ShockWaveLeavesAHeldObject()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = ShockWorld(rate);
+            feeder.Spawn(1, "ShockLauncher", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "ShockTank", owner: 2, x: 50, y: 0);
+            world.Step();
+            var tank = world.Entities.Single(value => value.Template.Name == "ShockTank");
+            var physics = tank.Modules.OfType<PhysicsBehavior>().Single();
+            var angle = tank.Angle;
+            world.SetScriptDisable(tank, Entity.ScriptHeld, true);
+            Check.That(world.Weapons.TryGet("ShockBomb", out var bomb), "Setup: the bomb is in the catalog.");
+            world.DealWeaponDamage(world.Entities.Single(value => value.Template.Name == "ShockLauncher"), bomb!, null, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            Check.That(tank.Body!.Health < tank.Body.MaxHealth, $"{rate}: the blast hurts the held tank.");
+            var moved = false;
+            for (var step = 0; step < world.Frames(60); step++)
+            {
+                world.Step();
+                moved |= tank.X != Fixed.FromInt(50) || tank.Y != Fixed.Zero || tank.Z != Fixed.Zero || tank.Angle != angle;
+            }
+            Check.That(!moved && !physics.Flying && !tank.InPhysicsFlight, $"{rate}: held, it is not thrown ({tank.X}, {tank.Y}, {tank.Z}, flying {physics.Flying}).");
+            Check.That(physics.Stunned && physics.ShowsFlailing, $"{rate}: the shock's stun stays while it is held.");
+            world.SetScriptDisable(tank, Entity.ScriptHeld, false);
+            for (var step = 0; step < world.Frames(60); step++)
+            {
+                world.Step();
+                moved |= tank.X != Fixed.FromInt(50) || tank.Y != Fixed.Zero || tank.Z != Fixed.Zero;
+            }
+            Check.That(!moved, $"{rate}: let go, the shock that came while it was held throws it no more ({tank.X}, {tank.Y}, {tank.Z}).");
+        }
+    }
 }

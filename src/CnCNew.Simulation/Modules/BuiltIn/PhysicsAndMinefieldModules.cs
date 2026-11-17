@@ -341,6 +341,22 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             return _subStep == 0 && !_flying ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
         }
 
+        // PhysicsBehavior::update integrates nothing while the object is held ("if (!obj->isDisabledByType(DISABLED_HELD))") and then zeroes the acceleration, so a shock on a held
+        // object (a stinger site's soldier, a script's held unit) moves nothing and is gone after the frame; its stun stays, as only the integration ends it (#420). A held object
+        // already in flight hangs where it is with its speed until it is let go.
+        if ((world.DisabledFlagsOf(Entity) & DisabledMask.Held) != DisabledMask.None)
+        {
+            (_accelX, _accelY, _accelZ) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            world.MarkDirty(Entity);
+            if (_velocityX != Fixed.Zero || _velocityY != Fixed.Zero || _velocityZ != Fixed.Zero) return world.Time.TicksPerOriginalFrame;
+            // At rest: the flight is over as the port ends one (the rates are dropped; the original keeps them unused).
+            (_yawRate, _pitchRate, _rollRate) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            _flying = false;
+            Entity.InPhysicsFlight = false;
+            _bounce = false;
+            return SimulationTiming.SleepForever;
+        }
+
         var stick = Entity.Template.Locomotor is { StickToGround: true };
         _accelZ += ProjectileModules.GravityPerFrameSquared(world);
         if (!world.IsSignificantlyAboveTerrain(Entity))
