@@ -840,6 +840,8 @@ run.Test("Tunnels: shared network, capacity, entry rules and exit through anothe
 run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
 run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);
 run.Test("Tunnels: a tunnel takes a rally point, and its riders walk on to it", Tests.TunnelRallyPoint);
+run.Test("Tunnels (#428): riders leave by the door to its end and on to the rally point at 30, 60 and 120 Hz", Tests.TunnelRidersLeaveByTheDoor);
+run.Test("Tunnels (#428): selling the last tunnel leaves its riders standing on it at 30, 60 and 120 Hz", Tests.TunnelSaleLeavesRidersOnTheTunnel);
 run.Test("Transports: walk in, drive and unload at a position", Tests.TransportLoadAndUnloadAtPosition);
 run.Test("Container exit: riders leave a living transport one by one, ExitDelay apart, to places of their own", Tests.ContainerExitRidersLeaveOneByOne);
 run.Test("Container exit: ExitStart and ExitEnd bones, cycling through the exit paths", Tests.ContainerExitUsesTheExitBones);

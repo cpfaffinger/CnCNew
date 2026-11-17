@@ -35,6 +35,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(DockBonesTests), DockBonesTests.Run),
     (nameof(ChinookOrderTests), ChinookOrderTests.Run),
     (nameof(StingerSpawnPointTests), StingerSpawnPointTests.Run),
+    (nameof(TunnelDoorTests), TunnelDoorTests.Run),
     (nameof(DeterminismTests), DeterminismTests.Run),
     (nameof(SpectatorTests), SpectatorTests.Run),
     (nameof(NetLobbyTests), NetLobbyTests.Run),

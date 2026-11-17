@@ -201,8 +201,9 @@ static partial class Tests
     }
 
     /// <summary>
-    /// A tunnel network is one shared contain list per player: a grunt that entered tunnel A leaves through tunnel B, scattered to a point 20..30 away
-    /// (bounding circle 20); capacity is network-wide (MaxTunnelCapacity 2); aircraft and other players' objects are refused.
+    /// A tunnel network is one shared contain list per player: a grunt that entered tunnel A leaves through tunnel B, by its door (#428: <c>exitObjectViaDoor</c>, not a random point;
+    /// this fixture's tunnel has no exit bones, so the door is the tunnel's own position and each rider walks to a place of its own beside it); capacity is network-wide
+    /// (MaxTunnelCapacity 2); aircraft and other players' objects are refused.
     /// </summary>
     public static void TunnelSharedNetwork()
     {
@@ -233,12 +234,10 @@ static partial class Tests
         foreach (var grunt in grunts.Take(2))
         {
             Check.That(!grunt.ContainedBy.IsValid && network.ContainCount == 0, "The network is empty.");
-            var dx = grunt.MoveTargetX - b.X;
-            var dy = grunt.MoveTargetY - b.Y;
-            var distance = Fixed.Sqrt(dx * dx + dy * dy);
-            Check.That(grunt.HasMoveTarget && distance >= Fixed.FromInt(20) - Fixed.FromDecimal(0.01m) && distance <= Fixed.FromInt(30) + Fixed.FromDecimal(0.01m),
-                $"The grunt walks out to a point 20..30 from tunnel B (got {distance}).");
+            // It took its first step in the tick it left.
+            Check.That((grunt.X - b.X).Abs() <= Fixed.FromInt(2) && (grunt.Y - b.Y).Abs() <= Fixed.FromInt(2), $"The grunt comes out on tunnel B, which has no exit bone ({grunt.X}, {grunt.Y}).");
         }
+        Check.That(grunts[0].MoveTargetX != grunts[1].MoveTargetX || grunts[0].MoveTargetY != grunts[1].MoveTargetY, "Each walks to a place of its own.");
     }
 
     /// <summary>

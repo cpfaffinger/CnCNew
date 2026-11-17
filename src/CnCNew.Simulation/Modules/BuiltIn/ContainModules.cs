@@ -74,25 +74,42 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     /// it is set on the path's <c>ExitStart</c> bone with the container's heading and walks to the <c>ExitEnd</c> bone, moved to the nearest place it can stand on
     /// (<c>Pathfinder::adjustToPossibleDestination</c>) - the riders of one transport do not end on one spot. It ignores the container as an obstacle on that walk and other
     /// units' collisions for a second. A model without the bone answers with the container's position (<c>Object::getSingleLogicalBonePosition</c>), which the adjustment then
-    /// moves off the container. Not modeled: the door animation (<c>DoorOpenTime</c>), a rally point of the container, the fall of a rider that leaves in the air.
+    /// moves off the container. Not modeled: the door animation (<c>DoorOpenTime</c>), the fall of a rider that leaves in the air.
     /// </summary>
     protected void ExitObjectViaDoor(IWorldServices world, Entity rider, int numberOfExitPaths, ref int whichExitPath)
     {
         Remove(world, rider, true);
         world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
+        // The container has no rally point of its own here (OpenContain::m_rallyPointExists is never set). The rule fix door-exit-to-rally (the community source) takes
+        // the rally point of the object's production exit instead: an infantryman healed in a barracks walks on to the barracks' rally point.
+        var hasRally = false;
+        Fixed rallyX = Fixed.Zero, rallyY = Fixed.Zero;
+        if (world.Templates.Rules.Has(Rules.GameFix.DoorExitToRally) && Entity.Modules.OfType<IProductionExit>().Any())
+            foreach (var module in Entity.Modules)
+                if (module is ProductionUpdate production && production.TryGetRally(out rallyX, out rallyY)) { hasRally = true; break; }
+        WalkOutOfDoor(world, Entity, rider, numberOfExitPaths, ref whichExitPath, hasRally, rallyX, rallyY);
+    }
+
+    /// <summary>
+    /// The part of <c>OpenContain::exitObjectViaDoor</c> after <c>removeFromContain</c>: the rider is set on the exit path's <c>ExitStart</c> bone of <paramref name="container"/>'s model with its
+    /// heading and follows the path <c>ExitEnd</c>, <c>ExitEnd</c>, then the rally point when there is one; nothing with no exit path (<c>NumberOfExitPaths = 0</c>). Shared by the
+    /// containers derived from <see cref="ContainModuleBase"/> and by <see cref="TunnelContain"/>, whose rally point is its own (<c>OpenContain::setRallyPoint</c>).
+    /// </summary>
+    internal static void WalkOutOfDoor(IWorldServices world, Entity container, Entity rider, int numberOfExitPaths, ref int whichExitPath, bool hasRally, Fixed rallyX, Fixed rallyY)
+    {
         if (numberOfExitPaths <= 0) return;
-        var (centreX, centreY, _) = Entity.FrameEnd(world.Tick);
+        var (centreX, centreY, _) = container.FrameEnd(world.Tick);
         ExitPath? path = null;
-        if (world.Templates.Geometry.ExitPaths.TryGetValue(Entity.Template.Name, out var paths))
+        if (world.Templates.Geometry.ExitPaths.TryGetValue(container.Template.Name, out var paths))
         {
             if (paths.Length != numberOfExitPaths)
-                throw new InvalidDataException($"The model geometry of '{Entity.Template.Name}' has {paths.Length} exit paths, the module has {numberOfExitPaths}.");
+                throw new InvalidDataException($"The model geometry of '{container.Template.Name}' has {paths.Length} exit paths, the module has {numberOfExitPaths}.");
             path = paths[numberOfExitPaths > 1 ? whichExitPath - 1 : 0];
         }
         // "To cycle from 1 to n": only a container with several paths counts.
         if (numberOfExitPaths > 1) whichExitPath = whichExitPath % numberOfExitPaths + 1;
         // The bones turn with the container where its frame ends, as its centre does (F-71): a container that turns lets a rider out in its own update after it decided the frame.
-        var heading = Entity.FrameEndAngle(world.Tick);
+        var heading = container.FrameEndAngle(world.Tick);
         var cos = FixedTrig.Cos(heading);
         var sin = FixedTrig.Sin(heading);
         (Fixed X, Fixed Y) World(BonePose? bone) => bone is { } pose ? (centreX + pose.X * cos - pose.Y * sin, centreY + pose.X * sin + pose.Y * cos) : (centreX, centreY);
@@ -104,14 +121,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         world.MarkDirty(rider);
         if (CrateModules.AiOf(rider) is not { } ai) return;
         world.FindPossibleDestination(rider, ref endX, ref endY);
-        // The container has no rally point of its own here (OpenContain::m_rallyPointExists is never set). The rule fix door-exit-to-rally (the community source) takes
-        // the rally point of the object's production exit instead: an infantryman healed in a barracks walks on to the barracks' rally point.
-        var hasRally = false;
-        Fixed rallyX = Fixed.Zero, rallyY = Fixed.Zero;
-        if (world.Templates.Rules.Has(Rules.GameFix.DoorExitToRally) && Entity.Modules.OfType<IProductionExit>().Any())
-            foreach (var module in Entity.Modules)
-                if (module is ProductionUpdate production && production.TryGetRally(out rallyX, out rallyY)) { hasRally = true; break; }
-        ai.OrderExitContainer(world, Entity, endX, endY, true, hasRally, rallyX, rallyY);
+        ai.OrderExitContainer(world, container, endX, endY, true, hasRally, rallyX, rallyY);
     }
 
     public int ContainCount => Riders.Count;

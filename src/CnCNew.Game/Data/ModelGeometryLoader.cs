@@ -481,7 +481,7 @@ public static class ModelGeometryLoader
     }
 
     /// <summary>The contain modules whose riders leave through <c>OpenContain::exitObjectViaDoor</c> (the garrison, the tunnel, the ferry and the parachute have exits of their own).</summary>
-    private static readonly string[] DoorContainers = ["TransportContain", "HelixContain", "OverlordContain", "RiderChangeContain", "InternetHackContain"];
+    private static readonly string[] DoorContainers = ["TransportContain", "HelixContain", "OverlordContain", "RiderChangeContain", "InternetHackContain", "TunnelContain"];
 
     /// <summary>
     /// The exit bones of every object with a door container: <c>ExitStart</c>/<c>ExitEnd</c> for one path, <c>ExitStart01</c>..<c>ExitEndNN</c> for more (<c>OpenContain::exitObjectViaDoor</c>), read

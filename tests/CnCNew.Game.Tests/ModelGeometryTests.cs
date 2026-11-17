@@ -114,7 +114,8 @@ internal static class ModelGeometryTests
             // AVHUMMER.W3D (tools/CnCNew.W3dTool bones): EXITSTART01 (-5.719, -0.006), EXITEND01 (-15.950, 0.001), EXITEND02 (-1.658, 10.989).
             static bool Near(Fixed value, decimal expected) => Math.Abs(value.ToDecimal() - expected) <= 0.07m;
             TestHarness.Assert(Near(humvee[0].Start!.Value.X, -5.719m) && Near(humvee[0].End!.Value.X, -15.950m) && Near(humvee[1].End!.Value.Y, 10.989m), "the Humvee's exit bones are the model's");
-            TestHarness.Assert(exits.Count == 100 && paths == 168 && complete == 85 && none.Length == 75, $"measured on the patched content: 100 door containers, 168 paths, 85 with both bones, 75 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
+            // #428: the twelve tunnels (TunnelContain) leave by their door too, and every tunnel model has ExitStart and ExitEnd.
+            TestHarness.Assert(exits.Count == 112 && paths == 180 && complete == 97 && none.Length == 75, $"measured on the patched content: 112 door containers, 180 paths, 97 with both bones, 75 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
         });
 
         harness.Run("Model geometry: the fire points and stations of the garrisons and transports (loadGarrisonPoints, loadStationGarrisonPoints, putObjAtNextFirePoint)", () =>

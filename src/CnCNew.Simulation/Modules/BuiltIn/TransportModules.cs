@@ -925,11 +925,15 @@ public sealed record TunnelContainData(DieMuxData DieMux, Fixed TicksForFullHeal
     /// <summary><c>PassengersAllowedToFire</c> of <c>OpenContainModuleData</c> (default no; no shipped tunnel sets it): the tunnel has no rule of its own, the flag decides (F-60).</summary>
     public bool PassengersAllowedToFire { get; init; }
 
+    /// <summary><c>OpenContainModuleData::m_numberOfExitPaths</c> (default 1; no shipped tunnel sets it): the riders leave by the bones <c>ExitStart</c>/<c>ExitEnd</c> of the tunnel's model.</summary>
+    public int NumberOfExitPaths { get; init; } = 1;
+
     public static TunnelContainData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
         ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? SimulationRate.Original.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero)
     {
         PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
+        NumberOfExitPaths = checked((int)ModuleConfigReader.Int(configuration, "NumberOfExitPaths", 1)),
     };
 }
 
@@ -940,8 +944,10 @@ public sealed record TunnelContainData(DieMuxData DieMux, Fixed TicksForFullHeal
 /// last tunnel goes, everyone inside is destroyed (the cave-in, <c>onTunnelDestroyed</c>), except on a sale, which lets them out first; otherwise
 /// the riders that entered the dead tunnel are reassigned to the oldest remaining one. Each tunnel's update heals every rider like
 /// <c>healObject</c> — a sliver of <c>MaxHealth / TimeForFullHeal</c> per logic frame of the original, full health once inside that long; with several tunnels the network
-/// is healed once per tunnel, exactly as in the reference. Leaving puts a rider at the tunnel and walks it to a random point
-/// <c>BoundingCircleRadius · [1, 1.5]</c> away (<c>scatterToNearbyPosition</c>, two logic draws).
+/// is healed once per tunnel, exactly as in the reference. A rider that is told to leave (an exit order, an evacuation) goes out by the tunnel's door (<c>AIExitState</c> ->
+/// <c>OpenContain::exitObjectViaDoor</c>): set on the model's <c>ExitStart</c> bone, it walks to <c>ExitEnd</c> and on to the tunnel's rally point (#428). Every other removal
+/// (a sale, a bunker buster) only puts it on the tunnel (<c>TunnelContain::onRemoving</c>). <c>TunnelContain::scatterToNearbyPosition</c> exists in the original, but nothing calls
+/// it: it is not virtual, and only <c>TransportContain</c> and <c>MobNexusContain</c> call their own.
 /// <para>
 /// Entry rules: not aircraft (<c>TunnelTracker::isValidContainerFor</c>), room in the network (<c>MaxTunnelCapacity</c>), and — standing in for
 /// <c>ActionManager::canEnterObject</c> — only the tunnel owner's own objects, only into a living, finished tunnel. Not modeled: the nemesis tracking
@@ -958,6 +964,7 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
     private bool _hasRally;
     private Fixed _rallyX;
     private Fixed _rallyY;
+    private int _whichExitPath = 1;
 
     public override string ModuleName => "TunnelContain";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -1020,39 +1027,34 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
         world.WakeAt(Entity, this, world.Tick);
     }
 
+    /// <summary>
+    /// <c>TunnelContain::removeFromContain</c> and <c>onRemoving</c>: the rider leaves the network and, when it is put into the world, stands on the tunnel's position - no order, no
+    /// heading of its own. Who is told to leave goes on by the door (<see cref="ExitViaDoor"/>).
+    /// </summary>
     public void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
         world.TunnelSystemOf(Entity.Owner).RemoveRider(candidate.Id);
         candidate.ContainedBy = EntityId.Invalid;
-        if (positionAtContainer) ScatterToNearbyPosition(world, candidate);
+        if (!positionAtContainer) return;
+        candidate.X = Entity.X;
+        candidate.Y = Entity.Y;
+        candidate.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
+        world.MarkDirty(candidate);
     }
 
-    /// <summary><c>TunnelContain::scatterToNearbyPosition</c>.</summary>
-    private void ScatterToNearbyPosition(IWorldServices world, Entity rider)
+    /// <summary>
+    /// <c>aiExit</c> of a rider of the network through this tunnel (<c>AIExitState::update</c>): a tunnel's door is never busy (<c>OpenContain::isExitBusy</c>), so the rider leaves at
+    /// once by <c>OpenContain::exitObjectViaDoor</c> - out of the network onto the tunnel, then set on the <c>ExitStart</c> bone and walked to <c>ExitEnd</c> and on to the tunnel's
+    /// rally point. Any rider of the owner's network may leave by any of its tunnels. A dead tunnel has no door.
+    /// </summary>
+    public bool ExitViaDoor(IWorldServices world, Entity rider)
     {
-        var angle = world.LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
-        var minRadius = Entity.Template.BoundingCircleRadius;
-        var distance = world.LogicRandom.Range(minRadius, minRadius + minRadius / Fixed.FromInt(2));
-        var x = Entity.X + distance * FixedTrig.Cos(angle);
-        var y = Entity.Y + distance * FixedTrig.Sin(angle);
-        rider.Angle = FixedTrig.Normalize(angle);
-        var ai = rider.Ai;
-        if (ai is not null && rider.Template.Locomotor is not null)
-        {
-            rider.X = Entity.X;
-            rider.Y = Entity.Y;
-            rider.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
-            // OpenContain::exitObjectViaDoor: with a rally point the exit path goes on to it (m_rallyPointExists).
-            if (_hasRally) ai.OrderExitContainer(world, Entity, x, y, false, true, _rallyX, _rallyY);
-            else ai.OrderMove(world, x, y, false);
-        }
-        else
-        {
-            rider.X = x;
-            rider.Y = y;
-            rider.Z = world.LayerHeightAt(x, y, Entity.Layer);
-        }
-        world.MarkDirty(rider);
+        if (Entity.EffectivelyDead || !world.TunnelSystemOf(Entity.Owner).Contains(rider.Id)) return false;
+        Remove(world, rider, true);
+        world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
+        ContainModuleBase.WalkOutOfDoor(world, Entity, rider, data.NumberOfExitPaths, ref _whichExitPath, _hasRally, _rallyX, _rallyY);
+        world.MarkDirty(Entity);
+        return true;
     }
 
     public long Update(IWorldServices world)
@@ -1109,11 +1111,14 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
         if (_registered) TunnelDestroyed(world);
     }
 
-    /// <summary><c>onSelling</c>: the last tunnel lets everybody out, then the tunnel unregisters (after the kick-out, so no cave-in happens).</summary>
+    /// <summary>
+    /// <c>onSelling</c>: the last tunnel lets everybody out, then the tunnel unregisters (after the kick-out, so no cave-in happens). "Can't be order to exit": the riders are taken out
+    /// at once (<c>removeAllContained</c>) and stand on the tunnel, not sent through its door.
+    /// </summary>
     public void OnSelling(IWorldServices world)
     {
         if (!_registered) return;
-        if (world.TunnelSystemOf(Entity.Owner).TunnelCount == 1) world.EvacuateContainer(Entity);
+        if (world.TunnelSystemOf(Entity.Owner).TunnelCount == 1) world.EvacuateContainer(Entity, atOnce: true);
         TunnelDestroyed(world);
     }
 
@@ -1146,6 +1151,7 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
     {
         writer.Int("nextWake", _nextWake);
         writer.Bool("registered", _registered);
+        if (_whichExitPath != 1) writer.Int("whichExitPath", _whichExitPath);
         if (!_hasRally) return;
         writer.Fixed("rallyX", _rallyX);
         writer.Fixed("rallyY", _rallyY);
@@ -1155,6 +1161,7 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
     {
         _nextWake = reader.Int("nextWake");
         _registered = reader.Bool("registered");
+        _whichExitPath = reader.Has("whichExitPath") ? checked((int)reader.Int("whichExitPath")) : 1;
         _hasRally = reader.Has("rallyX");
         _rallyX = _hasRally ? reader.Fixed("rallyX") : Fixed.Zero;
         _rallyY = _hasRally ? reader.Fixed("rallyY") : Fixed.Zero;
