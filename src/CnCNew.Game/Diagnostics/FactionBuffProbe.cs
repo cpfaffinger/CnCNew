@@ -315,10 +315,12 @@ public sealed class FactionBuffProbe
         {
             var pair = NewPair(roster);
             var reader = pair.Spawn(item.Object, Me, Centre, Centre);
-            var victim = pair.Spawn(target, Enemy, Centre + Gap(item.Object, target), Centre);
+            var ahead = FliesOnly(item.Object);
+            var victim = ahead ? EntityId.Invalid : pair.Spawn(target, Enemy, Centre + Gap(item.Object, target), Centre);
             pair.Settle();
             pair.Upgrade(item.Buff, reader);
             pair.Steps(2);
+            if (ahead) victim = pair.SpawnAhead(target, Enemy, reader, Gap(item.Object, target));
             var hitA = pair.A.FirstHit(victim, reader, 25);
             var hitB = pair.B.FirstHit(victim, reader, 25);
             if (hitA is null) { tried.Add($"{target}: no hit"); continue; }
@@ -378,10 +380,12 @@ public sealed class FactionBuffProbe
         {
             var shot = NewPair(roster);
             var source = shot.Spawn(item.Object, Me, Centre, Centre);
-            var victim = shot.Spawn(target, Enemy, Centre + Gap(item.Object, target), Centre);
+            var ahead = FliesOnly(item.Object);
+            var victim = ahead ? EntityId.Invalid : shot.Spawn(target, Enemy, Centre + Gap(item.Object, target), Centre);
             shot.Settle();
             shot.Upgrade(item.Buff, source);
             shot.Steps(2);
+            if (ahead) victim = shot.SpawnAhead(target, Enemy, source, Gap(item.Object, target));
             var world = shot.B.World;
             var answer = world.Submit(new FireWeaponCommand(Me, shot.Next(world), world.Tick, source, victim, slot, FireOrigin.Player, FireWeaponCommand.NoMaxShotsLimit));
             if (!answer.Accepted) { tried.Add($"{target}: {answer.Reason}"); continue; }
@@ -1072,6 +1076,16 @@ public sealed class FactionBuffProbe
             return id;
         }
 
+        /// <summary>Spawns <paramref name="template"/> <paramref name="gap"/> ahead of <paramref name="shooter"/> - where the first world's shooter stands and heads - in both worlds.</summary>
+        public EntityId SpawnAhead(string template, PlayerId owner, EntityId shooter, decimal gap)
+        {
+            var source = A.World.FindEntity(shooter) ?? throw new ProbeSetupException("the shooter is gone");
+            var distance = Fixed.FromDecimal(gap);
+            var x = (source.X + FixedTrig.Cos(source.Angle) * distance).ToDecimal();
+            var y = (source.Y + FixedTrig.Sin(source.Angle) * distance).ToDecimal();
+            return Spawn(template, owner, x, y);
+        }
+
         public ulong Next(SimulationWorld world) => ReferenceEquals(world, A.World) ? A.NextSequence() : B.NextSequence();
 
         public void Both(Action<SimulationWorld> action)
@@ -1168,6 +1182,12 @@ public sealed class FactionBuffProbe
         var radii = source.BoundingCircleRadius.ToDecimal() + victim.BoundingCircleRadius.ToDecimal();
         return radii + Math.Clamp(range * 0.6m, 20m, 250m);
     }
+
+    /// <summary>
+    /// The shooter cannot turn on the spot (its locomotor has a minimum speed: a jet circling where it was made). Such a shooter fires as soon as its target is in reach, and the
+    /// target east of it is in reach between the bounding circles (#422) while it flies away from it - the missiles miss (#433). Its target is put as far ahead of it instead, after it settled (<see cref="Pair.SpawnAhead"/>).
+    /// </summary>
+    private bool FliesOnly(string shooter) => TemplateOf(shooter).Locomotor is { MinSpeed.Raw: > 0 };
 
     // ------------------------------------------------------------------------------------------------ the data
 
