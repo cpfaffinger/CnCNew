@@ -587,9 +587,16 @@ public sealed class CommandModeController
                 return ActivationResult.Issued;
             case GuiCommandKind.Evacuate:
             {
-                var passengers = sources.Where(entity => entity.Container is not null).SelectMany(entity => entity.Container!.Contained).OrderBy(id => id.Value).ToList();
-                if (passengers.Count == 0) return ActivationResult.NoSource;
-                return ForAll(passengers, id => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, id)));
+                // MSG_EVACUATE (AIGroup::groupEvacuate): an aircraft that is an airborne target moves to its own place on the ground below and evacuates there (aiMoveToAndEvacuate:
+                // a Chinook lands, lets everybody out and takes off again); every other container tells its riders to leave (orderAllPassengersToExit).
+                var containers = sources.Where(entity => entity.Container is { ContainCount: > 0 }).ToList();
+                if (containers.Count == 0) return ActivationResult.NoSource;
+                var flying = containers.Where(entity => entity.Template.IsKindOf("AIRCRAFT") && entity.Ai is not null && world.IsAirborneTarget(entity)).ToList();
+                var passengers = containers.Except(flying).SelectMany(entity => entity.Container!.Contained).OrderBy(id => id.Value).ToList();
+                var issued = ForAll(flying, aircraft => Issue((sequence, tick) => new EvacuateCommand(Player, sequence, tick, aircraft.Id, true, aircraft.X, aircraft.Y)));
+                if (passengers.Count == 0) return issued;
+                var left = ForAll(passengers, id => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, id)));
+                return issued == ActivationResult.Issued ? issued : left;
             }
             case GuiCommandKind.ExecuteRailedTransport:
             {

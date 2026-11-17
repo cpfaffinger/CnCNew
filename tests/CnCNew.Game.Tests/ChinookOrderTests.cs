@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CnCNew.Game.Data;
+using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -31,6 +32,8 @@ internal static class ChinookOrderTests
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         var catalogs = new[] { 30, 60, 120 }.Select(ticks => TemplateCatalog.Build(data.Graph, ModuleBindingTable.Default, SimulationRate.FromTicksPerSecond(ticks), data.Templates.Geometry, data.Rules)).ToArray();
         harness.Run("Real data (#416): the AirForce Chinook's AI is its last AI module - it gathers and does its combat drop at every rate", () => AirForceChinookIsAChinook(data, catalogs));
+        var buttons = CommandButtonCatalog.Build(data.Graph);
+        harness.Run("Real data (#415): the unload button of a hovering Chinook lands it, lets the riders out and takes off again, for every American faction at every rate", () => HoveringChinookUnloads(data, catalogs, buttons));
         return harness.Failures;
     }
 
@@ -108,6 +111,64 @@ internal static class ChinookOrderTests
                     Assert(!ranger.ContainedBy.IsValid && ranger.Z == Fixed.Zero && !ranger.EffectivelyDead && ranger.X > Fixed.FromInt(550),
                         $"{rate}: every ranger stands on the ground at the place ({ranger.X}, {ranger.Z}, in {ranger.ContainedBy})");
             }
+        }
+    }
+
+    /// <summary>
+    /// #415: the unload button of a Chinook in the air (<c>Command_ChinookUnload</c>, <c>GUI_COMMAND_EVACUATE</c>). The original posts <c>MSG_EVACUATE</c>, and <c>AIGroup::groupEvacuate</c> gives an
+    /// aircraft that is an airborne target <c>aiMoveToAndEvacuate</c> to its own place on the ground below: <c>ChinookAIUpdate</c>'s <c>MOVE_TO_AND_EVAC</c> lands, lets the riders out
+    /// and takes off again (<c>EVAC_AND_TAKEOFF</c>, <c>TAKING_OFF</c>). Pressed through the input layer for the Chinook of each American faction.
+    /// </summary>
+    private static void HoveringChinookUnloads(GameData data, TemplateCatalog[] catalogs, CommandButtonCatalog buttons)
+    {
+        Assert(buttons.TryGetButton("Command_ChinookUnload", out var unload) && unload.Kind == GuiCommandKind.Evacuate, "Command_ChinookUnload is an evacuate button");
+        foreach (var catalog in catalogs)
+        {
+            var rate = catalog.Rate;
+            foreach (var (chinookName, rangerName) in new[]
+                     {
+                         ("AmericaVehicleChinook", "AmericaInfantryRanger"), ("AFG_AmericaVehicleChinook", "AirF_AmericaInfantryRanger"),
+                         ("AirF_AmericaVehicleChinook", "AirF_AmericaInfantryRanger"), ("Lazr_AmericaVehicleChinook", "Lazr_AmericaInfantryRanger"),
+                         ("SupW_AmericaVehicleChinook", "SupW_AmericaInfantryRanger"),
+                     })
+            {
+                var bench = new Bench(data, catalog);
+                var world = bench.World;
+                var chinook = bench.Spawn(1, chinookName, 400, 400);
+                var rangers = Enumerable.Range(0, 3).Select(_ => bench.Spawn(1, rangerName, 300, 300)).ToArray();
+                foreach (var ranger in rangers) Assert(world.TryEnterContainer(ranger, chinook), $"{rate} {chinookName}: a ranger boards");
+                bench.Seconds(5);
+                var height = chinook.Template.Locomotor!.PreferredHeight;
+                Assert(world.IsAirborneTarget(chinook) && chinook.Z >= height - Fixed.FromInt(1), $"{rate} {chinookName}: the Chinook hovers at its height ({chinook.Z})");
+                var (hoverX, hoverY) = (chinook.X, chinook.Y);
+                var sink = new WorldSink(world);
+                var controller = new CommandModeController(new PlayerId(1), sink, new SelectionModel(new PlayerId(1)));
+                Assert(controller.Activate(world, unload, [chinook]) == ActivationResult.Issued, $"{rate} {chinookName}: the press is issued");
+                var landed = false;
+                for (var step = 0; step < world.Time.OriginalFrames(40 * CnCNew.Data.OriginalFrame.PerSecond) && rangers.Any(ranger => ranger.ContainedBy.IsValid); step++)
+                {
+                    world.Step();
+                    landed |= chinook.Z == Fixed.Zero;
+                }
+                Assert(landed, $"{rate} {chinookName}: the Chinook landed");
+                foreach (var ranger in rangers)
+                    Assert(!ranger.ContainedBy.IsValid && !ranger.EffectivelyDead && ranger.Z == Fixed.Zero, $"{rate} {chinookName}: every ranger is out on the ground ({ranger.Z}, in {ranger.ContainedBy})");
+                var off = Fixed.Sqrt((chinook.X - hoverX) * (chinook.X - hoverX) + (chinook.Y - hoverY) * (chinook.Y - hoverY));
+                Assert(off <= Fixed.FromInt(5), $"{rate} {chinookName}: it landed where it hovered ({off} away)");
+                bench.Seconds(15);
+                Assert(chinook.Z >= height - Fixed.FromInt(1), $"{rate} {chinookName}: and took off again ({chinook.Z})");
+            }
+        }
+    }
+
+    private sealed class WorldSink(SimulationWorld world) : ICommandSink
+    {
+        private ulong _sequence = 1000;
+
+        public CommandReceipt Issue(Func<ulong, long, SimCommand> make)
+        {
+            var command = make(++_sequence, world.Tick);
+            return new CommandReceipt((long)_sequence, world.Submit(command));
         }
     }
 }

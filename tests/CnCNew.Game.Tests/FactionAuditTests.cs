@@ -35,14 +35,6 @@ internal static class FactionAuditTests
         ["FactionAmericaLaserGeneral|Lazr_AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",
         ["FactionAmericaSuperWeaponGeneral|SupW_AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",
 
-        // The unload button of a Chinook in the air: the original's MSG_EVACUATE (AIGroup::groupEvacuate) is AICMD_EVACUATE to the Chinook, and ChinookAIUpdate::aiDoCommand lands
-        // first ("gotta land first!"). CommandModeController sends an ExitContainerCommand per rider instead, which nobody acts on while the Chinook hovers: nobody gets out.
-        ["FactionAmerica|AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
-        ["FactionAmericaAirForceGeneral|AFG_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
-        ["FactionAmericaAirForceGeneral|AirF_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
-        ["FactionAmericaLaserGeneral|Lazr_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
-        ["FactionAmericaSuperWeaponGeneral|SupW_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
-
         // The sneak attack tunnel's rally point button: ControlBar::getCommandAvailability has no producer check for GUI_COMMAND_SET_RALLY_POINT, and doSetRallyPoint sets it on the
         // object's exit interface (TunnelContain is one). The port's bar restricts it without a ProductionUpdate (ButtonReason.NoProducer).
         ["FactionGLA|GLASneakAttackTunnelNetwork|Command_SetRallyPoint"] = "rally point greyed without a production module",
