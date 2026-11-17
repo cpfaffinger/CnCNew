@@ -188,7 +188,7 @@ public sealed partial class SimulationWorld : IWorldServices
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
         SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default, EntityId Spawner = default, MapObjectFlags MapFlags = MapObjectFlags.None,
-        int Attitude = 0);
+        int Attitude = 0, bool Held = false);
 
     /// <summary>
     /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
@@ -746,7 +746,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
             extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer,
             HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY, StickTo: extras.StickTo, Bomber: extras.Bomber,
-            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null, Spawner: extras.Spawner);
+            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null, Spawner: extras.Spawner, Held: extras.Held);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -2199,6 +2199,8 @@ public sealed partial class SimulationWorld : IWorldServices
             adjustable.AdjustMaxHealth(this, setup.MaxHealth - entity.Body.MaxHealth, "SAME_CURRENTHEALTH");
         if (setup.HasHealth && entity.Body is IInitialHealthSettable health) health.SetInitialHealth(this, setup.HealthPercent);
         if (setup.MapFlags != MapObjectFlags.None || setup.Attitude != 0) ApplyMapProperties(entity, setup.MapFlags, setup.Attitude);
+        // SpawnPointProductionExitUpdate::exitObjectViaDoor: "You are stuck here, little man" - the object's own DISABLED_HELD, cleared when its slaver dies (#412).
+        if (setup.Held) entity.ScriptDisableMask |= Entity.ScriptHeld;
         if (builder.IsValid && entity.Body is IConstructionBody site)
             site.ChangeHealthForConstruction(this, Fixed.One - entity.Body.Health);
         Register(entity);
@@ -2814,6 +2816,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
             if (setup.MapFlags != MapObjectFlags.None) writer.Int("mapFlags", (long)setup.MapFlags);
             if (setup.Attitude != 0) writer.Int("attitude", setup.Attitude);
+            if (setup.Held) writer.Bool("held", true);
             if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
             if (setup.DeletionTicks > 0) writer.Int("deletionTicks", setup.DeletionTicks);
             if (setup.ShroudRange > Fixed.Zero) writer.Fixed("shroudRange", setup.ShroudRange);

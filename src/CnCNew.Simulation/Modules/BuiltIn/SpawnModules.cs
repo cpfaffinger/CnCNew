@@ -280,8 +280,10 @@ internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdate
             rally = true;
         }
         var enslaver = IsSlaveTemplate(template) ? Entity.Id : EntityId.Invalid;
-        var id = rally || enslaver.IsValid
-            ? world.RequestSpawn(template.Index, Entity.Owner, x, y, z, angle, new SpawnExtras(Fixed.Zero, ForceSupplyWanting: exit.ForcesSupplyWanting, HasRally: rally, RallyX: x, RallyY: y, Enslaver: enslaver))
+        var held = exit.HoldsWhatItLetsOut;
+        var id = rally || enslaver.IsValid || held
+            ? world.RequestSpawn(template.Index, Entity.Owner, x, y, z, angle,
+                new SpawnExtras(Fixed.Zero, ForceSupplyWanting: exit.ForcesSupplyWanting, HasRally: rally, RallyX: x, RallyY: y, Enslaver: enslaver, Held: held))
             : exit.ForcesSupplyWanting
                 ? world.RequestSpawn(template.Index, Entity.Owner, x, y, z, angle, new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true))
                 : world.RequestSpawn(template.Index, Entity.Owner, x, y, z, angle);

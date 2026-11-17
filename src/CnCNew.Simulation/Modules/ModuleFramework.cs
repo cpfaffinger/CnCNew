@@ -859,11 +859,12 @@ public static class SpecialPowerRouting
 /// object stands in for, or -1; delivered to <see cref="ISpawnOriginReceiver"/> modules) and <see cref="ForceSupplyWanting"/> (the
 /// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>) and the rally point
 /// (<c>ProductionUpdate::setRallyPoint</c>): a mobile object walks there right after it appears. <see cref="HasExit"/> is the exit path of a produced unit
-/// (<c>aiFollowExitProductionPath</c>): first to the exit point of its factory, then to the rally point, if there is one.
+/// (<c>aiFollowExitProductionPath</c>): first to the exit point of its factory, then to the rally point, if there is one. <see cref="Held"/> is the hold a spawn-point exit puts on
+/// what it lets out (<c>SpawnPointProductionExitUpdate::exitObjectViaDoor</c>: <c>setDisabled(DISABLED_HELD)</c>, #412).
 /// </summary>
 public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default,
     EntityId Enslaver = default, EntityId Producer = default, bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default,
-    EntityId StickTo = default, EntityId Bomber = default, bool Drop = false, EntityId Spawner = default);
+    EntityId StickTo = default, EntityId Bomber = default, bool Drop = false, EntityId Spawner = default, bool Held = false);
 
 // ------------------------------------------------------------------------------------------------ structures and world group
 
@@ -927,6 +928,9 @@ public interface IProductionExit
 
     /// <summary><c>SupplyCenterProductionExitUpdate::exitObjectViaDoor</c>: units leaving this exit start gathering supplies immediately.</summary>
     bool ForcesSupplyWanting => false;
+
+    /// <summary><c>SpawnPointProductionExitUpdate::exitObjectViaDoor</c>: what leaves this exit is held where it appears (<c>DISABLED_HELD</c>, "You are stuck here, little man").</summary>
+    bool HoldsWhatItLetsOut => false;
 
     /// <summary><c>GrantTemporaryStealth</c> of a supply center's exit, in ticks.</summary>
     long GrantStealthTicks => 0;

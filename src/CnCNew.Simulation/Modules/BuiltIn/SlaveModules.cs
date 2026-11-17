@@ -229,16 +229,19 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
     }
 
-    public void OnSlaverDie(IWorldServices world) => StopSlavedEffects();
+    public void OnSlaverDie(IWorldServices world) => StopSlavedEffects(world);
 
     public void OnSlaverDamage(IWorldServices world, in DamageInfo info) { }
 
-    private void StopSlavedEffects()
+    private void StopSlavedEffects(IWorldServices world)
     {
         _slaver = EntityId.Invalid;
         _offsetX = Fixed.Zero;
         _offsetY = Fixed.Zero;
         Entity.Status &= ~(1UL << UnselectableBit);
+        // "clearDisabled(DISABLED_HELD)": a stinger soldier its spawn point held is free once its site is gone (#412).
+        Entity.ScriptDisableMask &= unchecked((byte)~Entity.ScriptHeld);
+        world.MarkDirty(Entity);
     }
 
     public long Update(IWorldServices world)
@@ -256,7 +259,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         var master = world.FindEntity(_slaver);
         if (master is null || master.EffectivelyDead || master.DestroyRequested)
         {
-            StopSlavedEffects();
+            StopSlavedEffects(world);
             ai.StopInternalMove();
             if (SlaveSupport.IsFlying(Entity)) world.Kill(Entity.Id);
             return SimulationTiming.SleepNone;
@@ -805,6 +808,9 @@ public sealed class SpawnPointProductionExitUpdate(SpawnPointExitData data) : Si
 
     public override string ModuleName => "SpawnPointProductionExitUpdate";
     public string BoneName => data.SpawnPointBoneName;
+
+    /// <summary><c>exitObjectViaDoor</c> ends with <c>setDisabled(DISABLED_HELD)</c>: the spawn never leaves its bone (#412).</summary>
+    public bool HoldsWhatItLetsOut => true;
 
     /// <summary>How many spawn points the object has (see the class summary).</summary>
     public int SpawnPointCount => Bones() is { } bones

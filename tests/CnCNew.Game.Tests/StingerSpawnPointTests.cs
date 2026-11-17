@@ -30,6 +30,7 @@ internal static class StingerSpawnPointTests
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Real data (#410): the stinger site's soldiers stand at its spawn bones under the net, fire from there and are replaced there, at 30, 60 and 120 Hz", () => UnderTheNet(data));
+        harness.Run("Real data (#412): the stinger site holds its soldiers on their bones (DISABLED_HELD): neither an order nor a group order moves them, at 30, 60 and 120 Hz", () => HeldOnTheBones(data));
         return harness.Failures;
     }
 
@@ -65,6 +66,41 @@ internal static class StingerSpawnPointTests
             Assert(outcome.ReplacementFromBone < Fixed.FromInt(2), $"{rate}: a dead soldier is replaced at its bone ({outcome.ReplacementFromBone} from it)");
             reference ??= outcome;
             Assert(outcome.FirstHit == reference.FirstHit, $"{rate}: the first hit in the frame of 30 Hz ({outcome.FirstHit} against {reference.FirstHit})");
+        }
+    }
+
+    /// <summary>
+    /// #412: <c>SpawnPointProductionExitUpdate::exitObjectViaDoor</c> ends with <c>setDisabled(DISABLED_HELD)</c> ("You are stuck here, little man"), and a held object's physics moves
+    /// nothing (<c>PhysicsBehavior::update</c>), so an order its AI takes leaves the soldier on its bone. Before, the port held nothing: a move order walked a soldier off the site and a
+    /// group order took the other two along. That the held soldiers still fire is the test of #410 above.
+    /// </summary>
+    private static void HeldOnTheBones(GameData data)
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var templates = TemplateCatalog.Build(data.Graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, rate, data.Templates.Geometry, data.Rules);
+            var terrain = TerrainMap.Build(CnCNew.Simulation.Testing.FlatMap.Build(120, 120, 1), "stinger-held");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, Players, "stinger-held", "stinger-held", terrain.Fingerprint), templates, terrain);
+            ulong sequence = 0;
+            Assert(world.Submit(new SpawnCommand(new PlayerId(1), ++sequence, world.Tick, "GLAStingerSite", new PlayerId(1), Fixed.FromInt(300), Fixed.FromInt(600), Fixed.Zero, Fixed.Zero)).Accepted,
+                $"{rate}: the site spawns");
+            for (var step = 0; step < world.Time.OriginalFrames(30); step++) world.Step();
+            var soldiers = world.Entities.Where(value => value.Template.Name == "GLAInfantryStingerSoldier").OrderBy(value => value.Id.Value).ToArray();
+            Assert(soldiers.Length == 3, $"{rate}: the site has its three soldiers ({soldiers.Length})");
+            Assert(soldiers.All(soldier => (world.DisabledFlagsOf(soldier) & DisabledMask.Held) != DisabledMask.None), $"{rate}: every soldier is held");
+            var start = soldiers.Select(soldier => (soldier.X, soldier.Y)).ToArray();
+
+            // The AI of a held soldier takes the orders; nothing moves it.
+            world.Submit(new SetMoveTargetCommand(new PlayerId(1), ++sequence, world.Tick, soldiers[0].Id, Fixed.FromInt(450), Fixed.FromInt(700)));
+            world.Submit(new GroupMoveCommand(new PlayerId(1), ++sequence, world.Tick, [soldiers[1].Id, soldiers[2].Id], Fixed.FromInt(150), Fixed.FromInt(500), false));
+            var farthest = Fixed.Zero;
+            for (var step = 0; step < world.Time.OriginalFrames(300); step++)
+            {
+                world.Step();
+                for (var index = 0; index < soldiers.Length; index++) farthest = Fixed.Max(farthest, Distance(soldiers[index].X, soldiers[index].Y, start[index]));
+            }
+            Console.WriteLine($"       {rate}: farthest a held soldier went {farthest}");
+            Assert(farthest == Fixed.Zero, $"{rate}: no order moves a held soldier off its bone ({farthest})");
         }
     }
 
