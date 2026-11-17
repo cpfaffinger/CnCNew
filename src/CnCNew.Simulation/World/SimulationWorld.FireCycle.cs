@@ -319,6 +319,34 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
+    /// <c>AIAttackApproachTargetState</c> of an aircraft that flies at its victim (#436; <see cref="Modules.BuiltIn.AIUpdateInterface.FliesAtAimedVictim"/>) whose ordered attack is out of reach:
+    /// <c>computeAttackPath</c> - "airborne objects don't pathfind" - flies it straight to <c>Weapon::computeApproachTarget</c>. Too close (inside a minimum range above a cell, between the
+    /// bounding circles) it heads for the point halfway between minimum and maximum range from the victim, on its own side of it, or on the far side when it heads toward the victim ("Don't
+    /// do a 180 degree turn"); too far it flies at the victim, and the aim takes over where the weapon reaches. Not modelled: <c>clipToTerrainExtent</c> of the point.
+    /// </summary>
+    private void ApproachInFlight(Entity entity, Entity victim)
+    {
+        if (AiOf(entity) is not { FliesAtAimedVictim: true } ai || CurrentWeapon(entity) is not { } weapon || IsContactWeapon(weapon)) return;
+        var (ownX, ownY, _) = entity.FrameEnd(_tick);
+        var (victimX, victimY, _) = victim.FrameEnd(_tick);
+        var (goalX, goalY) = (victimX, victimY);
+        var radii = CircleRadius(entity) + CircleRadius(victim);
+        var minimum = weapon.MinimumRange();
+        var (dx, dy) = (ownX - victimX, ownY - victimY);
+        if (minimum > Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize) && SquaredReach.Of(minimum + radii).ContainsStrictly(dx * dx + dy * dy))
+        {
+            var heading = entity.FrameEndAngle(_tick);
+            var length = Fixed.Sqrt(dx * dx + dy * dy);
+            var (dirX, dirY) = length > Fixed.Zero ? (dx / length, dy / length) : (-FixedTrig.Cos(heading), -FixedTrig.Sin(heading));
+            if (FixedTrig.AngleDifference(heading, FixedTrig.Atan2(-dirY, -dirX)).Abs() < FixedTrig.HalfPi) (dirX, dirY) = (-dirX, -dirY);
+            var distance = (AttackRangeOf(entity, weapon) + minimum) / Fixed.FromInt(2) + radii;
+            (goalX, goalY) = (victimX + dirX * distance, victimY + dirY * distance);
+        }
+        if (entity.HasMoveTarget && entity.MoveTargetX == goalX && entity.MoveTargetY == goalY) return;
+        if (ai.StartInternalMove(goalX, goalY)) MarkDirty(entity);
+    }
+
+    /// <summary>
     /// An attack a module of <paramref name="source"/> orders at <paramref name="victim"/> with the weapon of <paramref name="slot"/> (<c>AIUpdateInterface::aiAttackObject</c> with
     /// <c>CMD_FROM_AI</c>: <c>CleanupHazardUpdate::fireWhenReady</c>, <c>AssistedTargetingUpdate::assistAttack</c>), with <paramref name="shots"/> shots at most (0: no limit). The attack
     /// machine fires it (F-140): the module orders again when the weapon is ready and no order waits for its shot, as a player's command giver does. False when the unit has no AI or no shot
@@ -399,6 +427,7 @@ public sealed partial class SimulationWorld
         if (choice.Slot < 0 || choice.Rejection == CommandRejection.OutOfRange)
         {
             if (choice.Rejection is CommandRejection.OutOfRange or CommandRejection.WeaponNotReady) AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
+            if (choice.Rejection == CommandRejection.OutOfRange) ApproachInFlight(entity, victim);
             return;
         }
         if (choice.Rejection is not (0 or CommandRejection.WeaponNotReady) || !GateAllowsFire(entity, victim)) return;

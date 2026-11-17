@@ -22,6 +22,9 @@ public sealed partial class JetAIUpdate
     /// <summary>A winged aircraft that is airborne (<see cref="AllowAirLoco"/>) is steered by <see cref="AIUpdateInterface.SteerWinged"/>; the taxi locomotor and helicopter locomotors are not.</summary>
     protected override bool FliesWithWings(LocomotorInfo locomotor) => _allowAir && locomotor.IsWings;
 
+    /// <summary>An airborne aircraft without an airfield state to fly (<see cref="JetPhase.None"/>) flies at the victim it aims at; one that takes off, returns, lands or is parked does not.</summary>
+    internal override bool FliesAtAimedVictim => _phase == JetPhase.None && _allowAir;
+
     /// <summary>The order ended at the point it was aimed at; the aircraft holds that point by circling it (the reference's <c>m_maintainPos</c>, which is where the move ended).</summary>
     protected override void OnWingedArrival(Fixed x, Fixed y)
     {

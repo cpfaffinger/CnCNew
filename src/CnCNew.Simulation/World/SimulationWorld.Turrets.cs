@@ -177,7 +177,7 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>AIAttackAimAtTargetState::update</c> for a weapon no turret can bring to bear: the unit turns on the spot until it faces the point within the weapon's
     /// <c>AcceptableAimDelta</c>, and fires only then. A weapon on a turret that turns has the turret's own aim, a contact weapon does not aim, a unit that cannot turn in place flies
-    /// at its victim (<c>setLocomotorGoalPositionExplicit</c>, its flight modules do), and an immobile object has nothing to turn with. Not modeled: a rider in its container
+    /// at its victim until it faces it (<see cref="FliesFacing"/>), and an immobile object has nothing to turn with. Not modeled: a rider in its container
     /// (<see cref="FireWeaponAt"/> gives its shot the bearing).
     /// <para>
     /// A unit that still follows a path - a move it was on when the attack began: <c>aiAttackObject</c> exits the move state, but nothing clears the locomotor's goal
@@ -188,11 +188,14 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool AimBodyAt(Entity source, int slot, Fixed x, Fixed y)
     {
-        if (source.ContainedBy.IsValid || source.Template.IsKindOf("IMMOBILE") || AiOf(source) is not { CanTurnInPlace: true } ai) return true;
+        if (source.ContainedBy.IsValid || source.Template.IsKindOf("IMMOBILE") || AiOf(source) is not { } ai) return true;
+        var flies = ai.CannotTurnInPlace && !source.Template.IsKindOf("PROJECTILE");
+        if (!flies && !ai.CanTurnInPlace) return true;
         var weaponIndex = WeaponIndexIn(source, slot);
         if (weaponIndex < 0) return true;
         var weapon = _templates.Weapons[weaponIndex];
         if (IsContactWeapon(weapon) || IsOnTurningTurret(source, slot)) return true;
+        if (flies) return FliesFacing(source, ai, weapon, x, y);
         // A turn on the spot begun in this tick - an attack order's, in the command phase - is judged where it ends (FrameEndAngle): the 30 Hz unit took it whole and fires
         // in the same frame (F-138). One begun in an earlier tick of the frame was the 30 Hz unit's own step, after which it looks again with its next frame.
         if (ai.IsCoveringEarlierTurn(_tick)) return false;
@@ -208,6 +211,26 @@ public sealed partial class SimulationWorld
         }
         ai.TurnInPlace(this, bearing);
         return false;
+    }
+
+    /// <summary>
+    /// <c>AIAttackAimAtTargetState::update</c> for a unit that cannot turn in place (<c>m_canTurnInPlace</c> false: its locomotor has a minimum speed - a jet): it flies at its victim
+    /// (<c>setLocomotorGoalPositionExplicit</c>, in every update of the aim, faced or not) and succeeds only when its heading is within the weapon's <c>AcceptableAimDelta</c> of the bearing to
+    /// the point, at least <c>REL_THRESH</c> (#436: a Stealth Fighter fired its missiles heading away from its victim, and they missed). Heading and place are read where the unit's frame
+    /// ends, as for the turn on the spot. Only an aircraft that flies free of its airfield's states is steered (<see cref="Modules.BuiltIn.AIUpdateInterface.FliesAtAimedVictim"/>); an attack-move
+    /// halts for the fight and marches on when it is over.
+    /// </summary>
+    private bool FliesFacing(Entity source, Modules.BuiltIn.AIUpdateInterface ai, WeaponInfo weapon, Fixed x, Fixed y)
+    {
+        var (ownX, ownY, _) = source.FrameEnd(_tick);
+        var faces = (x == ownX && y == ownY)
+            || FixedTrig.AngleDifference(source.FrameEndAngle(_tick), FixedTrig.Atan2(y - ownY, x - ownX)).Abs() <= Fixed.Max(weapon.AimDelta, BodyAimThreshold);
+        if (ai.FliesAtAimedVictim && !(source.HasMoveTarget && source.MoveTargetX == x && source.MoveTargetY == y) && ai.StartInternalMove(x, y))
+        {
+            if (source.Acquisition is { AttackMove: true, Halted: false } marching) marching.Halted = true;
+            MarkDirty(source);
+        }
+        return faces;
     }
 
     /// <summary><c>getWhichTurretForCurWeapon</c> with a turn rate: the weapon of the slot is aimed by a turret (a "fake" turret that cannot turn leaves it to the body).</summary>

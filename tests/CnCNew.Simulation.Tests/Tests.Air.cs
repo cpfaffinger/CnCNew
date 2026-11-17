@@ -279,9 +279,12 @@ static partial class Tests
         // fire both missiles: the clip is empty and does not reload by time
         var dummy = Get(world, "AirDummy");
         Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "The first shot is accepted.");
-        for (var i = 0; i < world.Frames(5); i++) world.Step();
-        Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "The second shot is accepted.");
-        world.Step();
+        // The jet flies at the dummy and fires only when it faces it (#436): the order stands until the clip is empty.
+        for (var i = 0; i < world.Frames(900) && jet.WeaponClip != 0; i++)
+        {
+            if (world.Time.IsOriginalFrameBoundary(world.Tick) && !world.IsShotPending(jet, dummy.Id)) feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value);
+            world.Step();
+        }
         Check.That(jet.WeaponClip == 0 && jet.WeaponReadyTick >= CnCNew.Simulation.Time.SimulationTiming.SleepForever, $"A RETURN_TO_BASE weapon never reloads by time (clip {jet.WeaponClip}, ready {jet.WeaponReadyTick}).");
         Check.That(ai.IsOutOfSpecialReloadAmmo(world), "The jet knows it is out of special-reload ammunition.");
 

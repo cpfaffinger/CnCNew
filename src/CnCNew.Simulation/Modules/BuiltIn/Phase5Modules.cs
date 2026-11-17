@@ -1075,6 +1075,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>A winged aircraft's move order ended at (<paramref name="x"/>, <paramref name="y"/>) without stopping: it has to keep flying, which the derived AI does by circling there.</summary>
     protected virtual void OnWingedArrival(Fixed x, Fixed y) { }
 
+    /// <summary>
+    /// The aim state of an attack may fly the object at its victim (<c>AIAttackAimAtTargetState::update</c> calls <c>setLocomotorGoalPositionExplicit</c> for a unit that cannot turn in place):
+    /// only an aircraft of <see cref="JetAIUpdate"/> that flies free of its airfield's states. Every other AI keeps the movement its own module gives it.
+    /// </summary>
+    internal virtual bool FliesAtAimedVictim => false;
+
     /// <summary>Dozers and workers can raise structures (<c>DozerAIInterface</c>); every other AI cannot.</summary>
     public virtual bool CanBuild => false;
 
@@ -2970,6 +2976,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     /// <summary><c>AIAttackAimAtTargetState::m_canTurnInPlace</c>: a locomotor without a minimum speed can face its victim standing (the others fly at it).</summary>
     internal bool CanTurnInPlace => ActiveLocomotor is { MinSpeed.Raw: 0 };
+
+    /// <summary>The other side of <see cref="CanTurnInPlace"/>: a locomotor with a minimum speed (a jet) cannot face its victim standing and has to fly until it faces it.</summary>
+    internal bool CannotTurnInPlace => ActiveLocomotor is { MinSpeed.Raw: > 0 };
 
     /// <summary>Above 30 Hz: a share of the frame the object has begun is still to come (always false at 30 Hz).</summary>
     internal bool CoversFrame => _frameTicksLeft > 0;

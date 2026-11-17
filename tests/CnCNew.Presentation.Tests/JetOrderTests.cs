@@ -12,8 +12,8 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Presentation.Tests;
 
 /// <summary>
-/// The attack order of a fighter (<see cref="StandingOrders"/>): it overflies its target, flies straight on for one weapon range, turns around and comes in for the next pass (a winged aircraft cannot stop to
-/// turn, and it cannot fire inside its weapon's minimum range), and the attack ends when the airfield-reloaded ammunition is gone.
+/// The attack order of a fighter (<see cref="StandingOrders"/>): it overflies its target, flies on until it is past its weapon's minimum range, turns round at its victim (the attack's aim flies it there,
+/// #436) and comes in for the next pass (a winged aircraft cannot stop to turn, and it cannot fire inside its weapon's minimum range), and the attack ends when the airfield-reloaded ammunition is gone.
 /// </summary>
 internal static class JetOrderTests
 {
@@ -115,7 +115,7 @@ internal static class JetOrderTests
     public static int Run(string[] args)
     {
         var harness = new TestHarness(nameof(JetOrderTests));
-        harness.Run("A gun fighter on an attack order makes pass after pass: in, over, out for a weapon range, round and in again", GunFighterPasses);
+        harness.Run("A gun fighter on an attack order makes pass after pass: in, over, out past its minimum range, round at its victim and in again", GunFighterPasses);
         harness.Run("A missile fighter ends its attack when its airfield ammunition is gone", MissileFighterEndsItsAttack);
         harness.Run("Time scale: a standing attack order issues its commands on the original-frame grid and at the same game times at 30, 60 and 120 Hz", TimeScaleStandingOrders);
         return harness.Failures;
@@ -188,7 +188,9 @@ internal static class JetOrderTests
 
         TestHarness.Assert(rig.World.RejectionCounts.Sum() == 0 || rig.World.RejectionCounts.Sum() < shots, "the simulation accepted the orders it was given");
         TestHarness.Assert(passes >= 3, $"at least three passes over the target in 80 seconds ({passes})");
-        TestHarness.Assert(farthestAfterPass.Take(passes - 1).All(value => value >= 280f), $"after each overflight the jet flew out for about a weapon range before turning ({string.Join(", ", farthestAfterPass.Select(value => value.ToString("F0")))})");
+        // #436: once past the weapon's minimum range the attack's aim flies the jet round at its victim (AIAttackAimAtTargetState::update, setLocomotorGoalPositionExplicit) - it no longer
+        // flies a whole weapon range out first.
+        TestHarness.Assert(farthestAfterPass.Take(passes - 1).All(value => value >= 100f && value < 280f), $"after each overflight the jet flew out past its minimum range and turned back at its victim ({string.Join(", ", farthestAfterPass.Select(value => value.ToString("F0")))})");
         TestHarness.Assert(shots >= passes, $"the gun fired on the passes ({shots} shots)");
         // The band between the two bounding circles (#422: Weapon::isWithinAttackRange measures FROM_BOUNDINGSPHERE_2D), here between the centres.
         var circles = (float)(jet.Template.BoundingCircleRadius + target.Template.BoundingCircleRadius).ToDecimal();

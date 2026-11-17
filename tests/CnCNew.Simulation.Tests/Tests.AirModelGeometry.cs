@@ -97,10 +97,12 @@ static partial class Tests
         // out of ammunition: it returns and lands on the model's runway
         StepUntil(world, () => !jet.HasMoveTarget, 900, "The jet reached its destination.");
         var dummy = Get(world, "AirDummy");
-        for (var shot = 0; shot < 2; shot++)
+        Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "A shot is accepted.");
+        // The jet flies at the dummy and fires only when it faces it (#436): the order stands until the clip is empty.
+        for (var i = 0; i < world.Frames(900) && !ai.IsOutOfSpecialReloadAmmo(world); i++)
         {
-            Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "A shot is accepted.");
-            for (var i = 0; i < world.Frames(6); i++) world.Step();
+            if (world.Time.IsOriginalFrameBoundary(world.Tick) && !world.IsShotPending(jet, dummy.Id)) feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value);
+            world.Step();
         }
         Check.That(ai.IsOutOfSpecialReloadAmmo(world), "The jet is out of ammunition.");
         var touchdown = (X: Fixed.Zero, Y: Fixed.Zero);
