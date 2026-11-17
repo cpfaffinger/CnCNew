@@ -496,8 +496,9 @@ public sealed class FactionBuffProbe
     }
 
     /// <summary>
-    /// <c>AutoHealBehavior::update</c> (the self-heal of <c>Radius = 0</c>): after <c>StartHealingDelay</c> from the last damage, <c>HealingAmount</c> every <c>HealingDelay</c>, through the
-    /// body's armour (<c>attemptHealing</c>). The body is hurt by half in both worlds; the test's heals against those numbers, the control heals nothing.
+    /// <c>AutoHealBehavior::update</c> (the self-heal of <c>Radius = 0</c>): after <c>StartHealingDelay</c> from the last damage - without one in the next frame (<c>onDamage</c>) -,
+    /// <c>HealingAmount</c> every <c>HealingDelay</c>, through the body's armour (<c>attemptHealing</c>). The body is hurt by half in both worlds, two frames of the original after the
+    /// upgrade and where a frame of the object begins, at every rate; a heal counts for the tick that was stepped (#432). The test's heals against those numbers, the control heals nothing.
     /// </summary>
     private BuffResult AutoHeal(FactionRoster roster, BuffCase item)
     {
@@ -509,8 +510,11 @@ public sealed class FactionBuffProbe
         var pair = NewPair(roster);
         var reader = pair.Spawn(item.Object, Me, Centre, Centre);
         pair.Settle();
+        // The spawn took one tick: the hurt is put where a frame of the object begins, as at 30 Hz.
+        var ticksPerFrame = pair.A.World.Time.TicksPerOriginalFrame;
+        pair.Steps(checked((int)((ticksPerFrame - (pair.A.World.Tick - pair.A.World.FindEntity(reader)!.SpawnTick) % ticksPerFrame) % ticksPerFrame)));
         pair.Upgrade(item.Buff, reader);
-        pair.Steps(2);
+        pair.Steps(checked((int)pair.A.World.Time.OriginalFrames(2)));
         pair.Both(world => world.Damage(reader, new DamageInfo(EntityId.Invalid, world.FindEntity(reader)!.Body!.MaxHealth * Fixed.FromDecimal(0.5m), DamageTypes.Unresistable, DeathTypes.Normal, false)));
         var hurt = pair.A.World.Tick;
         var heals = new List<(long Tick, decimal Amount)>();
@@ -522,7 +526,7 @@ public sealed class FactionBuffProbe
             pair.Steps(1);
             var now = (A: HealthOf(pair.A, reader).Health, B: HealthOf(pair.B, reader).Health);
             if (now.A > last.A) healedA += now.A - last.A;
-            if (now.B > last.B) heals.Add((pair.B.World.Tick, now.B - last.B));
+            if (now.B > last.B) heals.Add((pair.B.World.Tick - 1, now.B - last.B));
             last = now;
         }
         var time = pair.A.World.Time;
@@ -531,7 +535,8 @@ public sealed class FactionBuffProbe
         var startTicks = time.DurationMillisecondsToTicks(start);
         var frame = time.OriginalFrames(1);
         var intervals = heals.Zip(heals.Skip(1), (first, second) => second.Tick - first.Tick).ToList();
-        var expected = Invariant($"{pulse:0.##} every {delay} ms from {start} ms after the hurt");
+        var first = Math.Max(startTicks, frame);
+        var expected = Invariant($"{pulse:0.##} every {delay} ms, first {first * 1000m / time.TicksPerSecond:0} ms after the hurt");
         var measured = heals.Count == 0 ? "no heal"
             : Invariant($"{heals[0].Amount:0.##} first after {(heals[0].Tick - hurt) * 1000m / time.TicksPerSecond:0} ms, {heals.Count} heals, every {(intervals.Count == 0 ? 0 : intervals.Min() * 1000m / time.TicksPerSecond):0}-{(intervals.Count == 0 ? 0 : intervals.Max() * 1000m / time.TicksPerSecond):0} ms");
         if (radius > 0) return Result(item, heals.Count > 0 ? BuffOutcome.Passed : BuffOutcome.Failed, $"heals in a radius of {radius}", measured, "the radius heal's pulses are not timed");
@@ -541,7 +546,7 @@ public sealed class FactionBuffProbe
         var passed = heals.Count >= 2 && healedA == 0
                      && heals.All(value => Near(value.Amount, pulse, 0.01m) || value == heals[^1])
                      && intervals.SkipLast(1).All(value => Math.Abs(value - intervalTicks) <= frame)
-                     && heals[0].Tick - hurt >= startTicks - frame && heals[0].Tick - hurt <= startTicks + intervalTicks + frame;
+                     && heals[0].Tick - hurt == first;
         return Result(item, passed ? BuffOutcome.Passed : BuffOutcome.Failed, expected, measured, Invariant($"without: healed {healedA:0.##}"));
     }
 
