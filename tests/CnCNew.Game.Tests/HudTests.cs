@@ -672,7 +672,8 @@ internal static class HudTests
             var (x, y) = (center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(dy));
             TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, name, owner, x, y, CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, $"{name} is spawned");
             Advance(match, controller, (int)world.Time.OriginalFrames(2));
-            return world.Entities.First(entity => entity.Template.Name == name && !known.Contains(entity.Id));
+            // ThingFactory::newObject: a GLAVehicleTechnical comes as one of its chassis (#425).
+            return world.Entities.First(entity => world.Templates.IsOfType(entity.Template, name) && !known.Contains(entity.Id));
         }
         CommandBarButton Press(Entity unit, string name)
         {

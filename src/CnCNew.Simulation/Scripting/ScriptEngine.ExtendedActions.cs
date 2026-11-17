@@ -392,7 +392,7 @@ public sealed partial class ScriptEngine
         if (factory == 0 || _teamBuilds.Count == 0) return;
         // "factory could be NULL at the start of the game": what a session placed before its first tick came out of no factory and fills no order.
         if (unit.SpawnTick <= 0) return;
-        var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Factory == factory && candidate.Type == unit.Template.Name
+        var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Factory == factory && _world.Templates.IsOfType(unit.Template, candidate.Type)
             && _teams.TryGetValue(candidate.TeamId, out var team) && team.Owner == unit.Owner);
         if (order is null || !_teams.TryGetValue(order.TeamId, out var joined)) return;
         order.Joined++;
@@ -449,7 +449,8 @@ public sealed partial class ScriptEngine
     /// <summary>The factory that finished this object in the step being observed, or 0.</summary>
     private uint TakeFactoryOf(Entity unit)
     {
-        var made = _madeByFactories.FindIndex(entry => entry.Template == unit.Template.Index);
+        // The factory finished the template it was asked for; ThingFactory::newObject may have made one of its BuildVariations.
+        var made = _madeByFactories.FindIndex(entry => entry.Template == unit.Template.Index || _world.Templates[entry.Template].IsEquivalentTo(unit.Template));
         if (made < 0) return 0;
         var factory = _madeByFactories[made].Factory;
         _madeByFactories.RemoveAt(made);

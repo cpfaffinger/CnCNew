@@ -35,7 +35,7 @@ public sealed partial class ScriptEngine
                     if (unit.MaxCount < 1 || !_world.Templates.TryGet(unit.Type, out var template)) continue;
                     var count = 0;
                     foreach (var id in team.Members)
-                        if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false, EffectivelyDead: false } member && ReferenceEquals(member.Template, template)) count++;
+                        if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false, EffectivelyDead: false } member && template.IsEquivalentTo(member.Template)) count++;
                     if (count >= unit.MaxCount || !HasFactoryFor(player, unit.Type)) continue;
                     chosen = team;
                     chosenPrototype = prototype;

@@ -21,12 +21,6 @@ internal static class FactionBuffTests
         // never gathers, so its supply lines boost nothing.
         ["FactionAmericaAirForceGeneral|Upgrade_AmericaSupplyLines|supply-boost|AirF_AmericaVehicleChinook|ChinookAIUpdate:ModuleTag_07"] = "the first of two AI modules wins",
 
-        // ThingFactory::newObject makes one of a template's BuildVariations (ThingFactory.cpp): a produced Technical is ChassisOne, Two or Three, each trainable with its own
-        // VeterancyGainCreate. The port reads no BuildVariations: it makes the bare, untrainable GLAVehicleTechnical, and Technical Training gives it nothing.
-        ["FactionGLA|SCIENCE_TechnicalTraining|veterancy-at-birth|GLAVehicleTechnical|VeterancyGainCreate:ModuleTag_03"] = "BuildVariations are not read",
-        ["FactionGLAToxinGeneral|SCIENCE_TechnicalTraining|veterancy-at-birth|Chem_GLAVehicleTechnical|VeterancyGainCreate:ModuleTag_03"] = "BuildVariations are not read",
-        ["FactionGLADemolitionGeneral|SCIENCE_TechnicalTraining|veterancy-at-birth|Demo_GLAVehicleTechnical|VeterancyGainCreate:ModuleTag_03"] = "BuildVariations are not read",
-        ["FactionGLAStealthGeneral|SCIENCE_TechnicalTraining|veterancy-at-birth|Slth_GLAVehicleTechnical|VeterancyGainCreate:ModuleTag_03"] = "BuildVariations are not read",
 
         // BattleBusSlowDeathBehavior wakes its empty-hulk check when the bus is made; the original's SlowDeathBehavior constructor sleeps forever and only beginSlowDeath wakes the
         // module (BattleBusSlowDeathBehavior.cpp), so only the hulk of a second life is killed when empty. In the port an empty Battle Bus kills itself about 1.5 s after it appears.

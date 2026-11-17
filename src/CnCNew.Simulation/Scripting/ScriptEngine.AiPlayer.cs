@@ -592,7 +592,8 @@ public sealed partial class ScriptEngine
         for (var index = 0; index < state.UnitOrders.Count; index++)
         {
             var order = state.UnitOrders[index];
-            if (order.Factory != factory || !string.Equals(order.Template, unit.Template.Name, StringComparison.Ordinal)) continue;
+            // AIPlayer::onUnitProduced: isEquivalentTo, so a Technical's chassis fills the order for a Technical.
+            if (order.Factory != factory || !_world.Templates.IsOfType(unit.Template, order.Template)) continue;
             gatherer = order.Gatherer;
             state.UnitOrders.RemoveAt(index);
             if (AiOf(unit) is ISupplyCarrier carrier)

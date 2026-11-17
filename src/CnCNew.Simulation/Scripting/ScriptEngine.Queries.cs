@@ -102,7 +102,8 @@ public sealed partial class ScriptEngine
             if (!_world.Templates.TryGet(typeParameter, out var single) || !string.Equals(single.Name, typeParameter, StringComparison.Ordinal)) return CountOfNamedType(player, typeParameter, area);
             foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
             {
-                if (!ReferenceEquals(entity.Template, single) || !Counts(entity)) continue;
+                // Team::countObjectsByThingTemplate compares with isEquivalentTo: a Technical's chassis counts as the Technical it was asked for.
+                if (!single.IsEquivalentTo(entity.Template) || !Counts(entity)) continue;
                 if (area is null || area.Contains(entity.X, entity.Y)) count++;
             }
             return count;
@@ -110,7 +111,7 @@ public sealed partial class ScriptEngine
         foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
         {
             if (!Counts(entity)) continue;
-            if (!list.Contains(entity.Template.Name)) continue;
+            if (!IsOfAnyType(entity.Template, list)) continue;
             if (area is null || area.Contains(entity.X, entity.Y)) count++;
         }
         return count;
@@ -122,7 +123,7 @@ public sealed partial class ScriptEngine
         var count = 0;
         foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
         {
-            if (!Counts(entity) || !string.Equals(entity.Template.Name, typeName, StringComparison.Ordinal)) continue;
+            if (!Counts(entity) || !_world.Templates.IsOfType(entity.Template, typeName)) continue;
             if (area is null || area.Contains(entity.X, entity.Y)) count++;
         }
         return count;

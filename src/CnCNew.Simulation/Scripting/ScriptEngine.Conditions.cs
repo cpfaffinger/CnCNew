@@ -366,11 +366,19 @@ public sealed partial class ScriptEngine
         if (FindTeam(name) is { } team) yield return team;
     }
 
-    /// <summary><c>ObjectTypes</c> resolution (<c>objectTypesFromParam</c>): a named object-type list if one was built with <c>OBJECTLIST_ADDOBJECTTYPE</c>, otherwise the single template name.</summary>
+    /// <summary>
+    /// <c>ObjectTypes</c> resolution (<c>objectTypesFromParam</c>): a named object-type list if one was built with <c>OBJECTLIST_ADDOBJECTTYPE</c>, otherwise the single template name;
+    /// each compared with <c>isEquivalentTo</c>, so the chassis of a produced Technical is a <c>GLAVehicleTechnical</c>.
+    /// </summary>
     private bool TypeMatches(string typeParameter, Entity entity)
-        => _objectLists.TryGetValue(typeParameter, out var list)
-            ? list.Contains(entity.Template.Name)
-            : string.Equals(entity.Template.Name, typeParameter, StringComparison.Ordinal);
+        => _objectLists.TryGetValue(typeParameter, out var list) ? IsOfAnyType(entity.Template, list) : _world.Templates.IsOfType(entity.Template, typeParameter);
+
+    private bool IsOfAnyType(ObjectTemplate template, SortedSet<string> types)
+    {
+        foreach (var name in types)
+            if (_world.Templates.IsOfType(template, name)) return true;
+        return false;
+    }
 
     private static bool SurfacesMatch(Entity entity, int mask)
     {

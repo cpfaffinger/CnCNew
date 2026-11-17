@@ -162,6 +162,13 @@ public sealed class ObjectTemplate
         EnergyBonus = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyBonus", StringComparison.OrdinalIgnoreCase))?.Value.Value is long bonus ? checked((int)bonus) : 0;
         MaxSimultaneousOfType = definition.Fields.LastOrDefault(field => field.Name.Equals("MaxSimultaneousOfType", StringComparison.OrdinalIgnoreCase))?.Value.Value is long maxType ? checked((int)maxType) : 0;
         IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        // INI::parseAsciiStringVector: the last BuildVariations line is the list, every token kept as written (a name that resolves nothing stays in it).
+        BuildVariations = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildVariations", StringComparison.OrdinalIgnoreCase))?.Value.Value switch
+        {
+            ImmutableArray<DefinitionReference> many => [..many.Select(value => value.Name)],
+            DefinitionReference one => [one.Name],
+            _ => [],
+        };
         EnterGuard = definition.Fields.LastOrDefault(field => field.Name.Equals("EnterGuard", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         HijackGuard = definition.Fields.LastOrDefault(field => field.Name.Equals("HijackGuard", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         ExperienceValue = IntegerArray(definition, "ExperienceValue");
@@ -273,6 +280,26 @@ public sealed class ObjectTemplate
     public int MaxSimultaneousOfType { get; }
     /// <summary><c>ThingTemplate::m_isTrainable</c>: only trainable objects take over a veterancy level from an object creation list.</summary>
     public bool IsTrainable { get; }
+
+    /// <summary>
+    /// <c>ThingTemplate::m_buildVariations</c>: "if we build a unit of this type via script or ui, randomly choose one of these templates instead" - <c>ThingFactory::newObject</c>
+    /// makes one of them (the GLA Technical's three chassis). Empty for almost every template.
+    /// </summary>
+    public ImmutableArray<string> BuildVariations { get; }
+
+    /// <summary>
+    /// <c>ThingTemplate::isEquivalentTo</c> for what the port models: the same template, or one names the other among its <see cref="BuildVariations"/> (compared without case,
+    /// <c>compareNoCase</c>). The original also counts two reskins of one object as equivalent (<c>m_reskinnedFrom</c>); the port's definitions do not carry the reskin's parent.
+    /// </summary>
+    public bool IsEquivalentTo(ObjectTemplate other)
+    {
+        if (ReferenceEquals(this, other)) return true;
+        foreach (var name in BuildVariations)
+            if (name.Equals(other.Name, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (var name in other.BuildVariations)
+            if (name.Equals(Name, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     /// <summary><c>ThingTemplate::isEnterGuard</c>: on guard the object enters what it finds instead of attacking it (the hijackers).</summary>
     public bool EnterGuard { get; }
@@ -397,6 +424,7 @@ public sealed record LowEnergyRules(Fixed PenaltyModifier, Fixed MinProductionSp
 public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
+    private readonly ImmutableHashSet<string> _variationNames;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, CommandCatalog commands, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, RankCatalog ranks, SpecialPowerCatalog specialPowers,
         FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, Fixed sellPercentage, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
@@ -424,6 +452,7 @@ public sealed class TemplateCatalog
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var template in templates) builder[template.Name] = template;
         _byName = builder.ToImmutable();
+        _variationNames = templates.SelectMany(template => template.BuildVariations).ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     public ImmutableArray<ObjectTemplate> Templates { get; }
@@ -475,6 +504,17 @@ public sealed class TemplateCatalog
     public WeaponBonusTable GlobalWeaponBonus { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
+
+    /// <summary>
+    /// Whether an object of <paramref name="template"/> is of the type the data name <paramref name="typeName"/>: the name itself, or a template it is equivalent to
+    /// (<see cref="ObjectTemplate.IsEquivalentTo"/>) - a produced Technical's chassis is a <c>GLAVehicleTechnical</c> to a script's count, a team's order and a recruiter.
+    /// </summary>
+    public bool IsOfType(ObjectTemplate template, string typeName)
+    {
+        if (string.Equals(template.Name, typeName, StringComparison.Ordinal)) return true;
+        if (template.BuildVariations.IsDefaultOrEmpty && !_variationNames.Contains(template.Name)) return false;
+        return TryGet(typeName, out var named) && string.Equals(named.Name, typeName, StringComparison.Ordinal) && named.IsEquivalentTo(template);
+    }
 
     /// <summary>Whether one of the template's command sets carries a build or construct button for <paramref name="objectName"/>.</summary>
     public bool OffersBuild(ObjectTemplate builder, string objectName)

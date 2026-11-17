@@ -914,7 +914,8 @@ public sealed class FactionBuffProbe
             var answer = World.Submit(new SpawnCommand(PlayerId.System, NextSequence(), World.Tick, template, owner, Fixed.FromDecimal(x), Fixed.FromDecimal(y), Fixed.Zero, Fixed.Zero));
             if (!answer.Accepted) throw new ProbeSetupException($"spawning {template} was refused: {answer.Reason}");
             Steps(1);
-            var made = World.Entities.Where(entity => !known.Contains(entity.Id.Value) && entity.Owner == owner && entity.Template.Name.Equals(template, StringComparison.OrdinalIgnoreCase))
+            var made = World.Entities.Where(entity => !known.Contains(entity.Id.Value) && entity.Owner == owner
+                                                      && (entity.Template.Name.Equals(template, StringComparison.OrdinalIgnoreCase) || World.Templates.IsOfType(entity.Template, template)))
                 .OrderBy(entity => entity.Id.Value).FirstOrDefault() ?? throw new ProbeSetupException($"{template} did not appear");
             if (owner != Me) World.SetAttitude(made, (int)Attitude.Sleep);
             return made.Id;

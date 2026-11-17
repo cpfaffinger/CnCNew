@@ -1094,6 +1094,7 @@ if (contentDirectory is not null) run.Test("Real data (finding 15): the particle
 if (contentDirectory is not null) run.Test("Real data (F-64): the Scud Storm launches its nine missiles at 30, 60 and 120 Hz", () => Tests.RealScudStormLaunches(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-36): a dying Crusader throws its debris at 30, 60 and 120 Hz", () => Tests.RealDebrisFlies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#380): the soldiers of a stinger site stay at their site and fire from there at 30, 60 and 120 Hz", () => Tests.RealStingerSoldiersStayAtTheirSite(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#425): a produced Technical is one of its BuildVariations, drawn from the logic stream, and Technical Training trains it at 30, 60 and 120 Hz", () => Tests.RealProducedTechnicalIsOneOfItsBuildVariations(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.

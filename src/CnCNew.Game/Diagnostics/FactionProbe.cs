@@ -279,7 +279,8 @@ public sealed class FactionProbe
         // Spawns that make more objects (a structure's free unit) come later in id order: match the spawns by template in order.
         foreach (var spawn in spawns)
         {
-            var match = created.FirstOrDefault(entity => entity.Template.Name.Equals(spawn.Template, StringComparison.OrdinalIgnoreCase) && entity.Owner == spawn.Owner);
+            // ThingFactory::newObject may make one of the template's BuildVariations (the Technical's chassis).
+            var match = created.FirstOrDefault(entity => IsOf(world, entity, spawn.Template) && entity.Owner == spawn.Owner);
             if (match is null) { problem ??= $"{spawn.Template} ({spawn.Role}) did not appear"; continue; }
             created.Remove(match);
             switch (spawn.Role)
@@ -758,7 +759,10 @@ public sealed class FactionProbe
     };
 
     private static int Count(SimulationWorld world, string template)
-        => template.Length == 0 ? 0 : world.Entities.Count(entity => entity.Owner == Me && entity.Template.Name.Equals(template, StringComparison.OrdinalIgnoreCase));
+        => template.Length == 0 ? 0 : world.Entities.Count(entity => entity.Owner == Me && IsOf(world, entity, template));
+
+    private static bool IsOf(SimulationWorld world, Entity entity, string template)
+        => entity.Template.Name.Equals(template, StringComparison.OrdinalIgnoreCase) || world.Templates.IsOfType(entity.Template, template);
 
     /// <summary>The evidence of <paramref name="evidence"/>, or null while there is none yet.</summary>
     private string? Check(Arena test, Arena? control, CommandButtonInfo button, Evidence evidence, int baseline)

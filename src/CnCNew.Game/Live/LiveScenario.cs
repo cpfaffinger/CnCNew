@@ -225,7 +225,8 @@ public sealed class LiveScenario : LiveGame
             var order = Scenario.Orders[index];
             if (!_tags.TryGetValue(order.Actor, out var producer) || World.FindEntity(producer) is not { } owner) continue;
             var bound = _tags.Values.ToHashSet();
-            var made = World.Entities.Where(entity => entity.Owner == owner.Owner && entity.Template.Name.Equals(order.Template, StringComparison.OrdinalIgnoreCase) && !bound.Contains(entity.Id))
+            var made = World.Entities.Where(entity => entity.Owner == owner.Owner && !bound.Contains(entity.Id)
+                    && (entity.Template.Name.Equals(order.Template, StringComparison.OrdinalIgnoreCase) || World.Templates.IsOfType(entity.Template, order.Template ?? string.Empty)))
                 .OrderBy(entity => entity.Id.Value).FirstOrDefault();
             if (made is null) continue;
             _tags[tag] = made.Id;

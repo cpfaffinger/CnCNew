@@ -179,7 +179,8 @@ public sealed partial class ScriptEngine
         var bestDistance = maxDistanceSquared;
         foreach (var candidate in _world.EntitiesOwnedBy(owner).AsSpan())
         {
-            if (candidate.Template.Name != template || !Counts(candidate)) continue;
+            // Team::tryToRecruit: isEquivalentTo or isInBuildVariations.
+            if (!_world.Templates.IsOfType(candidate.Template, template) || !Counts(candidate)) continue;
             var current = FirstTeamOf(candidate.Id.Value);
             if (current is not null)
             {

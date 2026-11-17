@@ -2145,9 +2145,22 @@ public sealed partial class SimulationWorld : IWorldServices
             if (_spawnQueue[index].NotBefore == 0) _spawnQueue[index] = _spawnQueue[index] with { NotBefore = _tick + _firstFrameTicks };
     }
 
+    /// <summary>
+    /// <c>ThingFactory::newObject</c>, before anything else: a template with <c>BuildVariations</c> is replaced by one of them, drawn with <c>GameLogicRandomValue(0, size - 1)</c>
+    /// from the logic stream; a name the factory does not find (<c>findTemplate</c>, case-sensitive) keeps the template that was asked for. Every object the port makes - produced,
+    /// built, placed by the map, created by a list, a script or a reinforcement - comes through <see cref="SpawnEntity"/>, as every object of the original comes through newObject.
+    /// </summary>
+    private ObjectTemplate BuildVariationOf(ObjectTemplate template)
+    {
+        var variations = template.BuildVariations;
+        if (variations.IsDefaultOrEmpty) return template;
+        var name = variations[LogicRandom.Range(0, variations.Length - 1)];
+        return _templates.TryGet(name, out var variation) && string.Equals(variation.Name, name, StringComparison.Ordinal) ? variation : template;
+    }
+
     private Entity SpawnEntity(in PendingSpawn pending, EntityId builder = default)
     {
-        var template = _templates[pending.Template];
+        var template = BuildVariationOf(_templates[pending.Template]);
         var setup = pending.Setup;
         // GameLogic::startNewGame, ObjectCreationList: what comes into being on a deck is on that deck.
         var layer = template.IsKindOf("BRIDGE") ? GroundLayer : LayerForDestination(pending.X, pending.Y, pending.Z);
