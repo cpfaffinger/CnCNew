@@ -433,7 +433,7 @@ public sealed record AutoHealData(
 /// or (with <see cref="AutoHealData.AffectsWholePlayer"/>) anywhere. Matching is an O(entities) scan of <see cref="IWorldServices.Entities"/>
 /// (fine at fixture/scenario scale; a spatial index is a phase-6 performance concern, not a correctness one).
 /// </summary>
-public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModule, IUpgradeModule
+public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModule, IUpgradeModule, IDamageModule
 {
     /// <summary><c>getDisabledTypesToProcess</c>.</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
@@ -442,6 +442,12 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     private bool _active;
     private long _nextWake = -1;
 
+    /// <summary>
+    /// <c>m_soonestHealFrame</c>: the tick of the last pulse plus <c>HealingDelay</c> (0 before the first and after <c>undoUpgrade</c>). A hit wakes the self-heal at once only
+    /// in a frame after it, "otherwise we will heal on a timer AND at every damage input".
+    /// </summary>
+    private long _soonestHealTick;
+
     public override string ModuleName => "AutoHealBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
@@ -449,23 +455,50 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     {
         // UpgradeMux::giveSelfUpgrade (#429): the removals first, then the aura, and the switch is done - a later module's removal of the trigger re-arms it (resetUpgrade).
         if (data.StartsActive) _mux.GiveSelfUpgrade(world, Entity, _ => _active = true);
+        // The constructor: "start these guys with random phasings so that we don't have all of 'em check on the same frame" - GameLogicRandomValue(1, HealingDelay) frames,
+        // drawn from the logic stream after giveSelfUpgrade, for every aura that starts active (an upgrade's aura wakes when its upgrade comes, without a draw).
         _nextWake = _active ? Math.Min(world.Tick + world.Time.AtLeastOneFrame(data.StartHealingDelayTicks), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
     }
 
+    /// <summary><c>upgradeImplementation</c>: <c>setWakeFrame(UPDATE_SLEEP_NONE)</c> - the module looks with the object's next frame (not after <c>StartHealingDelay</c>, which only a hit starts).</summary>
     public void TryActivate(IWorldServices world, UpgradeMask keyMask)
     {
         if (!_mux.AttemptUpgrade(world, Entity, keyMask, _ => _active = true)) return;
-        world.WakeAt(Entity, this, world.Tick + world.Time.AtLeastOneFrame(data.StartHealingDelayTicks));
+        world.WakeAt(Entity, this, OwnFrameStart(world) + world.Time.TicksPerOriginalFrame);
     }
 
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
-    /// <summary><c>undoUpgrade</c>: "it also loses any healing bonuses it may have earned in its prior life".</summary>
+    /// <summary><c>undoUpgrade</c>: "it also loses any healing bonuses it may have earned in its prior life" - and <c>m_soonestHealFrame</c> is 0 again.</summary>
     public void UndoUpgrade()
     {
         _mux.UndoUpgrade();
         _active = false;
+        _soonestHealTick = 0;
     }
+
+    /// <summary>
+    /// <c>AutoHealBehavior::onDamage</c>, only for the self-heal (<c>Radius = 0</c>, also with <c>AffectsWholePlayer</c>): with a <c>StartHealingDelay</c> every hit puts the
+    /// module to sleep for that long from its frame; without one a hit wakes it with its next frame, unless a pulse is still due (<c>getFrame() &gt; m_soonestHealFrame</c>) or it
+    /// is awake in this frame already (<c>friend_awakenUpdateModule</c> keeps a call of this frame).
+    /// </summary>
+    public void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt)
+    {
+        if (!_active || data.Radius != Fixed.Zero) return;
+        var frameStart = OwnFrameStart(world);
+        if (data.StartHealingDelayTicks > 0)
+        {
+            world.WakeAt(Entity, this, frameStart + data.StartHealingDelayTicks);
+            return;
+        }
+        if (frameStart <= _soonestHealTick) return;
+        var next = frameStart + world.Time.TicksPerOriginalFrame;
+        if (_nextWake >= world.Tick && _nextWake <= next) return;
+        world.WakeAt(Entity, this, next);
+    }
+
+    /// <summary>The first tick of the object's own logic frame of the original that holds the current tick (at 30 Hz the tick).</summary>
+    private long OwnFrameStart(IWorldServices world) => world.Tick - (world.Tick - Entity.SpawnTick) % world.Time.TicksPerOriginalFrame;
 
     /// <summary>The original's <c>isUpgradeActive</c> is the mux's executed flag, so a re-armed aura stops healing until its upgrade comes back.</summary>
     public void ResetUpgrade(UpgradeMask keyMask)
@@ -480,21 +513,42 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         world.WakeAt(Entity, this, SimulationTiming.SleepForever);
     }
 
+    /// <summary>
+    /// <c>AutoHealBehavior::update</c>: nothing once the object is effectively dead; the whole player's or the radius's hurt objects every <c>HealingDelay</c>; the self-heal
+    /// (<c>Radius = 0</c>) heals only its own object and only while it is hurt - at full health it sleeps until a hit wakes it (<see cref="OnDamage"/>).
+    /// </summary>
     public long Update(IWorldServices world)
     {
-        if (!_active) return SimulationTiming.SleepForever;
+        if (!_active || Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
+        var delay = world.Time.AtLeastOneFrame(data.HealingDelayTicks);
+        if (!data.AffectsWholePlayer && data.Radius == Fixed.Zero)
+        {
+            if (!IsHurt(Entity)) return SimulationTiming.SleepForever;
+            Pulse(world, Entity);
+            return delay;
+        }
         foreach (var candidate in world.Entities)
             if (Matches(world, candidate) && data.SingleBurst) world.Emit(SimEventKind.HealedInBurst, candidate.Id, Entity.Id, string.Empty, 0);
         foreach (var candidate in world.Entities)
-            if (Matches(world, candidate)) world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
+            if (Matches(world, candidate)) Pulse(world, candidate);
         if (data.SingleBurst) { _active = false; return SimulationTiming.SleepForever; }
-        // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
-        return world.Time.AtLeastOneFrame(data.HealingDelayTicks);
+        return delay;
     }
 
+    /// <summary><c>pulseHealObject</c>: the heal, and <c>m_soonestHealFrame</c> one <c>HealingDelay</c> on.</summary>
+    private void Pulse(IWorldServices world, Entity candidate)
+    {
+        world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
+        _soonestHealTick = world.Tick + data.HealingDelayTicks;
+    }
+
+    private static bool IsHurt(Entity candidate) => candidate.Body is { } body && body.Health < body.MaxHealth;
+
+    /// <summary><c>checkForAutoHeal</c> and the radius scan: an object of the player that is hurt (an object at full health is not pulsed), of the kinds, inside the radius.</summary>
     private bool Matches(IWorldServices world, Entity candidate)
     {
-        if (candidate.Owner != Entity.Owner || candidate.Body is null || candidate.EffectivelyDead) return false;
+        if (candidate.Owner != Entity.Owner || candidate.Body is null || candidate.EffectivelyDead || !IsHurt(candidate)) return false;
         if (data.SkipSelfForHealing && candidate.Id == Entity.Id) return false;
         if (!data.KindOf.IsEmpty && !data.KindOf.Any(candidate.Template.IsKindOf)) return false;
         if (data.ForbiddenKindOf.Any(candidate.Template.IsKindOf)) return false;
@@ -512,6 +566,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         writer.Int("nextWake", _nextWake);
         writer.Bool("active", _active);
         _mux.Describe(writer);
+        if (_soonestHealTick != 0) writer.Int("soonestHealTick", _soonestHealTick);
     }
 
     public override void Load(IStateReader reader)
@@ -519,6 +574,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         _nextWake = reader.Int("nextWake");
         _active = reader.Bool("active");
         _mux.Load(reader);
+        _soonestHealTick = reader.Has("soonestHealTick") ? reader.Int("soonestHealTick") : 0;
     }
 }
 

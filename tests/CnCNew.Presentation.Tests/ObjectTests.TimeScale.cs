@@ -141,8 +141,8 @@ static partial class ObjectTests
             var rover = Spawn(rig.World, "Rover", 1, 10, 10);
             var patient = Spawn(rig.World, "Patient", 2, 50, 10);
             var entity = rig.World.FindEntity(patient)!;
-            // The patient heals itself two seconds after it appears and every twenty seconds from then on: hurt it shortly before the second heal, so exactly one heal
-            // raises its health in the run (and the icon is never shown in the first three seconds of a game, Drawable::drawHealing).
+            // The patient heals itself two seconds after a hit and every twenty seconds from then on while it is hurt (#432): hurt it once, so exactly one heal raises its
+            // health in the run (and the icon is never shown in the first three seconds of a game, Drawable::drawHealing).
             for (var tick = 0; tick < rig.Ticks(20); tick++) rig.Step();
             Submit(rig.World, sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, rover, patient));
             var health = entity.Body!.Health;
