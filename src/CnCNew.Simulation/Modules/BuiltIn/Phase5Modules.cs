@@ -538,19 +538,28 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         return delay;
     }
 
-    /// <summary><c>pulseHealObject</c>: the heal, and <c>m_soonestHealFrame</c> one <c>HealingDelay</c> on.</summary>
+    /// <summary>
+    /// <c>pulseHealObject</c>: the heal - an aura with a radius heals in the non-stacking way (<c>attemptHealingFromSoleBenefactor</c> for <c>HealingDelay</c>), so an object that
+    /// another such healer holds is not healed, and two auras do not add up -, and <c>m_soonestHealFrame</c> one <c>HealingDelay</c> on whether it healed or not.
+    /// </summary>
     private void Pulse(IWorldServices world, Entity candidate)
     {
-        world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
+        var heal = new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false);
+        if (data.Radius == Fixed.Zero) world.Damage(candidate.Id, heal);
+        else SoleHealingBenefactor.AttemptHealing(world, candidate, Entity, heal, OwnFrameStart(world), data.HealingDelayTicks);
         _soonestHealTick = world.Tick + data.HealingDelayTicks;
     }
 
     private static bool IsHurt(Entity candidate) => candidate.Body is { } body && body.Health < body.MaxHealth;
 
-    /// <summary><c>checkForAutoHeal</c> and the radius scan: an object of the player that is hurt (an object at full health is not pulsed), of the kinds, inside the radius.</summary>
+    /// <summary>
+    /// <c>checkForAutoHeal</c> and the radius scan: an object that is hurt (an object at full health is not pulsed), of the kinds, of the player for <c>AffectsWholePlayer</c> and
+    /// an ally of the healer inside the radius otherwise (<c>PartitionFilterRelationship::ALLOW_ALLIES</c> - its own player's objects are its allies).
+    /// </summary>
     private bool Matches(IWorldServices world, Entity candidate)
     {
-        if (candidate.Owner != Entity.Owner || candidate.Body is null || candidate.EffectivelyDead || !IsHurt(candidate)) return false;
+        if (candidate.Body is null || candidate.EffectivelyDead || !IsHurt(candidate)) return false;
+        if (data.AffectsWholePlayer ? candidate.Owner != Entity.Owner : world.RelationshipOf(Entity.Owner, candidate.Owner) != Relationship.Allies) return false;
         if (data.SkipSelfForHealing && candidate.Id == Entity.Id) return false;
         if (!data.KindOf.IsEmpty && !data.KindOf.Any(candidate.Template.IsKindOf)) return false;
         if (data.ForbiddenKindOf.Any(candidate.Template.IsKindOf)) return false;

@@ -325,6 +325,15 @@ public sealed class Entity
     public long RepulsorUntil { get; internal set; }
 
     /// <summary>
+    /// <c>Object::m_soleHealingBenefactorID</c>: the healer that alone may heal this object in the non-stacking way (<c>attemptHealingFromSoleBenefactor</c>) until
+    /// <see cref="SoleHealingBenefactorUntil"/>; invalid when none ever did.
+    /// </summary>
+    public EntityId SoleHealingBenefactor { get; internal set; } = EntityId.Invalid;
+
+    /// <summary><c>m_soleHealingBenefactorExpirationFrame</c> as a tick: after it any healer may take the object over.</summary>
+    public long SoleHealingBenefactorUntil { get; internal set; }
+
+    /// <summary>
     /// <c>Pathfinder::updateAircraftGoal</c>: the point whose box of goal cells this aircraft holds since its last adjusted move (<see cref="SimulationWorld.AdjustAircraftDestination"/>),
     /// with the one it held before and the logic frame of the original it took the present one in: another aircraft deciding in that same frame reads the earlier one, so that what it
     /// sees does not depend on which of the two decides first, which above 30 Hz the phases of their frames decide.
@@ -547,6 +556,11 @@ public sealed class Entity
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
         if (OwnAttitude is { } attitude) writer.Int("attitude", attitude);
         if (RepulsorUntil != 0) writer.Int("repulsorUntil", RepulsorUntil);
+        if (SoleHealingBenefactor.IsValid)
+        {
+            writer.UInt("soleHealer", SoleHealingBenefactor.Value);
+            writer.Int("soleHealerUntil", SoleHealingBenefactorUntil);
+        }
         Roam?.Describe(writer);
         if (Panicking) writer.Bool("panicking", true);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);

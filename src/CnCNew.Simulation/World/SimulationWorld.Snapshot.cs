@@ -244,6 +244,11 @@ public sealed partial class SimulationWorld
             Panicking = reader.Has("panicking") && reader.Bool("panicking"),
         };
         if (reader.Has("layer")) entity.Layer = checked((int)reader.Int("layer"));
+        if (reader.Has("soleHealer"))
+        {
+            entity.SoleHealingBenefactor = new EntityId(checked((uint)reader.UInt("soleHealer")));
+            entity.SoleHealingBenefactorUntil = reader.Int("soleHealerUntil");
+        }
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");
         if (reader.Has("shroudRange")) entity.ShroudRange = reader.Fixed("shroudRange");
         if (reader.Has("crateWeaponLevel")) entity.CrateWeaponLevel = checked((int)reader.Int("crateWeaponLevel"));
