@@ -168,8 +168,9 @@ public sealed record SlavedData(
 /// <c>GuardMaxRange</c> of the master. A slave whose master is gone crashes (the reference sets <c>DISABLED_UNMANNED</c> and lets physics kill a flier; here a flying slave is
 /// killed, a ground slave is just released), a master that changed sides takes its slave with it (<c>defect</c>).
 /// <para>
-/// Differences, all deliberate: the master's current victim is not stored anywhere in this simulation (attacks are fire commands), so it is taken to be the nearest enemy
-/// within the master's weapon range while the master fired during the last two seconds; "pathing" is <see cref="AIUpdateInterface.OrderMove"/>; the welding sparks, model
+/// The master's victim is <c>getCurrentVictim</c>: the victim of the master's attack, by its own choice or by order, wherever the attack measures its weapon's reach (#433: it was the
+/// nearest enemy within the weapon's data range of the master's centre while the master fired during the last two seconds). Differences, all deliberate: "pathing" is
+/// <see cref="AIUpdateInterface.OrderMove"/>; the welding sparks, model
 /// conditions and locomotor sets (panic, ultra accurate, precise z) are presentation or have no counterpart; the repair spot is kept apart from the guard offset
 /// (the reference writes an absolute position into that offset, which sends the drone far away once after a repair); a stealthy master does not grant stealth to the
 /// slave; <c>onSlaverDamage</c> does nothing without <c>ProneUpdate</c>. The random "direction" is the integer overload of the reference (0 to 6 radians).
@@ -182,7 +183,6 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
 
     private const int CloseEnoughSquared = 15 * 15;
     private const int RepairDistanceSquared = 12 * 12;
-    private const long RecentFireFrames = 2 * SimulationRate.OriginalFramesPerSecond;
 
     /// <summary><c>m_framesToWait = 15</c> for packing and unpacking, <c>= 5</c> for extending and retracting the arm (SlavedUpdate.cpp, <c>setRepairState</c>), in logic frames of the original.</summary>
     private const long PackFrames = 15;
@@ -332,24 +332,9 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         return SimulationTiming.SleepNone;
     }
 
-    /// <summary>Stands in for <c>AIUpdateInterface::getCurrentVictim</c> of the master (see the class summary).</summary>
+    /// <summary><c>AIUpdateInterface::getCurrentVictim</c> of the master (<c>m_currentVictimID</c>): the object its attack is at - none while it attacks a place or does not attack.</summary>
     private static Entity? MasterTarget(IWorldServices world, Entity master)
-    {
-        if (master.LastFireTick < 0 || world.Tick - master.LastFireTick > world.Time.OriginalFrames(RecentFireFrames) || SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot) < 0) return null;
-        var range = world.Weapons[SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot)].RangeWith(world.Templates.GlobalWeaponBonus, master.WeaponBonusConditions);
-        Entity? best = null;
-        var limit = SquaredReach.Of(range);
-        var bestDistance = Fixed.Zero;
-        foreach (var candidate in world.Entities)
-        {
-            if (candidate.EffectivelyDead || candidate.DestroyRequested || candidate.Body is null || !world.AreEnemies(master.Owner, candidate.Owner)) continue;
-            var distance = SlaveSupport.CenterDistanceSquared2D(master, candidate);
-            if (!limit.Contains(distance) || (best is not null && (distance > bestDistance || (distance == bestDistance && candidate.Id.Value > best.Id.Value)))) continue;
-            best = candidate;
-            bestDistance = distance;
-        }
-        return best;
-    }
+        => master.Acquisition is { Victim.IsValid: true } attack && world.FindEntity(attack.Victim) is { DestroyRequested: false } victim ? victim : null;
 
     /// <summary><c>doAttackLogic</c>: go to the victim, but no further from the master than <c>AttackRange</c>; grant the spotting bonus when close.</summary>
     private void DoAttackLogic(IWorldServices world, Entity master, AIUpdateInterface ai, Entity target)
