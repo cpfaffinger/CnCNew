@@ -59,6 +59,7 @@ public sealed partial class SimulationWorld
     private const int ChaseLeashFactor = 2;
 
     private static readonly int SoldStatus = ObjectStatusBits.Index("SOLD");
+    private static readonly int NoAttackStatus = ObjectStatusBits.Index("NO_ATTACK");
 
     /// <summary>Ids (ascending) of the objects that take part: every object whose AI may acquire while idle, plus the ones with an attack state of their own (<see cref="Entity.Acquisition"/>).</summary>
     private readonly SortedSet<uint> _acquirers = [];
@@ -461,12 +462,18 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// The port's <c>Object::isAbleToAttack</c>: what <see cref="MayAct"/> asks of the object itself, without its AI (the repulsor filter asks only this). An EMP or a hack makes it false
     /// only for a portable structure or an object whose spawns are its weapons ("as a portable structure, aptly disabled"); any other disabled object is still able to attack, and
-    /// what keeps it from acquiring is its AI that does not run (#423).
+    /// what keeps it from acquiring is its AI that does not run (#423). <c>OBJECT_STATUS_NO_ATTACK</c> ("absolute override": a flight deck without aircraft) refuses first, and such
+    /// an object that is infantry - a stinger soldier - is not able to attack while the slaver of its first slaved module is subdued ("if my stinger site is subdued, so am I", #429).
     /// </summary>
     private bool AbleToAttack(Entity entity, long tick)
-        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.Subdued
-           && (!entity.IsDisabledByTime(tick) || !(entity.Template.IsKindOf("PORTABLE_STRUCTURE") || entity.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS")))
-           && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
+    {
+        if (entity.HasStatus(NoAttackStatus) || entity.HasStatus(ObjectStatusBits.UnderConstruction) || entity.HasStatus(SoldStatus) || entity.Subdued) return false;
+        if (entity.ContainedBy.IsValid && !ContainerLetsFire(entity)) return false;
+        if (!(entity.Template.IsKindOf("PORTABLE_STRUCTURE") || entity.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS"))) return true;
+        if (entity.IsDisabledByTime(tick)) return false;
+        return !(entity.Template.IsKindOf("INFANTRY") && entity.ModuleArray.OfType<ISlavedModule>().FirstOrDefault() is { Slaver.IsValid: true } slaved
+                 && FindEntity(slaved.Slaver) is { Subdued: true });
+    }
 
     /// <summary>
     /// <c>GameLogic::update</c> runs a disabled object's <c>AIUpdateInterface</c> only when one of its disabled types is one the AI processes (<c>getDisabledTypesToProcess</c>: held), and

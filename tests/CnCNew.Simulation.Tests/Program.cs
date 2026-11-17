@@ -202,6 +202,7 @@ run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check",
 run.Test("Upgrades (#423): a module that starts active removes its upgrades first, at 30, 60 and 120 Hz", Tests.AStartsActiveModuleRemovesItsUpgrades);
 run.Test("Upgrades (#429): an aura that starts active goes through its upgrade switch, at 30, 60 and 120 Hz", Tests.AnAuraThatStartsActiveGoesThroughItsUpgradeSwitch);
 run.Test("Upgrades (#429): an effect list on death follows its upgrade switch, at 30, 60 and 120 Hz", Tests.AnEffectListOnDeathFollowsItsUpgradeSwitch);
+run.Test("Attack (#429): an object with NO_ATTACK is not able to attack, at 30, 60 and 120 Hz", Tests.AnObjectWithNoAttackIsNotAbleToAttack);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 41: StealthDetectorUpdate detects behind a ridge (no line of sight, as the original)", Tests.Phase5StealthDetectorHeightLineOfSight);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);
@@ -1100,6 +1101,7 @@ if (contentDirectory is not null) run.Test("Real data (F-64): the Scud Storm lau
 if (contentDirectory is not null) run.Test("Real data (F-36): a dying Crusader throws its debris at 30, 60 and 120 Hz", () => Tests.RealDebrisFlies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#380): the soldiers of a stinger site stay at their site and fire from there at 30, 60 and 120 Hz", () => Tests.RealStingerSoldiersStayAtTheirSite(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#425): a produced Technical is one of its BuildVariations, drawn from the logic stream, and Technical Training trains it at 30, 60 and 120 Hz", () => Tests.RealProducedTechnicalIsOneOfItsBuildVariations(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#429): the soldiers of a subdued stinger site are not able to attack, at 30, 60 and 120 Hz", () => Tests.RealStingerSoldiersOfASubduedSiteDoNotAttack(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.
