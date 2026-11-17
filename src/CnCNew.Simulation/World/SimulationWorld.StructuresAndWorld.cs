@@ -37,8 +37,8 @@ public sealed partial class SimulationWorld
     }
 
 
-    /// <summary>Asks the <see cref="IFireGate"/> modules of a fire command's source (a deployed-only weapon) whether the shot may go out now.</summary>
-    private bool GateAllowsFire(Entity source, Entity victim)
+    /// <summary>Asks the <see cref="IFireGate"/> modules of a fire command's source (a deployed-only weapon) whether the shot may go out now; a null victim is the place an attack is at.</summary>
+    private bool GateAllowsFire(Entity source, Entity? victim)
     {
         foreach (var module in source.ModuleArray)
             if (module is IFireGate gate && !gate.AllowsFire(this, victim)) return false;

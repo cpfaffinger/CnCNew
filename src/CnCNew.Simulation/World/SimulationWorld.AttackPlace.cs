@@ -190,7 +190,8 @@ public sealed partial class SimulationWorld
             ai.StopInternalMoveAtFrameEnd(this);
             state.Chasing = false;
         }
-        if (!TurretsLetAttack(entity)) return;
+        // DeployStyleAIUpdate::update: an attack at a place the weapon reaches (isWithinAttackRange(self, getCurrentVictimPos())) sets the unit up first, as one at an object does (#433).
+        if (!TurretsLetAttack(entity) || !GateAllowsFire(entity, null)) return;
         // The attack's machine (F-140): it aims and fires in the unit's frames, also while the weapon reloads.
         if (!AttackCycleFires(entity, ref state.Cycle, slot, null, state.X, state.Y, state.Z, ordered: false)) return;
         var fired = ConsumeShot(entity, slot, EntityId.Invalid);

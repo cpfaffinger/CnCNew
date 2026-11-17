@@ -3,8 +3,10 @@ using System.Linq;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Rules;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -78,6 +80,40 @@ static partial class Tests
             if (shots == 0) wrong.Add($"{rate}: the Crusader did not fire at the building");
             // Guarding, the drone stays 35 from its master (GuardMaxRange), at most 255 from the building; over the victim it flies up to 75 from the master toward it.
             if (closest > Fixed.FromInt(170)) wrong.Add($"{rate}: the drone stayed by its master ({closest.ToDecimal():0.#} from the building) instead of flying over the master's victim");
+        }
+        Check.That(wrong.Count == 0, string.Join("; ", wrong) + ".");
+    }
+
+    /// <summary>
+    /// <c>DeployStyleAIUpdate::update</c> sets a unit up when its attack's weapon reaches the victim - <c>isWithinAttackRange(self, victim)</c>, or <c>isWithinAttackRange(self, pos)</c> for
+    /// the place an attack is at (<c>getCurrentVictimPos</c>). A Nuke Cannon ordered at a place 250 away (its gun reaches 150 to 350) unpacks for <c>UnpackTime</c> (100 frames) and fires; in the
+    /// port its attack on a place never asked the deploy module, so the cannon stood packed with its turret switched off and never fired.
+    /// </summary>
+    public static void RealNukeCannonDeploysForAPlace(string directory)
+    {
+        var real = new RealTargets(directory);
+        var wrong = new List<string>();
+        foreach (var rate in TargetRates)
+        {
+            var world = real.WorldWith(rate, RuleProfile.Product);
+            var cannon = SpawnReal(world, ("ChinaVehicleNukeLauncher", 1, 300, 400))[0];
+            for (var step = 0; step < world.Frames(30 * 2); step++) world.Step();
+            var deploy = cannon.Modules.OfType<DeployStyleAIUpdate>().Single();
+            Check.That(world.Submit(new AttackPositionCommand(new PlayerId(1), ++_sequence, world.Tick, [cannon.Id], Fixed.FromInt(550), Fixed.FromInt(400), false, WeaponSlot.Best, 0)).Accepted,
+                $"{rate}: the attack on the place is accepted.");
+            var start = world.Tick;
+            long fired = -1, deployed = -1;
+            for (var step = 0; step < world.Frames(30 * 6); step++)
+            {
+                var events = world.Step().Events;
+                if (deployed < 0 && deploy.IsDeployed) deployed = world.InFrames(world.Tick - start);
+                if (fired < 0 && events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == cannon.Id)) fired = world.InFrames(world.Tick - start);
+            }
+            System.Console.WriteLine($"       {rate}: set up at frame {deployed}, first shot at frame {fired}");
+            if (deployed < 0) wrong.Add($"{rate}: the cannon never set up for the place its gun reaches");
+            if (fired < 0) wrong.Add($"{rate}: the cannon never fired at the place");
+            else if (deployed < 0 || fired < deployed) wrong.Add($"{rate}: the cannon fired (frame {fired}) before it was set up (frame {deployed})");
+            else if (deployed < 100) wrong.Add($"{rate}: the cannon was set up at frame {deployed}, before its UnpackTime of 100 frames");
         }
         Check.That(wrong.Count == 0, string.Join("; ", wrong) + ".");
     }

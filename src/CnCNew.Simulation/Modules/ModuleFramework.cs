@@ -908,8 +908,11 @@ public static class ProducerAwareModules
 /// <summary>A module that vetoes or delays a fire command (<c>DeployStyleAIUpdate</c>: a deployed-only weapon); asked when an accepted command executes (never while it is validated, so that replays, which hold only accepted commands, repeat its state changes).</summary>
 public interface IFireGate
 {
-    /// <summary>True when the object may fire now; a gate that returns false may start a state change (deploying) that lets a later command succeed, and the shot is counted as a <c>WeaponNotReady</c> rejection.</summary>
-    bool AllowsFire(IWorldServices world, Entity victim);
+    /// <summary>
+    /// True when the object may fire now at <paramref name="victim"/> - or, when it is null, at the place its attack is at (<c>getCurrentVictimPos</c>); a gate that returns false may start a
+    /// state change (deploying) that lets a later command succeed, and the shot is counted as a <c>WeaponNotReady</c> rejection.
+    /// </summary>
+    bool AllowsFire(IWorldServices world, Entity? victim);
 }
 
 /// <summary>A module that overrides its object's shroud clearing range at run time (<c>DynamicShroudClearingRangeUpdate</c>, <c>Object::setShroudClearingRange</c>).</summary>
