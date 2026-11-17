@@ -414,12 +414,24 @@ public sealed record AutoHealData(
     ImmutableArray<string> KindOf, ImmutableArray<string> ForbiddenKindOf, long StartHealingDelayTicks,
     bool AffectsWholePlayer, bool SkipSelfForHealing) : ModuleData
 {
+    /// <summary><see cref="HealingDelayTicks"/> of a module without <c>HealingDelay</c>: the original's default <c>UINT_MAX</c>.</summary>
+    public const long NoHealingDelay = -1;
+
+    /// <summary>Whether the module names a <c>HealingDelay</c>.</summary>
+    public bool HasHealingDelay => HealingDelayTicks != NoHealingDelay;
+
+    /// <summary>
+    /// The sleep after a pulse and the step of <c>m_soonestHealFrame</c>: without a <c>HealingDelay</c> none - <c>UPDATE_SLEEP(UINT_MAX)</c> is the signed enum's -1, which
+    /// <c>GameLogic::update</c> takes for <c>UPDATE_SLEEP_NONE</c>, and <c>frame + UINT_MAX</c> is the frame before.
+    /// </summary>
+    public long DelayTicks => HasHealingDelay ? HealingDelayTicks : 0;
+
     public static AutoHealData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog) => new(
         UpgradeMuxData.Parse(configuration, catalog),
         ModuleConfigReader.Bool(configuration, "StartsActive", false),
         ModuleConfigReader.Bool(configuration, "SingleBurst", false),
         ModuleConfigReader.Real(configuration, "HealingAmount", Fixed.Zero),
-        ModuleConfigReader.Ticks(configuration, "HealingDelay", 0),
+        ModuleConfigReader.Find(configuration, "HealingDelay") is null ? NoHealingDelay : ModuleConfigReader.Ticks(configuration, "HealingDelay", 0),
         ModuleConfigReader.Real(configuration, "Radius", Fixed.Zero),
         ModuleConfigReader.Flags(configuration, "KindOf")?.Names ?? [],
         ModuleConfigReader.Flags(configuration, "ForbiddenKindOf")?.Names ?? [],
@@ -457,9 +469,25 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         if (data.StartsActive) _mux.GiveSelfUpgrade(world, Entity, _ => _active = true);
         // The constructor: "start these guys with random phasings so that we don't have all of 'em check on the same frame" - GameLogicRandomValue(1, HealingDelay) frames,
         // drawn from the logic stream after giveSelfUpgrade, for every aura that starts active (an upgrade's aura wakes when its upgrade comes, without a draw).
-        _nextWake = data.StartsActive
-            ? world.Tick + world.Time.DrawFrames(world.LogicRandom, world.Time.TicksPerOriginalFrame, world.Time.AtLeastOneFrame(data.HealingDelayTicks))
-            : SimulationTiming.SleepForever;
+        _nextWake = !data.StartsActive ? SimulationTiming.SleepForever
+            : data.HealingDelayTicks > 0 ? world.Tick + world.Time.DrawFrames(world.LogicRandom, world.Time.TicksPerOriginalFrame, world.Time.AtLeastOneFrame(data.HealingDelayTicks))
+            : FirstWakeWithoutDelay(world);
+    }
+
+    /// <summary>
+    /// The first wake of an aura that starts active with a zero or no <c>HealingDelay</c>. <c>GameLogicRandomValue(1, 0)</c> is 0 without a draw: the aura wakes at once (here
+    /// with the next frame). Without one it is <c>GameLogicRandomValue(1, UINT_MAX)</c>, that is <c>(1, -1)</c>: a draw of any value but zero, added to the frame without sign;
+    /// a wake beyond <c>UPDATE_SLEEP_FOREVER</c> is forever (<c>friend_setNextCallFrame</c>), one that wrapped round into the past is at once - so the aura practically never
+    /// wakes, unless a hit wakes a self-heal.
+    /// </summary>
+    private long FirstWakeWithoutDelay(IWorldServices world)
+    {
+        if (data.HasHealingDelay) return world.Tick + world.Time.TicksPerOriginalFrame;
+        var drawn = world.LogicRandom.Range(1, -1);
+        var now = unchecked((uint)world.Time.ToOriginalFrames(world.Tick));
+        var wake = unchecked(now + (uint)drawn);
+        if (wake > SimulationTiming.SleepForever) return SimulationTiming.SleepForever;
+        return Math.Min(SimulationTiming.SleepForever, world.Tick + world.Time.OriginalFrames(wake > now ? wake - now : 1));
     }
 
     /// <summary><c>upgradeImplementation</c>: <c>setWakeFrame(UPDATE_SLEEP_NONE)</c> - the module looks with the object's next frame (not after <c>StartHealingDelay</c>, which only a hit starts).</summary>
@@ -522,8 +550,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     public long Update(IWorldServices world)
     {
         if (!_active || Entity.EffectivelyDead) return SimulationTiming.SleepForever;
-        // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
-        var delay = world.Time.AtLeastOneFrame(data.HealingDelayTicks);
+        // A missing or zero HealingDelay heals once per logic frame of the original, at every rate (DelayTicks).
+        var delay = world.Time.AtLeastOneFrame(data.DelayTicks);
         if (!data.AffectsWholePlayer && data.Radius == Fixed.Zero)
         {
             if (!IsHurt(Entity)) return SimulationTiming.SleepForever;
@@ -546,8 +574,9 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     {
         var heal = new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false);
         if (data.Radius == Fixed.Zero) world.Damage(candidate.Id, heal);
-        else SoleHealingBenefactor.AttemptHealing(world, candidate, Entity, heal, OwnFrameStart(world), data.HealingDelayTicks);
-        _soonestHealTick = world.Tick + data.HealingDelayTicks;
+        // Without a HealingDelay the claim ends a frame before it begins (now + UINT_MAX): any healer may take the object over at once.
+        else SoleHealingBenefactor.AttemptHealing(world, candidate, Entity, heal, OwnFrameStart(world), data.HasHealingDelay ? data.HealingDelayTicks : -world.Time.TicksPerOriginalFrame);
+        _soonestHealTick = world.Tick + data.DelayTicks;
     }
 
     private static bool IsHurt(Entity candidate) => candidate.Body is { } body && body.Health < body.MaxHealth;

@@ -208,6 +208,8 @@ run.Test("Auto heal (#432): an aura that starts active first wakes at a random p
 run.Test("Auto heal (#438): a radius aura heals its allies, at 30, 60 and 120 Hz", Tests.ARadiusAuraHealsItsAllies);
 run.Test("Auto heal (#438): two healing auras do not stack, at 30, 60 and 120 Hz", Tests.TwoHealingAurasDoNotStack);
 run.Test("Auto heal (#438): a healing aura keeps to its side of the map edge, at 30, 60 and 120 Hz", Tests.AHealingAuraKeepsToItsSideOfTheMapEdge);
+run.Test("Auto heal (#438): an aura without a delay that starts active does not wake, at 30, 60 and 120 Hz", Tests.AnAuraWithoutADelayThatStartsActiveDoesNotWake);
+run.Test("Auto heal (#438): auras without a delay heal every frame and add up, at 30, 60 and 120 Hz", Tests.AurasWithoutADelayHealEveryFrameAndAddUp);
 run.Test("Attack (#429): an object with NO_ATTACK is not able to attack, at 30, 60 and 120 Hz", Tests.AnObjectWithNoAttackIsNotAbleToAttack);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 41: StealthDetectorUpdate detects behind a ridge (no line of sight, as the original)", Tests.Phase5StealthDetectorHeightLineOfSight);

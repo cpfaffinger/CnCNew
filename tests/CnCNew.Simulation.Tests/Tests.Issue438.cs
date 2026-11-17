@@ -46,6 +46,30 @@ static partial class Tests
             AffectsWholePlayer = Yes
           End
         End
+        Object UndelayedHealer438
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AutoHealBehavior Heal01
+            StartsActive = Yes
+            HealingAmount = 2
+            Radius = 100.0
+          End
+        End
+        Object UpgradedHealer438
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AutoHealBehavior Heal01
+            TriggeredBy = Upgrade_Detonator
+            HealingAmount = 2
+            Radius = 100.0
+          End
+        End
         """;
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) HealAura438World(SimulationRate rate, TerrainMap? terrain = null)
@@ -170,6 +194,67 @@ static partial class Tests
                 Check.That(heals ? ticks.Count >= 3 : ticks.Count == 0,
                     $"{rate}: {healer} at x {healerX} {(heals ? "heals" : "does not heal")} a patient at x {patientX} ({ticks.Count} heals).");
             }
+        }
+    }
+
+    /// <summary>
+    /// <c>HealingDelay</c> defaults to <c>UINT_MAX</c>. The constructor of an aura that starts active draws <c>GameLogicRandomValue(1, UINT_MAX)</c>, which is <c>(1, -1)</c>: any
+    /// value but zero added to the frame without sign, beyond <c>UPDATE_SLEEP_FOREVER</c> forever - one draw, and the aura does not wake in any match. The port woke it within a
+    /// frame and healed every frame. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AnAuraWithoutADelayThatStartsActiveDoesNotWake()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = HealAura438World(rate);
+            feeder.Spawn(1, "AuraPatient438", owner: 1, x: 10, y: 0);
+            StepFrames(world, 1);
+            var patient = HealAura438Find(world, "AuraPatient438");
+            feeder.Damage(patient.Id.Value, 50);
+            StepFrames(world, 1);
+            var state = new uint[6];
+            world.LogicRandom.CopyState(state);
+            var expected = new CnCNew.Simulation.Random.SageRandom(0);
+            expected.SetState(state);
+            var drawn = expected.Range(1, -1);
+            var now = (uint)world.Time.ToOriginalFrames(world.Tick);
+            feeder.Spawn(1, "UndelayedHealer438", owner: 1, x: 0, y: 0);
+            world.Step();
+            var after = new uint[6];
+            world.LogicRandom.CopyState(after);
+            var stateAfterOneDraw = new uint[6];
+            expected.CopyState(stateAfterOneDraw);
+            Check.That(after.SequenceEqual(stateAfterOneDraw), $"{rate}: the healer's birth draws once from the logic stream.");
+            Check.That(unchecked(now + (uint)drawn) > SimulationTiming.SleepForever, $"{rate}: the draw {drawn} wakes the aura beyond forever.");
+            var module = HealAura438Find(world, "UndelayedHealer438").Modules.OfType<AutoHealBehavior>().Single();
+            Check.That(module.NextWake >= SimulationTiming.SleepForever, $"{rate}: the aura sleeps for good ({module.NextWake}).");
+            var (ticks, _) = HealAura438Heals(world, patient, 300);
+            Check.That(ticks.Count == 0, $"{rate}: and heals nothing ({ticks.Count} heals).");
+        }
+    }
+
+    /// <summary>
+    /// An aura without a <c>HealingDelay</c> that an upgrade wakes pulses every frame (<c>UPDATE_SLEEP(UINT_MAX)</c> is the signed enum's -1, which <c>GameLogic::update</c> makes
+    /// <c>UPDATE_SLEEP_NONE</c>), and its non-stacking claim ends a frame before it begins (<c>now + UINT_MAX</c>), so two such auras over one object both heal it every frame. On
+    /// the code before, the claim held for the frame and only one healed. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AurasWithoutADelayHealEveryFrameAndAddUp()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = HealAura438World(rate);
+            feeder.Spawn(1, "AuraPatient438", owner: 1, x: 10, y: 0);
+            feeder.Spawn(1, "UpgradedHealer438", owner: 1, x: 0, y: 0);
+            feeder.Spawn(1, "UpgradedHealer438", owner: 1, x: 20, y: 0);
+            StepFrames(world, 1);
+            var patient = HealAura438Find(world, "AuraPatient438");
+            feeder.Damage(patient.Id.Value, 80);
+            StepFrames(world, 1);
+            foreach (var healer in world.Entities.Where(entity => entity.Template.Name == "UpgradedHealer438").ToList())
+                feeder.GrantUpgrade(1, "Upgrade_Detonator", target: healer.Id.Value);
+            StepFrames(world, 3);
+            var (_, gain) = HealAura438Heals(world, patient, 10);
+            Check.That(gain == Fixed.FromInt(40), $"{rate}: two auras without a delay heal 2 each every frame ({gain} in 10 frames).");
         }
     }
 }

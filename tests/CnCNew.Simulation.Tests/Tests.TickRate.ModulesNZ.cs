@@ -55,6 +55,7 @@ static partial class Tests
           Behavior = AutoHealBehavior Heal01
             StartsActive = Yes
             HealingAmount = 1
+            HealingDelay = 0
             Radius = 100.0
             AffectsWholePlayer = Yes
           End
@@ -171,7 +172,10 @@ static partial class Tests
         Check.That(frames == 4, $"40 points of damage at 10 per frame of the original take 4 frames: {frames}.");
     }
 
-    /// <summary><c>AutoHealBehavior</c> without <c>HealingDelay</c>: one pulse per frame of the original, at every rate.</summary>
+    /// <summary>
+    /// <c>AutoHealBehavior</c> with a zero <c>HealingDelay</c>: one pulse per frame of the original, at every rate. (An aura that starts active without one practically never wakes,
+    /// #438.)
+    /// </summary>
     public static void TickRateNzAutoHealWithoutDelayPulsesOncePerOriginalFrame()
     {
         var frames = NzSpansScale("twenty heal pulses", rate =>
