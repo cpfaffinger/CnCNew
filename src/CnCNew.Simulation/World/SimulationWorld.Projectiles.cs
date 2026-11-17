@@ -230,13 +230,15 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>WeaponStore::handleProjectileDetonation</c> (<c>fireProjectileDetonationWeapon</c>): the weapon detonates at the projectile's position
-    /// without a victim (radius damage only), with the launcher's weapon bonus conditions of the launch, credited to the launcher. The
-    /// detonation effect and creation list (<c>ProjectileDetonationFX</c>/<c>OCL</c>) are requested at that position.
+    /// without a victim (radius damage only), credited to the launcher. The projectile is the weapon's source, so <c>Weapon::computeBonus</c> takes the projectile's own
+    /// weapon bonus conditions as they are now - a <c>WeaponBonusUpgrade</c> on the missile or shell sets <c>PLAYER_UPGRADE</c> on it (the laser-guided missiles, the uranium
+    /// shells, the AP rockets) - and adds the launcher's conditions of the launch (<c>m_extraBonusFlags</c>). The detonation effect and creation list
+    /// (<c>ProjectileDetonationFX</c>/<c>OCL</c>) are requested at that position.
     /// </summary>
     public void DetonateProjectile(Entity projectile, WeaponInfo weapon, EntityId launcher, uint conditions, bool damage = true)
     {
         MarkDirty(projectile);
-        if (damage) DealDamageCore(projectile.Id, projectile, launcher, launcher, conditions, weapon, null, projectile.X, projectile.Y, projectile.Z);
+        if (damage) DealDamageCore(projectile.Id, projectile, launcher, launcher, WeaponBonusOf(projectile) | conditions, weapon, null, projectile.X, projectile.Y, projectile.Z);
         if (weapon.DetonationFx.Length > 0)
             EmitAt(SimEventKind.FxRequested, projectile.Id, launcher, weapon.DetonationFx, 0, projectile.X, projectile.Y, projectile.Z);
         if (weapon.DetonationOcl.Length > 0) CreateFromList(projectile, weapon.DetonationOcl, launcher, false);

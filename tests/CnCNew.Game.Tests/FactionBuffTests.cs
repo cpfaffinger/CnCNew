@@ -17,27 +17,6 @@ internal static class FactionBuffTests
     /// <summary>The measurements that fail today (<see cref="BuffResult.Key"/>), each with its finding.</summary>
     private static readonly Dictionary<string, string> KnownFailures = new(StringComparer.Ordinal)
     {
-        // A projectile's own weapon bonus: WeaponBonusUpgrade on the missile or shell sets PLAYER_UPGRADE on it, and the original detonates the launcher's weapon with the projectile as the
-        // source - Weapon::computeBonus ORs the source's getWeaponBonusCondition() into the launcher's flags (Weapon.cpp; MissileAIUpdate::detonate, DumbProjectileBehavior::detonate ->
-        // WeaponStore::handleProjectileDetonation). SimulationWorld.DetonateProjectile deals the damage with the launcher's conditions of the launch only: the laser-guided missiles,
-        // the uranium shells and the AP rockets add nothing (measured x1, the data name x1.25).
-        ["FactionAmerica|Upgrade_AmericaLaserMissiles|damage|AmericaJetStealthFighter|StealthJetMissile/WeaponBonusUpgrade:ModuleTag_99"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionAmericaAirForceGeneral|Upgrade_AmericaLaserMissiles|damage|AirF_AmericaJetStealthFighter|StealthJetMissile/WeaponBonusUpgrade:ModuleTag_99"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionAmericaLaserGeneral|Upgrade_AmericaLaserMissiles|damage|Lazr_AmericaJetStealthFighter|StealthJetMissile/WeaponBonusUpgrade:ModuleTag_99"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionAmericaSuperWeaponGeneral|Upgrade_AmericaLaserMissiles|damage|SupW_AmericaJetStealthFighter|StealthJetMissile/WeaponBonusUpgrade:ModuleTag_99"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionChina|Upgrade_ChinaUraniumShells|damage|ChinaTankBattleMaster|BattleMasterTankShell/WeaponBonusUpgrade:ModuleTag_06"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionChina|Upgrade_ChinaUraniumShells|damage|ChinaTankOverlord|OverlordTankShell/WeaponBonusUpgrade:ModuleTag_06"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionChinaTankGeneral|Upgrade_ChinaUraniumShells|damage|Tank_ChinaTankBattleMaster|BattleMasterTankShell/WeaponBonusUpgrade:ModuleTag_06"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionChinaTankGeneral|Upgrade_ChinaUraniumShells|damage|Tank_ChinaTankEmperor|OverlordTankShell/WeaponBonusUpgrade:ModuleTag_06"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLA|Upgrade_GLAAPRockets|damage|GLAInfantryTunnelDefender|TunnelDefenderMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLA|Upgrade_GLAAPRockets|damage|GLAVehicleRocketBuggy|RocketBuggyMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLAToxinGeneral|Upgrade_GLAAPRockets|damage|Chem_GLAInfantryTunnelDefender|Chem_StingerMissile/WeaponBonusUpgrade:Upgrade_01"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLAToxinGeneral|Upgrade_GLAAPRockets|damage|Chem_GLAVehicleRocketBuggy|RocketBuggyMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLADemolitionGeneral|Upgrade_GLAAPRockets|damage|Demo_GLAInfantryTunnelDefender|TunnelDefenderMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLADemolitionGeneral|Upgrade_GLAAPRockets|damage|Demo_GLAVehicleRocketBuggy|RocketBuggyMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLAStealthGeneral|Upgrade_GLAAPRockets|damage|Slth_GLAInfantryTunnelDefender|TunnelDefenderMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-        ["FactionGLAStealthGeneral|Upgrade_GLAAPRockets|damage|Slth_GLAVehicleRocketBuggy|RocketBuggyMissile/WeaponBonusUpgrade:ModuleTag_08"] = "a projectile's own bonus is not applied at its detonation",
-
         // AirF_AmericaVehicleChinook has two AI modules; the original keeps the last (ChinookAIUpdate) as m_ai, the port's AiOf the first (FactionAuditTests' combat drop): the Chinook
         // never gathers, so its supply lines boost nothing.
         ["FactionAmericaAirForceGeneral|Upgrade_AmericaSupplyLines|supply-boost|AirF_AmericaVehicleChinook|ChinookAIUpdate:ModuleTag_07"] = "the first of two AI modules wins",

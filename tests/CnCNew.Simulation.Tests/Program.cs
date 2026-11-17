@@ -1005,6 +1005,7 @@ if (contentDirectory is not null) run.Test("Real data (issue 350): tanks run idl
 if (contentDirectory is not null) run.Test("Real data (#370): a tank spares a hijacker and a Tank Hunter that are after it", () => Tests.RealSquishSparesHijackerAndTankHunter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#373): a crusher spares a hijacker riding hidden in a vehicle", () => Tests.RealCrushSparesAHiddenHijacker(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#373): a hijacker takes the tank before it is squished", () => Tests.RealHijackComesBeforeTheSquish(contentDirectory));
+if (contentDirectory is not null) run.Test("#424 real data: the uranium shell and the AP rocket carry their own weapon bonus to their detonation", () => Tests.RealProjectileCarriesItsOwnWeaponBonus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a reversing Dozer is held up by nobody in front of it", () => Tests.RealReversingDozerIsHeldByNobody(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): the donut timer of a circling Dozer survives a save", () => Tests.RealDonutTimerSurvivesASave(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
