@@ -83,6 +83,9 @@ const string Usage = """
     A budget given as --ticks/--max-ticks is a raw tick count of that rate; --seconds S or --minutes M state it as game time instead, and the
     default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). A manifest is checked at the rate its file records.
     The commands that load the shipped content take --rules product|original|fixes|NAME,... (docs/GGC-FIXES.md; default product); a manifest is checked with the product rules only.
+      faction-audit <content-dir> --out <dir> [--faction NAME[,NAME..]] [--object TEXT] [--dynamic]
+                                                           what each playable faction can build and do, from its PlayerTemplate through the command sets: a roster per
+                                                           faction, each general against its base faction, the findings of the data; --dynamic presses every button (#411)
       match-analysis <content-dir> <file.cncreplay> --out <directory> [--title TEXT]
                                                            the analysis of a replay of the replay browser (docs/MATCH-ANALYSIS.md): analysis.json,
                                                            players.tsv, samples.tsv, events.tsv and report.html, with the SHA-256 of each
@@ -155,6 +158,7 @@ try
         "ai-data" when args.Length >= 2 => CnCNew.SimTool.OriginalAi.Data(args, CompileGraph),
         "rate-distribution" => CnCNew.SimTool.Survey.RateDistribution.Run(args),
         "rate-compare" when args.Length >= 2 => CnCNew.SimTool.RateCompare.Run(args, CompileGraph),
+        "faction-audit" when args.Length >= 2 => CnCNew.SimTool.FactionAudit.Run(args, CompileShipped),
         _ => Fail(Usage),
     };
 }
