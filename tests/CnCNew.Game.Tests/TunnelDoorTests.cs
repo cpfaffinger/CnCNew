@@ -28,7 +28,7 @@ internal static class TunnelDoorTests
             return harness.Failures;
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
-        harness.Run("Real data (#428): riders leave a GLA tunnel by its door and walk to its end, at 30, 60 and 120 Hz", () => ByTheDoor(data));
+        harness.Run("Real data (#428): riders leave a GLA tunnel by its door and walk to its end, and on to the rally point (#417), at 30, 60 and 120 Hz", () => ByTheDoor(data));
         return harness.Failures;
     }
 
@@ -87,8 +87,18 @@ internal static class TunnelDoorTests
                 Assert(!rebel.HasMoveTarget && Distance(rebel.X, rebel.Y, end) < Fixed.FromInt(30), $"{rate}: rebel {rebel.Id.Value} stands at the door's end ({rebel.X}, {rebel.Y}; {Distance(rebel.X, rebel.Y, end)} from it)");
             var stood = string.Join(";", rebels.Select(rebel => $"{rebel.X.Raw},{rebel.Y.Raw}"));
 
-            var line = stood;
-            Console.WriteLine($"       {rate}: stood at the door's end {stood}");
+
+            // #417 with real data: the GLA tunnel network has a ProductionUpdate (its upgrades) and no production exit, so its rally point is its contain module's
+            // (Object::getObjectExitInterface), and the rebel that leaves by the door walks on to it.
+            Submit(new SetRallyPointCommand(new PlayerId(1), ++sequence, world.Tick, b.Id, Fixed.FromInt(700), Fixed.FromInt(1000)), "tunnel B takes a rally point");
+            foreach (var rebel in rebels) Submit(new EnterContainerCommand(new PlayerId(1), ++sequence, world.Tick, rebel.Id, b.Id), $"rebel {rebel.Id.Value} enters tunnel B");
+            for (var step = 0; step < world.Time.TicksPerOriginalFrame; step++) world.Step();
+            Submit(new ExitContainerCommand(new PlayerId(1), ++sequence, world.Tick, rebels[0].Id), "one rebel leaves tunnel B");
+            for (var step = 0; step < world.Time.OriginalFrames(30 * 20); step++) world.Step();
+            Assert(!rebels[0].ContainedBy.IsValid && Distance(rebels[0].X, rebels[0].Y, (Fixed.FromInt(700), Fixed.FromInt(1000))) < Fixed.FromInt(25),
+                $"{rate}: the rebel that left by the door walked on to the rally point ({rebels[0].X}, {rebels[0].Y})");
+            var line = $"{stood}|{rebels[0].X.Raw},{rebels[0].Y.Raw}";
+            Console.WriteLine($"       {rate}: stood at the door's end {stood}; at the rally point ({rebels[0].X}, {rebels[0].Y})");
             reference ??= line;
             Assert(line == reference, $"{rate}: the same places as at 30 Hz");
         }

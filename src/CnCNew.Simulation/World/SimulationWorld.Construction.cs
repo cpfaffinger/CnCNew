@@ -279,7 +279,8 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>doSetRallyPoint</c> (GameLogicDispatch.cpp) sets the rally point on <c>Object::getObjectExitInterface</c>: a producer's exit, or - for an object without one - its contain
-    /// module's (<c>OpenContain</c>). The only shipped objects of the second kind with the rally button are the tunnels (<see cref="Modules.BuiltIn.TunnelContain"/>).
+    /// module's (<c>OpenContain</c>). The only shipped objects of the second kind with the rally button are the tunnels (<see cref="Modules.BuiltIn.TunnelContain"/>). A
+    /// <c>ProductionUpdate</c> is no exit interface: the GLA tunnel network has one for its upgrades and no production exit, so its point is its contain module's too.
     /// </summary>
     private CommandRejection CheckRally(PlayerId issuer, SetRallyPointCommand rally, out Entity? producer, out Modules.BuiltIn.ProductionUpdate? production,
         out Modules.BuiltIn.TunnelContain? tunnel)
@@ -290,7 +291,11 @@ public sealed partial class SimulationWorld
         if (producer is null || producer.DestroyRequested) return CommandRejection.UnknownEntity;
         if (!MayCommand(issuer, producer)) return CommandRejection.NotPermitted;
         production = FindProductionModule(producer);
-        if (production is null) tunnel = producer.Container as Modules.BuiltIn.TunnelContain;
+        if (producer.Container is Modules.BuiltIn.TunnelContain contain && !Array.Exists(producer.ModuleArray, module => module is Modules.IProductionExit))
+        {
+            production = null;
+            tunnel = contain;
+        }
         return production is null && tunnel is null ? CommandRejection.CannotProduce : 0;
     }
 
