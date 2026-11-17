@@ -1,14 +1,9 @@
 using System.Collections.Immutable;
-using CnCNew.Content;
-using CnCNew.Data.Compilation;
-using CnCNew.Data.Registry;
-using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
-using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -104,64 +99,6 @@ static partial class Tests
             for (var i = 0; i < world.Frames(300) && world.FindEntity(sold.Id) is not null; i++) world.Step();
             Check.That(world.FindEntity(sold.Id) is null, $"{rate}: the sale completes.");
             Check.That(world.FindEntity(first.Id) is { EffectivelyDead: false, ContainedBy.IsValid: false }, $"{rate}: the walker of the sold pad stands in the world after the sale.");
-        }
-    }
-
-    /// <summary>
-    /// #409 on the real data, at 30, 60 and 120 Hz: a ranger healed in its barracks walks out of the door when the barracks is sold, and when another barracks is evacuated;
-    /// a hacker in the Internet Center (an <c>InternetHackContain</c>, which is a <c>TransportContain</c> and always had its door) walks out when the center is sold.
-    /// </summary>
-    public static void RealSoldBarracksLetsItsOccupantOutThroughTheDoor(string directory)
-    {
-        var content = ContentFileSystem.Open(directory);
-        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
-        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
-        var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
-        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
-        {
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
-            var terrain = TerrainMap.Build(SyntheticMaps.Build(160, 120, 1, (_, _) => 0), "sold-barracks");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, players, "sold-barracks", fingerprint, terrain.Fingerprint), catalog, terrain);
-            var sequence = 0UL;
-            void Spawn(string template, int x, int y)
-                => Check.That(world.Submit(new SpawnCommand(new PlayerId(1), ++sequence, world.Tick, template, new PlayerId(1), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, template + " spawns.");
-            Spawn("AmericaBarracks", 500, 600);
-            Spawn("AmericaBarracks", 900, 600);
-            Spawn("ChinaInternetCenter", 1300, 600);
-            Spawn("AmericaInfantryRanger", 500, 750);
-            Spawn("AmericaInfantryRanger", 900, 750);
-            Spawn("ChinaInfantryHacker", 1300, 800);
-            for (var i = 0; i < world.Frames(1); i++) world.Step();
-            var buildings = world.Entities.Where(value => value.Template.IsKindOf("STRUCTURE")).OrderBy(value => value.Id.Value).ToList();
-            var riders = world.Entities.Where(value => value.Template.IsKindOf("INFANTRY")).OrderBy(value => value.Id.Value).ToList();
-            Check.That(buildings.Count == 3 && riders.Count == 3, $"{rate}: three buildings and three soldiers.");
-            Check.That(buildings[0].Container is HealContain && buildings[2].Container is InternetHackContain, $"{rate}: the barracks heals, the Internet Center hacks.");
-            for (var i = 0; i < 3; i++)
-            {
-                // Hurt, so the barracks keeps the ranger to heal it.
-                Check.That(world.Submit(new DamageCommand(PlayerId.System, ++sequence, world.Tick, riders[i].Id, riders[i].Body!.MaxHealth / Fixed.FromInt(2), 0, 0)).Accepted, "The soldier is hurt.");
-                Check.That(world.Submit(new MoveAndEnterCommand(new PlayerId(1), ++sequence, world.Tick, riders[i].Id, buildings[i].Id)).Accepted, $"{rate}: the order to enter is accepted.");
-            }
-            for (var step = 0; step < world.Frames(900) && Enumerable.Range(0, 3).Any(i => riders[i].ContainedBy != buildings[i].Id); step++) world.Step();
-            Check.That(Enumerable.Range(0, 3).All(i => riders[i].ContainedBy == buildings[i].Id), $"{rate}: every soldier is inside its building.");
-
-            while (world.Tick % world.Time.TicksPerOriginalFrame != 0) world.Step();
-            Check.That(world.Submit(new SellCommand(new PlayerId(1), ++sequence, world.Tick, buildings[0].Id)).Accepted, $"{rate}: the barracks can be sold while it heals.");
-            Check.That(world.Submit(new EvacuateCommand(new PlayerId(1), ++sequence, world.Tick, buildings[1].Id, false, Fixed.Zero, Fixed.Zero)).Accepted, $"{rate}: the other barracks can be evacuated.");
-            Check.That(world.Submit(new SellCommand(new PlayerId(1), ++sequence, world.Tick, buildings[2].Id)).Accepted, $"{rate}: the Internet Center can be sold while it hacks.");
-            for (var step = 0; step < world.Frames(30) && riders.Any(rider => rider.ContainedBy.IsValid); step++) world.Step();
-            Check.That(riders.All(rider => !rider.ContainedBy.IsValid), $"{rate}: every soldier leaves its building.");
-            for (var step = 0; step < world.Frames(90); step++) world.Step();
-            for (var i = 0; i < 3; i++)
-            {
-                var distance = Fixed.Sqrt((riders[i].X - buildings[i].X) * (riders[i].X - buildings[i].X) + (riders[i].Y - buildings[i].Y) * (riders[i].Y - buildings[i].Y));
-                Check.That(distance > buildings[i].Template.GeometryMajorRadius,
-                    $"{rate}: {riders[i].Template.Name}#{riders[i].Id.Value} walked out of {buildings[i].Template.Name}, {distance} from its centre (its radius {buildings[i].Template.GeometryMajorRadius}).");
-            }
-            for (var step = 0; step < world.Frames(300) && (world.FindEntity(buildings[0].Id) is not null || world.FindEntity(buildings[2].Id) is not null); step++) world.Step();
-            Check.That(world.FindEntity(buildings[0].Id) is null && world.FindEntity(buildings[2].Id) is null, $"{rate}: both sales complete.");
-            Check.That(riders.All(rider => world.FindEntity(rider.Id) is { EffectivelyDead: false, ContainedBy.IsValid: false }), $"{rate}: every soldier stands in the world after the sales.");
         }
     }
 }

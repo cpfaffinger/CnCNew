@@ -115,7 +115,8 @@ internal static class ModelGeometryTests
             static bool Near(Fixed value, decimal expected) => Math.Abs(value.ToDecimal() - expected) <= 0.07m;
             TestHarness.Assert(Near(humvee[0].Start!.Value.X, -5.719m) && Near(humvee[0].End!.Value.X, -15.950m) && Near(humvee[1].End!.Value.Y, 10.989m), "the Humvee's exit bones are the model's");
             // #428: the twelve tunnels (TunnelContain) leave by their door too, and every tunnel model has ExitStart and ExitEnd.
-            TestHarness.Assert(exits.Count == 112 && paths == 180 && complete == 97 && none.Length == 75, $"measured on the patched content: 112 door containers, 180 paths, 97 with both bones, 75 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
+            // #435: the fifteen heal containers (HealContain: the barracks of every faction and general) leave by their door too, and every one of their models has ExitStart and ExitEnd.
+            TestHarness.Assert(exits.Count == 127 && paths == 195 && complete == 112 && none.Length == 75, $"measured on the patched content: 127 door containers, 195 paths, 112 with both bones, 75 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
         });
 
         harness.Run("Model geometry: the fire points and stations of the garrisons and transports (loadGarrisonPoints, loadStationGarrisonPoints, putObjAtNextFirePoint)", () =>

@@ -1075,7 +1075,6 @@ if (contentDirectory is not null) run.Test("Real data (owner decision): target v
 if (contentDirectory is not null) run.Test("Real data (owner decision): target value numbers follow the armour table and the threat", () => Tests.RealTargetValueNumbersFollowTheRule(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered to garrison a building goes in at its wall", () => Tests.RealGarrisonEntryAtTheWall(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the soldiers of a sold fire base come out (#408)", () => Tests.RealSoldFireBaseLetsItsSoldiersOut(contentDirectory));
-if (contentDirectory is not null) run.Test("Real data: a sold or evacuated barracks and a sold Internet Center let their occupants out through the door (#409)", () => Tests.RealSoldBarracksLetsItsOccupantOutThroughTheDoor(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: units ordered into a full bunker stop where they are", () => Tests.RealUnitsStopWhenTheirContainerIsFull(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a unit ordered into a bunker that is full stops at once", () => Tests.RealUnitOrderedIntoAFullBunkerStops(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a hurt computer ranger is healed in its barracks, not sent into an ally's (#375)", () => Tests.RealHurtRangerIsHealedInItsBarracks(contentDirectory));

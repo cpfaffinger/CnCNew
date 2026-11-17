@@ -480,8 +480,13 @@ public static class ModelGeometryLoader
         throw new InvalidDataException($"{definition.OriginalName}: {module.Name} {key} is not Yes or No ('{text}').");
     }
 
-    /// <summary>The contain modules whose riders leave through <c>OpenContain::exitObjectViaDoor</c> (the garrison, the tunnel, the ferry and the parachute have exits of their own).</summary>
-    private static readonly string[] DoorContainers = ["TransportContain", "HelixContain", "OverlordContain", "RiderChangeContain", "InternetHackContain", "TunnelContain"];
+    /// <summary>
+    /// The contain modules whose riders leave through <c>OpenContain::exitObjectViaDoor</c> with the model's exit bones: every <c>OpenContain</c> that does not override it. The garrison
+    /// (<c>GarrisonContain::exitObjectViaDoor</c>) and the ferry (<c>RailedTransportContain::exitObjectViaDoor</c>) have exits of their own; a parachute lets its rider go by
+    /// <c>removeAllContained</c>. <c>HealContain</c> (the barracks: a healed, sold or evacuated occupant, #435) uses the door. <c>CaveContain</c>, <c>MobNexusContain</c>,
+    /// <c>PrisonBehavior</c> and <c>PropagandaCenterBehavior</c> would too, but no object of the game has them.
+    /// </summary>
+    private static readonly string[] DoorContainers = ["TransportContain", "HelixContain", "OverlordContain", "RiderChangeContain", "InternetHackContain", "TunnelContain", "HealContain"];
 
     /// <summary>
     /// The exit bones of every object with a door container: <c>ExitStart</c>/<c>ExitEnd</c> for one path, <c>ExitStart01</c>..<c>ExitEndNN</c> for more (<c>OpenContain::exitObjectViaDoor</c>), read
