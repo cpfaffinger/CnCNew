@@ -32,6 +32,7 @@ MultiFileDefinitionsReportWinners();
 RepeatableKeysKeepMultiplicity();
 DefaultThingTemplateIsInheritedWithInterfaceRules();
 ReskinAndModuleEditsFollowTheReference();
+ReskinRecordsTheObjectItReskins();
 IdsAndSnapshotsIgnoreEnumerationOrder();
 TruncatedInputsAreRejected();
 FullCompilationsAreByteIdentical();
@@ -730,6 +731,31 @@ static void DefaultThingTemplateIsInheritedWithInterfaceRules()
     Assert(soldier.Sections.Select(value => value.Declaration).SequenceEqual(["ArmorSet", "WeaponSet", "WeaponSet"]), "The first explicit WeaponSet replaces the default sets only once.");
     Assert(((FlagsValue)soldier.Fields.Single(field => field.Name == "KindOf").Value.Value).Names.SequenceEqual(["INFANTRY"]), "Own fields override the default.");
     Assert(soldier.Fields.Single(field => field.Name == "Side").Value.OriginalText == "Civilian", "Default fields are inherited.");
+}
+
+static void ReskinRecordsTheObjectItReskins()
+{
+    // ThingFactory::parseObjectDefinition: setReskinnedFrom(parent) after copyFrom - the direct parent; ThingFactory::newOverride copies it into an override.
+    var graph = DefinitionCompiler.Compile(One("""
+    Object Base
+      KindOf = VEHICLE
+    End
+    ObjectReskin Skin Base
+    End
+    ObjectReskin SkinOfSkin Skin
+    End
+    Object Skin
+      KindOf = VEHICLE INFANTRY
+    End
+    """), ModuleRegistry.Default);
+    ObjectDefinition Get(string name) => graph.Definitions.OfType<ObjectDefinition>().Single(value => value.OriginalName == name);
+    Assert(Get("Base").ReskinnedFrom is null, "An object of its own reskins nothing.");
+    Assert(Get("Skin").ReskinnedFrom == "Base", "A reskin records its parent: " + Get("Skin").ReskinnedFrom);
+    Assert(Get("SkinOfSkin").ReskinnedFrom == "Skin", "A reskin of a reskin records its direct parent, not the parent's parent: " + Get("SkinOfSkin").ReskinnedFrom);
+    Assert(Get("Skin").Fields.Any(field => field.Name == "KindOf" && field.Value.OriginalText.Contains("INFANTRY", StringComparison.Ordinal)), "The later block overrides the reskin.");
+    var text = System.Text.Encoding.UTF8.GetString(DefinitionSnapshotWriter.WriteCanonical(graph));
+    Assert(text.Contains("\"reskinnedFrom\": \"Base\"", StringComparison.Ordinal) && text.Contains("\"reskinnedFrom\": \"Skin\"", StringComparison.Ordinal), "The snapshot carries the parent.");
+    Assert(System.Text.RegularExpressions.Regex.Count(text, "reskinnedFrom") == 2, "Only reskins carry it in the snapshot.");
 }
 
 static void ReskinAndModuleEditsFollowTheReference()

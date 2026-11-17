@@ -96,6 +96,8 @@ public static class DefinitionCompiler
             if (!c.States.TryGetValue(parentId, out var parent))
                 throw new DefinitionCompileException($"ObjectReskin must come after the original Object '{declaration.Parent}'.", block.Location);
             state = parent.Clone(markCopiedFromDefault: true);
+            // ThingFactory::parseObjectDefinition: setReskinnedFrom(reskinTmpl) after copyFrom - the direct parent, never the parent's own parent.
+            state.ReskinnedFrom = parent.Name;
         }
         else if (declaration.Parent is not null)
         {
@@ -653,7 +655,7 @@ public static class DefinitionCompiler
         var modules = state.Modules.Select(slot => slot.Config).ToImmutableArray();
         GameDefinition definition = state.Kind switch
         {
-            DefinitionKind.Object => new ObjectDefinition(id, state.Name, state.Location, fields, modules),
+            DefinitionKind.Object => new ObjectDefinition(id, state.Name, state.Location, fields, modules) { ReskinnedFrom = state.ReskinnedFrom },
             DefinitionKind.Weapon => new WeaponDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.WeaponSet => new WeaponSetDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.Armor => new ArmorDefinition(id, state.Name, state.Location, fields, modules),
@@ -890,6 +892,8 @@ public static class DefinitionCompiler
         public string DeclarationType { get; set; } = string.Empty;
         public IniSourceLocation Location { get; set; }
         public bool IsReskin { get; set; }
+        /// <summary><c>ThingTemplate::m_reskinnedFrom</c>: the object an <c>ObjectReskin</c> copied; kept by a later override of the reskin (<c>ThingFactory::newOverride</c> copies the template).</summary>
+        public string? ReskinnedFrom { get; set; }
         public bool WeaponSetsFromDefault { get; set; }
         public bool ArmorSetsFromDefault { get; set; }
         public List<DefinitionField> Fields { get; init; } = [];
@@ -902,6 +906,7 @@ public static class DefinitionCompiler
             Name = Name,
             DeclarationType = DeclarationType,
             Location = Location,
+            ReskinnedFrom = ReskinnedFrom,
             WeaponSetsFromDefault = markCopiedFromDefault || WeaponSetsFromDefault,
             ArmorSetsFromDefault = markCopiedFromDefault || ArmorSetsFromDefault,
             Fields = [..Fields],

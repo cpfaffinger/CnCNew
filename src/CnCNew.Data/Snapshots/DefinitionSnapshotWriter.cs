@@ -74,7 +74,7 @@ public static class DefinitionSnapshotWriter
         schemaVersion = SchemaVersion,
         definitions = graph.Definitions.OrderBy(value => value.Id.ToString(), StringComparer.Ordinal).Select(value => new
         {
-            id = value.Id.ToString(), kind = value.Id.Kind.ToString(), name = value.OriginalName,
+            id = value.Id.ToString(), kind = value.Id.Kind.ToString(), name = value.OriginalName, reskinnedFrom = (value as ObjectDefinition)?.ReskinnedFrom,
             source = new { path = value.Location.Source.Replace('\\', '/'), value.Location.Line, value.Location.Column },
             fields = value.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new
             {

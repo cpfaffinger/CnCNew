@@ -169,6 +169,7 @@ public sealed class ObjectTemplate
             DefinitionReference one => [one.Name],
             _ => [],
         };
+        ReskinnedFrom = definition.ReskinnedFrom;
         EnterGuard = definition.Fields.LastOrDefault(field => field.Name.Equals("EnterGuard", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         HijackGuard = definition.Fields.LastOrDefault(field => field.Name.Equals("HijackGuard", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         ExperienceValue = IntegerArray(definition, "ExperienceValue");
@@ -288,12 +289,22 @@ public sealed class ObjectTemplate
     public ImmutableArray<string> BuildVariations { get; }
 
     /// <summary>
-    /// <c>ThingTemplate::isEquivalentTo</c> for what the port models: the same template, or one names the other among its <see cref="BuildVariations"/> (compared without case,
-    /// <c>compareNoCase</c>). The original also counts two reskins of one object as equivalent (<c>m_reskinnedFrom</c>); the port's definitions do not carry the reskin's parent.
+    /// <c>ThingTemplate::m_reskinnedFrom</c>: the object this template's <c>ObjectReskin</c> block copied (its direct parent), or null - the Technical's second and third
+    /// chassis are reskins of the first, a GLA rebuild hole of a building is a reskin of <c>GLAHole</c>.
+    /// </summary>
+    public string? ReskinnedFrom { get; }
+
+    /// <summary>
+    /// <c>ThingTemplate::isEquivalentTo</c>: the same template; one is a reskin of the other, either way; both are reskins of one object (one step only - a reskin of a
+    /// reskin is not its grandparent's equal); or one names the other among its <see cref="BuildVariations"/>, either way. Names are compared without case
+    /// (<c>compareNoCase</c>; the catalog finds templates without case).
     /// </summary>
     public bool IsEquivalentTo(ObjectTemplate other)
     {
         if (ReferenceEquals(this, other)) return true;
+        if (ReskinnedFrom is not null && ReskinnedFrom.Equals(other.Name, StringComparison.OrdinalIgnoreCase)) return true;
+        if (other.ReskinnedFrom is not null && other.ReskinnedFrom.Equals(Name, StringComparison.OrdinalIgnoreCase)) return true;
+        if (ReskinnedFrom is not null && ReskinnedFrom.Equals(other.ReskinnedFrom, StringComparison.OrdinalIgnoreCase)) return true;
         foreach (var name in BuildVariations)
             if (name.Equals(other.Name, StringComparison.OrdinalIgnoreCase)) return true;
         foreach (var name in other.BuildVariations)
@@ -424,7 +435,7 @@ public sealed record LowEnergyRules(Fixed PenaltyModifier, Fixed MinProductionSp
 public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
-    private readonly ImmutableHashSet<string> _variationNames;
+    private readonly ImmutableHashSet<string> _equivalentNames;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, CommandCatalog commands, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, RankCatalog ranks, SpecialPowerCatalog specialPowers,
         FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, Fixed sellPercentage, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
@@ -452,7 +463,11 @@ public sealed class TemplateCatalog
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var template in templates) builder[template.Name] = template;
         _byName = builder.ToImmutable();
-        _variationNames = templates.SelectMany(template => template.BuildVariations).ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
+        // The templates that can be equivalent to another one: those with or named in build variations, the reskins and what they reskin.
+        _equivalentNames = templates.Where(template => !template.BuildVariations.IsDefaultOrEmpty || template.ReskinnedFrom is not null).Select(template => template.Name)
+            .Concat(templates.SelectMany(template => template.BuildVariations))
+            .Concat(templates.Select(template => template.ReskinnedFrom).OfType<string>())
+            .ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     public ImmutableArray<ObjectTemplate> Templates { get; }
@@ -512,7 +527,7 @@ public sealed class TemplateCatalog
     public bool IsOfType(ObjectTemplate template, string typeName)
     {
         if (string.Equals(template.Name, typeName, StringComparison.Ordinal)) return true;
-        if (template.BuildVariations.IsDefaultOrEmpty && !_variationNames.Contains(template.Name)) return false;
+        if (!_equivalentNames.Contains(template.Name)) return false;
         return TryGet(typeName, out var named) && string.Equals(named.Name, typeName, StringComparison.Ordinal) && named.IsEquivalentTo(template);
     }
 

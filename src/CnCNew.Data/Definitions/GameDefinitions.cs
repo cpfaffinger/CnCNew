@@ -21,7 +21,14 @@ public sealed record DefinitionSection(
     IniSourceLocation Location);
 
 public sealed record ObjectDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
-    : GameDefinition(Id, OriginalName, Location, Fields, Modules);
+    : GameDefinition(Id, OriginalName, Location, Fields, Modules)
+{
+    /// <summary>
+    /// <c>ThingTemplate::m_reskinnedFrom</c>: the name of the object an <c>ObjectReskin</c> block copied (its direct parent), or null for an object of its own.
+    /// <c>ThingTemplate::isEquivalentTo</c> counts a reskin as the object it reskins.
+    /// </summary>
+    public string? ReskinnedFrom { get; init; }
+}
 public sealed record WeaponDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record WeaponSetDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
