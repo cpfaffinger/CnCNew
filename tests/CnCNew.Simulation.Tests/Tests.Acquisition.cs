@@ -585,6 +585,61 @@ static partial class Tests
         }
     }
 
+    /// <summary>
+    /// #420: <c>GameLogic::update</c> runs a disabled object's AI only when the AI processes one of its disabled types (held), and the AI's idle state is what picks a victim
+    /// (<c>getNextMoodTarget</c>). A script's disable and the battle plan's paralysis therefore stop a soldier's own acquisition, as an EMP does; let go, it picks its victim again.
+    /// Held and disabled at once, the AI runs (the hold is among the types it processes) and the soldier fires. The port's acquisition stopped only for EMP, hack and subdual.
+    /// At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AcquisitionStopsWhileTheAiDoesNotRun()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var world = SoldierAndDummy(rate);
+            var soldier = Slotted(world, "AcqSoldier");
+            var victim = Slotted(world, "AcqDummy");
+            world.SetScriptDisable(soldier, Entity.ScriptDisabled, true);
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(Hurt(victim) == Fixed.Zero && !world.AcquiredVictimOf(soldier).IsValid, $"{rate}: a script-disabled soldier picks no victim ({Hurt(victim)} damage).");
+            world.SetScriptDisable(soldier, Entity.ScriptHeld, true);
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(Hurt(victim) > Fixed.Zero && world.AcquiredVictimOf(soldier) == victim.Id, $"{rate}: held as well, its AI runs and it fires ({Hurt(victim)} damage).");
+            world.SetScriptDisable(soldier, Entity.ScriptHeld, false);
+            for (var step = 0; step < world.Frames(2); step++) world.Step();
+            Check.That(!world.AcquiredVictimOf(soldier).IsValid, $"{rate}: disabled alone again, it drops its own attack.");
+            var hurt = Hurt(victim);
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(Hurt(victim) == hurt, $"{rate}: and fires no more ({Hurt(victim)} against {hurt}).");
+            world.SetScriptDisable(soldier, Entity.ScriptDisabled, false);
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(world.AcquiredVictimOf(soldier) == victim.Id, $"{rate}: let go, it picks its victim again.");
+
+            var paralysed = SoldierAndDummy(rate);
+            var trooper = Slotted(paralysed, "AcqSoldier");
+            paralysed.ParalyzeTroops(new PlayerId(1), ["INFANTRY"], [], paralysed.Tick + paralysed.Frames(30));
+            var acquired = false;
+            for (var step = 0; step < paralysed.Frames(25); step++)
+            {
+                paralysed.Step();
+                acquired |= paralysed.AcquiredVictimOf(trooper).IsValid;
+            }
+            Check.That(!acquired, $"{rate}: a paralysed soldier picks no victim.");
+            for (var step = 0; step < paralysed.Frames(40); step++) paralysed.Step();
+            Check.That(paralysed.AcquiredVictimOf(trooper).IsValid, $"{rate}: once the paralysis is over it does.");
+        }
+    }
+
+    private static SimulationWorld SoldierAndDummy(SimulationRate rate)
+    {
+        var fixture = new SyntheticFixture(rate, files: AcquisitionFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "AcqSoldier", owner: 1, x: 0, y: 0);
+        feeder.Spawn(2, "AcqDummy", owner: 2, x: 60, y: 0);
+        world.Step();
+        return world;
+    }
+
     private static Dictionary<string, string> HeldFiles()
         => new(AcquisitionFiles())
         {

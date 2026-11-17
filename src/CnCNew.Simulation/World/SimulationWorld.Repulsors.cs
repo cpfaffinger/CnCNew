@@ -126,7 +126,7 @@ public sealed partial class SimulationWorld
     {
         if (other.HasStatus(RepulsorStatus)) return true;
         if (other.EffectivelyDead || !AreEnemies(self, other) || other.Template.IsKindOf("INERT")) return false;
-        return MayAct(other, _tick) && ActiveWeaponSet(other) is { WeaponCount: > 0 };
+        return AbleToAttack(other, _tick) && ActiveWeaponSet(other) is { WeaponCount: > 0 };
     }
 
     /// <summary><c>privateWanderInPlace</c>: the object wanders around where it stands until an order replaces the state.</summary>

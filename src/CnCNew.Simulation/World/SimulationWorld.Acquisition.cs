@@ -452,12 +452,27 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// Objects that cannot act do not acquire: under construction, sold, disabled (EMP, hacked, subdued) or inside a container that does not let them fire (<c>Object::isAbleToAttack</c>,
-    /// F-60). A hold (<c>DISABLED_HELD</c>) is no stop, neither a container's of its riders nor the object's own (a script's, a stinger site's soldier, #412): <c>isAbleToAttack</c> does
-    /// not look at it and the original's AI processes it (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held object still looks for victims and fires; it only does not move.
+    /// F-60) - and objects whose AI does not run (<see cref="AiRuns"/>). A hold (<c>DISABLED_HELD</c>) is no stop, neither a container's of its riders nor the object's own (a script's,
+    /// a stinger site's soldier, #412): <c>isAbleToAttack</c> does not look at it and the original's AI processes it (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held
+    /// object still looks for victims and fires; it only does not move.
     /// </summary>
-    private bool MayAct(Entity entity, long tick)
+    private bool MayAct(Entity entity, long tick) => AbleToAttack(entity, tick) && AiRuns(entity, tick);
+
+    /// <summary>The port's <c>Object::isAbleToAttack</c>: what <see cref="MayAct"/> asks of the object itself, without its AI (the repulsor filter asks only this).</summary>
+    private bool AbleToAttack(Entity entity, long tick)
         => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.IsDisabledByTime(tick) && !entity.Subdued
            && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
+
+    /// <summary>
+    /// <c>GameLogic::update</c> runs a disabled object's <c>AIUpdateInterface</c> only when one of its disabled types is one the AI processes (<c>getDisabledTypesToProcess</c>: held), and
+    /// the AI's states are what looks for victims (<c>getNextMoodTarget</c>), guards and attacks a place: a script's disable, a paralysis, an unmanned vehicle, a brown-out of a
+    /// powered object or a script's unpowering stop it as an EMP does (#420). As in the original, a held object that is also disabled otherwise still runs its AI.
+    /// </summary>
+    private bool AiRuns(Entity entity, long tick)
+    {
+        var disabled = DisabledFlagsAt(entity, tick);
+        return disabled == DisabledMask.None || AiOf(entity) is not { } ai || (disabled & ai.DisabledTypesToProcess) != DisabledMask.None;
+    }
 
     /// <summary>
     /// The container of a contained rider, null for an object in no container. Where a rider is measured from is <see cref="ShooterPosition"/>.

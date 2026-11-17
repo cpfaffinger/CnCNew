@@ -968,6 +968,7 @@ run.Test("Acquisition: structures, stealth, moods and attack priorities", Tests.
 run.Test("Acquisition: an ordered attack is left alone, a move ends an attack, a marching turret takes targets of opportunity", Tests.AcquisitionLeavesAnOrderedAttackAlone);
 run.Test("Acquisition (#412): a held unit still acquires and fires, at 30, 60 and 120 Hz", Tests.AcquisitionHeldUnitStillFires);
 run.Test("Acquisition (#420): a group move skips a held member, which goes on picking its own victims, at 30, 60 and 120 Hz", Tests.HeldUnitTakesNoGroupMove);
+run.Test("Acquisition (#420): a script's disable and a paralysis stop a unit's own acquisition where the AI does not run, at 30, 60 and 120 Hz", Tests.AcquisitionStopsWhileTheAiDoesNotRun);
 run.Test("Attack-move: the unit stops for a fight and marches on; a computer player's unit walks to its victim", Tests.AttackMoveStopsFightsAndMarchesOn);
 run.Test("Attack-move: snapshot mid-fight, determinism and the replay of AttackMoveCommand", Tests.AttackMoveSnapshotDeterminismAndReplay);
 run.Test("Baseline manifests: canonical file form, round trip and strict reading", Tests.ManifestCanonicalRoundTrip);
