@@ -1882,6 +1882,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             // DISABLED_EMP (EMPUpdate): the object cannot act until the disable runs out; its orders stay.
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
+            // DISABLED_HELD holds what the physics would move (PhysicsBehavior::update), not the AI: the locomotor turns a held object on the spot by its orientation, so a stinger
+            // soldier faces its victim (#412). Above 30 Hz that turn is covered in the shares of its frame.
+            if (!Entity.IsDisabledByTime(world.Tick) && _frameTicksLeft > 0 && _frameArriving && _frameStepX == Fixed.Zero && _frameStepY == Fixed.Zero) Coast(world);
             return SimulationTiming.SleepNone;
         }
         // The dock machine is a state machine of the original's logic frame: its states change once per frame, so that "the update after the arrival" is a frame later at every

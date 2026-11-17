@@ -525,6 +525,60 @@ static partial class Tests
         public Attitude AttitudeOf(Entity entity) => Mood;
     }
 
+    /// <summary>
+    /// #412: <c>DISABLED_HELD</c> keeps an object in place, not from fighting. <c>Object::isAbleToAttack</c> does not look at it and <c>AIUpdateInterface</c> processes it
+    /// (<c>getDisabledTypesToProcess</c>), so a held unit still picks an enemy in range and fires - the garrison's riders and a stinger site's soldiers fight that way. The port took the
+    /// object's own hold (a script's, the stinger soldier's) for a stop of its acquisition and, above 30 Hz, of its turn on the spot: the victim stands to its side, at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AcquisitionHeldUnitStillFires()
+    {
+        var files = new Dictionary<string, string>(AcquisitionFiles())
+        {
+            // A weapon the body aims (no AcceptableAimDelta): the soldier must turn to its victim before it fires.
+            ["Data/INI/Object/HeldFixture.ini"] = """
+            Weapon AcqNarrowGun
+              PrimaryDamage = 10
+              AttackRange = 100.0
+              DamageType = EXPLOSION
+              ClipSize = 0
+              DelayBetweenShots = 300
+            End
+            Object AcqHeldSoldier
+              KindOf = SELECTABLE INFANTRY
+              VisionRange = 150.0
+              Locomotor = SET_NORMAL ChaseLoco
+              Body = ActiveBody Body01
+                MaxHealth = 1000.0
+                InitialHealth = 1000.0
+              End
+              WeaponSet
+                Conditions = None
+                Weapon = PRIMARY AcqNarrowGun
+              End
+              Behavior = AIUpdateInterface AI01
+                AutoAcquireEnemiesWhenIdle = Yes
+                MoodAttackCheckRate = 250
+              End
+            End
+            """,
+        };
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: files);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "AcqHeldSoldier", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "AcqDummy", owner: 2, x: 0, y: 60);
+            world.Step();
+            var soldier = Slotted(world, "AcqHeldSoldier");
+            var victim = Slotted(world, "AcqDummy");
+            world.SetScriptDisable(soldier, Entity.ScriptHeld, true);
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(Hurt(victim) > Fixed.Zero && world.AcquiredVictimOf(soldier) == victim.Id, $"{rate}: a held unit turns to the enemy in range and fires ({Hurt(victim)} damage, heading {soldier.Angle}).");
+            Check.That(soldier.X == Fixed.Zero && soldier.Y == Fixed.Zero, $"{rate}: it stays where it is held ({soldier.X}, {soldier.Y}).");
+        }
+    }
+
     public static void AcquisitionLeavesAnOrderedAttackAlone()
     {
         var (world, feeder, _) = AcquisitionWorld(false, ("AcqSoldier", 1, 0, 0), ("AcqDummy", 2, 50, 0), ("AcqDummy", 2, 90, 0));

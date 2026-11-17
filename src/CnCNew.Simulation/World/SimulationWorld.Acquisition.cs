@@ -451,13 +451,13 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// Objects that cannot act do not acquire: under construction, sold, disabled (EMP, held by a script) or inside a container that does not let them fire (<c>Object::isAbleToAttack</c>,
-    /// F-60). The container's own hold (<c>DISABLED_HELD</c> of every rider) is no stop: the original's AI processes <c>DISABLED_HELD</c>
-    /// (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held rider still looks for victims and fires.
+    /// Objects that cannot act do not acquire: under construction, sold, disabled (EMP, hacked, subdued) or inside a container that does not let them fire (<c>Object::isAbleToAttack</c>,
+    /// F-60). A hold (<c>DISABLED_HELD</c>) is no stop, neither a container's of its riders nor the object's own (a script's, a stinger site's soldier, #412): <c>isAbleToAttack</c> does
+    /// not look at it and the original's AI processes it (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held object still looks for victims and fires; it only does not move.
     /// </summary>
     private bool MayAct(Entity entity, long tick)
         => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.IsDisabledByTime(tick) && !entity.Subdued
-           && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
+           && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
 
     /// <summary>
     /// The container of a contained rider, null for an object in no container. Where a rider is measured from is <see cref="ShooterPosition"/>.
