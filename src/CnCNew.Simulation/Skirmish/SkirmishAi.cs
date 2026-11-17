@@ -171,6 +171,8 @@ public sealed partial class SkirmishAi
     private readonly long _thinkInterval;
     private readonly long _phase;
     private readonly Dictionary<int, Role> _roles = [];
+    private readonly Dictionary<int, ImmutableArray<ObjectTemplate>> _variations = [];
+    private readonly Dictionary<int, Fixed> _variationCost = [];
     private readonly Dictionary<int, ImmutableArray<ObjectTemplate>> _producible = [];
     private readonly Dictionary<int, ImmutableArray<ObjectTemplate>> _structureCandidates = [];
     private readonly SortedSet<int> _builderTemplates = [];
@@ -409,6 +411,15 @@ public sealed partial class SkirmishAi
     {
         if (_roles.TryGetValue(template.Index, out var known)) return known;
         var role = Role.None;
+        // ThingFactory::newObject makes one of the template's BuildVariations instead of the template itself (the GLA Technical's three chassis): an order of it is judged by
+        // what it may become. The bare Technical has no body, weapon or locomotor of its own, so read by itself it was no army unit and the AI never bought one (#430).
+        var variations = VariationsOf(template);
+        if (variations.Length > 0)
+        {
+            foreach (var variation in variations) role |= RoleOf(variation);
+            _roles[template.Index] = role;
+            return role;
+        }
         bool Has(string name) => template.Modules.Any(module => module.Name == name);
         if (Has("DozerAIUpdate") || Has("WorkerAIUpdate")) role |= Role.Builder;
         if (Has("SupplyTruckAIUpdate") || Has("WorkerAIUpdate") || Has("ChinookAIUpdate")) role |= Role.Carrier;
@@ -425,11 +436,44 @@ public sealed partial class SkirmishAi
             if (template.IsKindOf("COMMANDCENTER")) role |= Role.CommandCenter;
             if (template.IsKindOf("FS_BASE_DEFENSE") && template.DefaultWeapon >= 0) role |= Role.Defense;
         }
-        else if ((role & (Role.Builder | Role.Carrier)) == 0 && template.DefaultWeapon >= 0 && template.Locomotor is not null && template.BuildCost > Fixed.Zero
+        else if ((role & (Role.Builder | Role.Carrier)) == 0 && template.DefaultWeapon >= 0 && template.Locomotor is not null && CostOf(template) > Fixed.Zero
                  && (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE")))
             role |= Role.Army;
         _roles[template.Index] = role;
         return role;
+    }
+
+    /// <summary>
+    /// The templates <see cref="ObjectTemplate.BuildVariations"/> names that the world would make (<c>ThingFactory::newObject</c> takes a name <c>findTemplate</c> finds, with its
+    /// case), in the order of the list; empty for a template without variations or when none resolves, and never the template itself.
+    /// </summary>
+    private ImmutableArray<ObjectTemplate> VariationsOf(ObjectTemplate template)
+    {
+        if (template.BuildVariations.IsDefaultOrEmpty) return [];
+        if (_variations.TryGetValue(template.Index, out var known)) return known;
+        var list = ImmutableArray.CreateBuilder<ObjectTemplate>();
+        foreach (var name in template.BuildVariations)
+            if (_catalog.TryGet(name, out var variation) && string.Equals(variation.Name, name, StringComparison.Ordinal) && variation.Index != template.Index && !list.Contains(variation))
+                list.Add(variation);
+        var result = list.ToImmutable();
+        _variations[template.Index] = result;
+        return result;
+    }
+
+    /// <summary>
+    /// What an object of this template costs its player: its own <c>BuildCost</c>, or, for a build variation that has none (the Technical's chassis leave theirs commented out and
+    /// the bare template carries it), the cost of the template that names it - the one the command button offers and the production charges. A variation named by
+    /// several templates takes the first of them with a cost, in the order of the catalog.
+    /// </summary>
+    private Fixed CostOf(ObjectTemplate template)
+    {
+        if (template.BuildCost > Fixed.Zero) return template.BuildCost;
+        if (_variationCost.TryGetValue(template.Index, out var known)) return known;
+        var cost = template.BuildCost;
+        foreach (var parent in _catalog.Templates)
+            if (parent.BuildCost > Fixed.Zero && VariationsOf(parent).Contains(template)) { cost = parent.BuildCost; break; }
+        _variationCost[template.Index] = cost;
+        return cost;
     }
 
     private bool SameSide(ObjectTemplate template) => template.Side.Length == 0 || _side.Length == 0 || template.Side.Equals(_side, StringComparison.OrdinalIgnoreCase);

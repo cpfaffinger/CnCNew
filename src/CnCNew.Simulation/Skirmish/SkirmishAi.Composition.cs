@@ -117,7 +117,21 @@ public sealed partial class SkirmishAi
         return units.Count - 1;
     }
 
+    /// <summary>
+    /// The exchange value of an order of <paramref name="unit"/>. An order of a template with build variations makes one of them, each with the same chance
+    /// (<c>ThingFactory::newObject</c>): its value is the mean of theirs, each fighting with its own weapons, armour and health at the price of the order.
+    /// </summary>
     private Fixed ExchangeValue(ObjectTemplate unit, SortedDictionary<int, int> force)
+    {
+        var cost = Fixed.Max(CostOf(unit), Fixed.One);
+        var variations = VariationsOf(unit);
+        if (variations.Length == 0) return ExchangeValue(unit, cost, force);
+        var sum = Fixed.Zero;
+        foreach (var variation in variations) sum += ExchangeValue(variation, cost, force);
+        return sum / Fixed.FromInt(variations.Length);
+    }
+
+    private Fixed ExchangeValue(ObjectTemplate unit, Fixed cost, SortedDictionary<int, int> force)
     {
         var offence = Fixed.Zero;
         var exposure = Fixed.One / Fixed.FromInt(LifetimeFrames);
@@ -127,10 +141,10 @@ public sealed partial class SkirmishAi
             var enemy = _catalog[index];
             var enemyHealth = HealthOf(enemy);
             // A share of at most one object per frame: an instant-kill weapon is worth one kill, and the sums stay far inside the number range.
-            if (enemyHealth > Fixed.Zero) offence += Fixed.FromInt(count) * Fixed.Max(enemy.BuildCost, Fixed.One) * Share(DamagePerFrame(unit, enemy), enemyHealth);
+            if (enemyHealth > Fixed.Zero) offence += Fixed.FromInt(count) * Fixed.Max(CostOf(enemy), Fixed.One) * Share(DamagePerFrame(unit, enemy), enemyHealth);
             if (health > Fixed.Zero) exposure += Fixed.FromInt(count) * Share(DamagePerFrame(enemy, unit), health);
         }
-        return offence / (exposure * Fixed.Max(unit.BuildCost, Fixed.One));
+        return offence / (exposure * cost);
     }
 
     private static Fixed Share(Fixed damage, Fixed health) => damage >= health ? Fixed.One : damage / health;

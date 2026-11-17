@@ -39,6 +39,8 @@ public sealed partial class SkirmishAi
         ("_sites", "rebuilt by every observation before a think reads it"),
         ("_enemyTargets", "rebuilt by every observation before a think reads it"),
         ("_roles", "a pure function of a template"),
+        ("_variations", "a pure function of a template"),
+        ("_variationCost", "a pure function of a template"),
         ("_damagePerFrame", "a pure function of two templates and the rate"),
         ("_health", "a pure function of a template"),
         ("_stateHash", "cache of the hash over this description"),
