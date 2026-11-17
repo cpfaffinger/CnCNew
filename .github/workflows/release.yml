@@ -1,8 +1,13 @@
 # CnCNew release workflow (GitHub). Documentation: docs/RELEASING.md.
 #
 # A release is a tag vMAJOR.MINOR.PATCH made by `scripts/release.ps1` and pushed. This workflow builds every asset with scripts/release-build.ps1
-# (client package, launcher, dedicated servers, SHA-256 files, separation check) on a Windows runner and publishes them on the GitHub release of the tag. The
-# launcher reads these releases, so this is the workflow that matters for players; .gitlab-ci.yml does the same on GitLab.
+# (client package, launcher, dedicated servers, SHA-256 files, separation check) and publishes them on the GitHub release of the tag. The launcher reads
+# these releases, so this is the workflow that matters for players; .gitlab-ci.yml does the same on GitLab.
+#
+# It runs on the project's own runner (labels self-hosted, linux, cncnew: a Debian server, docs/RELEASING.md "The runner"), not on a hosted one. Linux builds
+# the Windows packages with the Windows desktop packs referenced explicitly; the Stride asset compiler is a Windows program, so the client takes its shader
+# database from build/stride-shaders (scripts/make-stride-shaders.ps1). Only a tag or a person with write access starts it - no pull request reaches this
+# runner.
 #
 # "Run workflow" (workflow_dispatch) builds the same assets from a branch and keeps them as a workflow artifact; it publishes nothing.
 #
@@ -20,8 +25,12 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest   # PowerShell 7 and Git come with the image; setup-dotnet installs the SDK that global.json names
+    runs-on: [self-hosted, linux, cncnew]   # PowerShell 7 and Git are installed on the runner; setup-dotnet installs the SDK that global.json names
     timeout-minutes: 120
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}/dotnet   # a runner user cannot write /usr/share/dotnet
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
     steps:
       - uses: actions/checkout@v4
         with:

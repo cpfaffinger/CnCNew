@@ -33,9 +33,28 @@ $target = Join-Path $OutDir 'cncnew-win-x64'
 if (Test-Path $target) { Remove-Item -Recurse -Force $target }
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 
+# Off Windows (the release runner is Linux, docs/RELEASING.md "The runner") the Windows desktop packs are referenced explicitly, the Stride asset compiler - a
+# Windows program - is skipped, and the shader database it would write comes from build/stride-shaders (scripts/make-stride-shaders.ps1), which must have
+# been made for the Stride version the client references.
+$crossBuild = @()
+if (-not $IsWindows) {
+    $env:EnableWindowsTargeting = 'true'
+    $shaders = Join-Path $root 'build/stride-shaders'
+    $stride = & (Join-Path $PSScriptRoot 'stride-version.ps1')
+    $made = (Get-Content -LiteralPath (Join-Path $shaders 'stride-shaders.json') -Raw | ConvertFrom-Json).stride
+    if ($made -ne $stride) { Write-Host "build/stride-shaders was made for Stride $made, the client references ${stride}: run scripts/make-stride-shaders.ps1 on Windows."; exit 1 }
+    $crossBuild = @('-p:StrideCompilerSkipBuild=true')
+}
 Write-Host '== Publishing the client (win-x64, self-contained)'
-dotnet publish src/CnCNew.Client.Stride -c Release -r win-x64 --self-contained true -o (Join-Path $target 'bin') -v q --nologo
+dotnet publish src/CnCNew.Client.Stride -c Release -r win-x64 --self-contained true -o (Join-Path $target 'bin') -v q --nologo @crossBuild
 if ($LASTEXITCODE -ne 0) { Write-Host 'Publishing the client failed.'; exit 1 }
+if (-not $IsWindows) {
+    $database = Join-Path $target 'bin/data/db'
+    New-Item -ItemType Directory -Force -Path (Join-Path $database 'bundles') | Out-Null
+    Copy-Item -Path (Join-Path $shaders 'bundles/*.bundle') -Destination (Join-Path $database 'bundles')
+    Copy-Item -LiteralPath (Join-Path $shaders 'index') -Destination $database
+    Write-Host "   the shader database of Stride $stride from build/stride-shaders"
+}
 Write-Host '== Publishing the patcher (win-x64, self-contained)'
 dotnet publish tools/CnCNew.AssetTool -c Release -r win-x64 --self-contained true -o (Join-Path $target 'patcher') -v q --nologo
 if ($LASTEXITCODE -ne 0) { Write-Host 'Publishing the patcher failed.'; exit 1 }

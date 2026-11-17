@@ -48,11 +48,28 @@ GitLab pipeline `.gitlab-ci.yml` does the same for a GitLab copy of the reposito
 | | GitHub (`.github/workflows/release.yml`) | GitLab (`.gitlab-ci.yml`) |
 |---|---|---|
 | starts on | tag `v[0-9]+.[0-9]+.[0-9]+`; "Run workflow" builds without publishing | tag matching `^v\d+\.\d+\.\d+$`; manual job `build:dry-run` on branches builds without publishing |
-| runner | `windows-latest` (PowerShell 7 and Git included, .NET 10 SDK by `actions/setup-dotnet` from `global.json`) | a Windows runner tagged `windows` with PowerShell 7, Git and the .NET 10 SDK, and a Linux Docker runner tagged `docker` for the release job |
+| runner | the project's runner `dev2-cncnew` (Linux, `self-hosted, linux, cncnew`; below), .NET 10 SDK by `actions/setup-dotnet` from `global.json` | a Windows runner tagged `windows` with PowerShell 7, Git and the .NET 10 SDK, and a Linux Docker runner tagged `docker` for the release job |
 | publishes | `softprops/action-gh-release` creates the release with the assets | the assets go to the generic package registry, `release-cli` creates the release page with links |
 
-Neither pipeline could be run in the session that wrote them (no runner was available): the YAML was checked for syntax only, and the first real tag is the first real
-test. Expect to adjust runner tags, the shell of the GitLab Windows runner (the script lines are PowerShell) and the name of the output of `package-launcher.ps1`.
+The GitHub workflow built every asset on 15 November 2026 on a hosted Windows runner ("Run workflow") and on 18 November 2026 on the project's runner; the GitLab
+pipeline has never run.
+
+## The runner (since 18 November 2026)
+
+The hosted runners' minutes of the account were used up, so the GitHub workflow runs on a runner of the project's own: `dev2-cncnew` on the owner's Debian 13
+server `srv-dev2` (labels `self-hosted`, `linux`, `cncnew`; user `ghrunner3`, service `actions.runner.cpfaffinger-CnCNew.dev2-cncnew`, beside the runners of two
+other projects, each with its own user). PowerShell 7 is installed in `/opt/microsoft/powershell/7`; the workflow installs the .NET SDK of `global.json` into the
+runner's tool cache. Only a pushed tag or "Run workflow" by a person with write access starts the workflow; no workflow of this repository runs for pull
+requests, so no stranger's code reaches the server.
+
+Linux builds the Windows packages: `release-build.ps1` and `package-client.ps1` set `EnableWindowsTargeting` (the WPF launcher and the client reference the
+Windows desktop packs). The Stride asset compiler, which writes the client's shader database (`bin/data/db`), is a Windows program and cannot run there, and a
+client without that database stops at its first material ("Unable to find shader"). The client has no assets and no shaders of its own, so the database depends
+on the Stride version and the graphics API alone: `build/stride-shaders` holds the database of a Windows build (Stride 4.3.0.2507, Direct3D 11; Stride's
+shader sources under Stride's MIT licence, no file of the game), and off Windows `package-client.ps1` skips the compiler (`StrideCompilerSkipBuild`), copies it
+into the package and refuses when `stride-shaders.json` names another Stride version than the client references. After a Stride update run
+`pwsh scripts/make-stride-shaders.ps1` on Windows and commit the result. Checked on 18 November 2026: every asset built on the runner; the client package built
+there, with this database, passed the client's smoke test on Windows (a model and a 600-frame match), and the launcher built there ran on Windows.
 
 ## What the pipelines do not do
 

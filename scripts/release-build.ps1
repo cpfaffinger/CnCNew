@@ -42,6 +42,8 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail "'$Version' is not MAJOR.MINOR.
 $stated = (Get-Content -LiteralPath (Join-Path $root 'version.txt') -Raw).Trim()
 if ($stated -ne $Version) { Fail "version.txt states $stated, the release is $Version (scripts/release.ps1 raises it in the release commit)." }
 if (git status --porcelain) { Write-Host 'Note: the working tree has local changes - the packages state a "+modified" build.' }
+# Off Windows the launcher (WPF) and the client reference the Windows desktop packs explicitly (docs/RELEASING.md, "The runner").
+if (-not $IsWindows) { $env:EnableWindowsTargeting = 'true' }
 
 $OutDir = [IO.Path]::GetFullPath($OutDir)
 if (Test-Path -LiteralPath $OutDir) { Remove-Item -Recurse -Force -LiteralPath $OutDir }
