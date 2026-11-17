@@ -17,10 +17,6 @@ internal static class FactionBuffTests
     /// <summary>The measurements that fail today (<see cref="BuffResult.Key"/>), each with its finding.</summary>
     private static readonly Dictionary<string, string> KnownFailures = new(StringComparer.Ordinal)
     {
-        // AirF_AmericaVehicleChinook has two AI modules; the original keeps the last (ChinookAIUpdate) as m_ai, the port's AiOf the first (FactionAuditTests' combat drop): the Chinook
-        // never gathers, so its supply lines boost nothing.
-        ["FactionAmericaAirForceGeneral|Upgrade_AmericaSupplyLines|supply-boost|AirF_AmericaVehicleChinook|ChinookAIUpdate:ModuleTag_07"] = "the first of two AI modules wins",
-
     };
 
     public static int Run(string[] args)
