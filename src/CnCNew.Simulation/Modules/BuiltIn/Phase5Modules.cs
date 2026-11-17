@@ -1869,12 +1869,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_dock is not null && (_dock.Active || world.Time.IsOriginalFrameBoundary(world.Tick)) && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
         ChooseLocomotorForCell(world);
-        // A shocked object in flight is moved by its physics (F-63): the movement keeps its order and goes on once the object rests on the ground again.
-        if (Entity.InPhysicsFlight || HoldsMovement)
+        // A shocked object in flight is moved by its physics (F-63): the movement keeps its order and goes on once the object rests on the ground again. A stunned object's
+        // locomotor does nothing ("Skip moveTowardsPosition if physics say you're stunned", #423) - the stun outlasts the flight of an object that was held.
+        if (Entity.InPhysicsFlight || Entity.PhysicsStunned || HoldsMovement)
         {
             // A flight holds the movement for whole frames of the object (F-74): the 30 Hz movement that has its turn before the flight's update decides again only in the frame
-            // after the one the flight ended in; above 30 Hz the flight ends in a frame's first tick, and the movement must not decide in that frame's later ticks.
-            if (Entity.InPhysicsFlight && world.Time.TicksPerOriginalFrame > TickOrder.Next) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
+            // after the one the flight ended in; above 30 Hz the flight ends in a frame's first tick, and the movement must not decide in that frame's later ticks. So does a stun.
+            if ((Entity.InPhysicsFlight || Entity.PhysicsStunned) && world.Time.TicksPerOriginalFrame > TickOrder.Next) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
             // A turn on the spot the flight caught ends with its frame: the 30 Hz turn was taken whole before the flight began.
@@ -2930,7 +2931,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     internal void TurnInPlace(IWorldServices world, Fixed desired)
     {
         // "Skip moveTowardsAngle if physics say you're stunned": a unit in the air, or one whose movement is held, does not turn.
-        if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick || Entity.InPhysicsFlight || HoldsMovement) return;
+        if (ActiveLocomotor is not { } locomotor || _spotTurnTick == world.Tick || Entity.InPhysicsFlight || Entity.PhysicsStunned || HoldsMovement) return;
         if (_stride == 0) ResolveBlockerTiming(world.Time);
         if (_frameTicksLeft > 0)
         {

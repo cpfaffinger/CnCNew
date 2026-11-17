@@ -148,6 +148,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _accelZ += forceZ * resisted / mass;
         // Object::attemptDamage: setStunned(true) and STUNNED_FLAILING.
         _stunned = true;
+        Entity.PhysicsStunned = true;
         _flailing = true;
         if (!stickToGround)
         {
@@ -267,6 +268,16 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 
     public long Update(IWorldServices world)
     {
+        if (!_flying && !_falling && HasRates)
+        {
+            // A held object at rest whose shock gave it rates: HAS_PITCHROLLYAW keeps the original's physics awake while it is held (it integrates nothing then); the first update
+            // after it is let go integrates again - the rates turn it, and the stun ends there (#423).
+            if ((world.DisabledFlagsOf(Entity) & DisabledMask.Held) != DisabledMask.None) return world.Time.TicksPerOriginalFrame;
+            _flying = true;
+            Entity.InPhysicsFlight = true;
+            _wasAirborne = Entity.Z > world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
+            _subStep = 0;
+        }
         if (_flying && !_falling) return Fly(world);
         if (!_falling) return SimulationTiming.SleepForever;
         var time = world.Time;
@@ -349,12 +360,12 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             (_accelX, _accelY, _accelZ) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
             world.MarkDirty(Entity);
             if (_velocityX != Fixed.Zero || _velocityY != Fixed.Zero || _velocityZ != Fixed.Zero) return world.Time.TicksPerOriginalFrame;
-            // At rest: the flight is over as the port ends one (the rates are dropped; the original keeps them unused).
-            (_yawRate, _pitchRate, _rollRate) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            // At rest: the flight is over as the port ends one. The rates stay: with them the original's physics stays awake and integrates again, and ends the stun, in its
+            // first update after the object is let go (#423); without them (an object that sticks to the ground) it sleeps, and the stun stays until another force wakes it.
             _flying = false;
             Entity.InPhysicsFlight = false;
             _bounce = false;
-            return SimulationTiming.SleepForever;
+            return HasRates ? world.Time.TicksPerOriginalFrame : SimulationTiming.SleepForever;
         }
 
         var stick = Entity.Template.Locomotor is { StickToGround: true };
@@ -396,6 +407,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         if (_stunned && ((_velocityX.Abs() < StunRelief && _velocityY.Abs() < StunRelief && _velocityZ.Abs() < StunRelief) || !world.IsSignificantlyAboveTerrain(Entity)))
         {
             _stunned = false;
+            Entity.PhysicsStunned = false;
             _stunnedPose = false;
         }
         // handleBounce and testStunnedUnitForDestruction read the object's orientation before this step's rotation, for the same reason.
@@ -574,6 +586,27 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         writer.Fixed("stepZ", _stepZ);
     }
 
+    private bool HasRates => _yawRate != Fixed.Zero || _pitchRate != Fixed.Zero || _rollRate != Fixed.Zero;
+
+    // What a held object keeps after its flight has ended (#423): the stun and the rates. Written only when set.
+    private void DescribeRest(IStateWriter writer)
+    {
+        if (_stunned) writer.Bool("stunned", true);
+        if (!HasRates) return;
+        writer.Fixed("yawRate", _yawRate);
+        writer.Fixed("pitchRate", _pitchRate);
+        writer.Fixed("rollRate", _rollRate);
+    }
+
+    private void LoadRest(IStateReader reader)
+    {
+        _stunned = reader.Has("stunned");
+        if (!reader.Has("yawRate")) return;
+        _yawRate = reader.Fixed("yawRate");
+        _pitchRate = reader.Fixed("pitchRate");
+        _rollRate = reader.Fixed("rollRate");
+    }
+
     private void LoadFlight(IStateReader reader)
     {
         _flying = reader.Has("flying");
@@ -608,6 +641,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         if (_flailing) writer.Bool("flailing", true);
         if (_stunnedPose) writer.Bool("stunnedPose", true);
         if (_flying) DescribeFlight(writer);
+        else DescribeRest(writer);
         if (!_falling) return;
         writer.Bool("falling", true);
         writer.Fixed("velocityX", _velocityX);
@@ -629,7 +663,9 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _flailing = reader.Has("flailing");
         _stunnedPose = reader.Has("stunnedPose");
         LoadFlight(reader);
+        if (!_flying) LoadRest(reader);
         Entity.InPhysicsFlight = _flying;
+        Entity.PhysicsStunned = _stunned;
     }
 }
 

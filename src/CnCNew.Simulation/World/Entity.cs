@@ -176,6 +176,12 @@ public sealed class Entity
 
     /// <summary>A shock wave threw the object (F-63, <see cref="Modules.BuiltIn.PhysicsBehavior.Flying"/>): its movement waits until it rests on the ground. Derived from the physics module's state.</summary>
     public bool InPhysicsFlight { get; internal set; }
+
+    /// <summary>
+    /// The physics module's stun (<see cref="Modules.BuiltIn.PhysicsBehavior.Stunned"/>): <c>Locomotor::locoUpdate_moveTowardsPosition</c> and <c>locoUpdate_moveTowardsAngle</c> do
+    /// nothing while it lasts, so the object neither moves nor turns on the spot. Derived from the physics module's state.
+    /// </summary>
+    public bool PhysicsStunned { get; internal set; }
     public Fixed MoveTargetX { get; internal set; }
     public Fixed MoveTargetY { get; internal set; }
 

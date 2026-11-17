@@ -263,6 +263,7 @@ run.Test("Shock wave (F-63), step 1: the weapon's shock wave keys and the physic
 run.Test("Shock wave (F-63), step 2: a shocked object flies, turns, lands and is hurt by the fall, the same at every rate", Tests.ShockWaveFlight);
 run.Test("Shock wave (F-63), step 3: the stun - lost in the first step off the ground, the flailing kept, a stunned landing, death off the map", Tests.ShockWaveStun);
 run.Test("Shock wave (#420): a held object is not thrown, neither held nor let go; its stun stays, at 30, 60 and 120 Hz", Tests.ShockWaveLeavesAHeldObject);
+run.Test("Shock wave (#423): a stunned unit's locomotor does nothing; a held object's stun outlasts its flight, at 30, 60 and 120 Hz", Tests.AStunnedUnitsLocomotorDoesNothing);
 run.Test("Phase 40: a disable other than held pauses the special powers (pauseAllSpecialPowers)", Tests.DisablePausesSpecialPowers);
 run.Test("Phase 40 (F-50): the player's radar", Tests.PlayerRadar);
 run.Test("Phase 40 (F-48): the body applies the armour to raw damage and healing", Tests.ArmourIsAppliedByTheBody);
