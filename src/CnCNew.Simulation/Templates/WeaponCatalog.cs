@@ -180,6 +180,18 @@ public sealed record WeaponInfo(
 
     public Fixed RangeWith(WeaponBonusTable global, uint conditions) => AttackRange * Multiplier(global, conditions, WeaponBonusTable.Range);
 
+    // PATHFIND_CELL_SIZE_F * 0.25f: "undersize by 1/4 of a pathfind cell, so that the goal is not teetering on the edge of firing range" (RATIONALIZE_ATTACK_RANGE, Weapon.cpp).
+    private static readonly Fixed RangeUndersize = Fixed.FromDecimal(2.5m);
+
+    /// <summary>
+    /// <c>WeaponTemplate::getAttackRange(bonus)</c> of the shipped build, which defines <c>RATIONALIZE_ATTACK_RANGE</c> (Weapon.cpp): the range with its bonuses less a quarter of a
+    /// pathfind cell, never below zero - what every range test of the attack, the acquisition and the modules reads (#422). <see cref="RangeWith"/> is the range of the data.
+    /// </summary>
+    public Fixed AttackRangeWith(WeaponBonusTable global, uint conditions) => Fixed.Max(Fixed.Zero, RangeWith(global, conditions) - RangeUndersize);
+
+    /// <summary><see cref="AttackRangeWith"/> without a bonus (<c>WeaponBonus::clear</c>), as <c>PointDefenseLaserUpdate</c> and <c>CleanupHazardUpdate</c> ask it.</summary>
+    public Fixed AttackRangeWithoutBonus() => Fixed.Max(Fixed.Zero, AttackRange - RangeUndersize);
+
     /// <summary>The shortest time between two shots of one weapon, in logic frames of the original: the reference fires a weapon at most once per logic frame.</summary>
     public const long MinimumShotDelayFrames = 1;
 

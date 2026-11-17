@@ -98,7 +98,7 @@ static partial class Tests
                     foreach (var value in scene.World.Step().Events)
                         if (value.Entity == tank.Id && value.Kind == SimEventKind.WeaponFired && distance == Fixed.MinValue) distance = CentreDistance(tank, factory);
                 Check.That(distance != Fixed.MinValue, $"{rate}: the Crusader fires at the factory within 30 s.");
-                Check.That(distance <= Fixed.FromInt(150) + radii && distance >= Fixed.FromInt(150) + radii - Fixed.FromInt(20),
+                Check.That(distance <= Fixed.FromDecimal(147.5m) + radii && distance >= Fixed.FromInt(150) + radii - Fixed.FromInt(20),
                     $"{rate}: it fires from {distance} between the centres - its range 150 between the circles ({radii} together), not 150 between the centres.");
             }
 
@@ -116,6 +116,42 @@ static partial class Tests
                         fired |= value.Entity == gattling.Id && value.Kind == SimEventKind.WeaponFired;
                 Check.That(fired && scene.World.AcquiredVictimOf(gattling) == victim.Id,
                     $"{rate}: a human player's Gattling tank takes a tank {CentreDistance(gattling, victim)} away between the centres for its victim and fires: its gun of 150 reaches between the circles.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>RATIONALIZE_ATTACK_RANGE</c>: <c>WeaponTemplate::getAttackRange</c> is the range less a quarter of a pathfind cell. A Crusader whose circle is 149 from a war factory's does not
+    /// reach it with its gun of 150, one 147 away does; a human player's Gattling tank does not take a tank whose circle is 149 away.
+    /// </summary>
+    public static void RealAttackRangeIsAQuarterCellShort(string directory)
+    {
+        var (graph, fingerprint) = RangeGraph(directory);
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var catalog = TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
+            var crusader = catalog.Templates.First(value => value.Name == "AmericaTankCrusader").BoundingCircleRadius;
+            {
+                var scene = RangeScene.Create(catalog, fingerprint, rate);
+                var factory = scene.Spawn("ChinaWarFactory", 2, Fixed.FromInt(600), Fixed.FromInt(600));
+                var radii = factory.Template.BoundingCircleRadius + crusader;
+                var outside = scene.Spawn("AmericaTankCrusader", 1, Fixed.FromInt(600) - (Fixed.FromInt(149) + radii), Fixed.FromInt(600));
+                var inside = scene.Spawn("AmericaTankCrusader", 1, Fixed.FromInt(600), Fixed.FromInt(600) + Fixed.FromInt(147) + radii);
+                scene.Settle();
+                Check.That(!Reaches(scene.World, outside, factory), $"{rate}: a Crusader whose circle is 149 from the factory's does not reach it (150 less a quarter cell).");
+                Check.That(Reaches(scene.World, inside, factory), $"{rate}: a Crusader whose circle is 147 from the factory's reaches it.");
+            }
+            {
+                var scene = RangeScene.Create(catalog, fingerprint, rate);
+                var gattling = scene.Spawn("ChinaTankGattling", 1, Fixed.FromInt(400), Fixed.FromInt(600));
+                var victim = scene.Spawn("AmericaTankCrusader", 2, Fixed.FromInt(400) + Fixed.FromInt(149) + gattling.Template.BoundingCircleRadius + crusader, Fixed.FromInt(600), FixedTrig.Pi);
+                scene.World.SetAttitude(victim, (int)Attitude.Sleep);
+                scene.Settle();
+                var fired = false;
+                for (var step = 0; step < scene.World.Frames(150) && !fired; step++)
+                    foreach (var value in scene.World.Step().Events)
+                        fired |= value.Entity == gattling.Id && value.Kind == SimEventKind.WeaponFired;
+                Check.That(!fired && !scene.World.AcquiredVictimOf(gattling).IsValid, $"{rate}: a human player's Gattling tank does not take a tank whose circle is 149 from its own.");
             }
         }
     }

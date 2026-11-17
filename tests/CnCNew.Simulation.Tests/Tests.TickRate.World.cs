@@ -245,8 +245,8 @@ static partial class Tests
             var waited = TicksUntilShot(world, feeder, tank.Id.Value, runner.Id.Value, limit: 80 * factor);
             Check.That(waited > 0 && world.AttackTargetOf(tank) == runner.Id, $"{rate}: the tank attacks (first shot after {waited} ticks).");
             feeder.SetMoveTarget(2, runner.Id.Value, 0, 400);
-            // The weapon's range of 150 between the two bounding circles (#422).
-            var reach = Fixed.FromInt(150) + tank.Template.BoundingCircleRadius + runner.Template.BoundingCircleRadius;
+            // The weapon's range of 150, a quarter cell short (RATIONALIZE_ATTACK_RANGE), between the two bounding circles (#422).
+            var reach = Fixed.FromDecimal(147.5m) + tank.Template.BoundingCircleRadius + runner.Template.BoundingCircleRadius;
             long outOfRange = -1;
             long lost = -1;
             for (var i = 0; i < 300 * factor && lost < 0; i++)

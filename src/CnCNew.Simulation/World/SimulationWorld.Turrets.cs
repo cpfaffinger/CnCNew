@@ -499,7 +499,7 @@ public sealed partial class SimulationWorld
             && !(attacker.Acquisition is { FireOrdered: true, OrderOrigin: FireOrigin.Player } forced && forced.Victim == victim.Id && StealthYieldsToForce(attacker, victim))) return false;
         if (state.Pursuing) { state.LoseInterestAt = 0; return true; }
         // Between the bounding circles, as every weapon range (#422).
-        var range = MaxWeaponRange(attacker) + CircleRadius(attacker) + CircleRadius(victim);
+        var range = LargestAttackRange(attacker) + CircleRadius(attacker) + CircleRadius(victim);
         var (victimX, victimY, _) = victim.FrameEnd(_tick);
         var (ownX, ownY, _) = attacker.FrameEnd(_tick);
         var dx = victimX - ownX;
@@ -608,7 +608,8 @@ public sealed partial class SimulationWorld
         if (info.GroundUnitPitch > Fixed.Zero && arc)
         {
             var weaponIndex = WeaponIndexIn(source, slot);
-            var range = weaponIndex >= 0 ? _templates.Weapons[weaponIndex].RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source)) : Fixed.One;
+            // TurretAI::updateTurretAI: curWeapon->getAttackRange (a quarter cell short, #422).
+            var range = weaponIndex >= 0 ? AttackRangeOf(source, _templates.Weapons[weaponIndex]) : Fixed.One;
             if (range < Fixed.One) range = Fixed.One;
             var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
             desired = Fixed.Max(actual + info.GroundUnitPitch * (distance / range), info.MinPitch);

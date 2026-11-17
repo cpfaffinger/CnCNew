@@ -269,7 +269,7 @@ public sealed partial class SimulationWorld
 
     private Fixed GuardRange(Entity entity, bool inner)
     {
-        if (entity.ContainedBy.IsValid) return MaxWeaponRange(entity);
+        if (entity.ContainedBy.IsValid) return LargestAttackRange(entity);
         var computer = IsComputerPlayer(entity.Owner);
         var factor = computer ? (inner ? GuardInnerFactorComputer : AcquireVisionFactorComputer) : (inner ? GuardInnerFactorHuman : GuardOuterFactorHuman);
         var range = entity.Template.VisionRange * factor;

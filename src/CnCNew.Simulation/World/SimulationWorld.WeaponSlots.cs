@@ -91,6 +91,16 @@ public sealed partial class SimulationWorld
         return range;
     }
 
+    /// <summary><c>Object::getLargestWeaponRange</c>: the longest <c>Weapon::getAttackRange</c> of the active set (a quarter cell short of the data's, #422); 0 when unarmed.</summary>
+    public Fixed LargestAttackRange(Entity entity)
+    {
+        var range = Fixed.Zero;
+        if (ActiveWeaponSet(entity) is not { } set) return range;
+        foreach (var index in set.Weapons)
+            if (index >= 0) range = Fixed.Max(range, AttackRangeOf(entity, _templates.Weapons[index]));
+        return range;
+    }
+
     /// <summary>Some weapon of the active set could fire this tick (a cheap precheck before looking for a target; <see cref="ChooseWeapon"/> decides for a specific one).</summary>
     public bool IsAnyWeaponReady(Entity entity)
     {
@@ -250,8 +260,8 @@ public sealed partial class SimulationWorld
         return bridgeVictim || !IsContactWeapon(weapon) || !victim.Template.IsKindOf("STRUCTURE") || FootprintsOverlap(source, victim);
     }
 
-    /// <summary><c>Weapon::getAttackRange</c>: the weapon's range with the bonuses of <paramref name="source"/>.</summary>
-    private Fixed AttackRangeOf(Entity source, WeaponInfo weapon) => weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
+    /// <summary><c>Weapon::getAttackRange</c>: the weapon's range with the bonuses of <paramref name="source"/>, a quarter cell short (<see cref="WeaponInfo.AttackRangeWith"/>).</summary>
+    private Fixed AttackRangeOf(Entity source, WeaponInfo weapon) => weapon.AttackRangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
 
     /// <summary>
     /// The minimum-range test of <c>Weapon::isWithinAttackRange</c> between two bounding circles <paramref name="radii"/> apart in sum, the centres <paramref name="distanceSquared"/>

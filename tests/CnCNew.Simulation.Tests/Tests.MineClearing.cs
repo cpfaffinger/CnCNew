@@ -121,7 +121,8 @@ static partial class Tests
         var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "mines");
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
-        Check.That(feeder.Spawn(1, "McDozer", owner: 1, x: 300, y: 300).Accepted && feeder.Spawn(2, "McField", owner: 2, x: 315, y: 300).Accepted && feeder.Spawn(2, "McSturdyMine", owner: 2, x: 320, y: 300).Accepted, "Dozer and mines spawn.");
+        // The mine within the clearing weapon's range of 20 less a quarter cell (RATIONALIZE_ATTACK_RANGE, #422).
+        Check.That(feeder.Spawn(1, "McDozer", owner: 1, x: 300, y: 300).Accepted && feeder.Spawn(2, "McField", owner: 2, x: 315, y: 300).Accepted && feeder.Spawn(2, "McSturdyMine", owner: 2, x: 317, y: 300).Accepted, "Dozer and mines spawn.");
         world.Step();
         var dozer = world.Entities.Single(value => value.Template.Name == "McDozer");
         var field = world.Entities.Single(value => value.Template.Name == "McField").Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.MinefieldBehavior>().Single();

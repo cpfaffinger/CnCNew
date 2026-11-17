@@ -134,7 +134,8 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         {
             // Track the target (this keeps the unit from drifting out of range): in range now, or lost since the last tick and re-evaluated.
             var distance = DistanceTo(target);
-            if (distance < weapon.AttackRange) _inRange = true;
+            // getAttackRange with a cleared bonus: a quarter cell short of the data's range (#422).
+            if (distance < weapon.AttackRangeWithoutBonus()) _inRange = true;
             else if (_inRange)
             {
                 // CleanupHazardUpdate.cpp, fireWhenReady: m_nextScanFrames = GameLogicRandomValue( 0, 3 ) – drawn in frames of the original; a wait of
@@ -164,7 +165,8 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         var dx = targetX - ownX;
         var dy = targetY - ownY;
         var distance = Fixed.Sqrt(dx * dx + dy * dy);
-        if (distance <= weapon.AttackRange)
+        // Within the attack's own reach (a quarter cell short, between the centres, so the attack measuring between the circles fires from here, #422).
+        if (distance <= weapon.AttackRangeWithoutBonus())
         {
             // In range where its frame ends: the unit stops there, as it does after the whole 30 Hz step.
             if (Entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(world);

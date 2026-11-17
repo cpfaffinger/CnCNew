@@ -1465,7 +1465,8 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         if (target is { DestroyRequested: true }) target = null;
         if (target is not null)
         {
-            if (Distance2D(target) < weapon.AttackRange) _inRange = true;
+            // getAttackRange with a cleared bonus: a quarter cell short of the data's range (#422).
+            if (Distance2D(target) < weapon.AttackRangeWithoutBonus()) _inRange = true;
             else if (_inRange)
             {
                 var wait = world.LogicRandom.Range(0, RescanMaxFrames);
@@ -1560,9 +1561,10 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies) continue;
             if (other.HasStatus(StealthedBit) && !other.HasStatus(DetectedBit)) continue;
             var distance = Distance2D(other);
+            var fireRange = weapon.AttackRangeWithoutBonus();
             if (targetClass == ClassPrimary)
             {
-                if (distance <= weapon.AttackRange)
+                if (distance <= fireRange)
                 {
                     if (Closer(picks.InRange0, picks.InDistance0, other, distance)) { picks.InRange0 = other; picks.InDistance0 = distance; }
                 }
@@ -1572,7 +1574,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
                     picks.OutDistance0 = distance;
                 }
             }
-            else if (distance <= weapon.AttackRange)
+            else if (distance <= fireRange)
             {
                 if (Closer(picks.InRange1, picks.InDistance1, other, distance)) { picks.InRange1 = other; picks.InDistance1 = distance; }
             }

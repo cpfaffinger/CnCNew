@@ -86,15 +86,16 @@ internal static class ContactRangeTests
             void Spawn(string template, int owner, int x, int y)
                 => Assert(world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, template + " spawns");
             Spawn("ContactCommando", 1, 100, 100);  // id 1
-            Spawn("ContactVictim", 2, 122, 100);    // id 2: 22 apart, the circles 2 apart
-            Spawn("ContactVictim", 2, 100, 126);    // id 3: 26 apart, the circles 6 apart
+            Spawn("ContactVictim", 2, 120, 100);    // id 2: 20 apart, the circles touch
+            Spawn("ContactVictim", 2, 100, 122);    // id 3: 22 apart, the circles 2 apart
             Spawn("ContactHut", 2, 400, 400);       // id 4: a box of 40 by 40
             Spawn("ContactCommando", 1, 400, 365);  // id 5: its circle within 3 of the hut's, its cylinder 5 short of the box
             Spawn("ContactCommando", 1, 400, 372);  // id 6: touching the box
             world.Step();
             Entity Of(int id) => world.FindEntity(new EntityId((uint)id))!;
-            Assert(SimulationQueries.InRange(world, Of(1), Of(2)), $"{rate}: a knife of 3 reaches a soldier whose circle is 2 from the commando's (the centres 22 apart)");
-            Assert(!SimulationQueries.InRange(world, Of(1), Of(3)), $"{rate}: and not one 6 from it");
+            // The knife's range of 3 is 0.5 a quarter cell short (RATIONALIZE_ATTACK_RANGE, #422).
+            Assert(SimulationQueries.InRange(world, Of(1), Of(2)), $"{rate}: a knife of 3 reaches a soldier whose circle touches the commando's (the centres 20 apart)");
+            Assert(!SimulationQueries.InRange(world, Of(1), Of(3)), $"{rate}: and not one 2 from it - its range is 0.5 between the circles");
             Assert(!SimulationQueries.InRange(world, Of(5), Of(4)), $"{rate}: at a structure the circles are not enough: the commando must touch it");
             Assert(SimulationQueries.InRange(world, Of(6), Of(4)), $"{rate}: a commando that touches the structure reaches it");
         }
