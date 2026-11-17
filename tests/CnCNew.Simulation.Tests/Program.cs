@@ -1028,7 +1028,7 @@ if (contentDirectory is not null) run.Test("#337: real builders build from where
 if (contentDirectory is not null) run.Test("Real data (playtest): a wheeled unit ordered onto a goal inside its turning circle does not circle it for ever", () => Tests.RealWheeledUnitDoesNotCircleItsGoalForEver(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): five Dozers sent to one place settle around it", () => Tests.RealDozersSentToOnePlaceSettleAroundIt(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (issue 350): tanks run idle infantry over", () => Tests.RealTanksRunIdleInfantryOver(contentDirectory));
-if (contentDirectory is not null) run.Test("Real data (#370): a tank spares a hijacker and a Tank Hunter that are after it", () => Tests.RealSquishSparesHijackerAndTankHunter(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#370): a tank spares a hijacker and a Tank Hunter that are after it - at 30, 60 and 120 Hz", () => Tests.RealSquishSparesHijackerAndTankHunter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#373): a crusher spares a hijacker riding hidden in a vehicle", () => Tests.RealCrushSparesAHiddenHijacker(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#373): a hijacker takes the tank before it is squished", () => Tests.RealHijackComesBeforeTheSquish(contentDirectory));
 if (contentDirectory is not null) run.Test("#424 real data: the uranium shell and the AP rocket carry their own weapon bonus to their detonation", () => Tests.RealProjectileCarriesItsOwnWeaponBonus(contentDirectory));

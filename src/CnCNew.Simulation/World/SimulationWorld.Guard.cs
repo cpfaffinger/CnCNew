@@ -156,7 +156,7 @@ public sealed partial class SimulationWorld
                     var fdx = fx - call.X;
                     var fdy = fy - call.Y;
                     if (!friends.Contains(fdx * fdx + fdy * fdy)) continue;
-                    if (friend.Template.IsKindOf("CANNOT_RETALIATE") || friend.Template.IsKindOf("IMMOBILE") || friend.Template.IsKindOf("DRONE") || !ai.IsIdle) continue;
+                    if (friend.Template.IsKindOf("CANNOT_RETALIATE") || friend.Template.IsKindOf("IMMOBILE") || friend.Template.IsKindOf("DRONE") || !ai.IsIdle || AbilityHoldsAi(friend)) continue;
                     if ((friend.HasStatus(StealthedStatus) && !friend.HasStatus(DetectedStatus)) || friend.HasStatus(UsingAbilityStatus)) continue;
                     if (!MayAct(friend, _tick) || !TurretsLetAttack(friend) || ActiveWeaponSet(friend) is null) continue;
                     UpdateWeaponSet(friend);
@@ -170,6 +170,18 @@ public sealed partial class SimulationWorld
             }
         }
         _retaliations.Clear();
+    }
+
+    /// <summary>
+    /// "Any unit that isn't idle won't retaliate" (<c>shouldRetaliate</c>): a unit whose special ability turns it to its target or unpacks (<see cref="SpecialAbilityUpdate.HoldsAi"/>:
+    /// <c>AI_FACE_OBJECT</c>, <c>AI_BUSY</c>) is not idle in the original, though the port's AI has no order then. A Tank Hunter turning to stick its TNT on a tank that shot it walked off
+    /// to answer the shot and was run over before its charge stuck (#439).
+    /// </summary>
+    private static bool AbilityHoldsAi(Entity entity)
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is SpecialAbilityUpdate { HoldsAi: true }) return true;
+        return false;
     }
 
     private CommandRejection CheckGuard(PlayerId issuer, GuardCommand order)

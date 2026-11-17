@@ -56,21 +56,23 @@ static partial class Tests
 
     /// <summary>
     /// #370 on real data: a Crusader and an Overlord run at a hijacker that runs at them to take them: it is not squished and takes the tank; one that stands idle is squished. A Tank Hunter
-    /// placing TNT on such a tank is not squished before its charge sticks; an idle one is squished. At 60 Hz.
+    /// placing TNT on such a tank is not squished before its charge sticks - the tank's shot while it turns to the tank does not make it walk off to answer it (#439: an ability that turns
+    /// its unit holds the AI, which is then not idle and does not retaliate); an idle one is squished. At 30, 60 and 120 Hz.
     /// </summary>
     public static void RealSquishSparesHijackerAndTankHunter(string directory)
     {
         var data = OpenRealFireData(directory);
-        var rate = SimulationRate.Hz60;
-        foreach (var tank in new[] { "AmericaTankCrusader", "ChinaTankOverlord" })
-        {
-            var hijack = RealRunOver(data, rate, tank, "GLAInfantryHijacker", "hijack", 320);
-            Check.That(!hijack.Crushed && hijack.Taken, $"{tank}: a hijacker running at it is not squished and takes it (crushed {hijack.Crushed}, taken {hijack.Taken}).");
-            var idle = RealRunOver(data, rate, tank, "GLAInfantryHijacker", "none", 320);
-            Check.That(idle.Crushed && !idle.Taken, $"{tank}: an idle hijacker it runs over is squished (crushed {idle.Crushed}).");
-            var tnt = RealRunOver(data, rate, tank, "ChinaInfantryTankHunter", "tnt", 320);
-            Check.That(tnt.Charged, $"{tank}: a Tank Hunter placing TNT on it is not squished before its charge sticks (crushed {tnt.Crushed}).");
-            Check.That(RealRunOver(data, rate, tank, "ChinaInfantryTankHunter", "none", 320).Crushed, $"{tank}: an idle Tank Hunter it runs over is squished.");
-        }
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+            foreach (var tank in new[] { "AmericaTankCrusader", "ChinaTankOverlord" })
+            {
+                var what = $"{rate}: {tank}";
+                var hijack = RealRunOver(data, rate, tank, "GLAInfantryHijacker", "hijack", 320);
+                Check.That(!hijack.Crushed && hijack.Taken, $"{what}: a hijacker running at it is not squished and takes it (crushed {hijack.Crushed}, taken {hijack.Taken}).");
+                var idle = RealRunOver(data, rate, tank, "GLAInfantryHijacker", "none", 320);
+                Check.That(idle.Crushed && !idle.Taken, $"{what}: an idle hijacker it runs over is squished (crushed {idle.Crushed}).");
+                var tnt = RealRunOver(data, rate, tank, "ChinaInfantryTankHunter", "tnt", 320);
+                Check.That(tnt.Charged, $"{what}: a Tank Hunter placing TNT on it is not squished before its charge sticks (crushed {tnt.Crushed}).");
+                Check.That(RealRunOver(data, rate, tank, "ChinaInfantryTankHunter", "none", 320).Crushed, $"{what}: an idle Tank Hunter it runs over is squished.");
+            }
     }
 }

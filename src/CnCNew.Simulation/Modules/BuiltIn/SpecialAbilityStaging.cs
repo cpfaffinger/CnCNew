@@ -169,6 +169,13 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         => _active && _target.IsValid && _target == target && _prepFrames == 0 && (_approachOrders > 0 || _facingInitiated)
            && (_packState == PackState.Packed || (_packState == PackState.Unpacked && data.UnpackTicks == 0));
 
+    /// <summary>
+    /// Whether the reference's AI stands in a state of this ability's instead of idle (<c>AIUpdateInterface::isIdle</c> false): <c>AI_FACE_OBJECT</c> from <c>startFacing</c>
+    /// (<c>aiFaceObject</c>) until the unit faces its target, <c>AI_BUSY</c> from <c>startUnpacking</c> and <c>startPacking</c> (<c>aiBusy</c>) until <c>startPreparation</c> and
+    /// <c>finishAbility</c> (<c>aiIdle</c>). This port turns and unpacks without an AI state, so the ability says it (#439). Its walk to the target is an order of the AI's own.
+    /// </summary>
+    internal bool HoldsAi => _active && ((_facingInitiated && !_facingComplete) || _packState is PackState.Unpacking or PackState.Packing);
+
     /// <summary>Where the active ability is (presentation: <c>UNPACKING</c>, <c>RAISING_FLAG</c>/<c>FIRING_A</c>, <c>PACKING</c>).</summary>
     public AbilityStage Stage
     {
