@@ -418,6 +418,11 @@ public sealed class Entity
     public IReadOnlyList<SimModule> Modules => ModuleArray;
     internal SimModule[] ModuleArray { get; set; } = [];
     public IBodyModule? Body { get; internal set; }
+    /// <summary>
+    /// The object's AI (<c>Object::getAIUpdateInterface</c>): the last module that is one. <c>Object::Object</c> sets <c>m_ai</c> for every such module in the order of the template, and the assertion
+    /// against two is debug-only, so the last wins (AirF_AmericaVehicleChinook: its ChinookAIUpdate, not the AIUpdateInterface before it). Null when the object has none.
+    /// </summary>
+    public CnCNew.Simulation.Modules.BuiltIn.AIUpdateInterface? Ai { get; internal set; }
     /// <summary>The entity's own container module, if it has one (<c>ContainModuleInterface::asOpenContain</c>). One per entity, matching phase 5's scope.</summary>
     public IContainerModule? Container { get; internal set; }
     internal IDieModule[] Dies { get; set; } = [];

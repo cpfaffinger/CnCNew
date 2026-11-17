@@ -235,7 +235,7 @@ public static partial class RateCases
             if (frame >= watchFrom)
                 foreach (var (session, rate) in new[] { (a, rateA), (b, rateB) })
                     if (session.World.FindEntity(new Ids.EntityId(checked((uint)watch))) is { } seen)
-                        report($"watch frame {frame.ToString(CultureInfo.InvariantCulture)} {rate.TicksPerSecond} Hz: ({seen.X}, {seen.Y}) angle {seen.Angle} speed {seen.Speed.Raw.ToString(CultureInfo.InvariantCulture)} raw per tick, per frame {(seen.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault()?.SpeedPerOriginalFrame(rate.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero).Raw.ToString(CultureInfo.InvariantCulture)} moving {seen.HasMoveTarget} to ({seen.MoveTargetX}, {seen.MoveTargetY}) ahead ({seen.AheadX}, {seen.AheadY})");
+                        report($"watch frame {frame.ToString(CultureInfo.InvariantCulture)} {rate.TicksPerSecond} Hz: ({seen.X}, {seen.Y}) angle {seen.Angle} speed {seen.Speed.Raw.ToString(CultureInfo.InvariantCulture)} raw per tick, per frame {(seen.Ai?.SpeedPerOriginalFrame(rate.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero).Raw.ToString(CultureInfo.InvariantCulture)} moving {seen.HasMoveTarget} to ({seen.MoveTargetX}, {seen.MoveTargetY}) ahead ({seen.AheadX}, {seen.AheadY})");
             var different = 0;
             var others = new Dictionary<uint, World.Entity>();
             foreach (var entity in b.World.Entities) others[entity.Id.Value] = entity;
@@ -251,8 +251,8 @@ public static partial class RateCases
                 if (entity.X == other.X && entity.Y == other.Y && entity.Z == other.Z && (positionsOnly || healthA == healthB) && entity.HasMoveTarget == other.HasMoveTarget && entity.ContainedBy == other.ContainedBy) continue;
                 if (different++ < shown)
                     report($"frame {frame.ToString(CultureInfo.InvariantCulture)}: {entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value}: "
-                        + $"{rateA.TicksPerSecond} Hz ({entity.X}, {entity.Y}, {entity.Z}) health {healthA} moving {entity.HasMoveTarget} to ({entity.MoveTargetX}, {entity.MoveTargetY}) in {entity.ContainedBy.Value} spawned {entity.SpawnTick} angle {entity.Angle} speed/frame {(entity.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault()?.SpeedPerOriginalFrame(rateA.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero)} | "
-                        + $"{rateB.TicksPerSecond} Hz ({other.X}, {other.Y}, {other.Z}) health {healthB} moving {other.HasMoveTarget} to ({other.MoveTargetX}, {other.MoveTargetY}) in {other.ContainedBy.Value} spawned {other.SpawnTick} angle {other.Angle} speed/frame {(other.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault()?.SpeedPerOriginalFrame(rateB.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero)} ahead ({other.AheadX}, {other.AheadY})");
+                        + $"{rateA.TicksPerSecond} Hz ({entity.X}, {entity.Y}, {entity.Z}) health {healthA} moving {entity.HasMoveTarget} to ({entity.MoveTargetX}, {entity.MoveTargetY}) in {entity.ContainedBy.Value} spawned {entity.SpawnTick} angle {entity.Angle} speed/frame {(entity.Ai?.SpeedPerOriginalFrame(rateA.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero)} | "
+                        + $"{rateB.TicksPerSecond} Hz ({other.X}, {other.Y}, {other.Z}) health {healthB} moving {other.HasMoveTarget} to ({other.MoveTargetX}, {other.MoveTargetY}) in {other.ContainedBy.Value} spawned {other.SpawnTick} angle {other.Angle} speed/frame {(other.Ai?.SpeedPerOriginalFrame(rateB.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero)} ahead ({other.AheadX}, {other.AheadY})");
             }
             foreach (var entity in others.Values)
                 if (different++ < shown) report($"frame {frame.ToString(CultureInfo.InvariantCulture)}: {entity.Id.Value} {entity.Template.Name} exists only at {rateB.TicksPerSecond} Hz");

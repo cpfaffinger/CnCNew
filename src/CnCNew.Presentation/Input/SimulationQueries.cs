@@ -44,7 +44,7 @@ public static class SimulationQueries
 {
     private static readonly string[] SupplyCarrierModules = ["SupplyTruckAIUpdate", "WorkerAIUpdate", "ChinookAIUpdate"];
 
-    public static AIUpdateInterface? AiOf(Entity entity) => entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
+    public static AIUpdateInterface? AiOf(Entity entity) => entity.Ai;
 
     public static ProductionUpdate? ProductionOf(Entity entity) => entity.Modules.OfType<ProductionUpdate>().FirstOrDefault();
 

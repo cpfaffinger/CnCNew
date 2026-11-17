@@ -110,7 +110,7 @@ public sealed partial class ScriptEngine
             if (member.Template == transportTemplate)
             {
                 var plane = member.ModuleArray.OfType<DeliverPayloadAIUpdate>().FirstOrDefault();
-                var ai = member.ModuleArray.OfType<AIUpdateInterface>().FirstOrDefault();
+                var ai = member.Ai;
                 if (plane is not null) plane.DeliverViaModuleData(_world, destination.X, destination.Y);
                 else if (ai is not null) ai.OrderEvacuate(_world, true, destination.X, destination.Y, prototype.TransportsExit);
                 else Diagnose($"reinforcement transport '{transportTemplate.Name}' has no AI");

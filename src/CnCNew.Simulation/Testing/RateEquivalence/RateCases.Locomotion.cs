@@ -47,8 +47,7 @@ public static partial class RateCases
             if (!_aiKnown)
             {
                 _aiKnown = true;
-                foreach (var module in unit.Modules)
-                    if (module is AIUpdateInterface ai) { _ai = ai; break; }
+                _ai = unit.Ai;
             }
             FrameSpeed.Add(_ai is not null ? _ai.SpeedPerOriginalFrame(Stride) : unit.Speed * Stride);
             Angle.Add(unit.Angle);

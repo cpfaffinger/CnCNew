@@ -124,7 +124,7 @@ internal static class SlaveSupport
     /// <summary><c>GameLogicRandomValue(0, 2*PI)</c> picks from the integer overload (the float limits convert to 0 and 6), so the "random direction" of the reference is a whole number of radians in [0, 6].</summary>
     public static Fixed RandomDirection(IWorldServices world) => Fixed.FromInt(world.LogicRandom.Range(0, 6));
 
-    public static AIUpdateInterface? AiOf(Entity entity) => entity.ModuleArray.OfType<AIUpdateInterface>().FirstOrDefault();
+    public static AIUpdateInterface? AiOf(Entity entity) => entity.Ai;
 
     public static bool IsFlying(Entity entity) => entity.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
 

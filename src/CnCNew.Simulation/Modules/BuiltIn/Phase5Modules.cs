@@ -1815,16 +1815,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         world.MarkDirty(Entity);
     }
 
-    /// <summary>
-    /// The AI modules of the object that run before this one in a tick have had their turn when this module's update sets a move target (<c>SimulationWorld.RunUpdates</c> calls this): at 30 Hz they see it in the next tick, which is the
-    /// next frame. Above 30 Hz they wait for the object's next frame (<see cref="BeginMoveWithNextFrame"/>) instead of seeing it in the next tick, in the middle of the frame.
-    /// </summary>
-    internal void HoldEarlierMoversToTheNextFrame(IWorldServices world)
-    {
-        foreach (var module in Entity.Modules)
-            if (module is AIUpdateInterface other && !ReferenceEquals(other, this) && other.Index < Index) other.BeginMoveWithNextFrame(world);
-    }
-
     // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
     private long _moveHoldUntil;
 
@@ -1860,6 +1850,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     public virtual long Update(IWorldServices world)
     {
+        // An AI module that is not the object's AI (an earlier one of two, Object::Object keeps the last): no order reaches it, and it never moves the object.
+        if (!ReferenceEquals(Entity.Ai, this)) return SimulationTiming.SleepForever;
         if (_rappelling) return Entity.EffectivelyDead ? SimulationTiming.SleepForever : StepRappel(world);
         // A death whose stop waits for this turn (StopAtDeath): the step of the frame the object died in is taken below, then it stands. A wait that was not
         // answered in the tick of the death (the module did not run) ends without a step.

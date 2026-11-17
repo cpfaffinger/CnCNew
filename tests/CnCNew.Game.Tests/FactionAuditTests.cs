@@ -39,12 +39,9 @@ internal static class FactionAuditTests
         // first ("gotta land first!"). CommandModeController sends an ExitContainerCommand per rider instead, which nobody acts on while the Chinook hovers: nobody gets out.
         ["FactionAmerica|AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
         ["FactionAmericaAirForceGeneral|AFG_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
+        ["FactionAmericaAirForceGeneral|AirF_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
         ["FactionAmericaLaserGeneral|Lazr_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
         ["FactionAmericaSuperWeaponGeneral|SupW_AmericaVehicleChinook|Command_ChinookUnload"] = "hovering Chinook does not unload",
-
-        // AirF_AmericaVehicleChinook has two AI modules (AIUpdateInterface ModuleTag_04 and ChinookAIUpdate ModuleTag_07). Object::Object keeps the last as m_ai (Object.cpp, the
-        // assertion against two is debug-only); the port's AiOf takes the first, so the Chinook's own AI is never asked: no rappellers, the combat drop is greyed.
-        ["FactionAmericaAirForceGeneral|AirF_AmericaVehicleChinook|Command_CombatDrop"] = "the first of two AI modules wins",
 
         // The sneak attack tunnel's rally point button: ControlBar::getCommandAvailability has no producer check for GUI_COMMAND_SET_RALLY_POINT, and doSetRallyPoint sets it on the
         // object's exit interface (TunnelContain is one). The port's bar restricts it without a ProductionUpdate (ButtonReason.NoProducer).

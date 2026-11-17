@@ -632,7 +632,7 @@ public sealed partial class SimulationWorld
     {
         if (container.Container is not { } contain) return;
         foreach (var id in contain.Contained)
-            if (FindEntity(id) is { Acquisition: { Victim.IsValid: true } state } rider && Array.Find(rider.ModuleArray, module => module is AIUpdateInterface) is AIUpdateInterface ai)
+            if (FindEntity(id) is { Acquisition: { Victim.IsValid: true } state } rider && rider.Ai is { } ai)
                 EndEngagement(rider, ai, state);
     }
 

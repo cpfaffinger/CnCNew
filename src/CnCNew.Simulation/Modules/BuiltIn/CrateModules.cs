@@ -40,12 +40,7 @@ internal static class CrateModules
     public static bool GoalAllows(Entity self, Entity other)
         => AiOf(self) is not { } ai || ai.GoalObject == other.Id;
 
-    public static AIUpdateInterface? AiOf(Entity entity)
-    {
-        foreach (var module in entity.ModuleArray)
-            if (module is AIUpdateInterface ai) return ai;
-        return null;
-    }
+    public static AIUpdateInterface? AiOf(Entity entity) => entity.Ai;
 
     /// <summary>Whether the object moves by an airborne locomotor (<c>Object::isUsingAirborneLocomotor</c>), judged by its normal locomotor set.</summary>
     public static bool UsesAirborneLocomotor(Entity entity) => entity.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;

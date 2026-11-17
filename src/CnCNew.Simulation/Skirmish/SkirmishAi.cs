@@ -477,12 +477,7 @@ public sealed partial class SkirmishAi
         return dx * dx + dy * dy;
     }
 
-    private static AIUpdateInterface? AiOf(Entity entity)
-    {
-        foreach (var module in entity.Modules)
-            if (module is AIUpdateInterface ai) return ai;
-        return null;
-    }
+    private static AIUpdateInterface? AiOf(Entity entity) => entity.Ai;
 
     // ------------------------------------------------------------------------------------------------------------ economy
 

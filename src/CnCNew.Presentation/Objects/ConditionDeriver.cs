@@ -190,7 +190,7 @@ public static partial class ConditionDeriver
         set = set.With(ModelConditions.PartiallyConstructed);
         var active = context.PreviousConstructionWork is { } previous
             ? entity.ConstructionWork > previous
-            : world.FindEntity(entity.BuilderId) is { } builder && builder.Modules.OfType<AIUpdateInterface>().Any(ai => ai.IsBuilding);
+            : world.FindEntity(entity.BuilderId) is { } builder && builder.Ai is { IsBuilding: true };
         return active ? set.With(ModelConditions.ActivelyBeingConstructed) : set;
     }
 }

@@ -954,12 +954,7 @@ public sealed partial class ScriptEngine
         }
     }
 
-    private static AIUpdateInterface? AiOf(Entity entity)
-    {
-        foreach (var module in entity.ModuleArray)
-            if (module is AIUpdateInterface ai) return ai;
-        return null;
-    }
+    private static AIUpdateInterface? AiOf(Entity entity) => entity.Ai;
 
     /// <summary>One tick of a team follower: the goal is the team waypoint plus the member's offset; the first member to arrive advances the team waypoint, the others switch to it.</summary>
     private void UpdateTeamFollower(Follower follower, Entity entity, ScriptWaypointPath path)

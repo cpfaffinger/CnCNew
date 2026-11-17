@@ -140,7 +140,7 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
         // m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames (AutoFindHealingUpdate.cpp): a period of ScanRate + 1 frames of the original, counted in ticks of whole frames.
         _nextScanTicks = world.Time.FloorToFrame(data.ScanTicks);
 
-        var ai = Entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
+        var ai = Entity.Ai;
         if (ai is null || Entity.Body is not { } body) return frame;
         if (body.Health > body.MaxHealth * data.NeverHeal) return frame;
         // The dying are in the AI's dead state, which is not idle (F-87).

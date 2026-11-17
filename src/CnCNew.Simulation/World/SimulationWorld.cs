@@ -658,7 +658,7 @@ public sealed partial class SimulationWorld : IWorldServices
         dockActive = false;
         if (Modules.BuiltIn.DockModules.DockOf(dock) is not Modules.BuiltIn.DockUpdateBase { DockerInside: true } module) return;
         dockerInside = true;
-        dockActive = FindEntity(module.ActiveDocker)?.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault() is { IsDockActive: true, DockingAt: var at } && at == dock.Id;
+        dockActive = FindEntity(module.ActiveDocker)?.Ai is { IsDockActive: true, DockingAt: var at } && at == dock.Id;
     }
 
     /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
@@ -812,8 +812,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public void GuardPlaceFor(Entity unit, Fixed x, Fixed y)
         => ExecuteGuard(new GuardCommand(unit.Owner, 0, _tick, [unit.Id], x, y, EntityId.Invalid, GuardMode.Normal));
 
-    internal static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity)
-        => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface) as Modules.BuiltIn.AIUpdateInterface;
+    internal static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity) => entity.Ai;
 
     /// <summary>
     /// <c>VictoryConditions::hasSinglePlayerBeenDefeated</c> (default flags NOBUILDINGS|NOUNITS) = <c>!Player::hasAnyObjects</c>:
@@ -1903,13 +1902,9 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             _currentUpdate = node;
             observer?.UpdateStarted(node.Module);
-            var hadMoveTarget = entity.HasMoveTarget;
             var sleep = node.Update.Update(this);
             observer?.UpdateEnded(node.Module);
             _currentUpdate = null;
-            // An AI module of the object that runs before the one that has just set a move target has had its turn in this tick: at 30 Hz it sees the target in the next tick, which is
-            // the next frame, and above 30 Hz it waits for the object's next frame instead of the next tick, the middle of this one (F-166).
-            if (!hadMoveTarget && entity.HasMoveTarget && _firstFrameTicks != TickOrder.Next && node.Module is Modules.BuiltIn.AIUpdateInterface setter) setter.HoldEarlierMoversToTheNextFrame(this);
             if (sleep < SimulationTiming.SleepNone) sleep = SimulationTiming.SleepNone;
             var wake = Math.Min(tick + sleep, SimulationTiming.SleepForever);
             node.Update.NextWake = wake;
@@ -2354,6 +2349,7 @@ public sealed partial class SimulationWorld : IWorldServices
             modules[index] = module;
             if (module is IBodyModule body && entity.Body is null) entity.Body = body;
             if (module is IContainerModule container && entity.Container is null) entity.Container = container;
+            if (module is Modules.BuiltIn.AIUpdateInterface ai) entity.Ai = ai;
             if (module is IDieModule die) dies.Add(die);
             if (module is IEventReceiver receiver) receivers.Add(receiver);
             if (module is IUpdateModule update) updates.Add(new UpdateNode(entity, module, update));

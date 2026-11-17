@@ -454,7 +454,7 @@ public sealed class NeutronBlastBehavior(NeutronBlastData data) : SimModule, IUp
             world.Kill(victim.Id);
             return;
         }
-        if (Array.Find(victim.ModuleArray, module => module is AIUpdateInterface) is AIUpdateInterface ai) ai.OrderIdle(world);
+        victim.Ai?.OrderIdle(world);
         world.TransferOwnership(victim.Id, PlayerId.System);
     }
 
