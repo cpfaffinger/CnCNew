@@ -22,7 +22,7 @@ public enum ArmyComposition : byte
 /// What the player has seen of the enemy in the last three minutes (<see cref="_sightings"/>: every enemy object with a body, by type) is the enemy's force E. For a candidate
 /// unit u, read from the catalog only:
 /// <list type="bullet">
-/// <item><b>damage per frame</b> d(a, b) of a against b: the best weapon of a's default weapon set that may be fired at b (ground or airborne), its primary damage times the
+/// <item><b>damage per frame</b> d(a, b) of a against b: the best weapon of the weapon set a fights with (a bike's rider's) that may be fired at b (ground or airborne), its primary damage times the
 /// coefficient of b's armour for the damage type, times shots per logic frame (clip and reload included); a weapon that kills its owner counts as one shot in a lifetime;</item>
 /// <item><b>offence</b> O(u) = Σ over E of n(e) · cost(e) · d(u, e) / health(e): the credits of the enemy u destroys per frame while it fires;</item>
 /// <item><b>exposure</b> X(u) = 1 / <see cref="LifetimeFrames"/> + Σ over E of n(e) · d(e, u) / health(u): the share of itself u loses per frame, never less than "lives one
@@ -159,13 +159,13 @@ public sealed partial class SkirmishAi
         return health;
     }
 
-    /// <summary>Damage per logic frame of the original of <paramref name="attacker"/>'s best default weapon against <paramref name="victim"/>; zero when it has none that may be fired at it.</summary>
+    /// <summary>Damage per logic frame of the original of <paramref name="attacker"/>'s best weapon of the set it fights with (<see cref="FightingSet"/>) against <paramref name="victim"/>; zero when it has none that may be fired at it.</summary>
     private Fixed DamagePerFrame(ObjectTemplate attacker, ObjectTemplate victim)
     {
         var key = ((long)attacker.Index << 32) | (uint)victim.Index;
         if (_damagePerFrame.TryGetValue(key, out var known)) return known;
         var best = Fixed.Zero;
-        if (attacker.DefaultWeaponSet is { } set)
+        if (FightingSet(attacker) is { } set)
         {
             var wanted = victim.IsKindOf("AIRCRAFT") ? WeaponInfo.AntiMaskAirborneVehicle : WeaponInfo.AntiMaskGround;
             foreach (var weaponIndex in set.Weapons)

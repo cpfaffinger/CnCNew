@@ -436,11 +436,26 @@ public sealed partial class SkirmishAi
             if (template.IsKindOf("COMMANDCENTER")) role |= Role.CommandCenter;
             if (template.IsKindOf("FS_BASE_DEFENSE") && template.DefaultWeapon >= 0) role |= Role.Defense;
         }
-        else if ((role & (Role.Builder | Role.Carrier)) == 0 && template.DefaultWeapon >= 0 && template.Locomotor is not null && CostOf(template) > Fixed.Zero
+        else if ((role & (Role.Builder | Role.Carrier)) == 0 && FightingSet(template)?.Primary >= 0 && template.Locomotor is not null && CostOf(template) > Fixed.Zero
                  && (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE")))
             role |= Role.Army;
         _roles[template.Index] = role;
         return role;
+    }
+
+    /// <summary>
+    /// The weapon set a new object of this template fights with. A vehicle with <c>RiderChangeContain</c> (the combat bike) is made with its <c>InitialPayload</c> inside, and the
+    /// rider line that names it raises the line's weapon set flag (<c>RiderChangeContain::onContaining</c>, <c>setWeaponSetFlag</c>); the bike's set without a rider is unarmed, so read
+    /// by its default set it was no army unit and the AI never built one (#434). Every other template fights with its default set.
+    /// </summary>
+    private WeaponSetInfo? FightingSet(ObjectTemplate template)
+    {
+        foreach (var module in template.Modules)
+            if (module.Data is RiderChangeContainData { InitialPayload.Length: > 0 } rider)
+                foreach (var line in rider.Riders)
+                    if (_catalog.AreEquivalent(line.TemplateName, rider.InitialPayload))
+                        return CnCNew.Data.Definitions.NameTablesPhase5.WeaponSetCondition.TryIndexOf(line.WeaponSet, out var bit) ? WeaponSetResolver.Find(template.WeaponSets, 1u << bit) : template.DefaultWeaponSet;
+        return template.DefaultWeaponSet;
     }
 
     /// <summary>
