@@ -49,10 +49,18 @@ public sealed partial class SimulationWorld
         var members = _groupMembers;
         members.Clear();
         _groupPending.Clear();
+        var heldOut = false;
         foreach (var id in order.Units)
         {
             // A member that is gone, changed hands or cannot move any more since the order was accepted takes no part (a dead object leaves its AIGroup); a unit named twice counts once.
             if (FindEntity(id) is not { DestroyRequested: false } unit || unit.Owner != order.Player || !CanMove(unit)) continue;
+            // groupMoveToPosition and the moves it ends in (friend_moveInfantryToPos, friend_moveVehicleToPos, groupTightenToPosition) skip a held member, "don't bother telling the
+            // occupants to move" (#420): the stinger site's soldiers, a script's held unit, a rider. groupAttackMoveToPosition orders every member.
+            if (!order.Attack && (DisabledFlagsOf(unit) & DisabledMask.Held) != DisabledMask.None)
+            {
+                heldOut = true;
+                continue;
+            }
             if (!_groupPending.Add(id.Value)) continue;
             // Where the unit stands once the logic frame of the original it has begun is over (docs/SIMULATION-CORE.md §43.2, rule 4); 30 Hz: its position.
             var (standsX, standsY, _) = unit.FrameEnd(_tick);
@@ -62,7 +70,8 @@ public sealed partial class SimulationWorld
         }
         if (members.Count == 0)
         {
-            RecordRejection(order, CommandRejection.UnknownEntity);
+            // A group of held members only is told nothing, and that is no refusal.
+            if (!heldOut) RecordRejection(order, CommandRejection.UnknownEntity);
             return;
         }
         members.Sort(static (a, b) =>

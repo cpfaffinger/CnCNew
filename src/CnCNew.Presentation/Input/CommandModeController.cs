@@ -344,7 +344,7 @@ public sealed class CommandModeController
             case ContextAction.AddWaypoint:
             {
                 var any = false;
-                foreach (var unit in own.Where(SimulationQueries.CanMove))
+                foreach (var unit in own.Where(unit => SimulationQueries.CanMove(unit) && !SimulationQueries.IsHeld(world, unit)))
                 {
                     if (Orders.TryGet(unit.Id, out var order) && order.Kind == StandingOrderKind.Waypoints)
                     {
@@ -360,7 +360,8 @@ public sealed class CommandModeController
             case ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving or ContextAction.ForceAttackObject when target is not null:
             {
                 var any = false;
-                foreach (var unit in own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)))
+                // groupAttackObjectPrivate tells a held member nothing (#420).
+                foreach (var unit in own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity) && !SimulationQueries.IsHeld(world, entity)))
                 {
                     // A garrisoned building has no weapon and does not move: the one order goes to the simulation, which passes it to the riders (F-60, step 6).
                     if (!SimulationQueries.HasWeapon(unit) && !SimulationQueries.CanMove(unit))
@@ -450,7 +451,8 @@ public sealed class CommandModeController
     /// <summary>The move or attack-move order of <paramref name="units"/> to one point: a single command for one unit, a group order for several (units that cannot move take no part).</summary>
     private bool MoveGroup(SimulationWorld world, IReadOnlyList<Entity> units, Vector3 ground, bool attack)
     {
-        var movable = units.Where(SimulationQueries.CanMove).ToArray();
+        // groupMoveToPosition skips a held member ("don't bother telling the occupants to move", #420); groupAttackMoveToPosition orders every one.
+        var movable = units.Where(unit => SimulationQueries.CanMove(unit) && (attack || !SimulationQueries.IsHeld(world, unit))).ToArray();
         if (movable.Length == 0) return false;
         if (movable.Length == 1) return attack ? AttackMove(movable[0], ground) : Move(world, movable[0], ground);
         var (x, y) = (SimulationQueries.ToFixed(ground.X), SimulationQueries.ToFixed(ground.Y));
@@ -487,7 +489,7 @@ public sealed class CommandModeController
     /// </summary>
     public void Scatter(SimulationWorld world, IEnumerable<Entity> units)
     {
-        var movers = units.Where(entity => SimulationQueries.CanMove(entity) && !entity.Template.IsKindOf("IMMOBILE")).ToList();
+        var movers = units.Where(entity => SimulationQueries.CanMove(entity) && !SimulationQueries.IsHeld(world, entity) && !entity.Template.IsKindOf("IMMOBILE")).ToList();
         if (movers.Count == 0) return;
         var center = movers.Aggregate(Vector2.Zero, (sum, entity) => sum + SimulationQueries.GroundOf(entity)) / movers.Count;
         var ordered = movers.OrderByDescending(entity => Vector2.DistanceSquared(SimulationQueries.GroundOf(entity), center)).ThenBy(entity => entity.Id.Value).ToList();

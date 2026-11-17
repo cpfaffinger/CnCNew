@@ -532,7 +532,61 @@ static partial class Tests
     /// </summary>
     public static void AcquisitionHeldUnitStillFires()
     {
-        var files = new Dictionary<string, string>(AcquisitionFiles())
+        var files = HeldFiles();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: files);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "AcqHeldSoldier", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "AcqDummy", owner: 2, x: 0, y: 60);
+            world.Step();
+            var soldier = Slotted(world, "AcqHeldSoldier");
+            var victim = Slotted(world, "AcqDummy");
+            world.SetScriptDisable(soldier, Entity.ScriptHeld, true);
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(Hurt(victim) > Fixed.Zero && world.AcquiredVictimOf(soldier) == victim.Id, $"{rate}: a held unit turns to the enemy in range and fires ({Hurt(victim)} damage, heading {soldier.Angle}).");
+            Check.That(soldier.X == Fixed.Zero && soldier.Y == Fixed.Zero, $"{rate}: it stays where it is held ({soldier.X}, {soldier.Y}).");
+        }
+    }
+
+    /// <summary>
+    /// #420: <c>AIGroup::groupMoveToPosition</c> and the moves it ends in skip a held member ("don't bother telling the occupants to move"), so a held unit in a moving group stays idle
+    /// and goes on picking its own victims. The port gave it the move: it stood where it was held, busy with a move it could never make, and fired at nobody. The group's other
+    /// member goes; a group of held members only is told nothing and refuses nothing. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void HeldUnitTakesNoGroupMove()
+    {
+        var files = HeldFiles();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: files);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "AcqHeldSoldier", owner: 1, x: 0, y: 0);
+            feeder.Spawn(1, "AcqMute", owner: 1, x: -30, y: -30);
+            feeder.Spawn(2, "AcqDummy", owner: 2, x: 0, y: 60);
+            world.Step();
+            var soldier = Slotted(world, "AcqHeldSoldier");
+            var mate = Slotted(world, "AcqMute");
+            var victim = Slotted(world, "AcqDummy");
+            world.SetScriptDisable(soldier, Entity.ScriptHeld, true);
+            ulong sequence = 100;
+            var rejected = world.RejectionCounts.Sum();
+            Check.That(world.Submit(new GroupMoveCommand(new PlayerId(1), ++sequence, world.Tick, [soldier.Id], Fixed.FromInt(300), Fixed.Zero, false)).Accepted, $"{rate}: a group of a held unit only is accepted");
+            world.Step();
+            Check.That(world.RejectionCounts.Sum() == rejected, $"{rate}: and refuses nothing at its execution");
+            Check.That(world.Submit(new GroupMoveCommand(new PlayerId(1), ++sequence, world.Tick, [soldier.Id, mate.Id], Fixed.FromInt(300), Fixed.Zero, false)).Accepted, $"{rate}: the group order");
+            for (var step = 0; step < world.Frames(40); step++) world.Step();
+            Check.That(AiOfUnit(soldier).IsIdle, $"{rate}: the held member took no move");
+            Check.That(Hurt(victim) > Fixed.Zero && world.AcquiredVictimOf(soldier) == victim.Id, $"{rate}: it picks its own victim and fires ({Hurt(victim)} damage).");
+            Check.That(soldier.X == Fixed.Zero && soldier.Y == Fixed.Zero, $"{rate}: it stays where it is held ({soldier.X}, {soldier.Y}).");
+            Check.That(mate.X > Fixed.FromInt(30), $"{rate}: the group's other member goes ({mate.X}).");
+        }
+    }
+
+    private static Dictionary<string, string> HeldFiles()
+        => new(AcquisitionFiles())
         {
             // A weapon the body aims (no AcceptableAimDelta): the soldier must turn to its victim before it fires.
             ["Data/INI/Object/HeldFixture.ini"] = """
@@ -562,22 +616,6 @@ static partial class Tests
             End
             """,
         };
-        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
-        {
-            var fixture = new SyntheticFixture(rate, files: files);
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
-            var feeder = new Feeder(world);
-            feeder.Spawn(1, "AcqHeldSoldier", owner: 1, x: 0, y: 0);
-            feeder.Spawn(2, "AcqDummy", owner: 2, x: 0, y: 60);
-            world.Step();
-            var soldier = Slotted(world, "AcqHeldSoldier");
-            var victim = Slotted(world, "AcqDummy");
-            world.SetScriptDisable(soldier, Entity.ScriptHeld, true);
-            for (var step = 0; step < world.Frames(40); step++) world.Step();
-            Check.That(Hurt(victim) > Fixed.Zero && world.AcquiredVictimOf(soldier) == victim.Id, $"{rate}: a held unit turns to the enemy in range and fires ({Hurt(victim)} damage, heading {soldier.Angle}).");
-            Check.That(soldier.X == Fixed.Zero && soldier.Y == Fixed.Zero, $"{rate}: it stays where it is held ({soldier.X}, {soldier.Y}).");
-        }
-    }
 
     public static void AcquisitionLeavesAnOrderedAttackAlone()
     {

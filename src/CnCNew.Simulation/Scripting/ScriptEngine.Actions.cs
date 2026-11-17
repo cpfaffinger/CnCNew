@@ -637,6 +637,8 @@ public sealed partial class ScriptEngine
             _buttonHunts.Remove(member.Id.Value);
             if (member.Owner.IsSystem) { Diagnose("order for a neutral object"); continue; }
             if (member.Template.Locomotor is null || _world.IsAsleep(member)) continue;
+            // groupMoveToPosition skips a held member (#420); the alert members below go as an attack-move only because the port turns their move into one at the order.
+            if (!attackMove && (_world.DisabledFlagsOf(member) & DisabledMask.Held) != DisabledMask.None) continue;
             AiOf(member)?.ChooseLocomotorSet(_world, "SET_NORMAL");
             movers.Add((member.Owner, attackMove || (_world.IsComputerPlayer(member.Owner) && _world.AttitudeOf(member) >= Attitude.Alert), member.Id));
         }

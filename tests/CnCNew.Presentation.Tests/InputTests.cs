@@ -37,6 +37,7 @@ static class InputTests
         run.Test("Input: control groups create, recall, add, double press and pruning", ControlGroups);
         run.Test("Input: contextual orders produce the exact commands", ContextOrders);
         run.Test("Input: standing orders attack, attack-move, guard, waypoints, stop and scatter", StandingOrderBehaviour);
+        run.Test("Input (#420): a held unit takes no move, scatter or attack on an object of its group; an attack-move takes it along", HeldUnitsTakeNoGroupOrders);
         run.Test("Input: placement validity, ghost rotation and the construct command", PlacementRules);
         run.Test("Input: a placement starts at the template's PlacementViewAngle and a click without a drag keeps it", PlacementViewAngle);
         run.Test("Input: command bar slots, availability reasons, queue and multi-select", CommandBarStates);
@@ -1250,6 +1251,49 @@ static class InputTests
         var tankMove = scatter.OfType<SetMoveTargetCommand>().Single(command => command.Target == tank.Id);
         var away = new Vector2((float)(tankMove.X - tank.X).ToDecimal(), (float)(tankMove.Y - tank.Y).ToDecimal());
         Assert(Math.Abs(away.Length() - 24f) < 0.01f, $"four bounding radii (4 x 6 m) away from the centroid ({away.Length()})");
+    }
+
+    /// <summary>
+    /// #420: <c>AIGroup::groupMoveToPosition</c>, <c>groupScatter</c> and <c>groupAttackObjectPrivate</c> skip a held member ("don't bother telling the occupants to move");
+    /// <c>groupAttackMoveToPosition</c> does not. A held ranger in the selection gets no move, no scatter and no attack on an object; a held ranger alone gets no move at all.
+    /// </summary>
+    private static void HeldUnitsTakeNoGroupOrders()
+    {
+        var (arena, controller, view) = OrderSetup(arena =>
+        {
+            arena.Spawn("Ranger", Me, 40, 40);
+            arena.Spawn("Ranger", Me, 46, 40);
+            arena.Spawn("Ranger", Enemy, 120, 40);
+        });
+        var world = arena.World;
+        var selection = controller.Selection;
+        var (held, free) = (arena.Find("Ranger", Me, 40, 40), arena.Find("Ranger", Me, 46, 40));
+        var enemy = arena.Find("Ranger", Enemy, 120, 40);
+        world.SetScriptDisable(held, Entity.ScriptHeld, true);
+        List<SimCommand> Issued(Action act)
+        {
+            var before = arena.Sink.Issued.Count;
+            act();
+            return arena.Sink.Issued.Skip(before).ToList();
+        }
+
+        selection.Replace([held.Id, free.Id]);
+        var move = Issued(() => controller.IssueContext(world, view, Screen(70, 20)));
+        Assert(move is [SetMoveTargetCommand only] && only.Target == free.Id, "a move of the selection goes to the free ranger alone");
+        controller.DrainFeedback();
+        Assert(controller.IssueContext(world, view, Screen(120, 40)) && controller.Orders.TryGet(free.Id, out _) && !controller.Orders.TryGet(held.Id, out _),
+            "an attack on an object is no order for the held ranger");
+        controller.DrainFeedback();
+        var scatter = Issued(() => controller.Scatter(world, [held, free]));
+        Assert(scatter is [SetMoveTargetCommand away] && away.Target == free.Id, "scatter moves the free ranger only");
+        Assert(controller.Activate(world, new CnCNew.Presentation.Input.CommandButtonInfo("Command_TestAttackMove", GuiCommandKind.AttackMove, CommandOptions.NeedTargetPos, "", "", "", [], "", "", "", "", "", "NONE", "", "", ""),
+            [held, free]) == ActivationResult.EnteredMode, "the attack-move button asks for the place");
+        var march = Issued(() => controller.CompleteTarget(world, view, Screen(30, 20)));
+        Assert(march is [GroupMoveCommand { Attack: true } group] && group.Units.SequenceEqual([held.Id, free.Id]), "an attack-move takes the held ranger along (groupAttackMoveToPosition)");
+        controller.DrainFeedback();
+
+        selection.Replace([held.Id]);
+        Assert(Issued(() => controller.IssueContext(world, view, Screen(70, 20))).Count == 0, "a held ranger alone is told nothing");
     }
 
     // ============================================================================================ placement

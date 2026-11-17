@@ -56,6 +56,12 @@ public static class SimulationQueries
 
     public static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
+    /// <summary>
+    /// <c>isDisabledByType(DISABLED_HELD)</c>: a held unit (a stinger site's soldier, a script's held unit) takes no part in the group's moves and attacks on an object
+    /// (<c>AIGroup::groupMoveToPosition</c>, <c>groupScatter</c>, <c>groupAttackObjectPrivate</c>: "don't bother telling the occupants to move", #420).
+    /// </summary>
+    public static bool IsHeld(SimulationWorld world, Entity entity) => (world.DisabledFlagsOf(entity) & DisabledMask.Held) != DisabledMask.None;
+
     /// <summary><c>getRappellerCount</c>: the riders who can go down a Chinook's ropes.</summary>
     public static int Rappellers(SimulationWorld world, Entity entity) => AiOf(entity)?.RappellerCount(world) ?? 0;
 
