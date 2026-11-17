@@ -48,6 +48,12 @@ public static class SimulationQueries
 
     public static ProductionUpdate? ProductionOf(Entity entity) => entity.Modules.OfType<ProductionUpdate>().FirstOrDefault();
 
+    /// <summary>
+    /// <c>Object::getObjectExitInterface</c> as <c>doSetRallyPoint</c> asks it: a producer's exit, or the contain module of an object without one - of the shipped objects with a rally
+    /// point, the tunnels. A rally point set on any other object is set nowhere.
+    /// </summary>
+    public static bool TakesRallyPoint(Entity entity) => ProductionOf(entity) is not null || entity.Container is TunnelContain;
+
     public static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
     /// <summary><c>getRappellerCount</c>: the riders who can go down a Chinook's ropes.</summary>

@@ -826,6 +826,7 @@ run.Test("Rate invariance, projectiles: a free fall is stepped per frame", Tests
 run.Test("Tunnels: shared network, capacity, entry rules and exit through another tunnel", Tests.TunnelSharedNetwork);
 run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
 run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);
+run.Test("Tunnels: a tunnel takes a rally point, and its riders walk on to it", Tests.TunnelRallyPoint);
 run.Test("Transports: walk in, drive and unload at a position", Tests.TransportLoadAndUnloadAtPosition);
 run.Test("Container exit: riders leave a living transport one by one, ExitDelay apart, to places of their own", Tests.ContainerExitRidersLeaveOneByOne);
 run.Test("Container exit: ExitStart and ExitEnd bones, cycling through the exit paths", Tests.ContainerExitUsesTheExitBones);

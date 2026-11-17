@@ -428,7 +428,7 @@ public sealed class CommandModeController
     {
         var (x, y) = (SimulationQueries.ToFixed(ground.X), SimulationQueries.ToFixed(ground.Y));
         var any = false;
-        foreach (var producer in producers.Where(entity => entity.Template.IsKindOf("AUTO_RALLYPOINT") && SimulationQueries.ProductionOf(entity) is not null))
+        foreach (var producer in producers.Where(entity => entity.Template.IsKindOf("AUTO_RALLYPOINT") && SimulationQueries.TakesRallyPoint(entity)))
             any |= Issue((sequence, tick) => new SetRallyPointCommand(Player, sequence, tick, producer.Id, x, y)).Accepted;
         if (any) Feedback(FeedbackKind.RallyMarker, world, ground, EntityId.Invalid, Settings.MarkerFrames);
         return any;
@@ -651,7 +651,7 @@ public sealed class CommandModeController
                 return EnterButtonMode(button, []);
             case GuiCommandKind.SetRallyPoint:
             {
-                var producers = sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).Select(entity => entity.Id).ToImmutableArray();
+                var producers = sources.Where(SimulationQueries.TakesRallyPoint).Select(entity => entity.Id).ToImmutableArray();
                 return producers.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, producers);
             }
             case GuiCommandKind.FireWeapon when !button.NeedsTarget:

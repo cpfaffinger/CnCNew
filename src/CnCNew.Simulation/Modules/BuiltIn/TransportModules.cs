@@ -955,6 +955,9 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
     private bool _registered;
     private TunnelTracker? _tracker;
     private int _capacity;
+    private bool _hasRally;
+    private Fixed _rallyX;
+    private Fixed _rallyY;
 
     public override string ModuleName => "TunnelContain";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -975,6 +978,25 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
         world.TunnelSystemOf(Entity.Owner).AddTunnel(Entity.Id);
         _registered = true;
         _nextWake = world.Tick + SimulationTiming.SleepNone;
+    }
+
+    /// <summary>
+    /// <c>OpenContain::setRallyPoint</c>: a tunnel has no production exit, so <c>Object::getObjectExitInterface</c> answers with its contain module, and <c>doSetRallyPoint</c>
+    /// (GameLogicDispatch.cpp) sets the rally point there. Every rider that leaves through this tunnel walks on to it (<c>exitObjectViaDoor</c> appends it to the exit path).
+    /// </summary>
+    public void SetRally(Fixed x, Fixed y)
+    {
+        _hasRally = true;
+        _rallyX = x;
+        _rallyY = y;
+    }
+
+    /// <summary><c>OpenContain::getRallyPoint</c>: the rally point of this tunnel, when one is set.</summary>
+    public bool TryGetRally(out Fixed x, out Fixed y)
+    {
+        x = _rallyX;
+        y = _rallyY;
+        return _hasRally;
     }
 
     /// <summary><c>OpenContain::isPassengerAllowedToFire</c>: the tunnel has no rule of its own; the data's flag (no shipped tunnel sets it) and, like every open container, the one it rides in.</summary>
@@ -1020,7 +1042,9 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
             rider.X = Entity.X;
             rider.Y = Entity.Y;
             rider.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
-            ai.OrderMove(world, x, y, false);
+            // OpenContain::exitObjectViaDoor: with a rally point the exit path goes on to it (m_rallyPointExists).
+            if (_hasRally) ai.OrderExitContainer(world, Entity, x, y, false, true, _rallyX, _rallyY);
+            else ai.OrderMove(world, x, y, false);
         }
         else
         {
@@ -1122,11 +1146,17 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
     {
         writer.Int("nextWake", _nextWake);
         writer.Bool("registered", _registered);
+        if (!_hasRally) return;
+        writer.Fixed("rallyX", _rallyX);
+        writer.Fixed("rallyY", _rallyY);
     }
 
     public override void Load(IStateReader reader)
     {
         _nextWake = reader.Int("nextWake");
         _registered = reader.Bool("registered");
+        _hasRally = reader.Has("rallyX");
+        _rallyX = _hasRally ? reader.Fixed("rallyX") : Fixed.Zero;
+        _rallyY = _hasRally ? reader.Fixed("rallyY") : Fixed.Zero;
     }
 }

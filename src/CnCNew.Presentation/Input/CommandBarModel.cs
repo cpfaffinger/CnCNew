@@ -639,8 +639,10 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             // ControlBarCommand.cpp, GUI_COMMAND_COMBATDROP: getRappellerCount.
             case GuiCommandKind.CombatDrop:
                 return SimulationQueries.Rappellers(world, entity) > 0 ? State(ButtonAvailability.Available, ButtonReason.None) : State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
+            // ControlBar::getCommandAvailability has no test of its own for GUI_COMMAND_SET_RALLY_POINT (and keeps it even for a disabled object): where the point goes is
+            // doSetRallyPoint's business - a producer's exit or a tunnel's contain module (SimulationQueries.TakesRallyPoint).
             case GuiCommandKind.SetRallyPoint:
-                return production is null ? State(ButtonAvailability.Restricted, ButtonReason.NoProducer) : State(ButtonAvailability.Available, ButtonReason.None);
+                return State(ButtonAvailability.Available, ButtonReason.None);
             // GUI_COMMAND_STOP with OPTION_ONE is the Strategy Center's own: it stops the artillery cannon, so it works only in bombardment mode.
             case GuiCommandKind.Stop when button.Has(CommandOptions.OptionOne):
                 return entity.Modules.OfType<BattlePlanUpdate>().FirstOrDefault() is { } bombardier && bombardier.ActivePlan != BattlePlanKind.Bombardment

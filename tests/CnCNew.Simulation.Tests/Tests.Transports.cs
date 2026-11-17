@@ -295,6 +295,44 @@ static partial class Tests
         Check.That(world.FindEntity(grunt.Id) is { } survivor && !survivor.ContainedBy.IsValid, "The rider walked out of the sold tunnel.");
     }
 
+    /// <summary>
+    /// #417: a tunnel has no production exit, so <c>doSetRallyPoint</c> (GameLogicDispatch.cpp) sets the rally point on its contain module (<c>Object::getObjectExitInterface</c>,
+    /// <c>OpenContain::setRallyPoint</c>), and a rider leaving through it walks on to the point (<c>exitObjectViaDoor</c>). The point is the tunnel's own, it survives a snapshot, and a
+    /// rider of the network that leaves through another tunnel without one stays at that tunnel.
+    /// </summary>
+    public static void TunnelRallyPoint()
+    {
+        var world = TransportWorld(out var fixture, out var feeder);
+        feeder.Spawn(1, "Tunnel", x: 0, y: 0);
+        feeder.Spawn(1, "Tunnel", x: 500, y: 0);
+        feeder.Spawn(1, "Grunt", x: 0, y: 0);
+        feeder.Spawn(1, "Grunt", x: 0, y: 0);
+        world.Step();
+        var a = At(world, "Tunnel", 0, 0);
+        var b = At(world, "Tunnel", 500, 0);
+        var grunts = world.Entities.Where(value => value.Template.Name == "Grunt").OrderBy(value => value.Id.Value).ToArray();
+        Check.That(feeder.SetRallyPoint(1, b.Id.Value, 500, 300).Accepted, "A tunnel takes a rally point.");
+        Check.That(feeder.SetRallyPoint(2, b.Id.Value, 500, 300).Reason == CommandRejection.NotPermitted, "Not another player's.");
+        Check.That(feeder.EnterContainer(1, grunts[0].Id.Value, a.Id.Value).Accepted && feeder.EnterContainer(1, grunts[1].Id.Value, a.Id.Value).Accepted, "Two grunts enter tunnel A.");
+        world.Step();
+        world = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+        feeder = feeder.ForkTo(world);
+        a = At(world, "Tunnel", 0, 0);
+        b = At(world, "Tunnel", 500, 0);
+        Check.That(feeder.ExitContainer(1, grunts[1].Id.Value).Accepted, "One grunt leaves through tunnel A, which has no rally point.");
+        world.Step();
+        var leftAtA = world.FindEntity(grunts[1].Id)!;
+        Check.That(feeder.Evacuate(1, b.Id.Value).Accepted, "The other is evacuated through tunnel B.");
+        for (var tick = 0; tick < world.Frames(30 * 30); tick++) world.Step();
+        var walker = world.FindEntity(grunts[0].Id)!;
+        var dx = walker.X - Fixed.FromInt(500);
+        var dy = walker.Y - Fixed.FromInt(300);
+        Check.That(!walker.ContainedBy.IsValid && Fixed.Sqrt(dx * dx + dy * dy) < Fixed.FromInt(20), $"The grunt that left through tunnel B walked on to its rally point (at {walker.X}, {walker.Y}).");
+        var ax = leftAtA.X - a.X;
+        var ay = leftAtA.Y - a.Y;
+        Check.That(!leftAtA.ContainedBy.IsValid && Fixed.Sqrt(ax * ax + ay * ay) <= Fixed.FromInt(31), $"The grunt that left through tunnel A stays beside it (at {leftAtA.X}, {leftAtA.Y}).");
+    }
+
     /// <summary>MoveAndEnter walks a grunt into a transport; an evacuation order with a position drives there first and unloads on arrival.</summary>
     public static void TransportLoadAndUnloadAtPosition()
     {

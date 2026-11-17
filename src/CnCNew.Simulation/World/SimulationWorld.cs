@@ -1124,7 +1124,7 @@ public sealed partial class SimulationWorld : IWorldServices
             case SellCommand sell:
                 return CheckSell(command.Player, sell, out _);
             case SetRallyPointCommand rally:
-                return CheckRally(command.Player, rally, out _, out _);
+                return CheckRally(command.Player, rally, out _, out _, out _);
             case ResumeConstructCommand resume:
                 return CheckResume(command.Player, resume, out _, out _);
             case CancelConstructCommand cancelConstruct:
@@ -1716,9 +1716,10 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             case SetRallyPointCommand rally:
             {
-                var reason = CheckRally(command.Player, rally, out var producer, out var production);
+                var reason = CheckRally(command.Player, rally, out var producer, out var production, out var tunnel);
                 if (reason != 0) { RecordRejection(command, reason); break; }
-                production!.SetRally(rally.X, rally.Y);
+                if (production is not null) production.SetRally(rally.X, rally.Y);
+                else tunnel!.SetRally(rally.X, rally.Y);
                 MarkDirty(producer!);
                 break;
             }
