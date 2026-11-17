@@ -204,6 +204,7 @@ run.Test("Upgrades (#429): an aura that starts active goes through its upgrade s
 run.Test("Upgrades (#429): an effect list on death follows its upgrade switch, at 30, 60 and 120 Hz", Tests.AnEffectListOnDeathFollowsItsUpgradeSwitch);
 run.Test("Auto heal (#432): a self-heal wakes on the hit and sleeps at full health, at 30, 60 and 120 Hz", Tests.ASelfHealWakesOnTheHitAndSleepsAtFullHealth);
 run.Test("Auto heal (#432): a self-heal waits its start delay after the last hit, at 30, 60 and 120 Hz", Tests.ASelfHealWaitsItsStartDelayAfterTheLastHit);
+run.Test("Auto heal (#432): an aura that starts active first wakes at a random phase, at 30, 60 and 120 Hz", Tests.AnAuraThatStartsActiveFirstWakesAtARandomPhase);
 run.Test("Attack (#429): an object with NO_ATTACK is not able to attack, at 30, 60 and 120 Hz", Tests.AnObjectWithNoAttackIsNotAbleToAttack);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 41: StealthDetectorUpdate detects behind a ridge (no line of sight, as the original)", Tests.Phase5StealthDetectorHeightLineOfSight);

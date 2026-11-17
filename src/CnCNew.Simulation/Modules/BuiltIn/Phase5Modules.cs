@@ -457,7 +457,9 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         if (data.StartsActive) _mux.GiveSelfUpgrade(world, Entity, _ => _active = true);
         // The constructor: "start these guys with random phasings so that we don't have all of 'em check on the same frame" - GameLogicRandomValue(1, HealingDelay) frames,
         // drawn from the logic stream after giveSelfUpgrade, for every aura that starts active (an upgrade's aura wakes when its upgrade comes, without a draw).
-        _nextWake = _active ? Math.Min(world.Tick + world.Time.AtLeastOneFrame(data.StartHealingDelayTicks), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
+        _nextWake = data.StartsActive
+            ? world.Tick + world.Time.DrawFrames(world.LogicRandom, world.Time.TicksPerOriginalFrame, world.Time.AtLeastOneFrame(data.HealingDelayTicks))
+            : SimulationTiming.SleepForever;
     }
 
     /// <summary><c>upgradeImplementation</c>: <c>setWakeFrame(UPDATE_SLEEP_NONE)</c> - the module looks with the object's next frame (not after <c>StartHealingDelay</c>, which only a hit starts).</summary>

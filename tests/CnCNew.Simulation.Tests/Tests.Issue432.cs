@@ -39,6 +39,20 @@ static partial class Tests
             StartHealingDelay = 2000
           End
         End
+        Object AuraHealer432
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AutoHealBehavior Heal01
+            StartsActive = Yes
+            HealingAmount = 2
+            HealingDelay = 1000
+            KindOf = VEHICLE
+            AffectsWholePlayer = Yes
+          End
+        End
         """;
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) SelfHealWorld(SimulationRate rate)
@@ -129,5 +143,43 @@ static partial class Tests
             var second = NextSelfHeal(world, 40);
             Check.That(second - first == world.Frames(30), $"{rate}: then every HealingDelay ({second - first} ticks).");
         }
+    }
+
+    /// <summary>
+    /// The constructor of <c>AutoHealBehavior</c>: an aura that starts active first wakes <c>GameLogicRandomValue(1, HealingDelay)</c> frames after it appears ("random phasings so
+    /// that we don't have all of 'em check on the same frame"), one draw of the logic stream after <c>giveSelfUpgrade</c>; an aura of an upgrade draws nothing. The port woke it
+    /// <c>StartHealingDelay</c> (at least a frame) after its birth without a draw. The same draw, so the same frame, at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AnAuraThatStartsActiveFirstWakesAtARandomPhase()
+    {
+        var drawn = new List<long>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = SelfHealWorld(rate);
+            feeder.Spawn(1, "JunkCar432", owner: 1);
+            StepFrames(world, 1);
+            feeder.Damage(1, 30);
+            StepFrames(world, 1);
+            var state = new uint[6];
+            world.LogicRandom.CopyState(state);
+            var expected = new CnCNew.Simulation.Random.SageRandom(0);
+            expected.SetState(state);
+            var frames = expected.Range(1, 30);
+            var appeared = world.Tick;
+            feeder.Spawn(1, "AuraHealer432", owner: 1);
+            world.Step();
+            var after = new uint[6];
+            world.LogicRandom.CopyState(after);
+            var stateAfterOneDraw = new uint[6];
+            expected.CopyState(stateAfterOneDraw);
+            Check.That(after.SequenceEqual(stateAfterOneDraw), $"{rate}: the healer's birth draws once from the logic stream.");
+            var healer = world.Entities.Single(entity => entity.Template.Name == "AuraHealer432");
+            var module = healer.Modules.OfType<AutoHealBehavior>().Single();
+            Check.That(module.NextWake == appeared + world.Frames(frames), $"{rate}: the aura first wakes the drawn {frames} frames after its birth ({module.NextWake - appeared} ticks).");
+            var heal = NextSelfHeal(world, 40);
+            Check.That(heal == appeared + world.Frames(frames), $"{rate}: and heals the hurt car then ({heal - appeared} ticks).");
+            drawn.Add(frames);
+        }
+        Check.That(drawn.Distinct().Count() == 1, $"The same draw at every rate ({string.Join(" ", drawn)}).");
     }
 }
