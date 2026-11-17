@@ -936,7 +936,7 @@ internal static class StructureConditionTests
 
         Check(catalog["ChinaVehicleNukeLauncher"].ManualDeployAnimations, "The Nuke Cannon's deploy animations are manual.");
         var cannon = spawn("ChinaVehicleNukeLauncher", 2, 3500, 3000);
-        var target = spawn("AmericaTankCrusader", 1, 3700, 3000);
+        var target = spawn("AmericaTankCrusader", 1, 3720, 3000);
         var deploy = cannon.Modules.OfType<DeployStyleAIUpdate>().Single();
         var projector = new FrameProjector(catalog);
         Check(world.Submit(new FireWeaponCommand(new PlayerId(2), ++sequence, world.Tick, cannon.Id, target.Id)).Accepted, "The cannon is ordered to fire.");

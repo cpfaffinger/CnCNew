@@ -136,7 +136,7 @@ public sealed partial class SimulationWorld
     /// <c>Pathfinder::findAttackPath</c> for a mobile ground unit with a weapon that is not a contact weapon (F-143: <c>AIAttackApproachTargetState::computePath</c> asks it for every
     /// such attacker; the port asks it for a unit of the kind <c>ATTACK_NEEDS_LINE_OF_SIGHT</c> and for one that stands inside its weapon's minimum range): the place it moves to so that it can fire at the victim - first up to nine
     /// points half a cell apart straight toward the victim, then a search outward from the unit toward the victim over at most 2,500 cells; the first that is passable for the
-    /// unit, within the weapon's range less a quarter cell (and outside its minimum range plus as much) and has a clear view is the goal. Null when the search finds none:
+    /// unit, within the weapon's range less a quarter cell (and outside its minimum range plus as much), both between the bounding circles (#422), and has a clear view is the goal. Null when the search finds none:
     /// the unit then walks at the victim and stops where it can fire (the fallback of <c>doPathfind</c>); a unit inside its minimum range then steps to a free place beside it
     /// instead (the unstack of <c>computeAttackPath</c>), also in a world without terrain. A unit not of that kind that stands outside its minimum range is not searched for: the
     /// walk at its victim stops where the search's goal would. Not modelled: the test of <c>checkDestination</c> that no other unit has its goal there, the vehicles' strip-back past
@@ -150,6 +150,8 @@ public sealed partial class SimulationWorld
         var (victimX, victimY, _) = victim.FrameEnd(_tick);
         WeaponInfo? chosen = null;
         var tooClose = false;
+        // isGoalPosWithinAttackRange and isTooClose measure between the two bounding circles (FROM_BOUNDINGSPHERE_2D, #422).
+        var radii = CircleRadius(unit) + CircleRadius(victim);
         // In range but the view is blocked: only a unit of the kind that needs a view is held back by that (F-55).
         if (AttackUsesLineOfSight && Navigation is not null && Terrain is not null && unit.Template.IsKindOf(NeedsLineOfSightKind))
         {
@@ -163,7 +165,7 @@ public sealed partial class SimulationWorld
             // range (stacked on the victim, or the victim ran up to it) has to move out of it, while a unit further away passes into the range ring and stops there as the search's
             // goal would stop it.
             if (CurrentWeapon(unit) is not { } current || current.MinimumAttackRange <= Fixed.Zero) return null;
-            var closeRange = SquaredReach.Of(current.MinimumAttackRange + GoalRangeMargin);
+            var closeRange = SquaredReach.Of(current.MinimumAttackRange + GoalRangeMargin + radii);
             var offX = victimX - unitX;
             var offY = victimY - unitY;
             if (!closeRange.ContainsStrictly(offX * offX + offY * offY)) return null;
@@ -174,10 +176,10 @@ public sealed partial class SimulationWorld
         var weapon = chosen;
         // A contact weapon paths into its victim ("let the attacker pathfind into the target").
         if (IsContactWeapon(weapon)) return null;
-        var range = weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(unit));
-        var far = SquaredReach.Of(range - GoalRangeMargin);
+        var range = AttackRangeOf(unit, weapon);
+        var far = SquaredReach.Of(range - GoalRangeMargin + radii);
         var hasNear = weapon.MinimumAttackRange > Fixed.Zero;
-        var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin);
+        var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin + radii);
 
         // A world without terrain has no cells to search; a unit inside its minimum range still steps out of it.
         if (Navigation is not { } grid || Terrain is not { } terrain) return tooClose ? StepOffTheVictim() : null;
@@ -222,7 +224,8 @@ public sealed partial class SimulationWorld
         var stamp = _attackSearchStamp;
         var cost = _attackSearchCost!;
         var run = _attackSearchRun;
-        var halfAttack = (range + Fixed.FromInt(3 * global::CnCNew.Simulation.Terrain.TerrainMap.CellSize)) / Fixed.FromInt(2);
+        // getAttackDistance: the range and the two radii.
+        var halfAttack = (range + radii + Fixed.FromInt(3 * global::CnCNew.Simulation.Terrain.TerrainMap.CellSize)) / Fixed.FromInt(2);
         long Heuristic(int cx, int cy)
         {
             var dx = global::CnCNew.Simulation.Terrain.TerrainMap.CellCenter(cx) - victimX;
@@ -281,7 +284,7 @@ public sealed partial class SimulationWorld
             var awayY = unitY - victimY;
             var away = Fixed.Sqrt(awayX * awayX + awayY * awayY);
             var (directionX, directionY) = away > Fixed.Zero ? (awayX / away, awayY / away) : (Fixed.One, Fixed.Zero);
-            var distance = weapon.MinimumAttackRange + GoalRangeMargin * Fixed.FromInt(2);
+            var distance = weapon.MinimumAttackRange + GoalRangeMargin * Fixed.FromInt(2) + radii;
             var (freeX, freeY) = (victimX + directionX * distance, victimY + directionY * distance);
             return FindPossibleDestination(unit, ref freeX, ref freeY) && (freeX != unitX || freeY != unitY) ? (freeX, freeY) : null;
         }

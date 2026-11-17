@@ -104,19 +104,14 @@ public static class SimulationQueries
             : world.PassesAttackToRiders(source) ? world.RidersCanAttack(source, target, out var inRange) && inRange
             : world.OrderedSlaves(source).Any(slave => HasWeapon(slave) && InRange(world, slave, target));
 
+    /// <summary>
+    /// Whether <paramref name="source"/> may fire at <paramref name="target"/> from where it stands: the world's own test (<see cref="SimulationWorld.WeaponReaches"/>, the range between the
+    /// bounding circles as <c>Weapon::isWithinAttackRange</c> measures it, #422) for the weapon that would fire at this victim - not the longest of the set (the Gattling Tank's anti-air gun
+    /// reaches 350, its ground gun 150) -, and a view that is not blocked.
+    /// </summary>
     public static bool InRange(SimulationWorld world, Entity source, Entity target)
-    {
-        // A contact weapon reaches between the bounding circles, and a structure only when touched (#414): the world answers.
-        if (world.ContactWeaponReaches(source, target) is { } contact) return contact;
-        // The weapon that would fire at this victim decides, not the longest of the set (the Gattling Tank's anti-air gun reaches 350, its ground gun 150).
-        var reach = world.WeaponRangeAgainst(source, target);
-        // No weapon is chosen for a player's attack (a weapon whose AutoChooseSources leave the player out, the boss's Scud Storm): the set's longest range, as before.
-        if (reach == Fixed.Zero) reach = WeaponRange(world, source);
-        var dx = target.X - source.X;
-        var dy = target.Y - source.Y;
         // A unit that cannot see its victim from here is not in range: it keeps approaching (outOfWeaponRangeObject, F-55).
-        return reach > Fixed.Zero && SquaredReach.Of(reach).Contains(dx * dx + dy * dy) && !world.AttackViewBlocksFiring(source, target);
-    }
+        => world.WeaponReaches(source, target) && !world.AttackViewBlocksFiring(source, target);
 
     /// <summary><c>SimulationWorld.CanBuildTemplate</c>: a buildable structure of the builder's side (<c>Player::canBuild</c>).</summary>
     public static bool CanBuildTemplate(SimulationWorld world, PlayerId player, Entity builder, ObjectTemplate template)

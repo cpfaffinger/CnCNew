@@ -201,16 +201,18 @@ public sealed partial class SimulationWorld
         AfterCycleShot(entity, ref state.Cycle, slot);
     }
 
-    /// <summary><c>Weapon::isWithinAttackRange(source, pos)</c>: the place within the weapon's range of the shooter (its fire point in a garrison), not nearer than the minimum range.</summary>
+    /// <summary>
+    /// <c>Weapon::isWithinAttackRange(source, pos)</c>: the place within the weapon's range of the shooter (its fire point in a garrison), not nearer than the minimum range - measured from
+    /// the shooter's bounding circle (<c>FROM_BOUNDINGSPHERE_2D</c> with a place, which has none; #422).
+    /// </summary>
     private bool WithinPlaceRange(Entity source, WeaponInfo weapon, AttackPlaceState state)
     {
         if (!TryRangeOrigin(source, state.X, state.Y, state.Z, out var sourceX, out var sourceY)) return false;
         var dx = state.X - sourceX;
         var dy = state.Y - sourceY;
         var distanceSquared = dx * dx + dy * dy;
-        if (!SquaredReach.Of(weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source))).Contains(distanceSquared)) return false;
-        var minimum = weapon.MinimumAttackRange;
-        return minimum <= Fixed.Zero || !SquaredReach.ContainsStrictly(minimum, distanceSquared, Fixed.FromDecimal(0.5m));
+        var radius = CircleRadius(source);
+        return !InsideMinimumRange(weapon, radius, distanceSquared) && SquaredReach.Of(AttackRangeOf(source, weapon) + radius).Contains(distanceSquared);
     }
 
     /// <summary>

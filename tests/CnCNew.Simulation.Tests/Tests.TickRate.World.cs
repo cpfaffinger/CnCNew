@@ -245,6 +245,8 @@ static partial class Tests
             var waited = TicksUntilShot(world, feeder, tank.Id.Value, runner.Id.Value, limit: 80 * factor);
             Check.That(waited > 0 && world.AttackTargetOf(tank) == runner.Id, $"{rate}: the tank attacks (first shot after {waited} ticks).");
             feeder.SetMoveTarget(2, runner.Id.Value, 0, 400);
+            // The weapon's range of 150 between the two bounding circles (#422).
+            var reach = Fixed.FromInt(150) + tank.Template.BoundingCircleRadius + runner.Template.BoundingCircleRadius;
             long outOfRange = -1;
             long lost = -1;
             for (var i = 0; i < 300 * factor && lost < 0; i++)
@@ -253,7 +255,7 @@ static partial class Tests
                 // The turret decides once per logic frame and reads the runner where the frame it has begun ends (the position at 30 Hz): so does the measurement.
                 var (runnerX, runnerY, _) = runner.FrameEnd(world.Tick - 1);
                 var (apartX, apartY) = (runnerX - tank.X, runnerY - tank.Y);
-                if (outOfRange < 0 && apartX * apartX + apartY * apartY > Fixed.FromInt(150 * 150)) outOfRange = i;
+                if (outOfRange < 0 && apartX * apartX + apartY * apartY > reach * reach) outOfRange = i;
                 if (!world.AttackTargetOf(tank).IsValid) lost = i;
             }
 

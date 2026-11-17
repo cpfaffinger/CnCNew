@@ -190,7 +190,9 @@ internal static class JetOrderTests
         TestHarness.Assert(passes >= 3, $"at least three passes over the target in 80 seconds ({passes})");
         TestHarness.Assert(farthestAfterPass.Take(passes - 1).All(value => value >= 280f), $"after each overflight the jet flew out for about a weapon range before turning ({string.Join(", ", farthestAfterPass.Select(value => value.ToString("F0")))})");
         TestHarness.Assert(shots >= passes, $"the gun fired on the passes ({shots} shots)");
-        TestHarness.Assert(shotDistances.All(value => value is >= 90f and <= 330f), $"every shot was inside the weapon's range band (measured after the tick's move) ({shotDistances.Min():F0}..{shotDistances.Max():F0})");
+        // The band between the two bounding circles (#422: Weapon::isWithinAttackRange measures FROM_BOUNDINGSPHERE_2D), here between the centres.
+        var circles = (float)(jet.Template.BoundingCircleRadius + target.Template.BoundingCircleRadius).ToDecimal();
+        TestHarness.Assert(shotDistances.All(value => value >= 90f && value <= 330f + circles), $"every shot was inside the weapon's range band (measured after the tick's move) ({shotDistances.Min():F0}..{shotDistances.Max():F0}, circles {circles:F0})");
         TestHarness.Assert(slowest >= SimulationTimingMin, $"the fighter never flew slower than its minimum speed ({slowest} per tick after tick {slowestTick}, spawned in tick {jet.SpawnTick})");
         Console.WriteLine($"       jet passes: {passes} passes, {shots} shots, farthest out {string.Join(", ", farthestAfterPass.Select(value => value.ToString("F0")))}");
         TestHarness.Assert(rig.Orders.TryGet(jet.Id, out _), "the attack order stands while the target lives");

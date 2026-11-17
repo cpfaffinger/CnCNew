@@ -498,7 +498,8 @@ public sealed partial class SimulationWorld
         if (IsHiddenFrom(attacker.Owner, victim)
             && !(attacker.Acquisition is { FireOrdered: true, OrderOrigin: FireOrigin.Player } forced && forced.Victim == victim.Id && StealthYieldsToForce(attacker, victim))) return false;
         if (state.Pursuing) { state.LoseInterestAt = 0; return true; }
-        var range = MaxWeaponRange(attacker);
+        // Between the bounding circles, as every weapon range (#422).
+        var range = MaxWeaponRange(attacker) + CircleRadius(attacker) + CircleRadius(victim);
         var (victimX, victimY, _) = victim.FrameEnd(_tick);
         var (ownX, ownY, _) = attacker.FrameEnd(_tick);
         var dx = victimX - ownX;

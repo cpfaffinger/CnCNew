@@ -290,8 +290,10 @@ static partial class Tests
             Check.That(ticks.Count == 6, $"Level {level}: six shots observed.");
 
             var rangeWorld = VeterancyWorld(out _, out var rangeFeeder);
+            // The range is measured between the two bounding circles (#422): the target stands 52 beyond them.
+            var circles = rangeWorld.Templates.Templates.First(value => value.Name == "Recruit").BoundingCircleRadius + rangeWorld.Templates.Templates.First(value => value.Name == "Tank").BoundingCircleRadius;
             rangeFeeder.Spawn(1, "Recruit", x: 0);
-            rangeFeeder.Spawn(2, "Tank", x: 52);
+            rangeFeeder.SpawnAt(2, "Tank", Fixed.FromInt(52) + circles, Fixed.Zero);
             rangeWorld.Step();
             rangeWorld.SetVeterancy(new EntityId(IdOf(rangeWorld, "Recruit")), level);
             var shots = 0;

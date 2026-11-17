@@ -118,7 +118,9 @@ static partial class Tests
             Check.That(hits.Count == 2, $"{rate}: two shots hit the place ({hits.Count}).");
             Check.That(!world.IsAttackingPlace(cannon), $"{rate}: with its shots fired the cannon is done.");
             var distance = GdDistance(cannon, 300, 0);
-            Check.That(distance <= Fixed.FromInt(150) && distance > Fixed.FromInt(120), $"{rate}: it stopped within its range of the place ({distance}).");
+            // The range reaches from the cannon's bounding circle (#422: FROM_BOUNDINGSPHERE_2D, a place has no circle).
+            var reach = Fixed.FromInt(150) + cannon.Template.BoundingCircleRadius;
+            Check.That(distance <= reach && distance > Fixed.FromInt(120), $"{rate}: it stopped within its range of the place, from its circle ({distance}, {reach}).");
             return [.. hits];
         }
 

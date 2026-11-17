@@ -100,8 +100,9 @@ internal static class DeployAnimationTests
         }
 
         var cannon = Spawn(Cannon, 2, 3500, 3000);
-        // The victim stands to the cannon's left: its turret turns a quarter circle to it and back.
-        var target = Spawn("AmericaTankCrusader", 1, 3500, 3250);
+        // The victim stands to the cannon's left: its turret turns a quarter circle to it and back. An unarmed dozer: a tank would answer the shot, walk up to where its gun reaches
+        // between the two circles (#422) and damage the cannon, whose model would then show another state.
+        var target = Spawn("AmericaVehicleDozer", 1, 3500, 3250);
         var deploy = cannon.Modules.OfType<DeployStyleAIUpdate>().Single();
         var projector = new FrameProjector(ObjectVisualCatalog.Build(graph));
         DrawableInstance Drawn()

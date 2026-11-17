@@ -211,8 +211,11 @@ public sealed partial class SimulationWorld
         => (weapon.AntiMask & victimAntiMask) != 0 && (EstimateDamage(source, weapon, victim) > Fixed.Zero || weapon.DamageType == DamageTypes.Unresistable);
 
     /// <summary>
-    /// <c>Weapon::isWithinAttackRange</c> with the center distance this world uses everywhere: within the attack range and not inside the minimum attack range. A contained rider measures
-    /// from where it fires (<see cref="TryRangeOrigin"/>, F-60): from its fire point or station in a garrison, from its container in any other.
+    /// <c>Weapon::isWithinAttackRange</c>: within the attack range and not inside the minimum attack range, both measured as the original measures every weapon range,
+    /// <c>ATTACK_RANGE_CALC_TYPE</c> = <c>FROM_BOUNDINGSPHERE_2D</c> - between the two bounding circles in the plane (#422; <c>distCalcProc_BoundaryAndBoundary_2D</c>): a tank reaches a
+    /// large building from as far as its range plus the two radii. A contact weapon at a structure must also touch it ("we want to do a more detailed check to see if we're actually
+    /// colliding with the target", <c>iteratePotentialCollisions</c>; #414). A bridge is attacked at the nearer of its two attack points, which are places without a circle. A contained
+    /// rider measures from where it fires (<see cref="TryRangeOrigin"/>, F-60) - its fire point or station in a garrison, its container's in any other - with its own circle.
     /// </summary>
     private bool WithinWeaponRange(Entity source, WeaponInfo weapon, Entity victim)
     {
@@ -224,51 +227,58 @@ public sealed partial class SimulationWorld
         var dx = victimX - sourceX;
         var dy = victimY - sourceY;
         var distanceSquared = dx * dx + dy * dy;
-        var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
+        var reach = AttackRangeOf(source, weapon);
+        var radii = CircleRadius(source);
         // "Special case - bridges have two attackable points at either end."
-        if (_bridges.Count != 0 && victim.Template.IsKindOf("BRIDGE") && BridgeOf(victim.Id) is { } bridge)
+        var bridgeVictim = _bridges.Count != 0 && victim.Template.IsKindOf("BRIDGE") && BridgeOf(victim.Id) is not null;
+        if (bridgeVictim)
         {
-            var (first, second) = bridge.AttackPoints();
+            var (first, second) = BridgeOf(victim.Id)!.AttackPoints();
             (dx, dy) = (first.X - sourceX, first.Y - sourceY);
             distanceSquared = dx * dx + dy * dy;
-            if (!SquaredReach.Of(reach).Contains(distanceSquared))
+            if (!SquaredReach.Of(reach + radii).Contains(distanceSquared))
             {
                 (dx, dy) = (second.X - sourceX, second.Y - sourceY);
                 distanceSquared = dx * dx + dy * dy;
             }
         }
-        if (IsContactWeapon(weapon) && !victim.Template.IsKindOf("BRIDGE")) return WithinContactRange(source, victim, reach, distanceSquared);
-        if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
+        else radii += CircleRadius(victim);
+        // "too close. can't attack."
+        if (InsideMinimumRange(weapon, radii, distanceSquared)) return false;
+        if (!SquaredReach.Of(reach + radii).Contains(distanceSquared)) return false;
+        // "only compare contact weapons with structures": the port's bridge object has no footprint of the original's, so a bridge stays out of the touch test.
+        return bridgeVictim || !IsContactWeapon(weapon) || !victim.Template.IsKindOf("STRUCTURE") || FootprintsOverlap(source, victim);
+    }
+
+    /// <summary><c>Weapon::getAttackRange</c>: the weapon's range with the bonuses of <paramref name="source"/>.</summary>
+    private Fixed AttackRangeOf(Entity source, WeaponInfo weapon) => weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
+
+    /// <summary>
+    /// The minimum-range test of <c>Weapon::isWithinAttackRange</c> between two bounding circles <paramref name="radii"/> apart in sum, the centres <paramref name="distanceSquared"/>
+    /// apart squared: the gap between the circles (none where they overlap) inside the weapon's minimum range.
+    /// </summary>
+    private static bool InsideMinimumRange(WeaponInfo weapon, Fixed radii, Fixed distanceSquared)
+    {
         var minimum = weapon.MinimumAttackRange;
-        // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f" (the shipped, non-RATIONALIZE_ATTACK_RANGE build).
-        return minimum <= Fixed.Zero || !SquaredReach.ContainsStrictly(minimum, distanceSquared, Fixed.FromDecimal(0.5m));
+        if (minimum <= Fixed.Zero) return false;
+        var shrunk = Fixed.Max(Fixed.Zero, Fixed.Sqrt(distanceSquared) - radii);
+        // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f".
+        return SquaredReach.ContainsStrictly(minimum, shrunk * shrunk, Fixed.FromDecimal(0.5m));
     }
 
     /// <summary>
-    /// <c>Weapon::isWithinAttackRange</c> for a contact weapon (#414): the range is measured as the original measures every range, <c>ATTACK_RANGE_CALC_TYPE</c> =
-    /// <c>FROM_BOUNDINGSPHERE_2D</c>, between the two bounding circles; and at a structure the attacker must also touch it ("we want to do a more detailed check to see if we're actually
-    /// colliding with the target", <c>iteratePotentialCollisions</c>). The port measures the other weapons between the centres; a contact weapon measured so reaches no unit, whose
-    /// circle keeps the attacker's off: Colonel Burton circled a soldier at the two radii and never stabbed, a terrorist or a bomb truck never reached a vehicle. A contact weapon has
-    /// no minimum range in the data.
+    /// The client's "in range" (#422): the weapon <paramref name="source"/> would fire at <paramref name="victim"/> (<see cref="WeaponRangeAgainst"/>'s) reaches it as the attack measures it
+    /// (<see cref="WithinWeaponRange"/>, between the bounding circles); when no weapon is chosen for it (a weapon whose <c>AutoChooseSources</c> leave the player out, the boss's Scud
+    /// Storm), any weapon of the active set.
     /// </summary>
-    private bool WithinContactRange(Entity source, Entity victim, Fixed reach, Fixed distanceSquared)
+    public bool WeaponReaches(Entity source, Entity victim)
     {
-        if (!SquaredReach.Of(reach + CircleRadius(source) + CircleRadius(victim)).Contains(distanceSquared)) return false;
-        return !victim.Template.IsKindOf("STRUCTURE") || FootprintsOverlap(source, victim);
-    }
-
-    /// <summary>
-    /// Whether the weapon <paramref name="source"/> would fire at <paramref name="victim"/> (<see cref="WeaponRangeAgainst"/>'s) reaches it, when that weapon is a contact weapon
-    /// (<see cref="WithinContactRange"/>, #414): the question the client's "in range" asks with the range alone, which a contact weapon's range between the centres never answers. Null
-    /// for any other weapon, or none.
-    /// </summary>
-    public bool? ContactWeaponReaches(Entity source, Entity victim)
-    {
-        var set = ActiveWeaponSet(source);
+        if (ActiveWeaponSet(source) is not { } set) return false;
         var slot = AttackSlotIgnoringRange(source, victim);
-        if (set is null || slot < 0 || !set.HasWeapon(slot)) return null;
-        var weapon = _templates.Weapons[set.Weapons[slot]];
-        return IsContactWeapon(weapon) ? WithinWeaponRange(source, weapon, victim) : null;
+        if (slot >= 0 && set.HasWeapon(slot)) return WithinWeaponRange(source, _templates.Weapons[set.Weapons[slot]], victim);
+        for (var candidate = 0; candidate < WeaponSlot.Count; candidate++)
+            if (set.HasWeapon(candidate) && WithinWeaponRange(source, _templates.Weapons[set.Weapons[candidate]], victim)) return true;
+        return false;
     }
 
     private static bool IsPreferredAgainst(WeaponSetInfo set, int slot, Entity victim)
