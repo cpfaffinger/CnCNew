@@ -33,6 +33,19 @@ static partial class Tests
             Radius = 100.0
           End
         End
+        Object WholePlayerHealer438
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AutoHealBehavior Heal01
+            StartsActive = Yes
+            HealingAmount = 2
+            HealingDelay = 1000
+            AffectsWholePlayer = Yes
+          End
+        End
         """;
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) HealAura438World(SimulationRate rate, TerrainMap? terrain = null)
@@ -129,6 +142,34 @@ static partial class Tests
             Check.That(ticks.Zip(ticks.Skip(1), (a, b) => b - a).All(span => span == world.Frames(30)), $"{rate}: one heal a second ({string.Join(" ", ticks.Zip(ticks.Skip(1), (a, b) => b - a))}).");
             Check.That(patient.SoleHealingBenefactor == holder, $"{rate}: the aura that holds the patient keeps it.");
             Check.That(restoredTicks.SequenceEqual(ticks) && restored.StateHash == world.StateHash, $"{rate}: the restored world heals the same.");
+        }
+    }
+
+    /// <summary>
+    /// <c>checkForAutoHeal</c> skips an object off the map (<c>Object::isOffMap</c>), and the radius scan takes only what is as much on or off the map as the healer
+    /// (<c>PartitionFilterSameMapStatus</c>): an off-map patient is healed by neither aura on the map, and by a radius aura off the map. The port healed it. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AHealingAuraKeepsToItsSideOfTheMapEdge()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            foreach (var (healer, healerX, patientX, heals) in new[]
+            {
+                ("WholePlayerHealer438", 10, -20, false), ("WholePlayerHealer438", 10, 20, true),
+                ("RadiusHealer438", 10, -20, false), ("RadiusHealer438", 10, 40, true), ("RadiusHealer438", -40, -20, true),
+            })
+            {
+                var (world, feeder, _) = HealAura438World(rate, NavTerrain());
+                feeder.Spawn(1, "AuraPatient438", owner: 1, x: patientX, y: 20);
+                StepFrames(world, 1);
+                var patient = HealAura438Find(world, "AuraPatient438");
+                feeder.Damage(patient.Id.Value, 50);
+                StepFrames(world, 1);
+                feeder.Spawn(1, healer, owner: 1, x: healerX, y: 20);
+                var (ticks, _) = HealAura438Heals(world, patient, 100);
+                Check.That(heals ? ticks.Count >= 3 : ticks.Count == 0,
+                    $"{rate}: {healer} at x {healerX} {(heals ? "heals" : "does not heal")} a patient at x {patientX} ({ticks.Count} heals).");
+            }
         }
     }
 }

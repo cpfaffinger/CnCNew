@@ -554,7 +554,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
 
     /// <summary>
     /// <c>checkForAutoHeal</c> and the radius scan: an object that is hurt (an object at full health is not pulsed), of the kinds, of the player for <c>AffectsWholePlayer</c> and
-    /// an ally of the healer inside the radius otherwise (<c>PartitionFilterRelationship::ALLOW_ALLIES</c> - its own player's objects are its allies).
+    /// an ally of the healer inside the radius otherwise (<c>PartitionFilterRelationship::ALLOW_ALLIES</c> - its own player's objects are its allies); on the map for the whole
+    /// player, as much on or off the map as the healer for the radius.
     /// </summary>
     private bool Matches(IWorldServices world, Entity candidate)
     {
@@ -563,10 +564,13 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         if (data.SkipSelfForHealing && candidate.Id == Entity.Id) return false;
         if (!data.KindOf.IsEmpty && !data.KindOf.Any(candidate.Template.IsKindOf)) return false;
         if (data.ForbiddenKindOf.Any(candidate.Template.IsKindOf)) return false;
-        if (data.AffectsWholePlayer) return true;
         // Where the frames end (F-73): above 30 Hz a mover that has decided its frame is still inside the step the 30 Hz aura sees it at the end of.
         var (x, y, _) = candidate.FrameEnd(world.Tick);
+        // checkForAutoHeal skips what is off the map; the radius scan takes what is as much on or off the map as the healer (PartitionFilterSameMapStatus).
+        var offMap = FlightModules.IsOffMap(world, x, y);
+        if (data.AffectsWholePlayer) return !offMap;
         var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+        if (offMap != FlightModules.IsOffMap(world, ownX, ownY)) return false;
         var dx = x - ownX;
         var dy = y - ownY;
         return SquaredReach.Of(data.Radius).Contains(dx * dx + dy * dy);
