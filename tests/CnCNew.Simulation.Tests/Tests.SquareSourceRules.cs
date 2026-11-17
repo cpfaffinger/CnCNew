@@ -31,7 +31,6 @@ static partial class Tests
         // -- a length that is at most a distance between two positions (the squared distance it was taken from did not overflow)
         new("Simulation/World/SimulationWorld.Combat.cs", RuleSelfProduct, "shrunkSquared = shrunk * shrunk", "the centre distance minus the victim's bounding sphere: below a distance whose square was just formed"),
         new("Simulation/Modules/BuiltIn/AirWeaponModules.cs", RuleSelfProduct, "shrunk * shrunk : Fixed.Zero", "the centre distance minus the candidate's bounding sphere: below a distance whose square was just formed"),
-        new("Simulation/World/SimulationWorld.WeaponSlots.cs", RuleSelfProduct, "return SquaredReach.ContainsStrictly(minimum, shrunk * shrunk", "the centre distance minus the two bounding circles: below a distance whose square was just formed"),
         new("Simulation/Modules/BuiltIn/SlaveModules.cs", RuleSelfProduct, "private static Fixed ShrunkSquared(Fixed distance)", "a distance between two objects minus their bounding circles"),
         // -- geometry of a template or of a growing shape: the largest retail radius is 1,117 (rate-audit --ranges)
         new("Simulation/Templates/ObjectTemplate.cs", RuleSelfProduct, "public Fixed BoundingCircleRadius =>", "the diagonal of a box of the template's geometry"),

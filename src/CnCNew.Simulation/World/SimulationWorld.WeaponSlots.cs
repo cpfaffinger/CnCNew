@@ -265,15 +265,14 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// The minimum-range test of <c>Weapon::isWithinAttackRange</c> between two bounding circles <paramref name="radii"/> apart in sum, the centres <paramref name="distanceSquared"/>
-    /// apart squared: the gap between the circles (none where they overlap) inside the weapon's minimum range.
+    /// apart squared: the gap between the circles (none where they overlap) inside the weapon's minimum range. The shipped build (<c>RATIONALIZE_ATTACK_RANGE</c>) compares
+    /// <c>distSqr &lt; minAttackRangeSqr</c> with <c>getMinimumAttackRange</c> a quarter cell short (<see cref="WeaponInfo.MinimumRange"/>, #422) - not the other build's
+    /// <c>minAttackRangeSqr - 0.5f</c>. The gap is short of the minimum range exactly when the centres are closer than the minimum range and the two radii.
     /// </summary>
     private static bool InsideMinimumRange(WeaponInfo weapon, Fixed radii, Fixed distanceSquared)
     {
-        var minimum = weapon.MinimumAttackRange;
-        if (minimum <= Fixed.Zero) return false;
-        var shrunk = Fixed.Max(Fixed.Zero, Fixed.Sqrt(distanceSquared) - radii);
-        // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f".
-        return SquaredReach.ContainsStrictly(minimum, shrunk * shrunk, Fixed.FromDecimal(0.5m));
+        var minimum = weapon.MinimumRange();
+        return minimum > Fixed.Zero && SquaredReach.Of(minimum + radii).ContainsStrictly(distanceSquared);
     }
 
     /// <summary>

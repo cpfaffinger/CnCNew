@@ -155,4 +155,36 @@ static partial class Tests
             }
         }
     }
+
+    /// <summary>
+    /// <c>RATIONALIZE_ATTACK_RANGE</c> for the minimum range and the contact weapons: a Nuke Cannon (minimum range 150) fires at a tank whose circle is 148.5 from its own - its
+    /// <c>getMinimumAttackRange</c> is a quarter cell short and compared strictly, not with the other build's half unit -, not at one 147 away, nor at one 100 away whose centre is beyond 150;
+    /// and of the product's weapons exactly <c>NapalmBombWeapon</c> and <c>BlackNapalmBombWeapon</c> (range 10) become contact weapons ((range - 2.5) &lt; 10 instead of range · 1.05 &lt; 10).
+    /// </summary>
+    public static void RealMinimumRangeAndContactWeaponsAreRationalized(string directory)
+    {
+        var (graph, fingerprint) = RangeGraph(directory);
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var catalog = TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
+            var crusader = catalog.Templates.First(value => value.Name == "AmericaTankCrusader").BoundingCircleRadius;
+            foreach (var (gap, reaches) in new[] { (148.5m, true), (147m, false), (100m, false) })
+            {
+                var scene = RangeScene.Create(catalog, fingerprint, rate);
+                var cannon = scene.Spawn("ChinaVehicleNukeLauncher", 1, Fixed.FromInt(400), Fixed.FromInt(600));
+                var weapon = scene.World.Weapons[SimulationWorld.WeaponIndexIn(cannon, WeaponSlot.Primary)];
+                Check.That(weapon.MinimumAttackRange == Fixed.FromInt(150), $"{rate}: setup - the Nuke Cannon's minimum range is 150 ({weapon.MinimumAttackRange}).");
+                var victim = scene.Spawn("AmericaTankCrusader", 2, Fixed.FromInt(400) + Fixed.FromDecimal(gap) + cannon.Template.BoundingCircleRadius + crusader, Fixed.FromInt(600));
+                scene.World.SetAttitude(victim, (int)Attitude.Sleep);
+                scene.Settle();
+                Check.That(Reaches(scene.World, cannon, victim) == reaches,
+                    $"{rate}: a tank whose circle is {gap.ToString(System.Globalization.CultureInfo.InvariantCulture)} from the cannon's ({CentreDistance(cannon, victim)} between the centres) is {(reaches ? "beyond" : "inside")} its minimum range.");
+            }
+
+            var fudge = Fixed.FromDecimal(1.05m);
+            var changed = catalog.Weapons.Weapons.Where(weapon => weapon.IsContact() != weapon.AttackRange * fudge < Fixed.FromInt(10)).Select(weapon => weapon.Name).Order(StringComparer.Ordinal).ToArray();
+            Check.That(changed.SequenceEqual(["BlackNapalmBombWeapon", "NapalmBombWeapon"], StringComparer.Ordinal) && changed.All(name => catalog.Weapons.Weapons.First(weapon => weapon.Name == name).IsContact()),
+                $"{rate}: the two napalm bombs of range 10 become contact weapons, nothing else changes ({string.Join(", ", changed)}).");
+        }
+    }
 }

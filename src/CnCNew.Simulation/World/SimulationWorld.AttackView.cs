@@ -35,10 +35,8 @@ public sealed partial class SimulationWorld
         return IsAttackViewBlocked(attacker, victim);
     }
 
-    private static readonly Fixed ContactRangeFudge = Fixed.FromDecimal(1.05m);
-
-    /// <summary><c>WeaponTemplate::isContactWeapon</c>: "fudge this a little to account for pathfinding roundoff & such" - a range a twentieth longer still short of a cell.</summary>
-    internal static bool IsContactWeapon(WeaponInfo weapon) => weapon.AttackRange * ContactRangeFudge < Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize);
+    /// <summary><c>WeaponTemplate::isContactWeapon</c> (<see cref="WeaponInfo.IsContact"/>, the shipped build's <c>RATIONALIZE_ATTACK_RANGE</c>).</summary>
+    internal static bool IsContactWeapon(WeaponInfo weapon) => weapon.IsContact();
 
     /// <summary><c>Object::getCurrentWeapon</c>: the slot last chosen or locked in the active set, else its primary.</summary>
     private WeaponInfo? CurrentWeapon(Entity entity)
@@ -164,8 +162,8 @@ public sealed partial class SimulationWorld
             // original asks findAttackPath of every mobile attacker; the port asks it where the walk at the victim would not do: a unit that stands inside its weapon's minimum
             // range (stacked on the victim, or the victim ran up to it) has to move out of it, while a unit further away passes into the range ring and stops there as the search's
             // goal would stop it.
-            if (CurrentWeapon(unit) is not { } current || current.MinimumAttackRange <= Fixed.Zero) return null;
-            var closeRange = SquaredReach.Of(current.MinimumAttackRange + GoalRangeMargin + radii);
+            if (CurrentWeapon(unit) is not { } current || current.MinimumRange() <= Fixed.Zero) return null;
+            var closeRange = SquaredReach.Of(current.MinimumRange() + GoalRangeMargin + radii);
             var offX = victimX - unitX;
             var offY = victimY - unitY;
             if (!closeRange.ContainsStrictly(offX * offX + offY * offY)) return null;
@@ -178,8 +176,8 @@ public sealed partial class SimulationWorld
         if (IsContactWeapon(weapon)) return null;
         var range = AttackRangeOf(unit, weapon);
         var far = SquaredReach.Of(range - GoalRangeMargin + radii);
-        var hasNear = weapon.MinimumAttackRange > Fixed.Zero;
-        var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin + radii);
+        // "oversize by 1/4 of a pathfind cell": getMinimumAttackRange plus a quarter cell - also for a weapon without a minimum range, whose goal must keep its circle off the victim's.
+        var near = SquaredReach.Of(weapon.MinimumRange() + GoalRangeMargin + radii);
 
         // A world without terrain has no cells to search; a unit inside its minimum range still steps out of it.
         if (Navigation is not { } grid || Terrain is not { } terrain) return tooClose ? StepOffTheVictim() : null;
@@ -190,7 +188,7 @@ public sealed partial class SimulationWorld
             var dx = victimX - x;
             var dy = victimY - y;
             var distance = dx * dx + dy * dy;
-            if (!far.Contains(distance) || (hasNear && near.ContainsStrictly(distance))) return false;
+            if (!far.Contains(distance) || near.ContainsStrictly(distance)) return false;
             return !IsAttackViewBlockedFrom(unit, x, y, terrain.HeightAt(x, y), victim);
         }
 
@@ -284,7 +282,7 @@ public sealed partial class SimulationWorld
             var awayY = unitY - victimY;
             var away = Fixed.Sqrt(awayX * awayX + awayY * awayY);
             var (directionX, directionY) = away > Fixed.Zero ? (awayX / away, awayY / away) : (Fixed.One, Fixed.Zero);
-            var distance = weapon.MinimumAttackRange + GoalRangeMargin * Fixed.FromInt(2) + radii;
+            var distance = weapon.MinimumRange() + GoalRangeMargin * Fixed.FromInt(2) + radii;
             var (freeX, freeY) = (victimX + directionX * distance, victimY + directionY * distance);
             return FindPossibleDestination(unit, ref freeX, ref freeY) && (freeX != unitX || freeY != unitY) ? (freeX, freeY) : null;
         }

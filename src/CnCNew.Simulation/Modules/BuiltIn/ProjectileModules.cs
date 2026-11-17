@@ -260,12 +260,13 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         var aim = victim is null ? new Point3(launch.X, launch.Y, launch.Z) : Center(victim, world.Tick);
         // Per logic frame of the original at every rate: the path gets one point per frame of flight.
         _speed = ProjectileModules.FrameSpeed(world.Time, weapon.WeaponSpeed);
-        if (weapon.ScaleWeaponSpeed && weapon.AttackRange > weapon.MinimumAttackRange)
+        // DumbProjectileBehavior::launch: getMinimumAttackRange (a quarter cell short, #422) and getUnmodifiedAttackRange.
+        if (weapon.ScaleWeaponSpeed && weapon.AttackRange > weapon.MinimumRange())
         {
             var dx = aim.X - Entity.X;
             var dy = aim.Y - Entity.Y;
             var range = Fixed.Sqrt(dx * dx + dy * dy);
-            var ratio = (range - weapon.MinimumAttackRange) / (weapon.AttackRange - weapon.MinimumAttackRange);
+            var ratio = (range - weapon.MinimumRange()) / (weapon.AttackRange - weapon.MinimumRange());
             var slowest = ProjectileModules.FrameSpeed(world.Time, weapon.MinWeaponSpeed);
             _speed = ratio * (_speed - slowest) + slowest;
         }

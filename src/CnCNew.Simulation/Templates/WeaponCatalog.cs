@@ -189,6 +189,18 @@ public sealed record WeaponInfo(
     /// </summary>
     public Fixed AttackRangeWith(WeaponBonusTable global, uint conditions) => Fixed.Max(Fixed.Zero, RangeWith(global, conditions) - RangeUndersize);
 
+    /// <summary>
+    /// <c>WeaponTemplate::getMinimumAttackRange</c> of the shipped build (<c>RATIONALIZE_ATTACK_RANGE</c>): the minimum range of the data less a quarter of a pathfind cell, never below zero
+    /// (#422). <see cref="MinimumAttackRange"/> is the data's.
+    /// </summary>
+    public Fixed MinimumRange() => Fixed.Max(Fixed.Zero, MinimumAttackRange - RangeUndersize);
+
+    /// <summary>
+    /// <c>WeaponTemplate::isContactWeapon</c> of the shipped build (<c>RATIONALIZE_ATTACK_RANGE</c>): the range of the data less a quarter of a pathfind cell is short of a cell (#422) - not
+    /// the other build's range "fudge[d] a little" by 1.05. A range of 10 (<c>NapalmBombWeapon</c>) is a contact weapon, one of 12.5 is not.
+    /// </summary>
+    public bool IsContact() => AttackRange - RangeUndersize < Fixed.FromInt(10);
+
     /// <summary><see cref="AttackRangeWith"/> without a bonus (<c>WeaponBonus::clear</c>), as <c>PointDefenseLaserUpdate</c> and <c>CleanupHazardUpdate</c> ask it.</summary>
     public Fixed AttackRangeWithoutBonus() => Fixed.Max(Fixed.Zero, AttackRange - RangeUndersize);
 
