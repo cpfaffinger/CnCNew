@@ -70,6 +70,34 @@ static partial class Tests
             Radius = 100.0
           End
         End
+        Object BurstHealer438
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AutoHealBehavior Heal01
+            StartsActive = Yes
+            SingleBurst = Yes
+            HealingAmount = 2
+            HealingDelay = 1000
+            Radius = 100.0
+          End
+        End
+        Object WholeBurstHealer438
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AutoHealBehavior Heal01
+            StartsActive = Yes
+            SingleBurst = Yes
+            HealingAmount = 2
+            HealingDelay = 1000
+            AffectsWholePlayer = Yes
+          End
+        End
         """;
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) HealAura438World(SimulationRate rate, TerrainMap? terrain = null)
@@ -255,6 +283,42 @@ static partial class Tests
             StepFrames(world, 3);
             var (_, gain) = HealAura438Heals(world, patient, 10);
             Check.That(gain == Fixed.FromInt(40), $"{rate}: two auras without a delay heal 2 each every frame ({gain} in 10 frames).");
+        }
+    }
+
+    /// <summary>
+    /// <c>SingleBurst</c> is read in the radius branch of <c>AutoHealBehavior::update</c> only: a radius aura heals once and sleeps for good (<c>UPDATE_SLEEP_FOREVER</c>), staying
+    /// switched on, and draws the healed icon over what it healed; an aura of the whole player pulses on every <c>HealingDelay</c> and draws no icon. The port switched both off
+    /// after one pulse. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void ASingleBurstBelongsToTheRadiusAura()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            foreach (var (healer, heals) in new[] { ("BurstHealer438", 1), ("WholeBurstHealer438", 4) })
+            {
+                var (world, feeder, _) = HealAura438World(rate);
+                feeder.Spawn(1, "AuraPatient438", owner: 1, x: 10, y: 0);
+                StepFrames(world, 1);
+                var patient = HealAura438Find(world, "AuraPatient438");
+                feeder.Damage(patient.Id.Value, 50);
+                StepFrames(world, 1);
+                feeder.Spawn(1, healer, owner: 1, x: 0, y: 0);
+                var icons = 0;
+                var ticks = new List<long>();
+                var health = patient.Body!.Health;
+                for (var step = 0; step < world.Frames(120); step++)
+                {
+                    var result = world.Step();
+                    icons += result.Events.Count(value => value.Kind == CnCNew.Simulation.Events.SimEventKind.HealedInBurst && value.Entity == patient.Id);
+                    if (patient.Body!.Health > health) ticks.Add(world.Tick - 1);
+                    health = patient.Body.Health;
+                }
+                Check.That(ticks.Count is var count && (heals == 1 ? count == 1 : count >= heals), $"{rate}: {healer} heals {(heals == 1 ? "once" : "on every second")} ({ticks.Count} heals).");
+                Check.That(icons == (heals == 1 ? 1 : 0), $"{rate}: {healer} shows {(heals == 1 ? "one healed icon" : "no healed icon")} ({icons}).");
+                var module = HealAura438Find(world, healer).Modules.OfType<AutoHealBehavior>().Single();
+                if (heals == 1) Check.That(module.NextWake >= SimulationTiming.SleepForever, $"{rate}: the burst sleeps for good ({module.NextWake}).");
+            }
         }
     }
 }

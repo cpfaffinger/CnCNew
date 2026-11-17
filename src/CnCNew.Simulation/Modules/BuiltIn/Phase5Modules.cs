@@ -544,8 +544,9 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     }
 
     /// <summary>
-    /// <c>AutoHealBehavior::update</c>: nothing once the object is effectively dead; the whole player's or the radius's hurt objects every <c>HealingDelay</c>; the self-heal
-    /// (<c>Radius = 0</c>) heals only its own object and only while it is hurt - at full health it sleeps until a hit wakes it (<see cref="OnDamage"/>).
+    /// <c>AutoHealBehavior::update</c>: nothing once the object is effectively dead; the whole player's or the radius's hurt objects every <c>HealingDelay</c> - the radius's once
+    /// with <c>SingleBurst</c>; the self-heal (<c>Radius = 0</c>) heals only its own object and only while it is hurt - at full health it sleeps until a hit wakes it
+    /// (<see cref="OnDamage"/>).
     /// </summary>
     public long Update(IWorldServices world)
     {
@@ -558,12 +559,15 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
             Pulse(world, Entity);
             return delay;
         }
-        foreach (var candidate in world.Entities)
-            if (Matches(world, candidate) && data.SingleBurst) world.Emit(SimEventKind.HealedInBurst, candidate.Id, Entity.Id, string.Empty, 0);
+        // SingleBurst belongs to the radius scan alone: the whole player's aura pulses on every HealingDelay with it as without it.
+        var burst = data.SingleBurst && !data.AffectsWholePlayer;
+        if (burst)
+            foreach (var candidate in world.Entities)
+                if (Matches(world, candidate)) world.Emit(SimEventKind.HealedInBurst, candidate.Id, Entity.Id, string.Empty, 0);
         foreach (var candidate in world.Entities)
             if (Matches(world, candidate)) Pulse(world, candidate);
-        if (data.SingleBurst) { _active = false; return SimulationTiming.SleepForever; }
-        return delay;
+        // A burst only sleeps for good: the aura stays switched on (isUpgradeActive), and only its upgrade, taken away and given again, wakes it once more.
+        return burst ? SimulationTiming.SleepForever : delay;
     }
 
     /// <summary>
