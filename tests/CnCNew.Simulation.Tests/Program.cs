@@ -79,6 +79,8 @@ run.Test("Rate timing: a firestorm's way out and back take the same game time", 
 run.Test("Lost wake: a lifetime and a slow death of one frame end two frames after creation", Tests.LostWakeALifetimeAndASlowDeathOfOneFrameEnd);
 run.Test("Lost wake: a slow death of one frame begun in the tick after creation ends", Tests.LostWakeASlowDeathOfOneFrameBegunOnTheFirstFrameEnds);
 run.Test("Lost wake: a battle bus killed in a tick it looks at its hulk in ends", Tests.LostWakeABattleBusKilledWhileItLooksAtItsHulkEnds);
+run.Test("Lost wake: an empty battle bus on its first life lives on", Tests.LostWakeAnEmptyBattleBusOnItsFirstLifeLivesOn);
+run.Test("Lost wake: an empty landed battle bus is killed after its delay", Tests.LostWakeAnEmptyLandedBattleBusIsKilledAfterItsDelay);
 run.Test("F-138: an attack order turns a standing unit as much at 60 and 120 Hz as at 30 Hz", Tests.F138AttackOrderTurnsAStandingUnitLikeAt30Hz);
 run.Test("F-170: a moving unit turns to a victim beside it before it fires, and fires at one ahead on its way, at 30, 60 and 120 Hz", Tests.F170AMovingUnitTurnsToItsVictimBeforeItFires);
 run.Test("#303: a rider put out in the frame it boarded walks off as at 30 Hz, at 30, 60 and 120 Hz", Tests.ARiderPutOutInTheFrameItBoardedWalksOffAsAt30Hz);

@@ -63,6 +63,27 @@ static partial class Tests
             DestructionDelay = 1
           End
         End
+
+        Object LwSecondBus
+          KindOf = SELECTABLE VEHICLE
+          Body = UndeadBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+            SecondLifeMaxHealth = 10.0
+          End
+          Behavior = TransportContain Transport01
+            Slots = 4
+            AllowInsideKindOf = INFANTRY
+          End
+          Behavior = BattleBusSlowDeathBehavior Bus01
+            DeathTypes = ALL -EXTRA_4
+            EmptyHulkDestructionDelay = 1000
+            DestructionDelay = 1
+          End
+          Behavior = DestroyDie Destroy01
+            DeathTypes = NONE +EXTRA_4
+          End
+        End
         """,
     };
 
@@ -137,8 +158,8 @@ static partial class Tests
     }
 
     /// <summary>
-    /// The battle bus later in its life: it looks at its hulk every 15 frames, and a real death of one frame that begins in a tick of such a look, before the look,
-    /// is the same case. Killed on every tick of a second in turn, the bus is always removed one frame after the kill.
+    /// The battle bus on its second life: the landed hulk looks at itself every 15 frames, and a real death of one frame that begins in a tick of such a look, before the
+    /// look, is the same case. Killed on every tick of a second after the landing in turn, the bus is always removed one frame after the kill.
     /// </summary>
     public static void LostWakeABattleBusKilledWhileItLooksAtItsHulkEnds()
     {
@@ -148,17 +169,76 @@ static partial class Tests
             for (var wait = 0L; wait < second; wait++)
             {
                 var world = LostWakeWorld(rate, out var feeder);
-                Check.That(feeder.Spawn(1, "LwBus").Accepted, "The spawn is accepted.");
-                world.Step();
+                var bus = LandedSecondBus(world, feeder);
                 for (var step = 0L; step < wait; step++) world.Step();
-                var bus = world.Entities.Single(value => value.Template.Name == "LwBus");
                 var killed = world.Tick;
                 Check.That(feeder.Kill(bus.Id.Value).Accepted, "The kill is accepted.");
-                var ticks = LostWakeTicksUntilGone(world, "LwBus", killed);
+                var ticks = LostWakeTicksUntilGone(world, "LwSecondBus", killed);
                 Check.That(ticks == rate.TicksPerOriginalFrame,
                     $"{rate}: a bus killed {wait.ToString(CultureInfo.InvariantCulture)} ticks after its first tick is removed one frame of the original later, measured {ticks.ToString(CultureInfo.InvariantCulture)} ticks (-1: never).");
             }
         }
+    }
+
+    /// <summary>A <c>LwSecondBus</c> hit into its second life and stepped until the tick its throw has landed in (<c>BattleBusSlowDeathBehavior.HasLanded</c>).</summary>
+    private static Entity LandedSecondBus(SimulationWorld world, Feeder feeder)
+    {
+        Check.That(feeder.Spawn(1, "LwSecondBus").Accepted, "The spawn is accepted.");
+        world.Step();
+        var bus = world.Entities.Single(value => value.Template.Name == "LwSecondBus");
+        world.Damage(bus.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(100), DamageTypes.Explosion, DeathTypes.Normal, false));
+        Check.That(!bus.EffectivelyDead && bus.Body is UndeadBody { IsSecondLife: true }, "The first lethal hit starts the second life.");
+        var module = bus.Modules.OfType<BattleBusSlowDeathBehavior>().Single();
+        var limit = world.Time.WholeSecondsToTicks(3);
+        for (var step = 0L; step < limit && !module.HasLanded(world); step++) world.Step();
+        Check.That(module.HasLanded(world), "The thrown bus has landed.");
+        return bus;
+    }
+
+    /// <summary>
+    /// The constructor of SlowDeathBehavior puts the module to sleep for good, and only <c>beginSlowDeath</c> wakes it (<c>BattleBusSlowDeathBehavior.cpp</c>): an empty
+    /// bus on its first life never looks at its hulk. It used to look one frame after it appeared and killed itself when <c>EmptyHulkDestructionDelay</c> had passed.
+    /// </summary>
+    public static void LostWakeAnEmptyBattleBusOnItsFirstLifeLivesOn()
+    {
+        foreach (var rate in NzRates)
+        {
+            var world = LostWakeWorld(rate, out var feeder);
+            Check.That(feeder.Spawn(1, "LwSecondBus").Accepted, "The spawn is accepted.");
+            var limit = world.Time.WholeSecondsToTicks(10);
+            for (var step = 0L; step < limit; step++) world.Step();
+            var bus = world.Entities.SingleOrDefault(value => value.Template.Name == "LwSecondBus");
+            Check.That(bus is { EffectivelyDead: false }, $"{rate}: an empty bus on its first life is alive ten seconds after it appeared.");
+        }
+    }
+
+    /// <summary>
+    /// The landed hulk of a second life looks at itself: one frame after the landing (the update that lands returns UPDATE_SLEEP_NONE), then every 15 frames.
+    /// Empty, it is marked at its first look and killed at the first look later than EmptyHulkDestructionDelay (30 frames) after the mark: the fourth look, 46 frames
+    /// after the landing, in the same frame of the original at every rate.
+    /// </summary>
+    public static void LostWakeAnEmptyLandedBattleBusIsKilledAfterItsDelay()
+    {
+        var measured = new List<long>();
+        foreach (var rate in NzRates)
+        {
+            var world = LostWakeWorld(rate, out var feeder);
+            var bus = LandedSecondBus(world, feeder);
+            var landed = world.Tick;
+            var limit = world.Time.WholeSecondsToTicks(5);
+            var died = -1L;
+            for (var step = 0L; step < limit && died < 0; step++)
+            {
+                world.Step();
+                if (bus.EffectivelyDead) died = world.Tick;
+            }
+            Check.That(died > 0, $"{rate}: the empty hulk is killed.");
+            // The frame of the original the death falls in: a decision is made in the first tick of its frame above 30 Hz.
+            var frames = (died - landed + rate.TicksPerOriginalFrame - 1) / rate.TicksPerOriginalFrame;
+            Check.That(frames == 46, $"{rate}: the empty hulk dies 46 frames after the landing, measured {frames.ToString(CultureInfo.InvariantCulture)} frames ({(died - landed).ToString(CultureInfo.InvariantCulture)} ticks).");
+            measured.Add(frames);
+        }
+        Check.That(measured.Distinct().Count() == 1, $"The hulk dies at the same game time at every rate: {string.Join(", ", measured)} frames.");
     }
 
     /// <summary>

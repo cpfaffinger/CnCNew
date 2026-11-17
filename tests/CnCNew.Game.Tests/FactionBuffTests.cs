@@ -22,13 +22,6 @@ internal static class FactionBuffTests
         ["FactionAmericaAirForceGeneral|Upgrade_AmericaSupplyLines|supply-boost|AirF_AmericaVehicleChinook|ChinookAIUpdate:ModuleTag_07"] = "the first of two AI modules wins",
 
 
-        // BattleBusSlowDeathBehavior wakes its empty-hulk check when the bus is made; the original's SlowDeathBehavior constructor sleeps forever and only beginSlowDeath wakes the
-        // module (BattleBusSlowDeathBehavior.cpp), so only the hulk of a second life is killed when empty. In the port an empty Battle Bus kills itself about 1.5 s after it appears.
-        ["FactionGLA|Upgrade_GLAJunkRepair|auto-heal|GLAVehicleBattleBus|AutoHealBehavior:ModuleTag_06"] = "an empty Battle Bus dies",
-        ["FactionGLAToxinGeneral|Upgrade_GLAJunkRepair|auto-heal|Chem_GLAVehicleBattleBus|AutoHealBehavior:ModuleTag_06"] = "an empty Battle Bus dies",
-        ["FactionGLADemolitionGeneral|Upgrade_GLAJunkRepair|auto-heal|Demo_GLAVehicleBattleBus|AutoHealBehavior:ModuleTag_06"] = "an empty Battle Bus dies",
-        ["FactionGLAStealthGeneral|Upgrade_GLAJunkRepair|auto-heal|Slth_GLAVehicleBattleBus|AutoHealBehavior:ModuleTag_06"] = "an empty Battle Bus dies",
-
         // RiderChangeContain::onRemoving returns before it clears the rider's status when the bike is dead (RiderChangeContain.cpp), so the bike's death modules still see
         // STATUS_RIDER5 of a terrorist; the port's RiderChangeContain.Remove clears the status first, and a terrorist's bike dies with the death weapons of a riderless one.
         ["FactionGLAToxinGeneral|Chem_Upgrade_GLAAnthraxGamma|death-weapon|Chem_GLAVehicleCombatBike|FireWeaponWhenDeadBehavior:ModuleTag91"] = "a dead bike forgets its rider",
