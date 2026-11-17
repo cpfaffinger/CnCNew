@@ -363,7 +363,7 @@ public sealed class FactionProbe
 
     /// <summary>
     /// The upgrades the press needs: the button's own when it needs one (never the one it buys), every upgrade that unpauses a power of the source, and the upgrade that switches the
-    /// source to the command set the button is in (an Overlord's bunker set) - except one whose module would recurse on its removals (<see cref="RecursingRemoval"/>).
+    /// source to the command set the button is in (an Overlord's bunker set).
     /// </summary>
     private IEnumerable<string> UpgradesToGrant(ObjectTemplate source, CommandButtonInfo button, string commandSet)
     {
@@ -371,11 +371,11 @@ public sealed class FactionProbe
             if (module.Data is CommandSetUpgradeData switching && commandSet.Length > 0 && !(source.CommandSets.FirstOrDefault()?.Equals(commandSet, StringComparison.OrdinalIgnoreCase) ?? false))
             {
                 if (switching.CommandSet.Equals(commandSet, StringComparison.OrdinalIgnoreCase))
-                    foreach (var name in switching.Mux.TriggerNames.Where(name => RemovalsOf(source.Name, name).Count == 0)) yield return name;
+                    foreach (var name in switching.Mux.TriggerNames) yield return name;
                 else if (switching.CommandSetAlt.Equals(commandSet, StringComparison.OrdinalIgnoreCase) && switching.TriggerAlt.Length > 0)
                 {
-                    foreach (var name in switching.Mux.TriggerNames.Where(name => RemovalsOf(source.Name, name).Count == 0)) yield return name;
-                    if (RemovalsOf(source.Name, switching.TriggerAlt).Count == 0) yield return switching.TriggerAlt;
+                    foreach (var name in switching.Mux.TriggerNames) yield return name;
+                    yield return switching.TriggerAlt;
                 }
             }
         var own = button.Kind is GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade ? button.Upgrade : string.Empty;
@@ -470,8 +470,6 @@ public sealed class FactionProbe
         if (button.Kind == GuiCommandKind.None) return Result(roster, owner, entry, ProbeOutcome.NotApplicable, "no command (a tooltip button)", 0);
         if (button.Has(CommandOptions.ScriptOnly)) return Result(roster, owner, entry, ProbeOutcome.NotApplicable, "SCRIPT_ONLY", 0);
         if (button.Kind == GuiCommandKind.ExitContainer) return Result(roster, owner, entry, ProbeOutcome.NotApplicable, "a rider's place, not a button of the set", 0);
-        if (!PressRecursingUpgrades && RecursingRemoval(setup, button) is { } recursing)
-            return Result(roster, owner, entry, ProbeOutcome.Failed, $"not pressed: {recursing}", 0);
 
         // A button that waits for an object is tried at each target a click could give it, each in worlds of their own, until one shows what it is for.
         ProbeResult? first = null;
@@ -577,42 +575,6 @@ public sealed class FactionProbe
             ? $"nothing to show for it in {BudgetSeconds(button)} s ({ExpectationOf(button, evidence)}; events: {(happened.Count == 0 ? "none" : string.Join(", ", happened))})"
             : found;
         return Result(roster, owner, entry, ProbeOutcome.Failed, notes.Length == 0 ? what : $"{what}; {notes}", seconds);
-    }
-
-    /// <summary>
-    /// Whether to press an upgrade button that the port is known to recurse on until the stack overflows (which ends the process): see <see cref="RecursingRemoval"/>. Off, the press is reported as
-    /// failed without being made; on (<c>faction-audit --press-recursing</c>), it is made, to see whether a fix holds.
-    /// </summary>
-    public static bool PressRecursingUpgrades { get; set; }
-
-    /// <summary>
-    /// #411: an upgrade module whose <c>RemovesUpgrades</c> names a known upgrade, switched on by the button's upgrade. <c>UpgradeMux::giveSelfUpgrade</c> removes those upgrades first and
-    /// <c>Object::removeUpgrade</c> (Object.cpp) only clears the bit and re-arms the modules it triggered; the port's <c>SimulationWorld.RemoveUpgradeByName</c> runs every upgrade module of the
-    /// object again (<c>ReevaluateUpgrades</c>) before the module is marked executed, so the module removes again, and again: the GLA worker's switch between its real and fake buildings.
-    /// </summary>
-    private string? RecursingRemoval(Setup setup, CommandButtonInfo button)
-    {
-        if (button.Kind is not (GuiCommandKind.ObjectUpgrade or GuiCommandKind.PlayerUpgrade) || button.Upgrade.Length == 0 || setup.Source is null) return null;
-        var removals = RemovalsOf(setup.Source, button.Upgrade);
-        return removals.Count == 0 ? null
-            : $"{removals[0]} of {setup.Source} removes upgrades when {button.Upgrade} switches it on, and the port runs the object's upgrade modules again on a removal (SimulationWorld.RemoveUpgradeByName) before the module counts as done: the stack overflows";
-    }
-
-    /// <summary>The modules (<c>Module:Tag removes A B</c>) of the object that <paramref name="upgrade"/> switches on and that remove a known upgrade when they run.</summary>
-    private List<string> RemovalsOf(string objectName, string upgrade)
-    {
-        var result = new List<string>();
-        var definition = _graph.Definitions.OfType<ObjectDefinition>().FirstOrDefault(value => value.OriginalName.Equals(objectName, StringComparison.OrdinalIgnoreCase));
-        if (definition is null) return result;
-        foreach (var module in definition.Modules)
-        {
-            string[] Names(string field) => [..module.Fields.Where(value => value.Name.Equals(field, StringComparison.OrdinalIgnoreCase))
-                .SelectMany(value => value.Value.OriginalText.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries))];
-            if (!Names("TriggeredBy").Contains(upgrade, StringComparer.OrdinalIgnoreCase)) continue;
-            var removed = Names("RemovesUpgrades").Where(name => _catalog.Upgrades.TryGet(name, out _)).ToList();
-            if (removed.Count > 0) result.Add($"{module.Name}:{module.Tag} (removes {string.Join(" ", removed)})");
-        }
-        return result;
     }
 
     private sealed record PreludeStep(CommandButtonInfo Button, int Seconds);
@@ -815,9 +777,17 @@ public sealed class FactionProbe
                 var done = upgrade.Scope == UpgradeScope.Player ? world.PlayerUpgrades(Me).Has(upgrade.Index) : source?.CompletedUpgrades.Has(upgrade.Index) == true;
                 if (!done && source is null && test.Events.Any(item => item.Kind == SimEventKind.UpgradeCompleted && item.Player == Me && item.Text.Equals(upgrade.Name, StringComparison.OrdinalIgnoreCase)))
                     return $"completed, the object replaced by {string.Join(" ", world.Entities.Where(entity => entity.Owner == Me && entity.SpawnTick > test.PressTick).Select(entity => entity.Template.Name).Distinct().Order(StringComparer.Ordinal))}";
-                if (!done) return null;
+                // A module that removes the upgrade that switched it on (the GLA worker's switch back to its real buildings, RemovesUpgrades): the object holds no bit, the module ran.
+                var removedBySelf = !done && source is not null && test.Events.Any(item => item.Kind == SimEventKind.UpgradeCompleted && item.Entity == source.Id
+                    && item.Text.Equals(upgrade.Name, StringComparison.OrdinalIgnoreCase));
+                if (!done && !removedBySelf) return null;
                 var switched = SwitchedModules(world, upgrade.Name);
-                if (switched.Count > 0) return $"completed, switched on {string.Join(" ", switched)}";
+                if (switched.Count > 0)
+                {
+                    var offers = source is not null && switched.Any(name => name.Contains("/CommandSetUpgrade:", StringComparison.Ordinal)) && test.Bar.ActiveCommandSet(world, source) is { } set ? $", offers {set}" : string.Empty;
+                    return $"completed{(removedBySelf ? " and removed by its own module" : string.Empty)}, switched on {string.Join(" ", switched)}{offers}";
+                }
+                if (removedBySelf) return null;
                 var expected = FactionRoster.TriggeredModules(_graph, world.Entities.Where(entity => entity.Owner == Me).Select(entity => entity.Template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase), upgrade.Name);
                 return expected.IsEmpty ? "completed (no module of a present object names it)" : null;
             }

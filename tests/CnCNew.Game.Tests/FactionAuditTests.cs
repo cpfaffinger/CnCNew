@@ -16,18 +16,6 @@ internal static class FactionAuditTests
     /// <summary>The presses that fail today (<see cref="ProbeResult.Key"/>), each with its finding.</summary>
     private static readonly Dictionary<string, string> KnownFailures = new(StringComparer.Ordinal)
     {
-        // The GLA worker's switch between its real and its fake buildings: CommandSetUpgrade ModuleTag_14/15 remove the other switch's upgrade. UpgradeMux::giveSelfUpgrade removes first and
-        // Object::removeUpgrade (Object.cpp) only clears the bit and re-arms the modules it triggered; SimulationWorld.RemoveUpgradeByName runs every upgrade module of the object again
-        // (ReevaluateUpgrades) before the module counts as executed, and the module removes again: the stack overflows and the game ends. Not pressed (FactionProbe.PressRecursingUpgrades).
-        ["FactionGLA|GLAInfantryWorker|Command_UpgradeGLAWorkerFakeCommandSet"] = "worker command set switch recurses",
-        ["FactionGLA|GLAInfantryWorker|Command_UpgradeGLAWorkerRealCommandSet"] = "worker command set switch recurses",
-        ["FactionGLAToxinGeneral|Chem_GLAInfantryWorker|Command_UpgradeGLAWorkerFakeCommandSet"] = "worker command set switch recurses",
-        ["FactionGLAToxinGeneral|Chem_GLAInfantryWorker|Command_UpgradeGLAWorkerRealCommandSet"] = "worker command set switch recurses",
-        ["FactionGLADemolitionGeneral|Demo_GLAInfantryWorker|Command_UpgradeGLAWorkerFakeCommandSet"] = "worker command set switch recurses",
-        ["FactionGLADemolitionGeneral|Demo_GLAInfantryWorker|Command_UpgradeGLAWorkerRealCommandSet"] = "worker command set switch recurses",
-        ["FactionGLAStealthGeneral|Slth_GLAInfantryWorker|Command_UpgradeGLAWorkerFakeCommandSet"] = "worker command set switch recurses",
-        ["FactionGLAStealthGeneral|Slth_GLAInfantryWorker|Command_UpgradeGLAWorkerRealCommandSet"] = "worker command set switch recurses",
-
         // Colonel Burton's knife (FIRE_WEAPON, SECONDARY ColonelBurtonKnifeWeapon, AttackRange 3): ordered at a soldier that stands still he walks up and circles it at some
         // 20 units without ever stabbing; at a vehicle or a building the order is refused (InvalidWeaponTarget), as the knife's data allow.
         ["FactionAmerica|AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",

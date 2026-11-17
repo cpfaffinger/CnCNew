@@ -15,7 +15,7 @@ namespace CnCNew.SimTool;
 /// </summary>
 internal static class FactionAudit
 {
-    public const string Usage = "faction-audit <content-dir> --out <dir> [--faction NAME[,NAME..]] [--object TEXT] [--dynamic [--press-recursing]]";
+    public const string Usage = "faction-audit <content-dir> --out <dir> [--faction NAME[,NAME..]] [--object TEXT] [--dynamic]";
 
     public static int Run(string[] args, Func<string, (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerprint)> compile)
     {
@@ -24,7 +24,6 @@ internal static class FactionAudit
         var factions = Option(args, "--faction")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [..FactionRoster.PlayableFactions];
         var objectFilter = Option(args, "--object");
         var dynamic = args.Contains("--dynamic");
-        FactionProbe.PressRecursingUpgrades = args.Contains("--press-recursing");
         Directory.CreateDirectory(output);
 
         var clock = Stopwatch.StartNew();
