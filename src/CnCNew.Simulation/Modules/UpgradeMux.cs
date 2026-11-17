@@ -80,11 +80,21 @@ public sealed class UpgradeMuxState(UpgradeMuxData data)
     /// <summary>
     /// <c>UpgradeMux::giveSelfUpgrade</c>: the constructor-time <c>StartsActive</c> path. Unlike <see cref="AttemptUpgrade"/>,
     /// it bypasses the activation-mask gate entirely (there is no triggering upgrade yet) and unconditionally marks the
-    /// module executed. Idempotent: a module that is already executed is left alone.
+    /// module executed. Idempotent: a module that is already executed is left alone. Like the upgrade path it processes the
+    /// removals first ("to prevent both being on for a moment", #423) - as <c>Object::removeUpgrade</c> does in the constructor: the
+    /// object's own upgrade bit is cleared (a player's upgrade is the player's) and every upgrade module of the object that the
+    /// removed upgrade triggers is reset (<c>resetUpgrade</c>), so an earlier <c>StartsActive</c> module it triggers is off again.
     /// </summary>
-    public void GiveSelfUpgrade(IWorldServices world, Action<IWorldServices> implementation)
+    public void GiveSelfUpgrade(IWorldServices world, Entity entity, Action<IWorldServices> implementation)
     {
         if (Executed) return;
+        foreach (var name in data.RemovalNames)
+        {
+            if (!world.Upgrades.TryGet(name, out var removed)) continue;
+            entity.CompletedUpgrades = entity.CompletedUpgrades.Clear(removed.Index);
+            var mask = UpgradeMask.Bit(removed.Index);
+            foreach (var module in entity.UpgradeModules) module.ResetUpgrade(mask);
+        }
         implementation(world);
         Executed = true;
     }

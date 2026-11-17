@@ -1,5 +1,6 @@
 using System.Linq;
 using CnCNew.Data.World;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Modules.BuiltIn;
@@ -171,5 +172,66 @@ static partial class Tests
             "Setup: the gunner and the portable gun are still disabled.");
         Check.That(NamedIn(session, "ByEmp")!.Panicking, "An EMP'd enemy gunner is still able to attack: it repulses.");
         Check.That(!NamedIn(session, "ByPortable")!.Panicking, "An EMP'd portable structure is not: it does not.");
+    }
+
+    /// <summary>
+    /// <c>UpgradeMux::giveSelfUpgrade</c> - the <c>StartsActive</c> path of a module's constructor - runs <c>processUpgradeRemoval</c> before the module's own effect, as the upgrade path
+    /// does: <c>Object::removeUpgrade</c> clears the object's bit and resets every upgrade module of the object the removed upgrade triggers. A second death weapon that starts active and
+    /// removes the upgrade that triggers the first one (which starts active too) leaves the first one off until the upgrade comes; a player's upgrade named for removal stays the player's.
+    /// No shipped object has a module with both <c>StartsActive = Yes</c> and <c>RemovesUpgrades</c>, so the fixture is synthetic. The port skipped the removal, and both fired.
+    /// At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AStartsActiveModuleRemovesItsUpgrades()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var files = new Dictionary<string, string>(Phase5Files())
+            {
+                ["Data/INI/Object/SelfRemoverFixture.ini"] = """
+                Object SelfRemover
+                  KindOf = SELECTABLE INFANTRY
+                  Body = ActiveBody Body01
+                    MaxHealth = 50.0
+                    InitialHealth = 50.0
+                  End
+                  Behavior = DestroyDie Destroy01
+                  End
+                  Behavior = FireWeaponWhenDeadBehavior FireDead01
+                    DeathWeapon = SuicideWeapon
+                    StartsActive = Yes
+                    TriggeredBy = Upgrade_Detonator
+                  End
+                  Behavior = FireWeaponWhenDeadBehavior FireDead02
+                    DeathWeapon = AltSuicideWeapon
+                    StartsActive = Yes
+                    RemovesUpgrades = Upgrade_Detonator Upgrade_AltDetonator
+                  End
+                End
+                """,
+            };
+            var fixture = new SyntheticFixture(rate, files: files);
+            IReadOnlyList<string> DeathWeapons(bool detonator, bool altDetonator)
+            {
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+                var feeder = new Feeder(world);
+                if (altDetonator) feeder.GrantUpgrade(1, "Upgrade_AltDetonator");
+                feeder.Spawn(1, "SelfRemover");
+                world.Step();
+                Check.That(!altDetonator || world.Templates.Upgrades.TryGet("Upgrade_AltDetonator", out var alt) && world.PlayerUpgrades(new PlayerId(1)).Has(alt.Index),
+                    $"{rate}: a player's upgrade named for removal stays the player's.");
+                if (detonator)
+                {
+                    feeder.GrantUpgrade(1, "Upgrade_Detonator", target: 1);
+                    world.Step();
+                }
+                feeder.Kill(1);
+                return world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFireRequested).Select(value => value.Text).ToArray();
+            }
+            var plain = DeathWeapons(detonator: false, altDetonator: false);
+            Check.That(plain.SequenceEqual(["AltSuicideWeapon"]), $"{rate}: the removal reset the first death weapon: only the second fires ({string.Join(", ", plain)}).");
+            var upgraded = DeathWeapons(detonator: true, altDetonator: false);
+            Check.That(upgraded.Contains("SuicideWeapon") && upgraded.Contains("AltSuicideWeapon"), $"{rate}: the upgrade that triggers it switches it on again ({string.Join(", ", upgraded)}).");
+            DeathWeapons(detonator: false, altDetonator: true);
+        }
     }
 }

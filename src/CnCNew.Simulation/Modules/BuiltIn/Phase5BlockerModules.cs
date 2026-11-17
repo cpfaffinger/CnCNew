@@ -719,7 +719,7 @@ public sealed class FireWeaponWhenDeadBehavior(FireWeaponWhenDeadData data) : Si
 
     public override void OnSpawn(IWorldServices world)
     {
-        if (data.StartsActive) _mux.GiveSelfUpgrade(world, _ => { });
+        if (data.StartsActive) _mux.GiveSelfUpgrade(world, Entity, _ => { });
     }
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => _mux.AttemptUpgrade(world, Entity, keyMask, _ => { });
