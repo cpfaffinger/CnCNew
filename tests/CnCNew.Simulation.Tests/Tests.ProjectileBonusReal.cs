@@ -66,4 +66,50 @@ static partial class Tests
                 $"{rate} {item.Launcher}: {item.Upgrade} makes the {item.Projectile} do x1.25 ({loss[0]} -> {loss[1]}, x{ratio}).");
         }
     }
+
+    /// <summary>
+    /// #424, the launcher's part of a projectile's bonus: <c>DumbProjectileBehavior::projectileLaunchAtObjectOrPosition</c> and <c>MissileAIUpdate</c>'s keep the launcher's own
+    /// <c>getWeaponBonusCondition()</c> as <c>m_extraBonusFlags</c>, not <c>Weapon::computeBonus</c>'s set - so the conditions a Battle Bus passes to its riders
+    /// (<c>WeaponBonusPassedToPassengers</c>) count for a rider's immediate shot and not for its missile. On the shipped data a rebel in a veteran bus does x1.1 (<c>VETERAN DAMAGE 110%</c>), a
+    /// tunnel defender's missile x1.
+    /// </summary>
+    public static void RealPassedBonusStaysOffAProjectile(string directory)
+    {
+        var data = OpenRealFireData(directory);
+        var cases = new[]
+        {
+            (Rider: "GLAInfantryRebel", Expected: Fixed.FromDecimal(1.1m), What: "the rebel's rifle"),
+            (Rider: "GLAInfantryTunnelDefender", Expected: Fixed.One, What: "the tunnel defender's missile"),
+        };
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        foreach (var item in cases)
+        {
+            var loss = new Fixed[2];
+            for (var veteran = 0; veteran < 2; veteran++)
+            {
+                var what = $"{rate} {item.Rider} in a{(veteran == 1 ? " veteran" : "")} Battle Bus";
+                var world = NewRealFireWorld(data, rate, computer: false);
+                ulong sequence = 0;
+                var bus = SpawnReal(world, ref sequence, "GLAVehicleBattleBus", 1, 400, 400);
+                var rider = SpawnReal(world, ref sequence, item.Rider, 1, 380, 400);
+                Check.That(world.TryEnterContainer(rider, bus), $"{what}: the rider gets in.");
+                var victim = SpawnReal(world, ref sequence, "AmericaVehicleDozer", 2, 480, 400);
+                if (veteran == 1) world.SetVeterancy(bus.Id, 1);
+                for (var tick = 0; tick < world.Frames(2); tick++) world.Step();
+                Check.That(rider.ContainedBy == bus.Id, $"{what}: the rider rides in the bus.");
+                var health = victim.Body!.Health;
+                Check.That(world.Submit(new FireWeaponCommand(new PlayerId(1), ++sequence, world.Tick, rider.Id, victim.Id)).Accepted, $"{what}: the fire order is accepted.");
+                var start = world.Tick;
+                while (victim.Body.Health == health)
+                {
+                    world.Step();
+                    Check.That(world.Tick - start < world.Frames(300), $"{what}: the dozer is hit within 10 s.");
+                }
+                Check.That(victim.Body.Health > Fixed.Zero, $"{what}: the first hit does not kill the dozer.");
+                loss[veteran] = health - victim.Body.Health;
+            }
+            var ratio = loss[1] / loss[0];
+            Check.That((ratio - item.Expected).Abs() < Fixed.FromDecimal(0.001m), $"{rate}: a veteran bus makes {item.What} do x{item.Expected} ({loss[0]} -> {loss[1]}, x{ratio}).");
+        }
+    }
 }

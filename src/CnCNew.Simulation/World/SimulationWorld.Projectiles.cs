@@ -96,7 +96,9 @@ public sealed partial class SimulationWorld
             var pose = (contained ? null : LaunchPoseOf(source, weapon, sourceX, sourceY, sourceZ, sourceAngle))
                 ?? new LaunchPose(sourceX, sourceY, sourceZ + source.Template.CenterZDelta, FixedTrig.Cos(sourceAngle), FixedTrig.Sin(sourceAngle), Fixed.Zero);
             var (velocityX, velocityY, velocityZ) = VelocityOf(source);
-            var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, conditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ, velocityX, velocityY, velocityZ);
+            // projectileLaunchAtObjectOrPosition keeps the launcher's own getWeaponBonusCondition() (m_extraBonusFlags), not computeBonus's set: what a Battle Bus passes to its
+            // riders counts for their immediate shots and not for their projectiles (#424).
+            var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, source.WeaponBonusConditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ, velocityX, velocityY, velocityZ);
             var heading = pose.ForwardX != Fixed.Zero || pose.ForwardY != Fixed.Zero ? FixedTrig.Atan2(pose.ForwardY, pose.ForwardX) : sourceAngle;
             _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, pose.X, pose.Y, pose.Z, heading, default(SpawnSetup) with { Launch = launch }));
             EmitAt(SimEventKind.ProjectileLaunched, id, source.Id, weapon.Name, 0, destinationX, destinationY, destinationZ);
