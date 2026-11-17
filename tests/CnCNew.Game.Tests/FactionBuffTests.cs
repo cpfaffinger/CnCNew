@@ -21,13 +21,6 @@ internal static class FactionBuffTests
         // never gathers, so its supply lines boost nothing.
         ["FactionAmericaAirForceGeneral|Upgrade_AmericaSupplyLines|supply-boost|AirF_AmericaVehicleChinook|ChinookAIUpdate:ModuleTag_07"] = "the first of two AI modules wins",
 
-
-        // RiderChangeContain::onRemoving returns before it clears the rider's status when the bike is dead (RiderChangeContain.cpp), so the bike's death modules still see
-        // STATUS_RIDER5 of a terrorist; the port's RiderChangeContain.Remove clears the status first, and a terrorist's bike dies with the death weapons of a riderless one.
-        ["FactionGLAToxinGeneral|Chem_Upgrade_GLAAnthraxGamma|death-weapon|Chem_GLAVehicleCombatBike|FireWeaponWhenDeadBehavior:ModuleTag91"] = "a dead bike forgets its rider",
-        ["FactionGLADemolitionGeneral|Demo_Upgrade_SuicideBomb|death-weapon|Demo_GLAVehicleCombatBike|FireWeaponWhenDeadBehavior:ModuleTag996"] = "a dead bike forgets its rider",
-        ["FactionGLADemolitionGeneral|Demo_Upgrade_SuicideBomb|death-weapon|Demo_GLAVehicleCombatBike|FireWeaponWhenDeadBehavior:ModuleTag997"] = "a dead bike forgets its rider",
-        ["FactionGLADemolitionGeneral|Demo_Upgrade_SuicideBomb|death-weapon|Demo_GLAVehicleCombatBike|FireWeaponWhenDeadBehavior:ModuleTag_CrushedDeath_3"] = "a dead bike forgets its rider",
     };
 
     public static int Run(string[] args)

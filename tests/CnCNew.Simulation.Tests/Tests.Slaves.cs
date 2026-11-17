@@ -326,6 +326,35 @@ static partial class Tests
             HealthRegen%PerSec = 0
           End
         End
+        Object SvBombBike
+          KindOf = VEHICLE SELECTABLE
+          Locomotor = SET_NORMAL TestLocomotor
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = RiderChangeContain Rider01
+            Slots = 1
+            AllowInsideKindOf = INFANTRY
+            Rider1 = SvBikeRebel RIDER1 WEAPON_RIDER1 STATUS_RIDER1 SvBikeCommands SET_NORMAL
+            ScuttleDelay = 600
+            ScuttleStatus = TOPPLED
+          End
+          Behavior = FireWeaponWhenDeadBehavior RiderBomb
+            RequiredStatus = STATUS_RIDER1
+            DeathWeapon = SuicideWeapon
+            StartsActive = Yes
+          End
+          Behavior = FireWeaponWhenDeadBehavior RiderlessBomb
+            ExemptStatus = STATUS_RIDER1
+            DeathWeapon = AltSuicideWeapon
+            StartsActive = Yes
+          End
+        End
         Object SvBikeRebel
           KindOf = INFANTRY SELECTABLE
           TransportSlotCount = 1
@@ -552,7 +581,7 @@ static partial class Tests
     public static void SlaveFixtureObjectsAreInstantiable()
     {
         var fixture = new SyntheticFixture(TestRate.Default, files: SlaveFiles());
-        foreach (var name in new[] { "SvMaster", "SvScoutDrone", "SvBattleDrone", "SvNexus", "SvMobMember", "SvHive", "SvHiveSoldier", "SvTower", "SvBike", "SvOverlord", "SvBunker",
+        foreach (var name in new[] { "SvMaster", "SvScoutDrone", "SvBattleDrone", "SvNexus", "SvMobMember", "SvHive", "SvHiveSoldier", "SvTower", "SvBike", "SvBombBike", "SvOverlord", "SvBunker",
                      "SvHackCenter", "SvHacker", "SvFireTransport", "SvCrawler", "SvRock" })
             Check.That(fixture.Templates.TryGet(name, out var template) && template.IsInstantiable, $"{name} is instantiable: " + (template is null ? "missing" : string.Join(", ", template.MissingModules)));
         // A bad rider line is a data error, never a silent default.
@@ -860,6 +889,37 @@ static partial class Tests
         world.Kill(second.Id);
         StepN(world, 3);
         Check.That(passenger.EffectivelyDead || world.FindEntity(passenger.Id) is null, "The rider of a destroyed bike is destroyed with it.");
+    }
+
+    /// <summary>
+    /// <c>RiderChangeContain::onRemoving</c>: "if the bike dies, the rider dies too" - and it returns there, before it clears the rider's model condition, weapon set flag and
+    /// object status. The contain module comes before the death weapons in the module list, so its <c>onDie</c> takes the rider out first; the death modules after it still
+    /// see the rider's <c>STATUS_RIDERn</c> and fire what the rider's line asks for (a terrorist's bike its dynamite). A bike without a rider fires the riderless weapon.
+    /// </summary>
+    public static void RiderChangeContainDeadBikeKeepsItsRider()
+    {
+        var world = SlaveWorld(out _, out var feeder);
+        feeder.Spawn(1, "SvBombBike", x: 100, y: 100);
+        feeder.Spawn(1, "SvBikeRebel", x: 100, y: 100);
+        StepN(world, 2);
+        var bike = SlaveEntity(world, "SvBombBike");
+        var rebel = SlaveEntity(world, "SvBikeRebel");
+        Check.That(world.TryEnterContainer(rebel, bike), "The rebel boards the bike.");
+        var riderOne = ObjectStatusBits.Index("STATUS_RIDER1");
+        Check.That(bike.HasStatus(riderOne), "The rider's status is on the bike.");
+        world.Kill(bike.Id);
+        var result = world.Step();
+        var fired = result.Events.Where(value => value.Kind == SimEventKind.WeaponFireRequested && value.Entity == bike.Id).Select(value => value.Text).ToArray();
+        Check.That(fired.SequenceEqual(["SuicideWeapon"]), $"The bike of a rider fires the rider's death weapon, and only that one (fired: {string.Join(", ", fired)}).");
+        Check.That(bike.HasStatus(riderOne), "The dead bike keeps its rider's status.");
+        Check.That(rebel.EffectivelyDead || world.FindEntity(rebel.Id) is null, "The rider is destroyed with the bike.");
+
+        feeder.Spawn(1, "SvBombBike", x: 300, y: 300);
+        StepN(world, 2);
+        var empty = world.Entities.Single(value => value.Template.Name == "SvBombBike" && !value.EffectivelyDead);
+        world.Kill(empty.Id);
+        var riderless = world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFireRequested && value.Entity == empty.Id).Select(value => value.Text).ToArray();
+        Check.That(riderless.SequenceEqual(["AltSuicideWeapon"]), $"A bike without a rider fires the riderless weapon (fired: {string.Join(", ", riderless)}).");
     }
 
     /// <summary>

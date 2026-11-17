@@ -177,7 +177,7 @@ public sealed record RiderChangeContainData(TransportContainData Transport, bool
 /// old rider's status); the rider's <c>STATUS_RIDERn</c> object status is set on the vehicle, and the bike takes the rider's veterancy (raised only — the rider keeps its own).
 /// The initial payload boards the vehicle once it exists (the next tick), without throwing anybody out. When the rider leaves and is not replaced, the vehicle is scuttled:
 /// unselectable (and immobile when it stands still), and <c>ScuttleDelay</c> frames later it dies of <c>TOPPLED</c>; a scuttled vehicle accepts nobody. When the vehicle dies, its
-/// rider is destroyed with it. The rider line gives the vehicle its weapon set flag, its command set and its locomotor set. The model condition and the selection are presentation.
+/// rider is destroyed with it, and the dead vehicle keeps the rider's status and weapon set flag for its death modules. The rider line gives the vehicle its weapon set flag, its command set and its locomotor set. The model condition and the selection are presentation.
 /// </summary>
 public sealed class RiderChangeContain(RiderChangeContainData data) : TransportContain(data.Transport)
 {
@@ -267,6 +267,13 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         var wasRider = Riders.Contains(candidate.Id);
         base.Remove(world, candidate, positionAtContainer);
         if (!wasRider) return;
+        // "Note if the bike dies, the rider dies too" - and onRemoving returns there, before it clears anything of the rider's line: a dead bike keeps the rider's model
+        // condition, weapon set flag and STATUS_RIDERn, so its death modules after the contain (a terrorist's dynamite, a rider flying off) still see who rode it.
+        if (Entity.EffectivelyDead || Entity.DestroyRequested)
+        {
+            world.RequestDestroy(candidate.Id);
+            return;
+        }
         var matched = _riderIndex >= 0;
         if (matched)
         {
@@ -275,12 +282,6 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
             // "Also clear the current weaponset flag": the bike's locomotor set stays, the next rider sets his.
             Entity.RiderWeaponBit = -1;
             world.WeaponSetFlagsChanged(Entity);
-        }
-        // "Note if the bike dies, the rider dies too."
-        if (Entity.EffectivelyDead || Entity.DestroyRequested)
-        {
-            world.RequestDestroy(candidate.Id);
-            return;
         }
         // And back (RiderChangeContain::onRemoving, after its death check): the rider takes the bike's level, the bike's experience goes to nothing.
         if (matched)

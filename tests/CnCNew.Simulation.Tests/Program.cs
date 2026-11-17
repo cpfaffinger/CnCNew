@@ -595,6 +595,7 @@ run.Test("Slaves: a hive passes damage to its slaves, swallows it without them, 
 run.Test("Slaves: the propaganda tower buffs and heals allies in range, does not stack and lets go", Tests.PropagandaTowerBuffsAlliesInRange);
 run.Test("Slaves: a combat bike swaps riders, is scuttled when deserted and takes its rider along", Tests.RiderChangeContainSwapsRiders);
 run.Test("Slaves: a combat bike and its rider swap their levels", Tests.RiderChangeContainSwapsLevels);
+run.Test("Slaves: a dead combat bike keeps its rider's status and fires the rider's death weapon", Tests.RiderChangeContainDeadBikeKeepsItsRider);
 run.Test("Slaves: an overlord redirects its container to the structure on its back", Tests.OverlordContainRedirectsToItsStructure);
 run.Test("Slaves: hackers earn cash in the internet center, pack before they move", Tests.HackersEarnCashInsideTheInternetCenter);
 run.Test("Slaves: the passenger-fire upgrade sets the container's flag", Tests.PassengersFireUpgradeSetsTheFlag);

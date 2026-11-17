@@ -574,6 +574,20 @@ public sealed class FactionBuffProbe
             if (!entered) return Result(item, BuffOutcome.NotMeasured, weapon, "", $"{rider.TemplateName} ({status}) did not get in");
             pair.Steps(2);
         }
+        // ExemptStatus of a rider: a dead vehicle keeps its rider's status (RiderChangeContain::onRemoving returns before it clears it), so a vehicle that starts with an exempt
+        // rider (the Demolition bike's terrorist) gets a rider of another line first, which throws the old one out.
+        var exempt = Names(module, "ExemptStatus").Select(status => NameTables.ObjectStatus.TryIndexOf(status, out var index) ? index : -1).ToHashSet();
+        var lines = TemplateOf(item.Object).Modules.Select(value => value.Data).OfType<RiderChangeContainData>().SelectMany(data => data.Riders).ToList();
+        if (exempt.Count > 0 && lines.Count > 0 && pair.B.World.FindEntity(reader) is { } vehicle && exempt.Any(bit => bit >= 0 && vehicle.HasStatus(bit)))
+        {
+            var other = lines.FirstOrDefault(value => !exempt.Contains(value.StatusBit));
+            if (other is null) return Result(item, BuffOutcome.NotMeasured, weapon, "", "every rider of the object has a status the module is exempt from");
+            var seated = pair.Spawn(other.TemplateName, Me, Centre - 40, Centre);
+            var entered = true;
+            pair.Both(world => entered &= world.TryEnterContainer(world.FindEntity(seated)!, world.FindEntity(reader)!));
+            if (!entered) return Result(item, BuffOutcome.NotMeasured, weapon, "", $"{other.TemplateName} did not get in");
+            pair.Steps(2);
+        }
         if (!made) pair.Upgrade(item.Buff, reader, upgrades);
         pair.Steps(2);
         pair.Both(world =>
@@ -585,6 +599,12 @@ public sealed class FactionBuffProbe
         var askedA = Asked(pair.A);
         var askedB = Asked(pair.B);
         var passed = askedB.Contains(weapon, StringComparer.OrdinalIgnoreCase) && (startsActive || !askedA.Contains(weapon, StringComparer.OrdinalIgnoreCase));
+        // The weapon in both worlds can be another module's that needs no upgrade (the Demolition bike's crushed terrorist fires CrushedBikeBomb with and without the
+        // suicide bomb, from two modules): the weapon's name cannot tell the two apart.
+        var twin = _objects.TryGetValue(item.Object, out var owner) ? owner.Modules.FirstOrDefault(other => !other.Tag.Equals(module.Tag, StringComparison.OrdinalIgnoreCase)
+            && other.Name.Equals("FireWeaponWhenDeadBehavior", StringComparison.OrdinalIgnoreCase) && string.Equals(Text(other, "DeathWeapon"), weapon, StringComparison.OrdinalIgnoreCase)) : null;
+        if (!passed && twin is not null && askedB.Contains(weapon, StringComparer.OrdinalIgnoreCase))
+            return Result(item, BuffOutcome.NotMeasured, weapon, string.Join(" ", askedB), $"{twin.Name}:{twin.Tag} fires {weapon} too; without: {(askedA.Length == 0 ? "none" : string.Join(" ", askedA))}; death {death}");
         return Result(item, passed ? BuffOutcome.Passed : BuffOutcome.Failed, weapon, askedB.Length == 0 ? "none" : string.Join(" ", askedB),
             $"without: {(askedA.Length == 0 ? "none" : string.Join(" ", askedA))}; death {death}{(made ? ", made after the upgrade" : "")}{(startsActive ? "; starts active" : "")}");
     }
