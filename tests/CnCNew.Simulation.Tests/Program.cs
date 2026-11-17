@@ -201,6 +201,7 @@ run.Test("Phase 5: SlowDeathBehavior weighted sibling lottery", Tests.Phase5Slow
 run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check", Tests.Phase5FireWeaponWhenDead);
 run.Test("Upgrades (#423): a module that starts active removes its upgrades first, at 30, 60 and 120 Hz", Tests.AStartsActiveModuleRemovesItsUpgrades);
 run.Test("Upgrades (#429): an aura that starts active goes through its upgrade switch, at 30, 60 and 120 Hz", Tests.AnAuraThatStartsActiveGoesThroughItsUpgradeSwitch);
+run.Test("Upgrades (#429): an effect list on death follows its upgrade switch, at 30, 60 and 120 Hz", Tests.AnEffectListOnDeathFollowsItsUpgradeSwitch);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 41: StealthDetectorUpdate detects behind a ridge (no line of sight, as the original)", Tests.Phase5StealthDetectorHeightLineOfSight);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);

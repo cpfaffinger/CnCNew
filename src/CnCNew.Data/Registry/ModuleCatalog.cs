@@ -138,9 +138,8 @@ public static class ModuleCatalog
             ..DieMux(),
             new("DeathFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "FXListDie.cpp"),
             new("OrientToObject", FieldType.Bool, Source: "FXListDie.cpp"),
-            new("StartsActive", FieldType.Bool, Source: "UpgradeMux"),
-            new("TriggeredBy", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "UpgradeMux"),
-            new("ConflictsWith", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "UpgradeMux"),
+            new("StartsActive", FieldType.Bool, Source: "FXListDie.h"),
+            ..UpgradeMux(),
         ]);
 
         // ---------------------------------------------------------------------------------------------- phase 5

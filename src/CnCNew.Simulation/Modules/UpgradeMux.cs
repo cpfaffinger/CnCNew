@@ -99,6 +99,6 @@ public sealed class UpgradeMuxState(UpgradeMuxData data)
         Executed = true;
     }
 
-    public void Describe(IStateWriter writer) => writer.Bool("executed", Executed);
-    public void Load(IStateReader reader) => Executed = reader.Bool("executed");
+    public void Describe(IStateWriter writer, string key = "executed") => writer.Bool(key, Executed);
+    public void Load(IStateReader reader, string key = "executed") => Executed = reader.Bool(key);
 }

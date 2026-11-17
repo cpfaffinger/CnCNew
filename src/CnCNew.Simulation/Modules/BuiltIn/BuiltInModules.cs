@@ -23,7 +23,7 @@ public static class BuiltInModules
         Bind<CreateObjectDieData>("CreateObjectDie", ModuleOwnerKind.Object, CreateObjectDieData.Parse, data => new CreateObjectDie(data)),
         Bind<LifetimeData>("DeletionUpdate", ModuleOwnerKind.Object, LifetimeData.Parse, data => new DeletionUpdate(data)),
         Bind<PlainDieData>("DestroyDie", ModuleOwnerKind.Object, PlainDieData.Parse, data => new DestroyDie(data)),
-        Bind<FxListDieData>("FXListDie", ModuleOwnerKind.Object, FxListDieData.Parse, data => new FxListDie(data)),
+        new ModuleBinding<FxListDieData>("FXListDie", ModuleOwnerKind.Object, FxListDieData.Parse, data => new FxListDie(data)),
         Bind<BodyData>("HighlanderBody", ModuleOwnerKind.Object, BodyData.Parse, data => new HighlanderBody(data)),
         Bind<BodyData>("ImmortalBody", ModuleOwnerKind.Object, BodyData.Parse, data => new ImmortalBody(data)),
         Bind<InactiveBodyData>("InactiveBody", ModuleOwnerKind.Object, _ => InactiveBodyData.Instance, _ => new InactiveBody()),

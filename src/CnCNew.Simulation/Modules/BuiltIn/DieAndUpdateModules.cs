@@ -4,6 +4,7 @@ using CnCNew.Data.Registry;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -88,33 +89,47 @@ public sealed class CreateObjectDie(CreateObjectDieData data) : DieModuleBase(da
     }
 }
 
-public sealed record FxListDieData(DieMuxData Mux, string DeathFx, bool OrientToObject, bool StartsActive) : DieData(Mux)
+public sealed record FxListDieData(DieMuxData Mux, UpgradeMuxData UpgradeMux, string DeathFx, bool OrientToObject, bool StartsActive) : DieData(Mux)
 {
-    public static FxListDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static FxListDieData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(DieMuxData.Parse(configuration), UpgradeMuxData.Parse(configuration, upgrades),
         ModuleConfigReader.Text(configuration, "DeathFX"), ModuleConfigReader.Bool(configuration, "OrientToObject", true),
         // FXListDieModuleData sets m_initiallyActive = TRUE: the reference documents that only one of 847 uses turns it off.
         ModuleConfigReader.Bool(configuration, "StartsActive", true));
 }
 
 /// <summary>
-/// <c>FXListDie</c>: requests an effect list on death. It is an upgrade module whose activation belongs to the upgrade system
-/// (phase 5): with <c>StartsActive = No</c> it stays dormant, and conflicting upgrades cannot exist yet.
+/// <c>FXListDie</c>: requests an effect list on death. It is an upgrade module (<c>FXListDie : DieModule, UpgradeMux</c>, #429): <c>StartsActive</c> goes through
+/// <c>giveSelfUpgrade</c>, a <c>TriggeredBy</c> upgrade switches it on, and on death it plays only while its switch is on and neither the object nor its player has a
+/// <c>ConflictsWith</c> upgrade (the anthrax bomb's three effect lists: the plain one conflicts with Beta and Gamma, Beta's is triggered by Beta and conflicts with Gamma).
+/// Unlike the original's <c>FXListDie::xfer</c>, which saves no switch (a load sets it back to <c>StartsActive</c>), the switch is saved.
 /// </summary>
-public sealed class FxListDie(FxListDieData data) : DieModuleBase(data.Mux)
+public sealed class FxListDie(FxListDieData data) : DieModuleBase(data.Mux), IUpgradeModule
 {
-    private bool _active;
+    private readonly UpgradeMuxState _mux = new(data.UpgradeMux);
 
     public override string ModuleName => "FXListDie";
-    public override void OnSpawn(IWorldServices world) => _active = data.StartsActive;
+
+    public override void OnSpawn(IWorldServices world)
+    {
+        if (data.StartsActive) _mux.GiveSelfUpgrade(world, Entity, _ => { });
+    }
+
+    public void TryActivate(IWorldServices world, UpgradeMask keyMask) => _mux.AttemptUpgrade(world, Entity, keyMask, _ => { });
+    public void ResetUpgrade(UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     public override void OnDie(IWorldServices world, in DamageInfo info)
     {
-        if (!_active || !Mux.IsApplicable(Entity, info) || data.DeathFx.Length == 0) return;
+        if (!_mux.Executed || !Mux.IsApplicable(Entity, info)) return;
+        var conflicting = data.UpgradeMux.Conflicting;
+        if (Entity.CompletedUpgrades.TestForAny(conflicting) || world.PlayerUpgrades(Entity.Owner).TestForAny(conflicting)) return;
+        if (data.DeathFx.Length == 0) return;
         world.Emit(SimEventKind.FxRequested, Entity.Id, info.Source, data.DeathFx, data.OrientToObject ? 1 : 0);
     }
 
-    public override void Describe(IStateWriter writer) => writer.Bool("active", _active);
-    public override void Load(IStateReader reader) => _active = reader.Bool("active");
+    // The switch keeps the key the module's former "active" flag had: an object without an upgrade switch hashes as before.
+    public override void Describe(IStateWriter writer) => _mux.Describe(writer, "active");
+    public override void Load(IStateReader reader) => _mux.Load(reader, "active");
 }
 
 public sealed record InstantDeathData(DieMuxData Mux, ImmutableArray<string> Fx, ImmutableArray<string> CreationLists, ImmutableArray<string> Weapons) : DieData(Mux)
