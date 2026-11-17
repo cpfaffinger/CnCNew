@@ -149,12 +149,18 @@ public sealed partial class SkirmishAi
 
     private static Fixed Share(Fixed damage, Fixed health) => damage >= health ? Fixed.One : damage / health;
 
+    /// <summary>
+    /// The health an object of <paramref name="template"/> is made with, as its body module reads it (<see cref="BodyData.Of"/>: every body type, #437). An <c>UndeadBody</c> counts
+    /// both lives: the blow that would end the first leaves one point and the second begins at <c>SecondLifeMaxHealth</c> (<c>UndeadBody::attemptDamage</c>), so the object is gone
+    /// only after both - what the exchange value asks is how long a unit lasts. The second life's own armour set is not judged.
+    /// </summary>
     private Fixed HealthOf(ObjectTemplate template)
     {
         if (_health.TryGetValue(template.Index, out var known)) return known;
         var health = Fixed.Zero;
         foreach (var module in template.Modules)
-            if (module.Data is BodyData body) health = body.MaxHealth;
+            if (BodyData.Of(module.Data) is { } body)
+                health = module.Data is UndeadBodyData undead ? body.MaxHealth + undead.SecondLifeMaxHealth : body.MaxHealth;
         _health[template.Index] = health;
         return health;
     }

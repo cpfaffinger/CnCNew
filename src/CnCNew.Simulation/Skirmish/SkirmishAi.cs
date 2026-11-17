@@ -286,6 +286,9 @@ public sealed partial class SkirmishAi
     /// <summary>Roles of the given template, for diagnostics.</summary>
     public string DescribeRoles(ObjectTemplate template) => RoleOf(template).ToString();
 
+    /// <summary>The health the composition rule judges an object of <paramref name="template"/> by (for tests).</summary>
+    public Fixed DescribeHealth(ObjectTemplate template) => HealthOf(template);
+
     /// <summary>The AI's turn for the world's current tick: call once per tick, before <see cref="SimulationWorld.Step"/>.</summary>
     public void Update()
     {

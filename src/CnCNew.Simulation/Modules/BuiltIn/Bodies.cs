@@ -18,6 +18,18 @@ public sealed record BodyData(Fixed MaxHealth, Fixed InitialHealth, Fixed Subdua
         ModuleConfigReader.Real(configuration, "SubdualDamageCap", Fixed.Zero),
         ModuleConfigReader.Ticks(configuration, "SubdualDamageHealRate", 0),
         ModuleConfigReader.Real(configuration, "SubdualDamageHealAmount", Fixed.Zero));
+
+    /// <summary>
+    /// The <c>ActiveBody</c> configuration a body module of <paramref name="data"/> is built with: itself for <c>ActiveBody</c>, <c>StructureBody</c>, <c>HighlanderBody</c> and
+    /// <c>ImmortalBody</c>, the embedded one of <c>UndeadBody</c> (its first life) and <c>HiveStructureBody</c>; none for <c>InactiveBody</c> (health 0) and any other module.
+    /// </summary>
+    public static BodyData? Of(ModuleData data) => data switch
+    {
+        BodyData body => body,
+        UndeadBodyData undead => undead.Body,
+        HiveStructureBodyData hive => hive.Body,
+        _ => null,
+    };
 }
 
 /// <summary><c>BodyDamageType</c> (<c>BodyModule.h</c>): PRISTINE &lt; DAMAGED &lt; REALLYDAMAGED &lt; RUBBLE, in ascending "worseness" order (values compare directly, matching the reference's <c>IS_CONDITION_WORSE(a, b) = a &gt; b</c>).</summary>
