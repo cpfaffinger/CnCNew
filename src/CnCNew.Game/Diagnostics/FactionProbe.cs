@@ -271,7 +271,10 @@ public sealed class FactionProbe
             var result = world.Submit(new SpawnCommand(PlayerId.System, ++system, world.Tick, spawn.Template, spawn.Owner, Fixed.FromDecimal(spawn.X), Fixed.FromDecimal(spawn.Y), Fixed.Zero, Fixed.Zero));
             if (!result.Accepted) problem = $"spawning {spawn.Template} ({spawn.Role}) was refused: {result.Reason}";
         }
-        Step(arena);
+        // The spawns are made in the first tick; their first original frame (a structure's build-complete modules, which start its powers' recharge; the vision that explores the
+        // ground a site needs) runs with the first tick of the next frame. Settle past it, to the start of a frame, so the staging below is the same game state at every rate.
+        do Step(arena);
+        while (world.Tick <= world.Time.TicksPerOriginalFrame || !world.Time.IsOriginalFrameBoundary(world.Tick));
         var created = world.Entities.Where(entity => !before.Contains(entity.Id.Value)).OrderBy(entity => entity.Id.Value).ToList();
         // Spawns that make more objects (a structure's free unit) come later in id order: match the spawns by template in order.
         foreach (var spawn in spawns)
@@ -325,7 +328,7 @@ public sealed class FactionProbe
                 // The rider of a rider's set takes the place of whoever sits there by getting in (RiderChangeContain::onContaining removes the rider before; a rider that gets out
                 // without one scuttles the combat bike). Staging, not a player's order: the riders are put in directly.
                 var sitting = held.Contained.ToList();
-                Step(arena);
+                StepFrame(arena);
                 var seated = 0;
                 var candidates = world.Entities.Where(entity => !known.Contains(entity.Id.Value) && entity.Owner == Me && riderKinds.Contains(entity.Template.Name, StringComparer.OrdinalIgnoreCase))
                     .OrderBy(entity => entity.Id.Value).ToList();
@@ -344,7 +347,8 @@ public sealed class FactionProbe
                     power.SetReadyFrame(world.Tick);
                     if (_catalog.SpecialPowers[power.PowerIndex].SharedSynced) world.SetSharedReadyFrame(Me, power.PowerIndex, world.Tick);
                 }
-        Step(arena);
+        // One whole original frame: the press comes at the start of a frame, the same one at every rate.
+        StepFrame(arena);
         arena.Events.Clear();
         return arena;
     }
@@ -941,6 +945,13 @@ public sealed class FactionProbe
         foreach (var item in arena.Events.Where(item => item.Tick > world.Tick - world.Time.TicksPerSecond && item.Kind is not (SimEventKind.FxRequested or SimEventKind.MoveArrived)))
             line.Append(string.Create(CultureInfo.InvariantCulture, $" | {item.Kind} {item.Entity.Value}->{item.Other.Value} {item.Text} {item.Value}"));
         Console.Error.WriteLine(line.ToString());
+    }
+
+    /// <summary>Steps to the start of the next original frame (one tick at 30 Hz, two at 60 Hz).</summary>
+    private void StepFrame(Arena arena)
+    {
+        do Step(arena);
+        while (!arena.World.Time.IsOriginalFrameBoundary(arena.World.Tick));
     }
 
     private void Step(Arena arena)
