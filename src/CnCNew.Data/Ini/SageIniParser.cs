@@ -172,7 +172,37 @@ public static class SageIniParser
             throw Error("Property name is empty.", source, line);
         }
 
-        return new IniProperty(name, line.Content[(equalsIndex + 1)..].Trim(), location);
+        return new IniProperty(name, ValueText(line.Content[(equalsIndex + 1)..]), location);
+    }
+
+    /// <summary>
+    /// Every separator set of <c>INI</c> (INI.cpp, <c>m_seps</c> and its percent, colon and quote variants) holds "=", and a
+    /// field's parser reads its tokens with <c>strtok</c>, which skips separators: an "=" in a value is whitespace to the
+    /// original. "CommandSet = = GLADemoTrapCommandSet" (FactionBuilding.ini) names the set GLADemoTrapCommandSet.
+    /// An "=" inside quotes is left as written (no shipped line has one).
+    /// </summary>
+    private static string ValueText(string value)
+    {
+        if (value.IndexOf('=') < 0)
+        {
+            return value.Trim();
+        }
+
+        var text = value.ToCharArray();
+        var quoted = false;
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (text[index] == '"')
+            {
+                quoted = !quoted;
+            }
+            else if (text[index] == '=' && !quoted)
+            {
+                text[index] = ' ';
+            }
+        }
+
+        return new string(text).Trim();
     }
 
     private static bool IsInclude(string value)

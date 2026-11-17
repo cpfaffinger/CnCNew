@@ -43,14 +43,9 @@ internal static class FactionAuditTests
         ["FactionGLAStealthGeneral|GLASneakAttackTunnelNetwork|Command_SetRallyPoint"] = "rally point greyed without a production module",
     };
 
-    /// <summary>
-    /// The static findings of severity <c>finding</c> (<see cref="RosterFinding.Key"/>): GLADemoTrap names its set as <c>CommandSet = = GLADemoTrapCommandSet</c>. The original's
-    /// <c>INI::parseAsciiString</c> reads the next token with the separators <c>" \n\r\t="</c> (INI.cpp), so the set is GLADemoTrapCommandSet and the trap has its detonate and
-    /// mode buttons; the port keeps "= GLADemoTrapCommandSet", which names no set, and the base GLA's demo trap has no buttons.
-    /// </summary>
+    /// <summary>The static findings of severity <c>finding</c> (<see cref="RosterFinding.Key"/>); none today.</summary>
     private static readonly Dictionary<string, string> KnownStaticFindings = new(StringComparer.Ordinal)
     {
-        ["FactionGLA|GLADemoTrap"] = "CommandSet = = GLADemoTrapCommandSet read with the '='",
     };
 
     public static int Run(string[] args)

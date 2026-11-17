@@ -42,6 +42,7 @@ SingleBitsMatchTheRuntimeCast();
 FingerprintEncodingIsPinned();
 BridgeBlocksAreStrictlyTyped();
 FieldsWithoutAnEqualsSignAreFields();
+AnEqualsSignInAValueIsASeparator();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -106,6 +107,31 @@ static void FieldsWithoutAnEqualsSignAreFields()
     Assert(module.Fields.Any(field => field.Name == "AliasConditionState" && field.Value.OriginalText == "RIDER1"), "so is an alias line.");
     var state = module.Sections.Single();
     Assert(state.Fields.Select(field => (field.Name, field.Value.OriginalText)).SequenceEqual([("Model", "ABPWRPLANT_A1"), ("AnimationSpeedFactorRange", "0.9 1.1")]), "A state's field without '=' is a field, in file order.");
+}
+
+static void AnEqualsSignInAValueIsASeparator()
+{
+    // Every separator set of INI (INI.cpp) holds "=": the GLA demo trap's "CommandSet = = GLADemoTrapCommandSet" names the set GLADemoTrapCommandSet.
+    const string text = """
+    CommandSet TrapCommandSet
+      1 = Command_Detonate
+    End
+    Object Trap
+      CommandSet = = TrapCommandSet
+      Behavior = ActiveBody ModuleTag_02
+        MaxHealth = = 100.0
+      End
+    End
+    """;
+    var document = SageIniParser.Parse(text, "fixture.ini");
+    var trap = document.Blocks.Single(block => block.Declaration == "Object Trap");
+    Assert(trap.Children.OfType<IniProperty>().Single(property => property.Name == "CommandSet").Value == "TrapCommandSet", "A second '=' is a separator, not part of the value.");
+    Assert(SageIniParser.Parse("Object A\n  DisplayName = \"a=b\"\nEnd\n", "quoted.ini").Blocks.Single().Children.OfType<IniProperty>().Single().Value == "\"a=b\"", "An '=' inside quotes is kept.");
+    var graph = DefinitionCompiler.Compile(One(text));
+    var definition = graph.Definitions.OfType<ObjectDefinition>().Single();
+    var commandSet = definition.Fields.Single(field => field.Name == "CommandSet").Value;
+    Assert(commandSet.OriginalText == "TrapCommandSet" && commandSet.Value is DefinitionReference { Name: "TrapCommandSet" }, $"The command set is the named set, not '{commandSet.OriginalText}'.");
+    Assert(definition.Modules.Single().Fields.Single(field => field.Name == "MaxHealth").Value.OriginalText == "100.0", "A module field's value has no '=' either.");
 }
 
 static void ParserPreservesStructureAndLocations()
