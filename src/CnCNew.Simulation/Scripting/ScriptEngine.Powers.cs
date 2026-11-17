@@ -193,6 +193,8 @@ public sealed partial class ScriptEngine
             }
             // Team::tryToRecruit: "can't recruit this unit".
             if (!IsRecruitable(candidate)) continue;
+            // "Don't recruit held units."
+            if ((_world.DisabledFlagsOf(candidate) & DisabledMask.Held) != DisabledMask.None) continue;
             var distance = DistanceSquared(candidate, home.X, home.Y);
             // A unit of the default team is taken even outside the radius while nothing was found yet, then nearer ones win (Team::tryToRecruit).
             var inDefaultTeam = current is null || (_program.FindTeam(current.Prototype) is { } ownTeam && ownTeam.Name == "team" + ownTeam.Owner);

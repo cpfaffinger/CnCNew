@@ -436,6 +436,7 @@ run.Test("Phase 61: the panel-flag actions set and clear an object's flags", Tes
 run.Test("Phase 61: the panel flag AI Recruitable keeps a unit out of recruiting", Tests.ScriptPanelFlagRecruitable);
 run.Test("Phase 61: a mission's map objects come with their properties", Tests.MissionMapObjectsComeWithTheirProperties);
 run.Test("Phase 62 (F-141): a map object brings objectRecruitableAI and objectSelectable", Tests.MapObjectsBringRecruitableAndSelectable);
+run.Test("Recruiting (#423): a held unit is not recruited, at 30, 60 and 120 Hz", Tests.AHeldUnitIsNotRecruited);
 run.Test("Phase 58: a falling hulk crashes into a building", Tests.AFallingHulkCrashesIntoABuilding);
 run.Test("F-175: a falling hulk meets the shape of a building, not its sphere", Tests.AFallingHulkMeetsTheShapeOfABuilding);
 run.Test("Phase 58: a hijacker on guard takes vehicles", Tests.AHijackerOnGuardTakesVehicles);
