@@ -237,10 +237,38 @@ public sealed partial class SimulationWorld
                 distanceSquared = dx * dx + dy * dy;
             }
         }
+        if (IsContactWeapon(weapon) && !victim.Template.IsKindOf("BRIDGE")) return WithinContactRange(source, victim, reach, distanceSquared);
         if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
         var minimum = weapon.MinimumAttackRange;
         // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f" (the shipped, non-RATIONALIZE_ATTACK_RANGE build).
         return minimum <= Fixed.Zero || !SquaredReach.ContainsStrictly(minimum, distanceSquared, Fixed.FromDecimal(0.5m));
+    }
+
+    /// <summary>
+    /// <c>Weapon::isWithinAttackRange</c> for a contact weapon (#414): the range is measured as the original measures every range, <c>ATTACK_RANGE_CALC_TYPE</c> =
+    /// <c>FROM_BOUNDINGSPHERE_2D</c>, between the two bounding circles; and at a structure the attacker must also touch it ("we want to do a more detailed check to see if we're actually
+    /// colliding with the target", <c>iteratePotentialCollisions</c>). The port measures the other weapons between the centres; a contact weapon measured so reaches no unit, whose
+    /// circle keeps the attacker's off: Colonel Burton circled a soldier at the two radii and never stabbed, a terrorist or a bomb truck never reached a vehicle. A contact weapon has
+    /// no minimum range in the data.
+    /// </summary>
+    private bool WithinContactRange(Entity source, Entity victim, Fixed reach, Fixed distanceSquared)
+    {
+        if (!SquaredReach.Of(reach + CircleRadius(source) + CircleRadius(victim)).Contains(distanceSquared)) return false;
+        return !victim.Template.IsKindOf("STRUCTURE") || FootprintsOverlap(source, victim);
+    }
+
+    /// <summary>
+    /// Whether the weapon <paramref name="source"/> would fire at <paramref name="victim"/> (<see cref="WeaponRangeAgainst"/>'s) reaches it, when that weapon is a contact weapon
+    /// (<see cref="WithinContactRange"/>, #414): the question the client's "in range" asks with the range alone, which a contact weapon's range between the centres never answers. Null
+    /// for any other weapon, or none.
+    /// </summary>
+    public bool? ContactWeaponReaches(Entity source, Entity victim)
+    {
+        var set = ActiveWeaponSet(source);
+        var slot = AttackSlotIgnoringRange(source, victim);
+        if (set is null || slot < 0 || !set.HasWeapon(slot)) return null;
+        var weapon = _templates.Weapons[set.Weapons[slot]];
+        return IsContactWeapon(weapon) ? WithinWeaponRange(source, weapon, victim) : null;
     }
 
     private static bool IsPreferredAgainst(WeaponSetInfo set, int slot, Entity victim)

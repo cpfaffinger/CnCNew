@@ -16,13 +16,6 @@ internal static class FactionAuditTests
     /// <summary>The presses that fail today (<see cref="ProbeResult.Key"/>), each with its finding.</summary>
     private static readonly Dictionary<string, string> KnownFailures = new(StringComparer.Ordinal)
     {
-        // Colonel Burton's knife (FIRE_WEAPON, SECONDARY ColonelBurtonKnifeWeapon, AttackRange 3): ordered at a soldier that stands still he walks up and circles it at some
-        // 20 units without ever stabbing; at a vehicle or a building the order is refused (InvalidWeaponTarget), as the knife's data allow.
-        ["FactionAmerica|AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",
-        ["FactionAmericaAirForceGeneral|AirF_AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",
-        ["FactionAmericaLaserGeneral|Lazr_AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",
-        ["FactionAmericaSuperWeaponGeneral|SupW_AmericaInfantryColonelBurton|Command_ColonelBurtonKnifeAttack"] = "Burton circles his knife's target",
-
     };
 
     /// <summary>The static findings of severity <c>finding</c> (<see cref="RosterFinding.Key"/>); none today.</summary>

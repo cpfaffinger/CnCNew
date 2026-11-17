@@ -41,6 +41,7 @@ Func<string[], int>[] suites =
     JetOrderTests.Run,
     PlacementPreviewTests.Run,
     SentinelRangeTests.Run,
+    ContactRangeTests.Run,
     SpectatorTests.Run,
     ChinookNetAnimationTests.Run,
     MissileJitterTests.Run,
