@@ -5423,7 +5423,7 @@ Sixteen findings of a skirmish (#306 to #321), each read in the original; the pr
 
 ### 90.6 The rounds of 15 November 2026
 
-Findings of the owner's play of 15 November 2026 and of the machine, one subsection per issue; what belongs to the presentation, the interface or the setup is in the documents 90.35 names. **No human has seen, heard or played the fixes.** **Reference values after the third round** (`d7850121`, measured at the code of `63cdd788`, one measurement for #355, #172, #354, #305, #363, #365, #366, #370, #371, #372 and #374 together): reference match a stalemate at tick 108,000, `30A66C50A3DF2544` / `3AD535A460333976`; stress test unchanged (`20359BA8A2093B99` / `2967E6B3B1BCFDDD`); 11 of 16 pairings decided (10 before; balance not judged); every mission keeps its outcome; the input manifest moved with #355 (`WeaponInfo.SuspendFxDelayTicks`) and #354 (the dock bones; world fingerprint `7C75647E07238CA6`).
+Findings of the owner's play of 15 November 2026 and of the machine, one subsection per issue; what belongs to the presentation, the interface or the setup is in the documents 90.45 names. **No human has seen, heard or played the fixes.** **Reference values after the third round** (`d7850121`, measured at the code of `63cdd788`, one measurement for #355, #172, #354, #305, #363, #365, #366, #370, #371, #372 and #374 together): reference match a stalemate at tick 108,000, `30A66C50A3DF2544` / `3AD535A460333976`; stress test unchanged (`20359BA8A2093B99` / `2967E6B3B1BCFDDD`); 11 of 16 pairings decided (10 before; balance not judged); every mission keeps its outcome; the input manifest moved with #355 (`WeaponInfo.SuspendFxDelayTicks`) and #354 (the dock bones; world fingerprint `7C75647E07238CA6`).
 
 ### 90.7 A builder that dies inside its frame (#136, F-139)
 
@@ -5539,7 +5539,47 @@ Found by the AI survey of #284: on Death Valley (ChinaTank against AirForce, see
 
 The owner's play of 16 November 2026: the soldiers stood still (#380) but outside the site. `SpawnPointProductionExitUpdate::initializeBonePositions` reads the bones `SpawnPoint01` to `03` of the site's model (`SpawnPoint` is a `StandardPublicBone` of `GameData.ini`, read through `Drawable::getPristineBonePositions`), and `exitObjectViaDoor` puts a new spawn on the first free one, facing the bone's heading. In `UBStingerS` and its variants they lie some 16 units from the centre, inside the 36-unit footprint; the port had no bones and put the soldiers on the bounding circle, on the sandbags. `ModelGeometry.SpawnPoints` (read by `ModelGeometryLoader` from each draw module's default state, scaled by `Scale`, part of the world fingerprint when not empty) gives the exit its points; a model without them has none, as in the original, and only a world without any model table (the synthetic fixtures) keeps the computed circle. Test `StingerSpawnPointTests` (Game.Tests, real data, 30, 60 and 120 Hz): each soldier at its own bone, the first hit at a Crusader in the same frame at every rate, a replacement at the bone its predecessor left. Not built: the original holds such a spawn (`DISABLED_HELD`, #412).
 
-### 90.35 Elsewhere
+### 90.35 A Stinger Site holds its soldiers (#412, #420, #423, #429)
+
+`SpawnPointProductionExitUpdate::exitObjectViaDoor` holds every spawn on its bone (`DISABLED_HELD`); `SlavedUpdate::stopSlavedEffects` lets it go when the site dies. A held object's physics moves nothing, but its AI runs: `isAbleToAttack` ignores the hold and the locomotor turns it on the spot, so `MayAct` no longer refuses a held object, and above 30 Hz the hold covers a turn on the spot (#412). `AIGroup` gives a held member no move, scatter or attack on an object (attack-move, guard and stop still reach it); its physics integrates nothing, so a shock wave neither throws it nor throws it once it is let go; a unit's own acquisition, guard and attack on a place run only while its AI runs - a script disable, paralysis, an unmanned vehicle or a brown-out stop it as an EMP does (`GameLogic::update`, `getDisabledTypesToProcess`; #420). A team recruits no held unit (`Team::tryToRecruit`); a stunned object's locomotor neither moves nor turns it (`Locomotor.cpp`), and the stun of an object held when the shock came outlasts its flight; `isAbleToAttack` refuses an EMP'd or hacked object only if it is a portable structure or `SPAWNS_ARE_THE_WEAPONS`; `giveSelfUpgrade` processes `RemovesUpgrades` (#423). `isAbleToAttack` also refuses `OBJECT_STATUS_NO_ATTACK` and the soldier of a subdued site (#429).
+
+### 90.36 The faction audit and the buff measurement (#411, #419, #421)
+
+`SimTool faction-audit <content> --out <dir> [--dynamic] [--buffs]` and the Game.Tests suites `FactionAuditTests` and `FactionBuffTests` (`src/CnCNew.Game/Diagnostics/FactionRoster.cs`, `FactionProbe.cs`, `FactionBuffProbe.cs`): for the twelve playable factions the roster each general reaches from its player template and command sets (structures, units, upgrades, sciences, powers, every button) and its difference to the base faction; every button pressed on real data as the command bar sends it, with its effect checked; every buff the data name - the modules an upgrade switches on, the horde and supply upgrades the engine reads by name, a projectile's bonus, veterancy a science gives at birth, a general's cost, build time and power reload - measured in a control and a test world against the data and the original. The worlds are staged in original frames, so every press comes at the same frame at 30, 60 and 120 Hz (#421). A failure not on a suite's named list, or a listed one that passes, fails the suite. At the end of the round: 2,270 presses, 0 failed, 67 not applicable; 638 buffs, 0 failed, 21 not measured. What the audit found is #413 to #418, #424 to #427; what it does not measure is named in its output.
+
+### 90.37 Removing an upgrade (#413)
+
+`SimulationWorld.RemoveUpgradeByName` is `Object::removeUpgrade`: it clears the upgrade's bit of the object's own mask and resets every upgrade module it triggered (`ResetUpgrade`); nothing runs and nothing is undone. The GLA worker's switch between real and fake buildings recursed until the stack overflowed. A drone freed by `UpgradeDie` is made again when bought again.
+
+### 90.38 Contact weapons and weapon ranges (#414, #422, #433, #436, #439)
+
+`Weapon::isWithinAttackRange` measures every range between the two bounding circles in the plane (`FROM_BOUNDINGSPHERE_2D`); the shipped build defines `RATIONALIZE_ATTACK_RANGE`, so the attack range and the minimum range are a quarter cell (2.5) short, the minimum range is compared strictly, and a contact weapon is one whose range less 2.5 is under a cell (`WeaponInfo.AttackRangeWith`, `MinimumRange`, `IsContact`; the client's in-range question asks the world, `WeaponReaches`). A place has no circle. Colonel Burton's knife reaches; a tank fires at a large building from its range plus both radii (#414, #422). A contact weapon's approach walks into its victim, which is the AI's ignored obstacle for that walk (`AIAttackApproachTargetState::computePath`; #439). The cleanup ambulance, a drone and a deploying unit use the attack's own test (#433). A unit whose locomotor has a minimum speed fires only within the weapon's aim delta (at least 0.035 rad) and flies at its target while it aims; an ordered jet attack out of reach approaches as `computeApproachTarget` does in the air (#436). A unit whose ability turns or unpacks it does not retaliate (`ActiveBody::shouldRetaliate`; #439).
+
+### 90.39 The Chinooks (#415, #416)
+
+`Object::Object` keeps the last AI module as the object's AI; the AirForce general's Chinook has two, so it now gathers, drops and lands as the others (#416). The unload button of a Chinook in the air sends `MSG_EVACUATE` as `AIGroup::groupEvacuate` does: it lands, unloads and takes off (#415).
+
+### 90.40 A tunnel and a barracks (#417, #418, #428, #435)
+
+The original's INI reader takes `=` as a separator in every value, so `CommandSet = = GLADemoTrapCommandSet` names the set and the demo trap has its buttons (#418). A tunnel takes a rally point in its contain module (`getObjectExitInterface`), and its riders leave by its door - `ExitStart`, `ExitEnd`, the rally point - instead of a random point (#417, #428). A heal container is a door container: a healed occupant and one of a sold or evacuated barracks leave by its exit bones; the exit order names the container the rider leaves through, so a tunnel's exit button lets a rider out by that tunnel (`CommandTypes.Version` 30, replay 29; #435).
+
+### 90.41 Buffs that reach their units (#424, #425, #426, #427)
+
+A projectile's damage is computed with the projectile as the source (`Weapon::computeBonus`): its own conditions at detonation and the launcher's own from the launch, never what a Battle Bus passes to its riders - upgraded shells and missiles do x1.25 (#424). `ThingFactory::newObject` makes one of a template's `BuildVariations`, drawn from the logic stream; a produced Technical is one of its chassis and Technical Training trains it; `IsEquivalentTo` reads the variations (#425). An empty Battle Bus sleeps until its slow death (#426). A dead combat bike keeps its rider's status for its death modules, so a terrorist's bike fires the terrorist's death weapons (#427).
+
+### 90.42 A reskin (#431)
+
+`ObjectReskin` records its direct parent (`ObjectDefinition.ReskinnedFrom`); `IsEquivalentTo` follows `ThingTemplate::isEquivalentTo` - a reskin and its parent either way, two reskins of one parent, build variations - and every place the original compares with it uses it (`NOT_SIMILAR`, `MaxSimultaneousOfType`, prerequisites, rider lines, `QuantityModifier`, select-same-type). The data hold 223 reskins of 39 parents.
+
+### 90.43 Healing (#429, #432, #438)
+
+`AutoHealBehavior` that starts active goes through `giveSelfUpgrade`, and `FXListDie` is an upgrade module - the anthrax bomb plays its plain, Beta or Gamma effect list (#429). The self-heal is a damage module: it sleeps at full health, a hit wakes it in the next frame of the object, a `StartHealingDelay` restarts with every hit, and an aura that starts active first wakes `GameLogicRandomValue(1, HealingDelay)` frames after its birth (#432). A radius aura heals allies on its side of the map edge through the object's sole healing benefactor, so two auras heal as one; a whole-player aura skips off-map objects; a single burst sleeps for good (#438).
+
+### 90.44 The built-in AI (#430, #434, #437)
+
+The built-in AI judges a Technical by the chassis it becomes and a combat bike by the rider it is made with (`FightingSet`), and reads the health of every body type - a Battle Bus by both lives, a hive structure by its body (`BodyData.Of`). Census of the GLA pairings, seeds 1 and 2, 25 minutes: Technicals 0 -> 91, combat bikes 0 -> 36; balance not judged. The Battle Bus stays unbuilt (#434 open: it needs a Palace, which no goal of the AI builds).
+
+### 90.45 Elsewhere
 
 - The patcher finds Steam outside its default place (#175): `docs/INSTALLATION.md` "Limits".
 - Effects and the transparent stage blend in display values (#356, #359): `docs/CLIENT-FX.md`.
