@@ -447,7 +447,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
 
     public override void OnSpawn(IWorldServices world)
     {
-        _active = data.StartsActive;
+        // UpgradeMux::giveSelfUpgrade (#429): the removals first, then the aura, and the switch is done - a later module's removal of the trigger re-arms it (resetUpgrade).
+        if (data.StartsActive) _mux.GiveSelfUpgrade(world, Entity, _ => _active = true);
         _nextWake = _active ? Math.Min(world.Tick + world.Time.AtLeastOneFrame(data.StartHealingDelayTicks), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
     }
 
