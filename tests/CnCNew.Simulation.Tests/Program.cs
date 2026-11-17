@@ -490,6 +490,7 @@ run.Test("Construction: dozers repair damaged structures", Tests.ConstructionRep
 run.Test("Construction: a second builder resumes an unfinished site", Tests.ConstructionResumeWithAnotherBuilder);
 run.Test("Construction: rejections for permission, prerequisites, funds and kind", Tests.ConstructionRejections);
 run.Test("Construction: production rejections (side, buildable, prerequisites, MaxSimultaneousOfType)", Tests.ConstructionProductionRejections);
+run.Test("#431: a reskin is equivalent to what it reskins (ObjectReskin): the type test, MaxSimultaneousOfType and NOT_SIMILAR", Tests.ReskinIsEquivalentToWhatItReskins);
 run.Test("Construction: placement on terrain", Tests.ConstructionPlacementRules);
 run.Test("Construction: snapshot mid-construction and mid-sale, replay round trip", Tests.ConstructionSnapshotAndReplay);
 run.Test("Navigation: escape from and goal inside a footprint", Tests.NavigationFootprintEscape);

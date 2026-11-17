@@ -102,7 +102,7 @@ public sealed partial class SimulationWorld
             {
                 if (entity.Owner != owner.Id || entity.HasStatus(ObjectStatusBits.UnderConstruction)) continue;
                 foreach (var name in line.Alternatives)
-                    if (entity.Template.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) { satisfied = true; break; }
+                    if (_templates.AreEquivalent(name, entity.Template.Name)) { satisfied = true; break; }
                 if (satisfied) break;
             }
             if (!satisfied) return false;
@@ -123,7 +123,7 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// <c>Player::canBuildMoreOfType</c>: counts the player's own, not-yet-dead objects of the exact template (<c>MaxSimultaneousLinkKey</c>
+    /// <c>Player::canBuildMoreOfType</c>: counts the player's own, not-yet-dead objects equivalent to the template (<c>countExisting</c>: <c>isEquivalentTo</c>; <c>MaxSimultaneousLinkKey</c>
     /// grouping is not modeled, see <see cref="ObjectTemplate.MaxSimultaneousOfType"/>) plus, for a non-structure template, every matching entry
     /// still queued in any of the player's <see cref="Modules.BuiltIn.ProductionUpdate"/>s (a structure can never sit in a factory queue).
     /// </summary>
@@ -135,7 +135,7 @@ public sealed partial class SimulationWorld
         foreach (var entity in _entities.Values)
         {
             if (entity.Owner != owner.Id || entity.EffectivelyDead) continue;
-            if (entity.Template.Index == template.Index) count++;
+            if (template.IsEquivalentTo(entity.Template)) count++;
             if (countQueued && FindProductionModule(entity) is { } production) count += production.CountInQueue(template.Index);
             if (count >= template.MaxSimultaneousOfType) return true;
         }

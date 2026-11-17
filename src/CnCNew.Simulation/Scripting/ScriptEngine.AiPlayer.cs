@@ -556,7 +556,8 @@ public sealed partial class ScriptEngine
         // "See if this is spawned from a hole": the entry that waits at this place for this type. The hole may be gone by now: it goes the moment its building is finished.
         foreach (var entry in state.BuildList)
         {
-            if (entry.X != building.X || entry.Y != building.Y || !string.Equals(entry.Template, building.Template.Name, StringComparison.Ordinal)) continue;
+            // AIPlayer::onStructureProduced: bldgPlan->isEquivalentTo(bldg->getTemplate()).
+            if (entry.X != building.X || entry.Y != building.Y || !_world.Templates.IsOfType(building.Template, entry.Template)) continue;
             if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is { Template: var waiting } && !waiting.IsKindOf("REBUILD_HOLE")) continue;
             entry.ObjectId = building.Id.Value;
             return;
@@ -791,7 +792,8 @@ public sealed partial class ScriptEngine
             if (!entry.Automatic) continue;
             if (FindDozer(state, entry.X, entry.Y) is null && underPowered) QueueDozer(state);
         }
-        if (power is not null && (chosen is null || !string.Equals(power.Template, chosen.Template, StringComparison.Ordinal)) && !powerUnderConstruction) chosen = power;
+        // AISkirmishPlayer::processBaseBuilding: !powerPlan->isEquivalentTo(bldgPlan).
+        if (power is not null && (chosen is null || !_world.Templates.AreEquivalent(power.Template, chosen.Template)) && !powerUnderConstruction) chosen = power;
         if (chosen is null || !BuildStructureWithDozer(state, chosen)) return;
         if (chosen.Rebuilds > 0) chosen.Rebuilds--;
         state.ReadyStructure = false;

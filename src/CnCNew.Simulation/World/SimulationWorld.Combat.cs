@@ -110,7 +110,7 @@ public sealed partial class SimulationWorld
                 else
                 {
                     if ((affects & WeaponInfo.AffectsSelf) == 0 && (victim == source || (producer.IsValid && victim.Id == producer))) continue;
-                    if ((affects & WeaponInfo.NotSimilar) != 0 && victim.Template.Index == source.Template.Index
+                    if ((affects & WeaponInfo.NotSimilar) != 0 && source.Template.IsEquivalentTo(victim.Template)
                         && RelationshipOf(source.Owner, victim.Owner) == Relationship.Allies) continue;
                     if ((affects & WeaponInfo.NotAirborne) != 0 && IsSignificantlyAboveTerrainAtFrameEnd(victim)) continue;
                     var required = RelationshipBetween(victim, source) switch

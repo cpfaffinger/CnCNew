@@ -367,18 +367,20 @@ public sealed class SelectionModel
     }
 
     /// <summary>
-    /// <c>InGameUI::selectMatchingAcrossRegion</c>: adds every own, uncontained, mass-selectable object whose template equals a selected own object's
-    /// template, on screen (<paramref name="view"/>) or across the map (null). Returns the number added, or -1 when nothing of the player's own is selected.
+    /// <c>InGameUI::selectMatchingAcrossRegion</c>: adds every own, uncontained, mass-selectable object whose template is equivalent to a selected own object's
+    /// template (<c>similarUnitSelection</c>: <c>isEquivalentTo</c> - a Technical's three chassis, a reskin and what it reskins), on screen (<paramref name="view"/>) or
+    /// across the map (null). Returns the number added, or -1 when nothing of the player's own is selected.
     /// A selection of buildings finds the finished buildings of its template instead (the structure group of this client; the original's call finds no structure).
     /// </summary>
     public int SelectMatching(SimulationWorld world, IViewProjection? view)
     {
         var own = OwnSelected(world);
-        var templates = own.Select(entity => entity.Template.Name).ToHashSet(StringComparer.Ordinal);
-        if (templates.Count == 0) return -1;
+        var templates = own.Select(entity => entity.Template).Distinct().ToArray();
+        if (templates.Length == 0) return -1;
         var structures = own.All(entity => entity.Template.IsKindOf("STRUCTURE"));
         var pool = view is null ? world.Entities.OrderBy(entity => entity.Id.Value).ToImmutableArray() : Picker.OnScreen(world, LocalPlayer, view);
-        return AddUpToLimit(pool.Where(entity => entity.Owner == LocalPlayer && (structures ? IsGroupableStructure(entity) : EntityPicker.IsMassSelectable(entity)) && templates.Contains(entity.Template.Name)));
+        return AddUpToLimit(pool.Where(entity => entity.Owner == LocalPlayer && (structures ? IsGroupableStructure(entity) : EntityPicker.IsMassSelectable(entity))
+                                         && templates.Any(template => template.IsEquivalentTo(entity.Template))));
     }
 
     /// <summary><c>InGameUI::selectMatchingAcrossScreen</c>: the matching units on screen; says "nothing selected" when there was nothing to match, "across screen" when units were added, nothing when none were.</summary>

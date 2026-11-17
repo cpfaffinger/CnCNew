@@ -83,7 +83,8 @@ public sealed partial class ScriptEngine
         var putIn = created.ModuleArray.OfType<DeliverPayloadAIUpdate>().FirstOrDefault()?.PutInContainer ?? string.Empty;
         foreach (var member in members.ToArray())
         {
-            if (member.Template == transportTemplate || member.ContainedBy.IsValid || current.Container is not { } contain) continue;
+            // doCreateReinforcements: obj->getTemplate()->isEquivalentTo(transport->getTemplate()) - "it's our transport".
+            if (member.Template.IsEquivalentTo(transportTemplate) || member.ContainedBy.IsValid || current.Container is not { } contain) continue;
             if (!contain.IsValidContainerFor(_world, member, false)) continue;
             var spotX = destination.X + Fixed.FromInt(transportCount) * transportTemplate.GeometryMajorRadius;
             if (!contain.IsValidContainerFor(_world, member, true))
@@ -107,7 +108,7 @@ public sealed partial class ScriptEngine
         foreach (var member in members)
         {
             if (member.DestroyRequested) continue;
-            if (member.Template == transportTemplate)
+            if (member.Template.IsEquivalentTo(transportTemplate))
             {
                 var plane = member.ModuleArray.OfType<DeliverPayloadAIUpdate>().FirstOrDefault();
                 var ai = member.Ai;

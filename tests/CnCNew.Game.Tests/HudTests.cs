@@ -79,6 +79,7 @@ internal static class HudTests
         harness.Run("A limited FIRE_WEAPON attack follows a victim that leaves its range and fires its shots (#328)", () => FireButtonChasesVictim(data));
         harness.Run("Hack, weapon switch, overcharge, hijack, car bomb, sabotage: a press does what the button says", () => ButtonsOfUnits(data));
         harness.Run("E tells the player what it selected: nothing selected, across the map, and no line for a structure that has no fellows", () => SelectionMessages(data));
+        harness.Run("#431: E on one Technical chassis selects the other two, its reskins (similarUnitSelection: isEquivalentTo)", () => MatchingSelectsReskins(data));
         harness.Run("The sneak attack: a press puts the tunnel at the cursor and the power is used where it is put down", () => SneakAttack(data));
         harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
@@ -1002,6 +1003,49 @@ internal static class HudTests
         controller.Input.Selection.Replace([center.Id]);
         PressE();
         TestHarness.Assert(Lines().Length == 2, $"E on a structure finds no fellows and says nothing ({string.Join(" | ", Lines())})");
+    }
+
+    /// <summary>
+    /// <c>InGameUI::selectMatchingAcrossRegion</c> picks every object whose template <c>isEquivalentTo</c> a selected one's: the GLA Technical's second and third chassis are
+    /// <c>ObjectReskin</c>s of the first, so E on one selects the other two. The port matched the template by name.
+    /// </summary>
+    private static void MatchingSelectsReskins(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        var world = match.World;
+        long time = 10_000;
+        ulong sequence = 2_000_000;
+        var center = world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+        Entity Spawn(string name, int dx)
+        {
+            var known = world.Entities.Select(entity => entity.Id).ToHashSet();
+            var (x, y) = (center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y + CnCNew.Simulation.Numerics.Fixed.FromInt(120));
+            TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, name, match.Human, x, y, CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, $"{name} is spawned");
+            Advance(match, controller, (int)world.Time.OriginalFrames(2));
+            return world.Entities.First(entity => entity.Template.Name == name && !known.Contains(entity.Id));
+        }
+        var one = Spawn("GLAVehicleTechnicalChassisOne", 0);
+        var two = Spawn("GLAVehicleTechnicalChassisTwo", 40);
+        var three = Spawn("GLAVehicleTechnicalChassisThree", 80);
+        var other = Spawn("GLAVehicleBattleBus", 120);
+        // E looks on the screen first and across the map when the screen added nothing: a second press reaches what the screen does not show.
+        ImmutableArray<CnCNew.Simulation.Ids.EntityId> Match(Entity start)
+        {
+            controller.Input.Selection.Replace([start.Id]);
+            for (var press = 0; press < 2 && controller.Input.Selection.Selected.Length < 3; press++)
+            {
+                controller.Process(new KeyEvent(time += 16, KeyCode.E, true));
+                controller.Process(new KeyEvent(time += 16, KeyCode.E, false));
+            }
+            return controller.Input.Selection.Selected;
+        }
+        var selected = Match(one);
+        TestHarness.Assert(selected.Contains(two.Id) && selected.Contains(three.Id) && selected.Contains(one.Id),
+            $"E on chassis one selects chassis two and three ({string.Join(", ", selected.Select(id => world.FindEntity(id)?.Template.Name))})");
+        TestHarness.Assert(!selected.Contains(other.Id), "and not a unit of another kind");
+
+        selected = Match(three);
+        TestHarness.Assert(selected.Contains(one.Id) && selected.Contains(two.Id), $"and on chassis three its sibling and its parent ({string.Join(", ", selected.Select(id => world.FindEntity(id)?.Template.Name))})");
     }
 
     private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport, GameSettings? settings = null, bool started = true)

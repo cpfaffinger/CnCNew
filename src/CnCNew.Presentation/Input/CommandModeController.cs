@@ -607,9 +607,10 @@ public sealed class CommandModeController
                 if (ferries.IsEmpty) return ActivationResult.NoSource;
                 return Issue((sequence, tick) => new ExecuteRailedTransportCommand(Player, sequence, tick, ferries)).Accepted ? ActivationResult.Issued : ActivationResult.Rejected;
             }
+            // selectObjectOfType: obj->getTemplate()->isEquivalentTo(soInfo->thingTemplate).
             case GuiCommandKind.SelectAllUnitsOfType:
                 Selection.Replace(world.Entities.Where(entity => entity.Owner == Player && EntityPicker.IsMassSelectable(entity)
-                                                                 && entity.Template.Name.Equals(button.Object, StringComparison.OrdinalIgnoreCase)).Select(entity => entity.Id));
+                                                                 && world.Templates.AreEquivalent(button.Object, entity.Template.Name)).Select(entity => entity.Id));
                 return ActivationResult.Issued;
             // GUI_COMMAND_SPECIAL_POWER_CONSTRUCT: a building at the cursor, and the power is used where it is put down (handleSpecialPowerConstructCommand).
             case GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut:

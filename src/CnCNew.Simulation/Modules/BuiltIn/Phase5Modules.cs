@@ -3530,14 +3530,14 @@ public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations =
     private const int OneUnit = 1;
 
     /// <summary>
-    /// <c>ProductionUpdate::queueCreateUnit</c>: the count of the first modifier whose template exists and is the ordered one (a name the data does not define matches nothing
+    /// <c>ProductionUpdate::queueCreateUnit</c>: the count of the first modifier whose template exists and is equivalent to the ordered one (<c>isEquivalentTo</c>; a name the data does not define matches nothing
     /// and the search goes on, as <c>findTemplate</c> returning null does in the original); one without a match.
     /// </summary>
     public int QuantityOf(TemplateCatalog templates, int templateIndex)
     {
         if (QuantityModifiers.IsDefault) return OneUnit;
         foreach (var modifier in QuantityModifiers)
-            if (templates.TryGet(modifier.Template, out var template) && template.Index == templateIndex) return modifier.Count;
+            if (templates.TryGet(modifier.Template, out var template) && template.IsEquivalentTo(templates[templateIndex])) return modifier.Count;
         return OneUnit;
     }
 

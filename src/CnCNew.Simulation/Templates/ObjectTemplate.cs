@@ -531,12 +531,19 @@ public sealed class TemplateCatalog
         return TryGet(typeName, out var named) && string.Equals(named.Name, typeName, StringComparison.Ordinal) && named.IsEquivalentTo(template);
     }
 
-    /// <summary>Whether one of the template's command sets carries a build or construct button for <paramref name="objectName"/>.</summary>
+    /// <summary><see cref="ObjectTemplate.IsEquivalentTo"/> of two templates the data name; a name the data do not define is equivalent only to itself.</summary>
+    public bool AreEquivalent(string first, string second)
+        => first.Equals(second, StringComparison.OrdinalIgnoreCase) || (TryGet(first, out var one) && TryGet(second, out var other) && one.IsEquivalentTo(other));
+
+    /// <summary>
+    /// Whether one of the template's command sets carries a build or construct button for <paramref name="objectName"/> or for a template equivalent to it
+    /// (<c>BuildAssistant::isPossibleToMakeUnit</c>: <c>commandButton->getThingTemplate()->isEquivalentTo(whatToBuild)</c>).
+    /// </summary>
     public bool OffersBuild(ObjectTemplate builder, string objectName)
     {
         foreach (var set in builder.CommandSets)
             foreach (var name in Commands.BuildsOf(set))
-                if (name.Equals(objectName, StringComparison.OrdinalIgnoreCase)) return true;
+                if (AreEquivalent(name, objectName)) return true;
         return false;
     }
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);

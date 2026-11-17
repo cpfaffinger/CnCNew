@@ -216,15 +216,16 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         else NextWake = world.Tick + SimulationTiming.SleepNone;
     }
 
-    private int LineOf(Entity candidate)
+    private int LineOf(IWorldServices world, Entity candidate)
     {
         for (var index = 0; index < data.Riders.Length; index++)
-            if (data.Riders[index].TemplateName.Equals(candidate.Template.Name, StringComparison.OrdinalIgnoreCase)) return index;
+            // RiderChangeContain: thing->isEquivalentTo(rider->getTemplate()).
+            if (world.Templates.AreEquivalent(data.Riders[index].TemplateName, candidate.Template.Name)) return index;
         return -1;
     }
 
     public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
-        => base.IsValidContainerFor(world, candidate, false) && _scuttledTick < 0 && LineOf(candidate) >= 0;
+        => base.IsValidContainerFor(world, candidate, false) && _scuttledTick < 0 && LineOf(world, candidate) >= 0;
 
     public override void Add(IWorldServices world, Entity candidate)
     {
@@ -243,7 +244,7 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
             _replacing = false;
         }
         base.Add(world, candidate);
-        var line = LineOf(candidate);
+        var line = LineOf(world, candidate);
         if (line >= 0)
         {
             _riderIndex = line;

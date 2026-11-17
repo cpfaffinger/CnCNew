@@ -65,7 +65,7 @@ public sealed partial class SimulationWorld
     public long PowerSabotagedUntil(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.PowerSabotagedUntil : 0;
 
     /// <summary>
-    /// <c>Weapon::processRequestAssistance</c>: every other object of the firing player that is equivalent to <paramref name="source"/> (here: the same template), within
+    /// <c>Weapon::processRequestAssistance</c>: every other object of the firing player that is equivalent to <paramref name="source"/> (<c>makeAssistanceRequest</c>: <c>isEquivalentTo</c>), within
     /// <see cref="WeaponInfo.RequestAssistRange"/> of it (centre to centre) and carrying an <see cref="AssistedTargetingUpdate"/> that is free is asked to attack the victim too.
     /// </summary>
     private void ProcessRequestAssistance(Entity source, WeaponInfo weapon, Entity victim)
@@ -73,7 +73,7 @@ public sealed partial class SimulationWorld
         var rangeSquared = SquaredReach.Of(weapon.RequestAssistRange);
         foreach (var candidate in _entities.Values)
         {
-            if (candidate == source || candidate.Owner != source.Owner || candidate.DestroyRequested || candidate.EffectivelyDead || candidate.Template.Index != source.Template.Index) continue;
+            if (candidate == source || candidate.Owner != source.Owner || candidate.DestroyRequested || candidate.EffectivelyDead || !candidate.Template.IsEquivalentTo(source.Template)) continue;
             var dx = candidate.X - source.X;
             var dy = candidate.Y - source.Y;
             if (!rangeSquared.Contains(dx * dx + dy * dy)) continue;
