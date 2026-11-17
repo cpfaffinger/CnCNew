@@ -131,4 +131,45 @@ static partial class Tests
             Check.That(restored.StateHash == world.StateHash, $"{rate}: the restored world went on as the other.");
         }
     }
+
+    /// <summary>
+    /// <c>PartitionFilterRepulsor::allow</c> asks <c>Object::isAbleToAttack</c>, which an EMP or a hack makes false only for a <c>PORTABLE_STRUCTURE</c> or a
+    /// <c>SPAWNS_ARE_THE_WEAPONS</c> object; any other disabled object is still able to attack there (its AI not running is another question). So an EMP'd (or hacked) enemy gunner
+    /// still repulses a civilian, an EMP'd portable gun does not. The port treated every EMP'd or hacked object as unable to attack. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void ADisabledEnemyStillRepulses()
+    {
+        var files = new Dictionary<string, string>(RoamFiles())
+        {
+            ["Data/INI/Object/PortableGunFixture.ini"] = """
+            Object PortableGunner
+              KindOf = SELECTABLE PORTABLE_STRUCTURE
+              VisionRange = 100.0
+              Body = ActiveBody Body01
+                MaxHealth = 5000.0
+                InitialHealth = 5000.0
+              End
+              WeaponSet
+                Conditions = None
+                Weapon = PRIMARY MoodGun
+              End
+              Behavior = AIUpdateInterface AI01
+                AutoAcquireEnemiesWhenIdle = Yes
+              End
+            End
+            """,
+        };
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)],
+            objects: [Placed("Civilian", 150m, 100m, "teamB", "ByEmp"), Placed("MoodGunner", 200m, 100m, "teamA", "Emp"),
+                      Placed("Civilian", 150m, 500m, "teamB", "ByPortable"), Placed("PortableGunner", 200m, 500m, "teamA", "Portable")], extraFiles: files);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var until = session.World.Tick + session.Frames(600);
+        session.World.DisableByEmpUntil(NamedIn(session, "Emp")!, until);
+        session.World.DisableByEmpUntil(NamedIn(session, "Portable")!, until);
+        Run(session, session.Frames(70));
+        Check.That(session.World.DisabledFlagsOf(NamedIn(session, "Emp")!) == DisabledMask.Emp && session.World.DisabledFlagsOf(NamedIn(session, "Portable")!) == DisabledMask.Emp,
+            "Setup: the gunner and the portable gun are still disabled.");
+        Check.That(NamedIn(session, "ByEmp")!.Panicking, "An EMP'd enemy gunner is still able to attack: it repulses.");
+        Check.That(!NamedIn(session, "ByPortable")!.Panicking, "An EMP'd portable structure is not: it does not.");
+    }
 }

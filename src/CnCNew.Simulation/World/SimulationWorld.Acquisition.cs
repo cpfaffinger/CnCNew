@@ -458,9 +458,14 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool MayAct(Entity entity, long tick) => AbleToAttack(entity, tick) && AiRuns(entity, tick);
 
-    /// <summary>The port's <c>Object::isAbleToAttack</c>: what <see cref="MayAct"/> asks of the object itself, without its AI (the repulsor filter asks only this).</summary>
+    /// <summary>
+    /// The port's <c>Object::isAbleToAttack</c>: what <see cref="MayAct"/> asks of the object itself, without its AI (the repulsor filter asks only this). An EMP or a hack makes it false
+    /// only for a portable structure or an object whose spawns are its weapons ("as a portable structure, aptly disabled"); any other disabled object is still able to attack, and
+    /// what keeps it from acquiring is its AI that does not run (#423).
+    /// </summary>
     private bool AbleToAttack(Entity entity, long tick)
-        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.IsDisabledByTime(tick) && !entity.Subdued
+        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.Subdued
+           && (!entity.IsDisabledByTime(tick) || !(entity.Template.IsKindOf("PORTABLE_STRUCTURE") || entity.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS")))
            && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
 
     /// <summary>

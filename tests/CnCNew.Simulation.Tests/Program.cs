@@ -535,6 +535,7 @@ run.Test("Roaming: a team wanders around a point until an order ends it (F-22)",
 run.Test("Roaming: a civilian runs from a repulsor, on its panic locomotors, and wanders where it stops (F-22)", Tests.CivilianRunsFromARepulsor);
 run.Test("Roaming: a damaged civilian scares others for two seconds (F-22)", Tests.DamagedCivilianScaresOthers);
 run.Test("Roaming: an armed enemy repulses, an unarmed one does not (F-22)", Tests.ArmedEnemyRepulses);
+run.Test("Roaming (#423): an EMP'd enemy still repulses, a disabled portable structure does not, at 30, 60 and 120 Hz", Tests.ADisabledEnemyStillRepulses);
 run.Test("Roaming: a panicking team runs its path on the panic locomotors and a repulsor turns it aside (F-22)", Tests.PanicRunsOnThePanicLocomotors);
 run.Test("Original skirmish AI: a script sets the skill set and the time between teams (F-22)", Tests.OriginalAiObeysItsScriptedSettings);
 run.Test("Scripts: a team's attacker chooses its victim by difficulty; a script makes every difficulty normal (F-22)", Tests.SquadAttackersChooseByDifficulty);
