@@ -965,7 +965,7 @@ public sealed class FactionProbe
         => new(roster.Faction, owner, entry.CommandSet, entry.Slot, entry.Button.Name, entry.Button.Kind, outcome, detail, seconds);
 
     /// <summary>Flat ground of 256 by 256 cells, without water or cliffs.</summary>
-    private static TerrainMap FlatTerrain()
+    internal static TerrainMap FlatTerrain()
     {
         const int border = 1;
         var width = MapCells + 2 * border;

@@ -15,7 +15,7 @@ namespace CnCNew.SimTool;
 /// </summary>
 internal static class FactionAudit
 {
-    public const string Usage = "faction-audit <content-dir> --out <dir> [--faction NAME[,NAME..]] [--object TEXT] [--dynamic]";
+    public const string Usage = "faction-audit <content-dir> --out <dir> [--faction NAME[,NAME..]] [--object TEXT] [--dynamic] [--buffs]";
 
     public static int Run(string[] args, Func<string, (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerprint)> compile)
     {
@@ -53,6 +53,25 @@ internal static class FactionAudit
         Write(Path.Combine(output, "summary.md"), [summary.ToString().TrimEnd('\n')]);
         Write(Path.Combine(output, "static-findings.tsv"), ["faction\tseverity\tsubject\tfinding", ..findings]);
         Console.WriteLine($"static: {findings.Count} findings; {output}");
+
+        if (args.Contains("--buffs"))
+        {
+            // #419: every buff of the factions measured where it acts (FactionBuffProbe).
+            var buffs = new FactionBuffProbe(graph, catalog, fingerprint, probe.RosterOf);
+            var buffLines = new List<string> { "faction\tbuff\teffect\tobject\tmodule\toutcome\texpected\tmeasured\tdetail" };
+            foreach (var name in factions)
+            {
+                var roster = rosters.TryGetValue(name, out var known) ? known : probe.RosterOf(name);
+                foreach (var item in buffs.CasesOf(roster))
+                {
+                    var result = buffs.Measure(roster, item);
+                    buffLines.Add($"{result.Faction}\t{result.Buff}\t{result.Effect}\t{result.Object}\t{result.Module}\t{result.Outcome}\t{result.Expected}\t{result.Measured}\t{result.Detail}");
+                    if (result.Outcome == BuffOutcome.Failed) Console.WriteLine($"BUFF {result.Key}: expected {result.Expected}; measured {result.Measured}");
+                }
+            }
+            Write(Path.Combine(output, "buffs.tsv"), buffLines);
+            Console.WriteLine($"buffs: {buffLines.Count - 1} measured, {buffs.Worlds} worlds, {buffs.SecondsStepped:F0} s of game time");
+        }
 
         if (!dynamic) return 0;
         var lines = new List<string> { "faction\tobject\tset\tslot\tbutton\tkind\toutcome\tseconds\tdetail" };
