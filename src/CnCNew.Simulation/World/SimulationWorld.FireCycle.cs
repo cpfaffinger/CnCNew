@@ -307,6 +307,7 @@ public sealed partial class SimulationWorld
             var (goalX, goalY) = FindAttackPosition(entity, victim) ?? (victimX, victimY);
             if (!ai.StartInternalMove(goalX, goalY)) return false;
             ai.NotePursuit(victim.Id);
+            NoteContactApproach(entity, ai, victim);
             ai.BeginMoveWithNextFrame(this);
             WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             state.Chasing = true;
@@ -316,6 +317,18 @@ public sealed partial class SimulationWorld
         state.OrderedTick = tick;
         MarkDirty(entity);
         return true;
+    }
+
+    /// <summary>
+    /// <c>AIAttackApproachTargetState::computePath</c> of the walk just given at <paramref name="victim"/>: with a contact weapon - the one the attack fires, ignoring range - "let the
+    /// attacker pathfind into the target" (<c>ignoreObstacle(victim)</c>, no adjusted destination; <see cref="Modules.BuiltIn.AIUpdateInterface.NoteContactApproach"/>). Its range is none in
+    /// the shipped build (<c>RATIONALIZE_ATTACK_RANGE</c>), so only a walk that may touch the victim reaches it (#439).
+    /// </summary>
+    private void NoteContactApproach(Entity source, Modules.BuiltIn.AIUpdateInterface ai, Entity victim)
+    {
+        if (ActiveWeaponSet(source) is not { } set) return;
+        var slot = AttackSlotIgnoringRange(source, victim);
+        if (slot >= 0 && set.HasWeapon(slot) && IsContactWeapon(_templates.Weapons[set.Weapons[slot]])) ai.NoteContactApproach(victim.Id);
     }
 
     /// <summary>

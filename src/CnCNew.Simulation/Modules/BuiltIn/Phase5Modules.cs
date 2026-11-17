@@ -939,6 +939,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private EntityId _goal;
     // The victim of the attack order whose approach the current move is (AIAttackApproachTargetState); invalid for every other move.
     private EntityId _pursued;
+    // The victim a contact weapon's approach walks into (AIAttackApproachTargetState::computePath: ignoreObstacle(victim)); invalid for every other move.
+    private EntityId _contactVictim;
     private readonly List<PathPoint> _path = [];
     private int _pathIndex;
     private bool _pathValid;
@@ -1215,6 +1217,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _lastCommandFromPlayer = fromPlayer;
         EndExitPath();
         _pursued = EntityId.Invalid;
+        _contactVictim = EntityId.Invalid;
         // AIInternalMoveToState::onEnter: a hovering or winged aircraft takes a goal cell nobody else of its kind holds (not for the stop order onto its own place).
         if (!IsGroundMover)
         {
@@ -1456,7 +1459,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// object of an approach, or the container of an enter order (<c>AIEnterState::onEnter</c>, AIStates.cpp: "tell the pathfinder to ignore the enterable object"), or the dock a docker
     /// drives into, at and out of when it allows passthrough (<c>AIDockMoveToEntryState::onEnter</c>).
     /// </summary>
-    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget.IsValid ? _enterTarget : _exitFrom.IsValid ? _exitFrom : _dock is { IgnoresDock: true } dock ? dock.DockId : EntityId.Invalid;
+    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget.IsValid ? _enterTarget : _exitFrom.IsValid ? _exitFrom : _dock is { IgnoresDock: true } dock ? dock.DockId
+        : _contactVictim.IsValid && Entity.HasMoveTarget ? _contactVictim : EntityId.Invalid;
 
     /// <summary>
     /// The approach half of <c>aiEnter</c>/<c>aiHijack</c>-style orders that end in a collision instead of a container entry: moves to <paramref name="goal"/> (following
@@ -1848,6 +1852,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (Entity.Template.Locomotor is null) return false;
         EndExitPath();
         _pursued = EntityId.Invalid;
+        _contactVictim = EntityId.Invalid;
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
@@ -1860,6 +1865,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     {
         EndExitPath();
         _pursued = EntityId.Invalid;
+        _contactVictim = EntityId.Invalid;
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
@@ -2111,6 +2117,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     internal void NotePursuit(EntityId victim)
     {
         if (Entity.HasMoveTarget) _pursued = victim;
+    }
+
+    /// <summary>
+    /// The move just given is the approach of an attack with a contact weapon on <paramref name="victim"/> (<c>AIAttackApproachTargetState::computePath</c>: "Weapon is basically a
+    /// contact weapon, so let the attacker pathfind into the target" - <c>ignoreObstacle(victim)</c>, <c>setAdjustsDestination(false)</c>): the victim is no obstacle of the walk, so the
+    /// attacker reaches the touch its range of none needs (<c>RATIONALIZE_ATTACK_RANGE</c>, #439), and neither crushes the other while it lasts (<c>PhysicsBehavior::onCollide</c>).
+    /// The approach's end lifts it (<c>AIAttackApproachTargetState::onExit</c>: <c>ignoreObstacle(NULL)</c>); any later move replaces it.
+    /// </summary>
+    internal void NoteContactApproach(EntityId victim)
+    {
+        if (Entity.HasMoveTarget) _contactVictim = victim;
     }
 
     /// <summary><c>AIUpdateInterface::transferAttack</c>: an approach of <paramref name="from"/> goes on as one of <paramref name="to"/> (a destroyed building's rebuild hole).</summary>
@@ -3455,6 +3472,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
         if (_pursued.IsValid) writer.UInt("pursued", _pursued.Value);
+        if (_contactVictim.IsValid) writer.UInt("contactVictim", _contactVictim.Value);
         if (_exitAfterEvacuate || _returning)
         {
             writer.Bool("exitAfterEvacuate", _exitAfterEvacuate);
@@ -3563,6 +3581,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
         _pursued = reader.Has("pursued") ? new EntityId(checked((uint)reader.UInt("pursued"))) : EntityId.Invalid;
+        _contactVictim = reader.Has("contactVictim") ? new EntityId(checked((uint)reader.UInt("contactVictim"))) : EntityId.Invalid;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
         _returning = reader.Has("returning") && reader.Bool("returning");
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;

@@ -632,6 +632,7 @@ public sealed partial class SimulationWorld
             // A unit that needs a line of sight walks to where it can fire (findAttackPath, F-55), the others at the victim.
             var (goalX, goalY) = FindAttackPosition(entity, victim) ?? (victimX, victimY);
             if (!ai.StartInternalMove(goalX, goalY)) return false;
+            NoteContactApproach(entity, ai, victim);
             ai.BeginMoveWithNextFrame(this);
             WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             state.Chasing = true;
