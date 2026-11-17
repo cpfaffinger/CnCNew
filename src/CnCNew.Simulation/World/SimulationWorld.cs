@@ -373,6 +373,19 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <c>ContainModuleInterface::isSpecificRiderFreeToExit</c> as an exit command asks it, with the adopted fix no-exit-from-contained-transport
     /// (<c>TransportContain::isSpecificRiderFreeToExit</c>): a transport that is itself contained lets nobody out.
     /// </summary>
+    /// <summary>
+    /// The container an exit order lets <paramref name="actor"/> out through (<c>MSG_EXIT</c>, <c>AIUpdateInterface::privateExit</c>): the one it is in when the order names none, else the named
+    /// one when the actor is inside it - for a tunnel network any living tunnel of the network that holds the actor (<c>TunnelContain</c> shares its riders through the
+    /// <c>TunnelTracker</c>: the bar of tunnel B shows a rider that entered tunnel A, and its exit button lets it out by B's door, #435). Null when the named object holds no such rider.
+    /// </summary>
+    private Entity? ExitThrough(Entity actor, EntityId named)
+    {
+        if (!named.IsValid || named == actor.ContainedBy) return _entities.GetValueOrDefault(actor.ContainedBy.Value);
+        if (!_entities.TryGetValue(named.Value, out var container) || container.DestroyRequested || container.EffectivelyDead) return null;
+        return container.Container is Modules.BuiltIn.TunnelContain && _entities.GetValueOrDefault(actor.ContainedBy.Value)?.Container is Modules.BuiltIn.TunnelContain
+            && TunnelSystemOf(container.Owner).Contains(actor.Id) ? container : null;
+    }
+
     private bool RiderMayExit(Entity container, IContainerModule door, Entity actor)
         => door.IsRiderFreeToExit(actor) && !(_templates.Rules.Has(Rules.GameFix.NoExitFromContainedTransport) && door is Modules.BuiltIn.TransportContain && container.ContainedBy.IsValid);
 
@@ -1098,7 +1111,8 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 if (!_entities.TryGetValue(exit.Actor.Value, out var actor) || actor.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (!actor.ContainedBy.IsValid) return CommandRejection.NotContained;
-                var byContainer = _entities.GetValueOrDefault(actor.ContainedBy.Value);
+                var byContainer = ExitThrough(actor, exit.Container);
+                if (exit.Container.IsValid && byContainer is null) return CommandRejection.NotContained;
                 if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
                     return CommandRejection.NotPermitted;
                 if (byContainer?.Container is { } door && !RiderMayExit(byContainer, door, actor)) return CommandRejection.NotPermitted;
@@ -1673,7 +1687,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 var actor = FindEntity(exit.Actor);
                 if (actor is null || actor.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (!actor.ContainedBy.IsValid) { RecordRejection(command, CommandRejection.NotContained); break; }
-                var byContainer = FindEntity(actor.ContainedBy);
+                var byContainer = ExitThrough(actor, exit.Container);
+                if (exit.Container.IsValid && byContainer is null) { RecordRejection(command, CommandRejection.NotContained); break; }
                 if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
                 { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 var previousContainer = actor.ContainedBy;

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CnCNew.Game.Data;
+using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -29,6 +30,7 @@ internal static class TunnelDoorTests
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Real data (#428): riders leave a GLA tunnel by its door and walk to its end, and on to the rally point (#417), at 30, 60 and 120 Hz", () => ByTheDoor(data));
+        harness.Run("Real data (#435): the exit button on tunnel B's bar lets out a rebel that entered tunnel A by B's door, at 30, 60 and 120 Hz", () => ByTheSelectedTunnel(data));
         return harness.Failures;
     }
 
@@ -37,6 +39,69 @@ internal static class TunnelDoorTests
     private static void Assert(bool condition, string message) => TestHarness.Assert(condition, message);
 
     private static Fixed Distance(Fixed x, Fixed y, (Fixed X, Fixed Y) point) => Fixed.Sqrt((x - point.X) * (x - point.X) + (y - point.Y) * (y - point.Y));
+
+    /// <summary>
+    /// #435: <c>GUI_COMMAND_EXIT_CONTAINER</c> sends <c>MSG_EXIT</c> with the rider, and the logic takes the container from the selection (<c>getSingleObjectFromSelection</c>): the bar of tunnel B
+    /// shows the network's riders (<c>TunnelContain</c> iterates the <c>TunnelTracker</c>), and pressing one lets it out by B's door, whichever tunnel it entered. Before, the command named only
+    /// the rider and it left by the tunnel it entered. Pressed through the command bar and the controller.
+    /// </summary>
+    private static void ByTheSelectedTunnel(GameData data)
+    {
+        var door = data.Templates.Geometry.ExitPaths["GLATunnelNetwork"][0];
+        var buttons = CommandButtonCatalog.Build(data.Graph);
+        string? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var templates = TemplateCatalog.Build(data.Graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, rate, data.Templates.Geometry, data.Rules);
+            var terrain = TerrainMap.Build(CnCNew.Simulation.Testing.FlatMap.Build(120, 120, 1), "tunnel-bar");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 7, Players, "tunnel-bar", "tunnel-bar", terrain.Fingerprint), templates, terrain);
+            ulong sequence = 0;
+            void Submit(SimCommand command, string what) => Assert(world.Submit(command).Accepted, $"{rate}: {what}");
+            void Spawn(string template, int x, int y, Fixed angle)
+                => Submit(new SpawnCommand(new PlayerId(1), ++sequence, world.Tick, template, new PlayerId(1), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, angle), $"{template} spawns");
+            Spawn("GLATunnelNetwork", 300, 300, Fixed.Zero);
+            Spawn("GLATunnelNetwork", 700, 700, FixedTrig.Pi / Fixed.FromInt(3));
+            Spawn("GLAInfantryRebel", 400, 300, Fixed.Zero);
+            for (var step = 0; step < world.Time.OriginalFrames(30); step++) world.Step();
+            var tunnels = world.Entities.Where(value => value.Template.Name == "GLATunnelNetwork").OrderBy(value => value.Id.Value).ToArray();
+            var (a, b) = (tunnels[0], tunnels[1]);
+            var rebel = world.Entities.Single(value => value.Template.Name == "GLAInfantryRebel");
+            Submit(new EnterContainerCommand(new PlayerId(1), ++sequence, world.Tick, rebel.Id, a.Id), "the rebel enters tunnel A");
+            for (var step = 0; step < world.Time.TicksPerOriginalFrame; step++) world.Step();
+            Assert(rebel.ContainedBy == a.Id, $"{rate}: the rebel is in the network, by tunnel A");
+
+            var selection = new SelectionModel(new PlayerId(1));
+            selection.Replace([b.Id]);
+            var bar = new CommandBarModel(buttons);
+            var controller = new CommandModeController(new PlayerId(1), new WorldSink(world), selection);
+            var view = bar.Build(world, selection);
+            var place = view.Slots.FirstOrDefault(button => button is { Button.Kind: GuiCommandKind.ExitContainer } && button.Rider == rebel.Id);
+            Assert(place is { IsEnabled: true } && place.Container == b.Id, $"{rate}: tunnel B's bar shows the rebel in a place of its own, for tunnel B ({place?.Slot}, {place?.Container})");
+            Assert(bar.Activate(world, view, place!.Slot, controller) == ActivationResult.Issued, $"{rate}: the press is issued");
+            var result = world.Step();
+            Assert(result.Events.Any(value => value.Kind == SimEventKind.EntityUncontained && value.Entity == rebel.Id && value.Other == b.Id), $"{rate}: the rebel leaves through tunnel B");
+            var (cos, sin) = (FixedTrig.Cos(b.Angle), FixedTrig.Sin(b.Angle));
+            (Fixed X, Fixed Y) OnB(BonePose pose) => (b.X + pose.X * cos - pose.Y * sin, b.Y + pose.X * sin + pose.Y * cos);
+            var start = OnB(door.Start!.Value);
+            Assert(!rebel.ContainedBy.IsValid && Distance(rebel.X, rebel.Y, start) < Fixed.FromInt(2), $"{rate}: it comes out at tunnel B's ExitStart {start} ({rebel.X}, {rebel.Y}), not at tunnel A ({a.X}, {a.Y})");
+            for (var step = 0; step < world.Time.OriginalFrames(30 * 10); step++) world.Step();
+            var line = $"{rebel.X.Raw},{rebel.Y.Raw}";
+            Console.WriteLine($"       {rate}: the rebel stands at ({rebel.X}, {rebel.Y})");
+            reference ??= line;
+            Assert(line == reference, $"{rate}: the same place as at 30 Hz");
+        }
+    }
+
+    private sealed class WorldSink(SimulationWorld world) : ICommandSink
+    {
+        private ulong _sequence = 1000;
+
+        public CommandReceipt Issue(Func<ulong, long, SimCommand> make)
+        {
+            var command = make(++_sequence, world.Tick);
+            return new CommandReceipt((long)_sequence, world.Submit(command));
+        }
+    }
 
     private static void ByTheDoor(GameData data)
     {

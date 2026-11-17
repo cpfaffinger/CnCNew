@@ -46,12 +46,13 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 20: command table 21 with the order that sends a ferry on its way (units; F-19); version 19 is rejected.
 /// Version 21: command table 22 with the two beacon orders (a place; units; F-24); version 20 is rejected.
 /// Version 27: command table 28, the fire command's shot limit (the origin byte's top bit says an i32 follows; #277); version 26 is rejected.
+/// Version 29: command table 30, the exit command's container after the rider (u32, 0 = the one it is in; #435); version 28 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 28;
+    public const int CurrentVersion = 29;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -330,6 +331,7 @@ public static class ReplayFormat
                 break;
             case ExitContainerCommand exit:
                 writer.Write(exit.Actor.Value);
+                writer.Write(exit.Container.Value);
                 break;
             case UseSpecialPowerCommand power:
                 writer.Write(power.Source.Value);
@@ -511,7 +513,7 @@ public static class ReplayFormat
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), reader.ReadInt32()),
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, ReadString(reader)),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
-            CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
+            CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.UseSpecialPower => ReadUseSpecialPower(reader, player, sequence, tick),
             CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), new PlayerId(reader.ReadInt32()), (Relationship)reader.ReadInt32()),

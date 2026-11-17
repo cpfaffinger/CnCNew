@@ -116,8 +116,8 @@ sealed class Feeder(SimulationWorld world)
     public SubmitResult UseSpecialPower(int player, uint source, string power, SpecialPowerTargetKind kind = SpecialPowerTargetKind.None, uint target = 0, int x = 0, int y = 0, long? tick = null, int option = 0)
         => world.Submit(new UseSpecialPowerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(source), power, kind, new EntityId(target), Fixed.FromInt(x), Fixed.FromInt(y), option));
 
-    public SubmitResult ExitContainer(int player, uint actor, long? tick = null)
-        => world.Submit(new ExitContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor)));
+    public SubmitResult ExitContainer(int player, uint actor, long? tick = null, uint container = 0)
+        => world.Submit(new ExitContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(container)));
 
     public SubmitResult Construct(int player, uint builder, string template, int x, int y, long? tick = null)
         => world.Submit(new ConstructCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(builder), template, Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero));

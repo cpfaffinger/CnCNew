@@ -509,9 +509,10 @@ public sealed class CommandModeController
 
     /// <summary>
     /// A control-bar button pressed for <paramref name="sources"/> (<c>processCommandUI</c>): immediate buttons issue their command, targeting
-    /// buttons enter <see cref="CommandModeKind.ButtonTarget"/>, construction enters <see cref="CommandModeKind.Placement"/>.
+    /// buttons enter <see cref="CommandModeKind.ButtonTarget"/>, construction enters <see cref="CommandModeKind.Placement"/>. <paramref name="exitThrough"/> is the container whose bar an
+    /// exit button belongs to (<see cref="CommandBarButton.Container"/>); invalid lets the rider out of the one it is in.
     /// </summary>
-    public ActivationResult Activate(SimulationWorld world, CommandButtonInfo button, ImmutableArray<Entity> sources)
+    public ActivationResult Activate(SimulationWorld world, CommandButtonInfo button, ImmutableArray<Entity> sources, EntityId exitThrough = default)
     {
         ArgumentNullException.ThrowIfNull(button);
         switch (button.Kind)
@@ -594,10 +595,11 @@ public sealed class CommandModeController
                 var containers = sources.Where(entity => entity.Container is { ContainCount: > 0 }).ToList();
                 if (containers.Count == 0) return ActivationResult.NoSource;
                 var flying = containers.Where(entity => entity.Template.IsKindOf("AIRCRAFT") && entity.Ai is not null && world.IsAirborneTarget(entity)).ToList();
-                var passengers = containers.Except(flying).SelectMany(entity => entity.Container!.Contained).OrderBy(id => id.Value).ToList();
+                // orderAllPassengersToExit: aiExit(getObject()) - every rider through the container that is evacuated (a tunnel's whole network through that tunnel, #435).
+                var passengers = containers.Except(flying).SelectMany(entity => entity.Container!.Contained.Select(id => (Rider: id, Through: entity.Id))).OrderBy(pair => pair.Rider.Value).ToList();
                 var issued = ForAll(flying, aircraft => Issue((sequence, tick) => new EvacuateCommand(Player, sequence, tick, aircraft.Id, true, aircraft.X, aircraft.Y)));
                 if (passengers.Count == 0) return issued;
-                var left = ForAll(passengers, id => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, id)));
+                var left = ForAll(passengers, pair => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, pair.Rider, pair.Through)));
                 return issued == ActivationResult.Issued ? issued : left;
             }
             case GuiCommandKind.ExecuteRailedTransport:
@@ -671,9 +673,9 @@ public sealed class CommandModeController
                     .Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
             }
-            // MSG_EXIT: the rider the button stands for.
+            // MSG_EXIT: the rider the button stands for, through the container whose bar it is.
             case GuiCommandKind.ExitContainer:
-                return ForAll(sources, rider => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, rider.Id)));
+                return ForAll(sources, rider => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, rider.Id, exitThrough)));
             // MSG_SWITCH_WEAPONS (AIGroup::setWeaponLockForGroup): the slot, for good.
             case GuiCommandKind.SwitchWeapon:
                 return ForAll(sources, unit => Issue((sequence, tick) => new SetWeaponLockCommand(Player, sequence, tick, unit.Id, button.WeaponSlotIndex, WeaponLockKind.Permanent)));

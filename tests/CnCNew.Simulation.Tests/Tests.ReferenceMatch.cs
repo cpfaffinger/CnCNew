@@ -191,7 +191,8 @@ static partial class Tests
             new GiveSciencePointsCommand(PlayerId.System, 8, 9, new PlayerId(1), 3),
             new PurchaseScienceCommand(new PlayerId(1), 9, 9, "SCIENCE_X"),
             new EnterContainerCommand(new PlayerId(1), 10, 10, new EntityId(4), new EntityId(6)),
-            new ExitContainerCommand(new PlayerId(1), 11, 11, new EntityId(4)));
+            new ExitContainerCommand(new PlayerId(1), 11, 11, new EntityId(4)),
+            new ExitContainerCommand(new PlayerId(1), 12, 11, new EntityId(4), new EntityId(6)));
         var everyCommand = ReplayFormat.Read(ReplayFormat.Write(recorded with { Commands = extra, Checkpoints = [] }));
         Check.That(everyCommand.Commands.SequenceEqual(extra), "Every economy, production, movement, combat, science and container command survives the replay file.");
         var withCheckpoints = recorded with { Checkpoints = ReplayRunner.Run(recorded, catalog, fixture.Fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval }).Checkpoints };

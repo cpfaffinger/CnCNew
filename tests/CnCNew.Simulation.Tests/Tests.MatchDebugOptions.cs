@@ -173,7 +173,7 @@ static partial class Tests
             world.Step();
             Check.That(world.MoneyOf(new PlayerId(1)) == start + Fixed.FromInt(20_000) && world.MoneyOf(new PlayerId(2)) == start + Fixed.FromInt(10_000), $"{rate}: every player is paid, the computer too.");
             Check.That(!world.Submit(new DebugGiveMoneyCommand(PlayerId.System, 1, world.Tick, true)).Accepted, $"{rate}: the system is no giver.");
-            Check.That(CommandTypes.IsPlayerOrder(CommandTypes.DebugGiveMoney) && CommandTypes.Version == 29 && ReplayFormat.CurrentVersion == 28, $"{rate}: a player order; command table 29, replay 28.");
+            Check.That(CommandTypes.IsPlayerOrder(CommandTypes.DebugGiveMoney) && CommandTypes.Version == 30 && ReplayFormat.CurrentVersion == 29, $"{rate}: a player order; command table 29, replay 28.");
             var decoded = ReplayFormat.DecodeCommand(ReplayFormat.EncodeCommand(new DebugGiveMoneyCommand(new PlayerId(1), 3, 9, true)));
             Check.That(decoded is DebugGiveMoneyCommand { All: true, Sequence: 3, Tick: 9 }, $"{rate}: the command survives the replay codec.");
         }

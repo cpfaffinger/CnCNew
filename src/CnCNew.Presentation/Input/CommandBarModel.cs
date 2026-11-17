@@ -71,6 +71,9 @@ public sealed record CommandBarButton(int Slot, CommandButtonInfo Button, Button
 
     /// <summary>An <c>EXIT_CONTAINER</c> button: who sits in this place (<c>ControlBar::m_containData</c>), invalid while it is free.</summary>
     public EntityId Rider { get; init; } = EntityId.Invalid;
+
+    /// <summary>An <c>EXIT_CONTAINER</c> button: the container whose bar shows it, the one the rider leaves through (<c>MSG_EXIT</c> takes the selected object; a tunnel shows its network's riders, #435).</summary>
+    public EntityId Container { get; init; } = EntityId.Invalid;
 }
 
 /// <summary>One production queue entry (<c>populateBuildQueue</c>, at most nine shown); only the head progresses.</summary>
@@ -378,7 +381,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             var rider = next < riders.Count ? riders[next++] : null;
             slots[index] = rider is null
                 ? new CommandBarButton(index + 1, button, ButtonAvailability.Restricted, ButtonReason.EmptyPlace, null, default, 0, null, [])
-                : new CommandBarButton(index + 1, button, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id };
+                : new CommandBarButton(index + 1, button, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id, Container = entity.Id };
         }
     }
 
@@ -402,7 +405,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             var rider = place < riders.Count ? riders[place] : null;
             slots[place] = rider is null || !own
                 ? new CommandBarButton(place + 1, exit, ButtonAvailability.Restricted, ButtonReason.EmptyPlace, null, default, 0, null, [])
-                : new CommandBarButton(place + 1, exit, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id };
+                : new CommandBarButton(place + 1, exit, ButtonAvailability.Available, ButtonReason.None, null, default, 0, null, [rider.Id]) { Rider = rider.Id, Container = entity.Id };
         }
         var full = own && riders.Count > 0;
         foreach (var (slot, name) in new[] { (InventoryStopSlot, "Command_Stop"), (InventoryEvacuateSlot, "Command_Evacuate") })
@@ -760,7 +763,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     {
         if (view[slot] is not { } button || !button.IsEnabled) return ActivationResult.NoSource;
         var sources = button.Sources.Select(world.FindEntity).OfType<Entity>().ToImmutableArray();
-        return controller.Activate(world, button.Button, sources);
+        return controller.Activate(world, button.Button, sources, button.Container);
     }
 
     /// <summary><c>HotKeyTranslator</c>: a key released without modifiers activates the visible button carrying that hotkey.</summary>

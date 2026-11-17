@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
@@ -97,6 +98,66 @@ internal static partial class Tests
             Check.That(Fixed.Sqrt(ax * ax + ay * ay) < Fixed.FromInt(30), $"{rate}: the grunt that left by tunnel A's door stays at its end ({grunts[0].X}, {grunts[0].Y}).");
         }
         Check.That(targets.Distinct().Count() == 1, $"The riders walk to the same places at 30, 60 and 120 Hz ({string.Join(" | ", targets)}).");
+    }
+
+    /// <summary>
+    /// #435: <c>MSG_EXIT</c> names the rider, and the container is the object the player has selected (<c>getSingleObjectFromSelection</c>; "Exit needs to know the thing to exit ... because of
+    /// the Tunnel system"): a rider that entered tunnel A leaves by tunnel B's door when the exit button of B's bar is pressed. An order that names no container lets it out of the one it
+    /// entered (<c>privateExit(NULL)</c>); one that names an object that does not hold it - a tunnel of another player, a unit - is refused. The same at 30, 60 and 120 Hz, and across a snapshot.
+    /// </summary>
+    public static void TunnelExitOrderNamesTheTunnel()
+    {
+        var quarter = FixedTrig.Pi / Fixed.FromInt(2);
+        var places = new List<string>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder) = TunnelDoorWorld(rate);
+            feeder.Spawn(1, "Tunnel", owner: 1, x: 200, y: 200, angle: quarter);
+            feeder.Spawn(1, "Tunnel", owner: 1, x: 600, y: 200);
+            feeder.Spawn(2, "Tunnel", owner: 2, x: 400, y: 600);
+            feeder.Spawn(1, "Grunt", owner: 1, x: 600, y: 200);
+            feeder.Spawn(1, "Grunt", owner: 1, x: 600, y: 200);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var b = At(world, "Tunnel", 200, 200);
+            var a = At(world, "Tunnel", 600, 200);
+            var foreign = At(world, "Tunnel", 400, 600);
+            var grunts = Grunts(world);
+            foreach (var grunt in grunts) Check.That(feeder.EnterContainer(1, grunt.Id.Value, a.Id.Value).Accepted, $"{rate}: grunt {grunt.Id.Value} enters tunnel A.");
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            Check.That(grunts.All(grunt => grunt.ContainedBy == a.Id), $"{rate}: both are in the network, by tunnel A.");
+
+            var notHere = feeder.ExitContainer(1, grunts[0].Id.Value, container: foreign.Id.Value);
+            Check.That(!notHere.Accepted && notHere.Reason == CommandRejection.NotContained, $"{rate}: another player's tunnel does not hold the grunt ({notHere.Reason}).");
+            var notAContainer = feeder.ExitContainer(1, grunts[0].Id.Value, container: grunts[1].Id.Value);
+            Check.That(!notAContainer.Accepted && notAContainer.Reason == CommandRejection.NotContained, $"{rate}: a unit does not hold the grunt ({notAContainer.Reason}).");
+
+            // A snapshot before the orders: the restored world lets them out the same way.
+            var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), world.Templates, world.Configuration.DefinitionFingerprint);
+            var line = string.Empty;
+            foreach (var (w, label) in new[] { (world, "live"), (restored, "restored") })
+            {
+                var g = grunts.Select(grunt => w.FindEntity(grunt.Id)!).ToArray();
+                var near = Fixed.FromDecimal(0.01m);
+                var sequence = 9000UL;
+                Check.That(w.Submit(new ExitContainerCommand(new PlayerId(1), ++sequence, w.Tick, g[0].Id, b.Id)).Accepted, $"{rate} {label}: the exit button of tunnel B's bar is accepted.");
+                Check.That(w.Submit(new ExitContainerCommand(new PlayerId(1), ++sequence, w.Tick, g[1].Id)).Accepted, $"{rate} {label}: an exit that names no tunnel is accepted.");
+                var result = w.Step();
+                Check.That(result.Events.Count(value => value.Kind == SimEventKind.EntityUncontained && value.Other == b.Id) == 1
+                    && result.Events.Count(value => value.Kind == SimEventKind.EntityUncontained && value.Other == a.Id) == 1, $"{rate} {label}: one leaves through B, the other through A.");
+                // ExitStart of B (25, 0) turned by a quarter: (200, 225), ExitEnd (200, 260); ExitStart of A: (625, 200). Each took its first step in the tick it left.
+                Check.That((g[0].X - Fixed.FromInt(200)).Abs() < near && (g[0].Y - Fixed.FromInt(225)).Abs() <= Fixed.FromInt(2) && g[0].Angle == b.Angle,
+                    $"{rate} {label}: the grunt ordered out by B stands at B's door ({g[0].X}, {g[0].Y}), not at A's.");
+                Check.That(g[0].HasMoveTarget && (g[0].MoveTargetX - Fixed.FromInt(200)).Abs() < near && (g[0].MoveTargetY - Fixed.FromInt(260)).Abs() < near,
+                    $"{rate} {label}: and walks to B's ExitEnd ({g[0].MoveTargetX}, {g[0].MoveTargetY}).");
+                Check.That((g[1].X - Fixed.FromInt(625)).Abs() <= Fixed.FromInt(2) && (g[1].Y - Fixed.FromInt(200)).Abs() < near, $"{rate} {label}: the other leaves by A, the tunnel it entered ({g[1].X}, {g[1].Y}).");
+                for (var tick = 0; tick < w.Frames(300); tick++) w.Step();
+                var here = string.Join(";", g.Select(grunt => $"{grunt.X.Raw},{grunt.Y.Raw}"));
+                if (label == "live") line = here;
+                else Check.That(here == line, $"{rate}: the restored world lets them out to the same places ({here} | {line}).");
+            }
+            places.Add(line);
+        }
+        Check.That(places.Distinct().Count() == 1, $"The grunts stand at the same places at 30, 60 and 120 Hz ({string.Join(" | ", places)}).");
     }
 
     /// <summary>Selling the last tunnel takes its riders out at once (<c>removeAllContained</c>, "Can't be order to exit"): they stand on the tunnel with no order, at 30, 60 and 120 Hz.</summary>

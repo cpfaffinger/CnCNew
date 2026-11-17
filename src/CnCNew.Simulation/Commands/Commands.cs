@@ -11,11 +11,12 @@ namespace CnCNew.Simulation.Commands;
 /// <summary>
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
 /// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
-/// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277; version 29: the debug money command).
+/// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277; version 29: the debug money command;
+/// version 30: the exit command names the container the rider leaves through, #435).
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 29;
+    public const int Version = 30;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -208,7 +209,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), checked((int)reader.Int("amount"))),
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, reader.Text("science")),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
-            CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor")))),
+            CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))),
+                reader.Has("container") ? new EntityId(checked((uint)reader.UInt("container"))) : EntityId.Invalid),
             CommandTypes.UseSpecialPower => new UseSpecialPowerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), reader.Text("power"),
                 (SpecialPowerTargetKind)checked((byte)reader.Int("targetKind")), new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y"), reader.Has("option") ? checked((int)reader.Int("option")) : 0),
             CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("from"))), new PlayerId(checked((int)reader.Int("to"))),
@@ -466,14 +468,21 @@ public sealed record EnterContainerCommand(PlayerId Player, ulong Sequence, long
 }
 
 /// <summary>
-/// Removes <see cref="Actor"/> from whatever currently contains it. Either the actor's own owner or the container's
-/// owner may order this (the reference's "Evacuate" command belongs to the container's owner; a passenger's own owner
-/// can also always leave).
+/// <c>MSG_EXIT</c>: <see cref="Actor"/> leaves through <see cref="Container"/> (<c>aiExit(objectContainingExiter)</c>). The original's message names the rider, and the container is the one
+/// object the player has selected (<c>getSingleObjectFromSelection</c>): "Exit needs to know the thing to exit ... because of the Tunnel system" - a rider of a tunnel network leaves
+/// through the tunnel whose bar the player clicked, not the one it entered (#435). <see cref="EntityId.Invalid"/> is the container the actor is in (<c>privateExit(NULL)</c>, a
+/// script's "get out regardless"). Either the actor's own owner or the container's owner may order this (the reference's "Evacuate" command belongs to the container's owner; a
+/// passenger's own owner can also always leave).
 /// </summary>
-public sealed record ExitContainerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor) : SimCommand(Player, Sequence, Tick)
+public sealed record ExitContainerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor, EntityId Container = default) : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.ExitContainer;
-    protected override void DescribeBody(IStateWriter writer) => writer.UInt("actor", Actor.Value);
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("actor", Actor.Value);
+        if (Container.IsValid) writer.UInt("container", Container.Value);
+    }
 }
 
 /// <summary>What a special power is aimed at (<c>doSpecialPower</c> / <c>doSpecialPowerAtObject</c> / <c>doSpecialPowerAtLocation</c>).</summary>
