@@ -28,6 +28,16 @@ static partial class Tests
           BuildCost = 10
           BuildTime = 1
         End
+        Upgrade Upgrade_SwFakeSet
+          Type = OBJECT
+          BuildCost = 0
+          BuildTime = 0
+        End
+        Upgrade Upgrade_SwRealSet
+          Type = OBJECT
+          BuildCost = 0
+          BuildTime = 0
+        End
         Upgrade Upgrade_SwCheap
           Type = PLAYER
           BuildCost = 10
@@ -101,6 +111,23 @@ static partial class Tests
             UpgradeObject = OCL_SwDrone
           End
           Behavior = DestroyDie Destroy01
+          End
+        End
+        Object SwSwitcher
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = CommandSetUpgrade Switch01
+            TriggeredBy = Upgrade_SwFakeSet
+            RemovesUpgrades = Upgrade_SwRealSet
+            CommandSet = SwFakeCommandSet
+          End
+          Behavior = CommandSetUpgrade Switch02
+            TriggeredBy = Upgrade_SwRealSet
+            RemovesUpgrades = Upgrade_SwFakeSet Upgrade_SwRealSet
+            CommandSet = SwRealCommandSet
           End
         End
         Object SwDrone
@@ -758,6 +785,53 @@ static partial class Tests
         restored.Run(2);
         Check.That(!UpgradeBit(restored, restored.World.FindEntity(carrier.Id)!), "The restored world frees the upgrade just the same.");
         Check.That(sw.World.StateHash == restored.World.StateHash, "Original and restored worlds hash alike after the same events.");
+
+        // #413: Object::removeUpgrade re-arms the module the upgrade triggered (UpgradeMux::resetUpgrade), so the upgrade bought again makes a new drone.
+        foreach (var world in new[] { sw, restored })
+        {
+            world.World.CompleteUpgrade(new PlayerId(1), carrier.Id, "Upgrade_SwDrone");
+            world.Run(3);
+            Check.That(world.Alive("SwDrone").Count() == 1, "The drone upgrade bought again after the drone died makes a new drone.");
+        }
+        Check.That(sw.World.StateHash == restored.World.StateHash, "Original and restored worlds hash alike after the second drone.");
+    }
+
+    /// <summary>
+    /// #413, the GLA worker's switch between its real and fake buildings: two <c>CommandSetUpgrade</c>s whose <c>RemovesUpgrades</c> name each other's upgrade and their own.
+    /// <c>UpgradeMux::giveSelfUpgrade</c> removes first; <c>Object::removeUpgrade</c> (Object.cpp) only clears the bit and re-arms the modules it triggered - it runs none. The port ran
+    /// the object's upgrade modules again from the removal before the module counted as done, so the module removed again until the stack overflowed.
+    /// </summary>
+    public static void StructuresUpgradeRemovalOnlyReArms()
+    {
+        var sw = new StructuresWorld();
+        var worker = sw.Spawn("SwSwitcher", 1, 100, 100);
+        var fake = sw.World.FindEntity(worker.Id)!.Modules.OfType<CommandSetUpgrade>().Single(module => module.Tag == "Switch01");
+        var real = sw.World.FindEntity(worker.Id)!.Modules.OfType<CommandSetUpgrade>().Single(module => module.Tag == "Switch02");
+        bool Has(string name) => sw.Fixture.Templates.Upgrades.TryGet(name, out var info) && sw.World.FindEntity(worker.Id)!.CompletedUpgrades.Has(info.Index);
+
+        sw.World.CompleteUpgrade(new PlayerId(1), worker.Id, "Upgrade_SwFakeSet");
+        sw.Run(1);
+        Check.That(fake.Executed && !real.Executed && Has("Upgrade_SwFakeSet"), "The fake switch runs and keeps its upgrade.");
+
+        sw.World.CompleteUpgrade(new PlayerId(1), worker.Id, "Upgrade_SwRealSet");
+        sw.Run(1);
+        Check.That(real.Executed, "The real switch runs once: its removal of its own upgrade does not run it again.");
+        Check.That(!fake.Executed, "Removing the fake switch's upgrade re-arms the fake switch.");
+        Check.That(!Has("Upgrade_SwFakeSet") && !Has("Upgrade_SwRealSet"), "The real switch removed both upgrades.");
+
+        var restored = StructuresWorld.RestoreOf(sw);
+        foreach (var world in new[] { sw, restored })
+        {
+            world.World.CompleteUpgrade(new PlayerId(1), worker.Id, "Upgrade_SwFakeSet");
+            world.Run(1);
+            var again = world.World.FindEntity(worker.Id)!.Modules.OfType<CommandSetUpgrade>().ToArray();
+            Check.That(again.Single(module => module.Tag == "Switch01").Executed && !again.Single(module => module.Tag == "Switch02").Executed,
+                "The fake switch runs again, and its removal of the real upgrade re-arms the real switch.");
+            world.World.CompleteUpgrade(new PlayerId(1), worker.Id, "Upgrade_SwRealSet");
+            world.Run(1);
+            Check.That(!again.Single(module => module.Tag == "Switch01").Executed && again.Single(module => module.Tag == "Switch02").Executed, "The real switch runs again.");
+        }
+        Check.That(sw.World.StateHash == restored.World.StateHash, "Original and restored worlds hash alike after the same switches.");
     }
 
     /// <summary>Fixed-point health within a hundredth of an expected value (percentages are not exact in 16 fractional bits).</summary>

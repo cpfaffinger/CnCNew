@@ -328,7 +328,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
         if (_mux.AttemptUpgrade(world, Entity, keyMask, _ => { })) world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public void ResetUpgrade(UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     /// <summary><c>CountermeasuresBehavior::reloadCountermeasures</c>: <c>JetAIUpdate</c> restocks the flares the moment the aircraft has landed (<c>TO_PARKING</c> taxi).</summary>

@@ -318,7 +318,7 @@ public sealed class SpyVisionUpdate(SpyVisionData data) : SimModule, IUpdateModu
         });
     }
 
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public void ResetUpgrade(UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     /// <summary><c>SpyVisionUpdate::activateSpyVision(duration)</c>: spy now, for <paramref name="durationTicks"/> ticks (0: until switched off by something else).</summary>

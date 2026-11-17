@@ -466,7 +466,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         _active = false;
     }
 
-    public void TryReset(IWorldServices world, UpgradeMask keyMask)
+    /// <summary>The original's <c>isUpgradeActive</c> is the mux's executed flag, so a re-armed aura stops healing until its upgrade comes back.</summary>
+    public void ResetUpgrade(UpgradeMask keyMask)
     {
         if (_mux.ResetUpgrade(keyMask)) _active = false;
     }
@@ -537,12 +538,10 @@ public abstract class UpgradeMuxModule(UpgradeMuxData data) : SimModule, IUpgrad
     public bool Executed => Mux.Executed;
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => Mux.AttemptUpgrade(world, Entity, keyMask, Activate);
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) { if (Mux.ResetUpgrade(keyMask)) Deactivate(world); }
+    public void ResetUpgrade(UpgradeMask keyMask) => Mux.ResetUpgrade(keyMask);
     public bool WouldUpgrade(UpgradeMask keyMask) => Mux.WouldUpgrade(keyMask);
 
     protected abstract void Activate(IWorldServices world);
-    protected virtual void Deactivate(IWorldServices world) => Deactivate();
-    protected virtual void Deactivate() { }
 
     public override void Describe(IStateWriter writer) => Mux.Describe(writer);
     public override void Load(IStateReader reader) => Mux.Load(reader);
@@ -553,7 +552,6 @@ public sealed class ArmorUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(dat
 {
     public override string ModuleName => "ArmorUpgrade";
     protected override void Activate(IWorldServices world) => Entity.HasPlayerUpgradeArmor = true;
-    protected override void Deactivate() => Entity.HasPlayerUpgradeArmor = false;
 }
 
 /// <summary><c>WeaponSetUpgrade</c>: raises the <c>PLAYER_UPGRADE</c> weapon set flag, which selects the object's <c>PLAYER_UPGRADE</c> <c>WeaponSet</c>, and loads its weapons.</summary>
@@ -566,8 +564,6 @@ public sealed class WeaponSetUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule
         Entity.HasPlayerUpgradeWeapon = true;
         world.WeaponSetFlagsChanged(Entity);
     }
-
-    protected override void Deactivate() => Entity.HasPlayerUpgradeWeapon = false;
 }
 
 /// <summary>
@@ -621,7 +617,6 @@ public sealed class StealthUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(d
     private static readonly int CanStealthBit = ObjectStatusBits.Index("CAN_STEALTH");
     public override string ModuleName => "StealthUpgrade";
     protected override void Activate(IWorldServices world) => Entity.Status |= 1UL << CanStealthBit;
-    protected override void Deactivate() => Entity.Status &= ~(1UL << CanStealthBit);
 }
 
 /// <summary><c>MaxHealthUpgrade.cpp</c>: raises the body's health cap by <see cref="AddMaxHealth"/> per <see cref="ChangeType"/>.</summary>
@@ -672,11 +667,6 @@ public sealed class RadarUpgrade(RadarUpgradeData data) : UpgradeMuxModule(data.
         Entity.Modules.OfType<RadarUpdate>().FirstOrDefault()?.ExtendRadar(world);
     }
 
-    protected override void Deactivate(IWorldServices world)
-    {
-        if (!Entity.DisabledEdge) world.RemoveRadar(Entity.Owner, data.DisableProof);
-    }
-
     public override void OnRemove(IWorldServices world)
     {
         if (Executed && !Entity.DisabledEdge) world.RemoveRadar(Entity.Owner, data.DisableProof);
@@ -692,8 +682,8 @@ public sealed class RadarUpgrade(RadarUpgradeData data) : UpgradeMuxModule(data.
 
 /// <summary>
 /// <c>PowerPlantUpgrade.cpp</c>: <c>upgradeImplementation</c> adds the template's <c>EnergyBonus</c> to the owner (<c>Player::addPowerBonus</c>) and
-/// extends the rods; <c>onDelete</c> takes the bonus away again. Not modeled: <c>onCapture</c> (no capture); un-upgrading (<c>TryReset</c>) is not in
-/// the reference either, but here it also removes the bonus so that re-activation cannot count it twice.
+/// extends the rods; <c>onDelete</c> takes the bonus away again. Not modeled: <c>onCapture</c> (no capture); a removal of its upgrade only re-arms it (<c>ResetUpgrade</c>), as in
+/// the reference, which keeps the bonus (no shipped data removes it).
 /// </summary>
 public sealed class PowerPlantUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(data.Mux)
 {
@@ -703,12 +693,6 @@ public sealed class PowerPlantUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModul
     {
         world.AddEnergyProduction(Entity.Owner, Entity.Template.EnergyBonus);
         Entity.Modules.OfType<PowerPlantUpdate>().FirstOrDefault()?.ExtendRods(world, true);
-    }
-
-    protected override void Deactivate(IWorldServices world)
-    {
-        world.AddEnergyProduction(Entity.Owner, -Entity.Template.EnergyBonus);
-        Entity.Modules.OfType<PowerPlantUpdate>().FirstOrDefault()?.ExtendRods(world, false);
     }
 
     public override void OnRemove(IWorldServices world)

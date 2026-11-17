@@ -621,6 +621,7 @@ run.Test("Specials: battle plan restore and unsupported options", Tests.Specials
 run.Test("Specials: projectile stream bookkeeping", Tests.SpecialsProjectileStream);
 run.Test("Structures: the fixture instantiates, a bone-FX OCL slot is refused", Tests.StructuresFixtureInstantiates);
 run.Test("Structures: a dying drone frees its producer's upgrade (save/restore)", Tests.StructuresUpgradeDieFreesTheProducersUpgrade);
+run.Test("Structures (#413): removing an upgrade only re-arms its modules, a switch that removes its own upgrade runs once", Tests.StructuresUpgradeRemovalOnlyReArms);
 run.Test("Structures: a destroyed building collapses through its phases", Tests.StructuresCollapseRunsItsPhases);
 run.Test("Structures: burning trees spread and hurt whoever touches them", Tests.StructuresBurningTreesSpreadAndHurtWhoTouchesThem);
 run.Test("Structures: deploy-style units deploy to shoot and pack to move", Tests.StructuresDeployStyleUnitsDeployToShootAndPackToMove);

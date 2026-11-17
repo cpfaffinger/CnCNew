@@ -129,7 +129,7 @@ public sealed class FireWeaponWhenDamagedBehavior(FireWeaponWhenDamagedData data
         if (HasContinuous) world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
     }
 
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public void ResetUpgrade(UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     public void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt)

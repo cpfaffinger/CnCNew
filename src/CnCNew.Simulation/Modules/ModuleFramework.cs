@@ -990,7 +990,11 @@ public static class ExitDoor
 public interface IUpgradeModule
 {
     void TryActivate(IWorldServices world, UpgradeMask keyMask);
-    void TryReset(IWorldServices world, UpgradeMask keyMask);
+    /// <summary>
+    /// <c>UpgradeModuleInterface::resetUpgrade</c> (<c>Object::removeUpgrade</c>): a module that has run and that <paramref name="keyMask"/> triggers may run again. Only the
+    /// state machine is re-armed - the original undoes no effect of the module.
+    /// </summary>
+    void ResetUpgrade(UpgradeMask keyMask);
 
     /// <summary><c>UpgradeModuleInterface::wouldUpgrade</c>: whether the module would execute in response to this combination of completed upgrades (a module that never does reports false).</summary>
     bool WouldUpgrade(UpgradeMask keyMask) => false;

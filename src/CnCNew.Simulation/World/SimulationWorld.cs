@@ -702,21 +702,22 @@ public sealed partial class SimulationWorld : IWorldServices
         ReevaluateUpgrades(target);
     }
 
+    /// <summary>
+    /// <c>Object::removeUpgrade</c> (Object.cpp): clears the upgrade's bit of the object's own mask and re-arms every upgrade module of the object it triggered
+    /// (<c>UpgradeMux::resetUpgrade</c>), so the module may run again when the upgrade comes back. Nothing is undone and no module is run: "it is not removing anything in
+    /// the sense of undoing the effects". A module's <c>RemovesUpgrades</c> comes here from inside its own activation (<c>UpgradeMux::giveSelfUpgrade</c> removes first) -
+    /// running the modules again from here made it remove again, without end (#413, the GLA worker's switch between its real and fake buildings). A player's upgrade is
+    /// not taken from the player: the original clears only the object's mask.
+    /// </summary>
     public void RemoveUpgradeByName(Entity entity, string upgradeName)
     {
         // An unresolved name is not modeled at all yet (e.g. an object creation list name mistakenly used here): a no-op,
         // matching the reference's behaviour when the removal list names something outside the upgrade table.
         if (!_templates.Upgrades.TryGet(upgradeName, out var info)) return;
-        if (info.Scope == UpgradeScope.Player)
-        {
-            if (_players.TryGetValue(entity.Owner.Value, out var state)) state.CompletedUpgrades = state.CompletedUpgrades.Clear(info.Index);
-        }
-        else
-        {
-            entity.CompletedUpgrades = entity.CompletedUpgrades.Clear(info.Index);
-        }
+        entity.CompletedUpgrades = entity.CompletedUpgrades.Clear(info.Index);
+        var removed = UpgradeMask.Bit(info.Index);
+        foreach (var module in entity.UpgradeModules) module.ResetUpgrade(removed);
         MarkDirty(entity);
-        ReevaluateUpgrades(entity);
     }
 
     /// <summary>

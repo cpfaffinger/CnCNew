@@ -682,7 +682,7 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
         => _nextWake = data.Upgradable ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => _mux.AttemptUpgrade(world, Entity, keyMask, PlaceMines);
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public void ResetUpgrade(UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     public void OnDie(IWorldServices world, in DamageInfo info)

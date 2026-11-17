@@ -392,7 +392,7 @@ public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData da
 
     // The module is not activated by the upgrade state machine: it asks the mux whether the conditions hold each tick (testUpgradeConditions).
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) { }
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) { }
+    public void ResetUpgrade(UpgradeMask keyMask) { }
     public bool WouldUpgrade(UpgradeMask keyMask) => false;
 
     public long Update(IWorldServices world)
