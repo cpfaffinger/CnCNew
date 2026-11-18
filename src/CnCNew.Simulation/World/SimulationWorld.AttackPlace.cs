@@ -86,6 +86,9 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.AttackPlaceFor"/>
     public bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots) => AttackPlace(unit, x, y, shots > 0 ? shots : -1, fromPlayer: false);
 
+    /// <inheritdoc cref="IWorldServices.ResumeAttackPlace"/>
+    public void ResumeAttackPlace(Entity entity, Fixed x, Fixed y, int shots, bool fromPlayer) => AttackPlace(entity, x, y, shots, fromPlayer);
+
     private (Fixed X, Fixed Y) FramePosition(Entity unit)
     {
         var (x, y, _) = unit.FrameEnd(_tick);
@@ -101,6 +104,8 @@ public sealed partial class SimulationWorld
     private bool AttackPlace(Entity unit, Fixed x, Fixed y, int shots, bool fromPlayer)
     {
         if (AiOf(unit) is not { } ai || unit.EffectivelyDead) return false;
+        // JetAIUpdate::aiDoCommand: a jet that is parked, taking off or landing stores the attack whole and gives it again when it flies (#458).
+        if (ai is JetAIUpdate jet && !jet.TakeAttackPlaceNow(this, x, y, shots, fromPlayer)) return true;
         if (ClearingVictimNear(unit, x, y) is { } victim)
         {
             BuilderAttacks(unit, victim);

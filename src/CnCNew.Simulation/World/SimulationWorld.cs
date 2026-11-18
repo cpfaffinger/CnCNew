@@ -819,7 +819,39 @@ public sealed partial class SimulationWorld : IWorldServices
     public void AttackFor(Entity unit, Entity victim)
     {
         ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
+        // JetAIUpdate::aiDoCommand: a jet that is parked, taking off or landing stores the attack whole and gives it again when it flies (#458).
+        if (AiOf(unit) is Modules.BuiltIn.JetAIUpdate jet && !jet.TakeAttackNow(this, victim.Id, fromPlayer: false)) return;
         AiOf(unit)?.OrderMove(this, victim.X, victim.Y, false);
+        BeginPursuit(unit, victim);
+        NoteOrderedAttack(unit, victim);
+    }
+
+    /// <inheritdoc cref="IWorldServices.ResumeAttack"/>
+    public void ResumeAttack(Entity entity, EntityId victimId, bool fromPlayer)
+    {
+        if (AiOf(entity) is null || entity.EffectivelyDead) return;
+        if (FindEntity(victimId) is not { DestroyRequested: false, EffectivelyDead: false, Body: not null } victim) return;
+        // As a player's order says it: where the unit stands, when it cannot attack the victim.
+        AttackObject(entity, victim, entity.X, entity.Y, fromPlayer);
+    }
+
+    /// <summary>
+    /// <c>aiAttackObject</c> after the command's checks: the order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim. A unit
+    /// that needs a line of sight and cannot fire from where it stands goes where it can (<c>AIAttackApproachTargetState::computePath</c> -> <c>findAttackPath</c>, F-55). An airborne
+    /// attacker does not pathfind: it flies to its approach target, a place within its weapon's range in a box of goal cells of its own (<c>computeAttackPath</c>,
+    /// <c>Weapon::computeApproachTarget</c>, #451). (<paramref name="x"/>, <paramref name="y"/>) is where it heads when it can fire from where it stands or cannot attack the victim.
+    /// </summary>
+    private void AttackObject(Entity unit, Entity victim, Fixed x, Fixed y, bool fromPlayer)
+    {
+        var ai = AiOf(unit)!;
+        if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere)
+        {
+            if (ApproachesInFlight(unit) && ApproachWeapon(unit, victim) is { } approachWeapon) (x, y) = AircraftApproachTarget(unit, victim, approachWeapon);
+            else if (FindAttackPosition(unit, victim) is { } place) (x, y) = place;
+        }
+        ai.OrderMove(this, x, y, fromPlayer);
+        ai.NotePursuit(victim.Id);
+        NoteContactApproach(unit, ai, victim);
         BeginPursuit(unit, victim);
         NoteOrderedAttack(unit, victim);
     }
@@ -1610,21 +1642,9 @@ public sealed partial class SimulationWorld : IWorldServices
                     break;
                 }
                 ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
-                // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim. A unit that needs a line of
-                // sight and cannot fire from where it stands goes where it can (AIAttackApproachTargetState::computePath -> findAttackPath, F-55).
-                // An airborne attacker does not pathfind: it flies to its approach target, a place within its weapon's range in a box of goal cells of its own (computeAttackPath,
-                // Weapon::computeApproachTarget, #451).
-                var (pursueX, pursueY) = (pursue.X, pursue.Y);
-                if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere)
-                {
-                    if (ApproachesInFlight(unit) && ApproachWeapon(unit, victim) is { } approachWeapon) (pursueX, pursueY) = AircraftApproachTarget(unit, victim, approachWeapon);
-                    else if (FindAttackPosition(unit, victim) is { } place) (pursueX, pursueY) = place;
-                }
-                AiOf(unit)!.OrderMove(this, pursueX, pursueY, true);
-                AiOf(unit)!.NotePursuit(victim.Id);
-                NoteContactApproach(unit, AiOf(unit)!, victim);
-                BeginPursuit(unit, victim);
-                NoteOrderedAttack(unit, victim);
+                // JetAIUpdate::aiDoCommand: a jet that is parked, taking off or landing stores the attack whole and gives it again when it flies (#458).
+                if (AiOf(unit) is Modules.BuiltIn.JetAIUpdate jet && !jet.TakeAttackNow(this, victim.Id, fromPlayer: true)) break;
+                AttackObject(unit, victim, pursue.X, pursue.Y, fromPlayer: true);
                 break;
             }
             case FireWeaponCommand fire:

@@ -72,7 +72,7 @@ static partial class Tests
             for (var tick = 0; tick < world.Frames(30 * 60) && !(ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco); tick++) world.Step();
             Check.That(ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco && ai.CurrentLocomotorSetName == "SET_TAXIING", $"{rate}: the Aurora stands on its space ({ai.Phase}, {ai.CurrentLocomotorSetName}).");
 
-            // Sent up first: an attack order given to a parked jet is stored as its move and the victim given up while it taxis (the client's standing orders give it again).
+            // Sent up first, so the attack set is measured from an order the jet takes at once (a parked jet stores an attack order and takes it when it flies, #458).
             long Launch()
             {
                 Check.That(Send(next => new SetMoveTargetCommand(new PlayerId(1), next, world.Tick, aurora.Id, Fixed.FromInt(2400), Fixed.FromInt(1500))).Accepted, $"{rate}: the Aurora is sent up.");

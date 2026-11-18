@@ -395,7 +395,7 @@ static partial class Tests
     }
 
     /// <summary>
-    /// <c>JetAIUpdate::getSneakyTargetingOffset</c> (F-124): while a jet with <c>SneakyOffsetWhenAttacking</c> attacks (<c>OBJECT_STATUS_IS_ATTACKING</c>, here from the order on, while it taxis), and for
+    /// <c>JetAIUpdate::getSneakyTargetingOffset</c> (F-124): while a jet with <c>SneakyOffsetWhenAttacking</c> attacks (<c>OBJECT_STATUS_IS_ATTACKING</c>, here from the end of its take-off on: a parked jet stores the order, #458), and for
     /// <c>AttackersMissPersistTime</c> after, a shot at it is aimed that far
     /// along its heading - behind it - and at the place, not at the jet, so a weapon without a projectile and without a radius hits nothing; a jet without the keys is hit.
     /// </summary>
@@ -409,12 +409,15 @@ static partial class Tests
             var (world, feeder, _, _, jet, _) = ParkedJet(files: files);
             var dummy = Get(world, "AirDummy");
             Check.That(feeder.Pursue(1, jet.Id.Value, dummy.Id.Value, 1500, 500).Accepted, "The attack is accepted.");
-            // The status is what counts, not the flight: the jet attacks from the order on, while it taxis to take off.
+            // A parked jet stores the attack and takes it up when it flies (JetAIUpdate::aiDoCommand, #458): it attacks from the end of its take-off on.
             for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
-            Check.That(world.AcquiredVictimOf(jet).IsValid, "The jet attacks.");
+            Check.That(!world.AcquiredVictimOf(jet).IsValid, "The taxiing jet attacks nothing yet.");
+            StepUntil(world, () => world.AcquiredVictimOf(jet).IsValid, 1500, "The jet attacks once it flies.");
+            // Its update notes the attack in its next frame (JetAIUpdate::update tests OBJECT_STATUS_IS_ATTACKING).
+            for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
             if (framesAfterAttack > 0)
             {
-                // The taxiing jet gives the victim up when it loses sight of it.
+                // The jet gives the attack up when nobody orders it on.
                 StepUntil(world, () => !world.AcquiredVictimOf(jet).IsValid, 300, "The jet gives its attack up.");
                 for (var tick = 0; tick < world.Frames(framesAfterAttack); tick++) world.Step();
             }

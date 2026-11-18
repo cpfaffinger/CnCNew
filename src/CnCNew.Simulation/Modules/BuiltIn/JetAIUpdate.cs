@@ -57,8 +57,9 @@ public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSe
 /// (<c>LANDING_AWAIT_CLEARANCE</c>), glides down at the locomotor's minimum speed and rolls out (<c>LANDING</c>), taxis to its space (<c>TAXI_FROM_LANDING</c>, reloads its countermeasures),
 /// orients, and reloads its weapon for the time the missing share of the clip takes (<c>RELOAD_AMMO</c>). While parked or reloading it is healed by the airfield. Helicopters
 /// (<c>NeedsRunway = No</c>, <c>PRODUCED_AT_HELIPAD</c>) rise from and settle onto the helipad vertically and need no space.</description></item>
-/// <item><description><b>Orders</b>: <see cref="OrderMove"/> and <see cref="OrderEnter"/> (landing at an airfield) are the orders aircraft answer; they are stored while a take-off or landing
-/// runs and carried out when it is over.</description></item>
+/// <item><description><b>Orders</b>: <see cref="OrderMove"/>, <see cref="OrderEnter"/> (landing at an airfield), a guard (<see cref="TakeGuardNow"/>) and an attack on an object or a place
+/// (<see cref="TakeAttackNow"/>, <see cref="TakeAttackPlaceNow"/>) are stored whole while a take-off or landing runs, or start the take-off of a parked aircraft, and are carried out when it
+/// is over.</description></item>
 /// <item><description><b>Locomotor sets</b>: <c>SET_TAXIING</c> while it cannot fly, the <c>AttackLocomotorType</c> set from its attack on (kept after
 /// <c>AttackLocomotorPersistTime</c> until another set is chosen), the
 /// <c>ReturnForAmmoLocomotorType</c> set while returning for ammunition (<see cref="ObjectTemplate.LocomotorSets"/>); a set the object does not declare falls back to <c>SET_NORMAL</c>.</description></item>
@@ -79,7 +80,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         ReturnToDeadAirfield, CirclingDeadAirfield,
     }
 
-    private enum PendingKind : byte { None, Move, Land, Guard }
+    // Attack: an attack on the object _pendingTarget; AttackPlace: an attack on the place (_pendingX, _pendingY) for _pendingShots shots (#458).
+    private enum PendingKind : byte { None, Move, Land, Guard, Attack, AttackPlace }
 
     private static readonly Fixed ParkedOrientationTolerance = Fixed.FromDecimal(0.001m);
     private static readonly Fixed Misaligned = FixedTrig.PiFraction(1, 6); // as the ground movement of AIUpdateInterface
@@ -108,6 +110,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private Fixed _pendingY;
     private bool _pendingFromPlayer;
     private EntityId _pendingTarget;
+    private int _pendingShots;
     private readonly List<Point3> _path = [];
     private int _pathIndex;
     private long _whenTick;
@@ -458,6 +461,29 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         return true;
     }
 
+    /// <summary>
+    /// <c>aiDoCommand</c> for an attack on an object (<c>AICMD_ATTACKOBJECT</c>, #458): the whole command is stored (<c>m_mostRecentCommand</c>, <c>HAS_PENDING_COMMAND</c>) while a take-off or
+    /// landing runs or the aircraft is parked (which starts the take-off) - false, the aircraft gives it again with its victim when it flies (<see cref="IWorldServices.ResumeAttack"/>);
+    /// while it flies the attack begins at once - true.
+    /// </summary>
+    public bool TakeAttackNow(IWorldServices world, EntityId victim, bool fromPlayer)
+        => TakeOrStore(world, PendingKind.Attack, Fixed.Zero, Fixed.Zero, 0, fromPlayer, victim);
+
+    /// <summary><c>aiDoCommand</c> for an attack on a place (<c>AICMD_ATTACKPOSITION</c>, #458): stored as <see cref="TakeAttackNow"/> stores an attack on an object.</summary>
+    public bool TakeAttackPlaceNow(IWorldServices world, Fixed x, Fixed y, int shots, bool fromPlayer)
+        => TakeOrStore(world, PendingKind.AttackPlace, x, y, shots, fromPlayer, EntityId.Invalid);
+
+    private bool TakeOrStore(IWorldServices world, PendingKind kind, Fixed x, Fixed y, int shots, bool fromPlayer, EntityId target)
+    {
+        if (!TakeoffOrLandingInProgress && _allowAir) return true;
+        // The stored order replaces whatever was stored, a guard included.
+        world.EndGuard(Entity);
+        Store(kind, x, y, fromPlayer, target);
+        _pendingShots = shots;
+        if (!TakeoffOrLandingInProgress) BeginTakeoff();
+        return false;
+    }
+
     private void Store(PendingKind kind, Fixed x, Fixed y, bool fromPlayer, EntityId target, bool attackMove = false)
     {
         _pending = kind;
@@ -466,6 +492,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _pendingY = y;
         _pendingFromPlayer = fromPlayer;
         _pendingTarget = target;
+        _pendingShots = 0;
     }
 
     private void BeginTakeoff()
@@ -727,13 +754,16 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
         var kind = _pending;
         var target = _pendingTarget;
-        var (x, y, fromPlayer, attackMove) = (_pendingX, _pendingY, _pendingFromPlayer, _pendingAttackMove);
+        var (x, y, fromPlayer, attackMove, shots) = (_pendingX, _pendingY, _pendingFromPlayer, _pendingAttackMove, _pendingShots);
         _pending = PendingKind.None;
         _pendingAttackMove = false;
+        _pendingShots = 0;
         _returnTick = 0;
         if (kind == PendingKind.Move) base.OrderMove(world, x, y, fromPlayer, attackMove);
         else if (kind == PendingKind.Land && world.FindEntity(target) is { } airfield) BeginLanding(world, airfield);
         else if (kind == PendingKind.Guard) world.ResumeGuard(Entity);
+        else if (kind == PendingKind.Attack) world.ResumeAttack(Entity, target, fromPlayer);
+        else if (kind == PendingKind.AttackPlace) world.ResumeAttackPlace(Entity, x, y, shots, fromPlayer);
     }
 
     // ------------------------------------------------------------------------------------------------------------------ take-off
@@ -1288,6 +1318,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             writer.UInt("pendingTarget", _pendingTarget.Value);
             // Written only for a stored attack-move, so every other pending order keeps its serialized form.
             if (_pendingAttackMove) writer.Bool("pendingAttackMove", true);
+            if (_pending == PendingKind.AttackPlace) writer.Int("pendingShots", _pendingShots);
         }
         writer.Int("pathIndex", _pathIndex);
         writer.BeginArray("jetPath");
@@ -1356,7 +1387,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _homeX = reader.Fixed("homeX");
         _homeY = reader.Fixed("homeY");
         var pending = reader.Int("pending");
-        if (pending < 0 || pending > (int)PendingKind.Guard) throw new InvalidDataException("Jet pending order out of range.");
+        if (pending < 0 || pending > (int)PendingKind.AttackPlace) throw new InvalidDataException("Jet pending order out of range.");
         _pending = (PendingKind)pending;
         if (_pending != PendingKind.None)
         {
@@ -1365,12 +1396,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             _pendingFromPlayer = reader.Bool("pendingFromPlayer");
             _pendingTarget = new EntityId(checked((uint)reader.UInt("pendingTarget")));
             _pendingAttackMove = reader.Has("pendingAttackMove") && reader.Bool("pendingAttackMove");
+            _pendingShots = _pending == PendingKind.AttackPlace ? checked((int)reader.Int("pendingShots")) : 0;
         }
         else
         {
             _pendingX = _pendingY = Fixed.Zero;
             _pendingFromPlayer = false;
             _pendingTarget = EntityId.Invalid;
+            _pendingShots = 0;
         }
         _pathIndex = checked((int)reader.Int("pathIndex"));
         _path.Clear();

@@ -234,6 +234,14 @@ public interface IWorldServices
     void ResumeGuard(Entity entity);
 
     /// <summary>
+    /// The aircraft flies again and gives its stored attack on <paramref name="victim"/> again (<c>m_mostRecentCommand.reconstitute</c>, #458); nothing when the victim is gone.
+    /// </summary>
+    void ResumeAttack(Entity entity, EntityId victim, bool fromPlayer);
+
+    /// <summary>The aircraft flies again and gives its stored attack on the place again (<c>m_mostRecentCommand.reconstitute</c>, #458).</summary>
+    void ResumeAttackPlace(Entity entity, Fixed x, Fixed y, int shots, bool fromPlayer);
+
+    /// <summary>
     /// <c>GarrisonContain::matchObjectsToGarrisonPoints</c> of an enclosing garrison (F-60, step 4): a rider at a point whose victim is gone or out of range goes back to the centre,
     /// a rider with a victim takes the free point closest to it, and a rider at a point moves to a free one closer to its victim.
     /// </summary>
