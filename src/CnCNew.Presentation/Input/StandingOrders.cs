@@ -153,8 +153,8 @@ public sealed class StandingOrders
             return;
         }
         // A fixed-wing aircraft cannot stop in the air: it keeps flying at the target and fires whenever the weapon may (inside its range, past its minimum range, aimed), as an attack run.
-        // A helicopter (a HOVER locomotor) approaches like a ground unit and hovers where it is in range (AIAttackApproachTargetState, then AIAttackFireWeaponState with
-        // Locomotor::maintainCurrentPosition): it does not fly over its victim.
+        // A helicopter (a HOVER locomotor) flies to its approach target - a place within its weapon's range in a box of goal cells of its own, which the simulation computes
+        // (AIAttackApproachTargetState, Weapon::computeApproachTarget, #451) - and hovers there (AIAttackFireWeaponState with Locomotor::maintainCurrentPosition): it does not fly over its victim.
         var flying = unit.Template.IsKindOf("AIRCRAFT");
         var hovers = flying && unit.Template.Locomotor is { IsHover: true };
         if (flying && IsOutOfAirfieldAmmunition(world, unit))
@@ -182,12 +182,12 @@ public sealed class StandingOrders
         }
         if (SimulationQueries.InRange(world, unit, target))
         {
+            // A helicopter on its approach flies on to its approach target before it attacks: the approach of an attack path does not stop in range ("we have calculated a position
+            // to shoot from, so go there", m_stopIfInRange), and AIAttackState aims and fires only once it is over. An order to fire now would stop it short to turn on the spot.
+            if (hovers && unit.HasMoveTarget && _chaseGoal.ContainsKey(unit.Id.Value) && order.MaxShots == 0) return;
             // The chase ends where the unit stands; it is still attacking (its turrets stay on the victim while the weapon reloads), so the stop is a pursuit of its own position.
-            if ((!flying || hovers) && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
-            {
-                if (hovers) issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
-                else issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
-            }
+            if (!flying && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
+                issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
             if (order.MaxShots > 0)
             {
                 if (SimulationQueries.CanFireAt(world, unit, target, FireOrigin.Player, order.Slot))
@@ -215,9 +215,8 @@ public sealed class StandingOrders
         var goal = SimulationQueries.GroundOf(target);
         if (_chaseGoal.TryGetValue(unit.Id.Value, out var last) && unit.HasMoveTarget && Vector2.Distance(last, goal) <= ChaseRepathDistance) return;
         _chaseGoal[unit.Id.Value] = goal;
-        // The approach of an attack (AIAttackApproachTargetState): the turrets track the victim on the way; aircraft have none and just fly.
-        if (flying) issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, target.X, target.Y));
-        else issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, target.X, target.Y));
+        // The approach of an attack (AIAttackApproachTargetState): the turrets track the victim on the way; an airborne aircraft flies to its approach target instead of the victim's place.
+        issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, target.X, target.Y));
     }
 
     /// <summary>A jet whose weapons that reload only at an airfield are all empty (<see cref="JetAIUpdate.IsOutOfSpecialReloadAmmo"/>).</summary>
