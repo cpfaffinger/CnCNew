@@ -806,10 +806,15 @@ public sealed partial class SkirmishAi
         if (CountAlive(Role.SupplyCenter, true) < 2 && army >= _plan.SecondCenterArmy && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
         else if (CountAlive(Role.SupplyCenter, true) < 3 && army >= _plan.ThirdCenterArmy && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
         if (CountAlive(Role.Power, true) < 2 && producers >= 3) goals.Add(Role.Power);
-        if (CountAlive(Role.Barracks, true) < 2 && _budget > Fixed.FromInt(_plan.SecondBarracksBudget)) goals.Add(Role.Barracks);
-        if (CountAlive(Role.Factory, true) < 2 && _budget > Fixed.FromInt(1500)) goals.Add(Role.Factory);
+        // The second barracks and factory are bought with money to spare. What is held back for the Palace is not to spare: counted as such, the savings themselves raised a
+        // second Arms Dealer first (it comes earlier in this list), whose price was held back in turn - the army bought nothing while the player saved twice, and the Palace came
+        // minutes later (measured on Alpine Assault against America: begun by ten game minutes in 3 of 36 seeds, 11 of 36 without the detour).
+        var advancedTech = AdvancedTechPrice(army);
+        var spare = _budget - advancedTech;
+        if (CountAlive(Role.Barracks, true) < 2 && spare > Fixed.FromInt(_plan.SecondBarracksBudget)) goals.Add(Role.Barracks);
+        if (CountAlive(Role.Factory, true) < 2 && spare > Fixed.FromInt(1500)) goals.Add(Role.Factory);
         if (CountAlive(Role.Defense, true) < Math.Min(_plan.MaxDefenses, _plan.DefenseBase + army / _plan.DefensesPerArmy)) goals.Add(Role.Defense);
-        if (WantsAdvancedTech(army)) goals.Add(Role.AdvancedTech);
+        if (advancedTech > Fixed.Zero) goals.Add(Role.AdvancedTech);
         return [..goals];
     }
 
@@ -824,15 +829,15 @@ public sealed partial class SkirmishAi
     /// <see cref="BuildStructures"/>), as the original's player saves for a structure its script has ordered - but only while the army is as strong as an attack wave
     /// (<c>_threshold</c>): a player whose army has melted away rebuilds it first, or saving for the Palace leaves the base without defenders (measured: China against GLA on
     /// Alpine Assault, the GLA army fell from 14 units to 1 while it saved). A lost Palace is planned again. The advanced technology buildings of the other sides (Strategy Center,
-    /// Propaganda Center) are left out: this AI does not plan them.
+    /// Propaganda Center) are left out: this AI does not plan them. Returns the price of the Palace while it is planned, zero otherwise.
     /// </summary>
-    private bool WantsAdvancedTech(int army)
+    private Fixed AdvancedTechPrice(int army)
     {
-        if (!_side.StartsWith("GLA", StringComparison.OrdinalIgnoreCase) || _tick < _time.OriginalFrames(AdvancedTechAfterFrames)) return false;
-        if (CountAlive(Role.AdvancedTech, true) > 0 || CountAlive(Role.Factory, false) == 0) return false;
-        if (army >= _threshold) return true;
+        if (!_side.StartsWith("GLA", StringComparison.OrdinalIgnoreCase) || _tick < _time.OriginalFrames(AdvancedTechAfterFrames)) return Fixed.Zero;
+        if (CountAlive(Role.AdvancedTech, true) > 0 || CountAlive(Role.Factory, false) == 0) return Fixed.Zero;
         var candidates = StructureCandidates(Role.AdvancedTech);
-        return candidates.Length > 0 && _budget > candidates[0].BuildCost;
+        if (candidates.Length == 0) return Fixed.Zero;
+        return army >= _threshold || _budget > candidates[0].BuildCost ? candidates[0].BuildCost : Fixed.Zero;
     }
 
     private ImmutableArray<ObjectTemplate> StructureCandidates(Role role)

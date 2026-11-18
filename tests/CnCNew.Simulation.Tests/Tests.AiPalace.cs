@@ -17,10 +17,10 @@ static partial class Tests
     /// Real data (#454): the built-in AI of every GLA general builds its Palace. The original raises it by its skirmish scripts (<c>GLA Palace - N</c>, <c>- H</c>) once the Arms Dealer
     /// stands and the <c>_ESCALATION</c> counter has reached 30 (five game minutes); the built-in AI had no goal that led to one, so the Battle Bus, the Scud launcher, the bomb truck,
     /// the rocket buggy and the Palace's upgrades stayed locked. In <see cref="BusMap"/> against America the plain GLA player with the standard money owns a finished Palace within
-    /// <see cref="PalaceMinutes"/> game minutes at 60 Hz (measured: 12.3; it saves for it only while its army is as strong as an attack wave), and with <see cref="BusMoney"/> credits
+    /// <see cref="PalaceMinutes"/> game minutes at 60 Hz (measured: 7.8, 12.3 while its savings first bought a second Arms Dealer; it saves for it only while its army is as strong as an attack wave), and with <see cref="BusMoney"/> credits
     /// each of the four GLA sides owns the Palace of its own side within that time at 60 Hz, the plain GLA player also at 30 and 120 Hz; none begins one before five game minutes. At
     /// 60 Hz the rich plain GLA player then queues and owns a Battle Bus within <see cref="PalaceBusMinutes"/> - the whole way from an empty base (a bus comes only with the
-    /// composition's variety share, so its time depends on the draws; measured at 21 game minutes with this seed).
+    /// composition's variety share, so its time depends on the draws; measured at 8.9 game minutes with this seed, 21 before).
     /// </summary>
     public static void RealSkirmishAiBuildsPalace(string directory)
     {
