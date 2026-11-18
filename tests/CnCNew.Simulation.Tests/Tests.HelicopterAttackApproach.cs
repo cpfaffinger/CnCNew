@@ -59,12 +59,14 @@ static partial class Tests
                     Check.That(heli.HasMoveTarget && goal >= 150m && goal <= 215m, $"{rate}, {victimName}: Comanche {heli.Id.Value} flies to a place within its range, not to its victim ({Where()}).");
                 }
                 for (var tick = 0; tick < world.Frames(30 * 30) && helis.Any(heli => heli.HasMoveTarget); tick++) world.Step();
+                // Above 30 Hz the move ends in the first tick of its last frame and the rest of the step is covered in that frame's shares (#457): read where the frame ends.
+                for (var tick = 0; tick < world.Frames(1) && helis.Any(heli => heli.IsInsideFrameStep); tick++) world.Step();
                 System.Console.WriteLine($"       {rate} {victimName}: {Where()}");
                 for (var a = 0; a < helis.Count; a++)
                 {
                     var (goalX, goalY) = goals[helis[a].Id.Value];
                     Check.That(!helis[a].HasMoveTarget && Gap(helis[a].X, helis[a].Y) >= 150m && Gap(helis[a].X, helis[a].Y) <= 215m
-                               && (helis[a].X - goalX).Abs() <= Fixed.FromInt(5) && (helis[a].Y - goalY).Abs() <= Fixed.FromInt(5), $"{rate}, {victimName}: Comanche {helis[a].Id.Value} hovers at its approach target within its range ({Where()}).");
+                               && helis[a].X == goalX && helis[a].Y == goalY, $"{rate}, {victimName}: Comanche {helis[a].Id.Value} hovers at its approach target within its range ({Where()}).");
                     for (var b = a + 1; b < helis.Count; b++)
                     {
                         // Boxes of four cells that do not overlap: their points at least four cells apart on one axis.

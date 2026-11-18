@@ -680,6 +680,7 @@ run.Test("Weapons: three hits of napalm make a firestorm", Tests.ThreeHitsOfNapa
 run.Test("Weapons: a clip goes out in its pattern", Tests.AClipGoesOutInItsPattern);
 run.Test("Group move: a click into the group gathers it", Tests.AClickIntoTheGroupGathersIt);
 run.Test("Wheels: a car reverses to a goal close behind it", Tests.ACarReversesToAGoalCloseBehindIt);
+run.Test("Straight move (#457): a ground unit and an aircraft on a world without terrain stand where 30 Hz has them at every frame end and on their target", Tests.AStraightMoveEndsWhere30HzEnds);
 run.Test("Vision: a look goes on after its object is gone", Tests.ALookGoesOnAfterItsObjectIsGone);
 run.Test("Transport: it comes with its payload", Tests.ATransportComesWithItsPayload);
 run.Test("Transport: a second life wears its armour", Tests.ASecondLifeWearsItsArmour);
