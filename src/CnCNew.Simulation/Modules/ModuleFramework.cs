@@ -968,6 +968,12 @@ public interface IProductionExit
         return false;
     }
 
+    /// <summary>
+    /// Whether a unit of <paramref name="produced"/> leaving this exit goes on to the producer's rally point (<c>ExitInterface::exitObjectViaDoor</c> reading <c>getRallyPoint</c>). Every
+    /// exit but the airfield's sends all it lets out there; <c>ParkingPlaceBehavior</c> only a <c>PRODUCED_AT_HELIPAD</c> object (a jet taxis to its parking space), and a carrier's deck nothing.
+    /// </summary>
+    bool SendsToRallyPoint(ObjectTemplate produced) => true;
+
     /// <summary><see cref="IsFreeToExit"/> for a specific product: <c>ParkingPlaceBehavior::hasAvailableSpaceFor</c> needs no parking space for a <c>PRODUCED_AT_HELIPAD</c> object.</summary>
     bool IsFreeToExitFor(ObjectTemplate produced) => IsFreeToExit;
 

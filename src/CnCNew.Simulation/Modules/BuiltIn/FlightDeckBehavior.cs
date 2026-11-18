@@ -77,6 +77,9 @@ public sealed class FlightDeckBehavior(FlightDeckData deck) : ParkingPlaceBehavi
         return false;
     }
 
+    /// <summary><c>FlightDeckBehavior::getRallyPoint</c> is always null (<c>setRallyPoint</c> does nothing): nothing a carrier lets out goes to a rally point.</summary>
+    public override bool SendsToRallyPoint(ObjectTemplate produced) => false;
+
     /// <summary>Whether a runway's ramp stands up (<c>m_rampUp</c>), which the model shows as its door.</summary>
     public bool RampIsUp(int runway) => _rampUp[runway];
 

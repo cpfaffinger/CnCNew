@@ -485,6 +485,12 @@ public class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateMod
         return true;
     }
 
+    /// <summary>
+    /// <c>exitObjectViaDoor</c>: only a <c>PRODUCED_AT_HELIPAD</c> object moves to the rally point (<c>m_heliRallyPoint</c>); a jet follows its exit path to its parking space
+    /// (<c>aiFollowExitProductionPath</c>) and waits there whatever the rally point says.
+    /// </summary>
+    public virtual bool SendsToRallyPoint(ObjectTemplate produced) => produced.IsKindOf("PRODUCED_AT_HELIPAD");
+
     /// <summary><c>hasAvailableSpaceFor</c>: a <c>PRODUCED_AT_HELIPAD</c> object always fits, anything else needs a free space.</summary>
     public bool IsFreeToExitFor(ObjectTemplate produced) => IsReady && (produced.IsKindOf("PRODUCED_AT_HELIPAD") || EmptySpace() >= 0);
 

@@ -4046,8 +4046,10 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
         Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
         var hasExit = !forcesSupplyWanting && exit is not null && exit.TryGetExitPath(out doorX, out doorY, out exitX, out exitY);
+        // An airfield sends only its helicopters to the rally point; its jets wait on their spaces (ParkingPlaceBehavior::exitObjectViaDoor, #445).
+        var hasRally = _hasRally && (exit is null || exit.SendsToRallyPoint(world.Templates[templateIndex]));
         var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true, Producer: exit!.GrantStealthTicks > 0 ? Entity.Id : EntityId.Invalid)
-            : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
+            : hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
             : default(SpawnExtras?);
         var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[templateIndex], door);
         if (extras is { } value) world.RequestSpawn(templateIndex, Entity.Owner, x, y, z, angle, value);
