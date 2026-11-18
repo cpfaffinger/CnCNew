@@ -39,7 +39,7 @@ public sealed class OptionsScreen : ShellScreen
         Tree.KeyboardHome = W("OptionsMenuParent");
         Tree.AddLayout(MoreOptionsLayoutOf(W("ButtonDefaults").Definition));
         Tree.FindByName(MoreOptionsButton)!.SetText("More options");
-        W("LabelVersion").SetText("CnCNew 0.1.0");
+        W("LabelVersion").SetText("CnCNew " + ProductVersion.Text);
         // The layout's TEXT of an entry field is the word "Entry"; OptionsMenuInit overwrites it with the stored values. There are none here
         // (network play is out of scope), so the fields start empty instead of showing the placeholder.
         W("TextEntryHTTPProxy").SetEntryText(string.Empty);
