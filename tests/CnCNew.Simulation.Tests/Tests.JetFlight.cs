@@ -344,6 +344,8 @@ static partial class Tests
     {
         ["Data/INI/Object/AirFixture.ini"] = AirFixtureFiles["Data/INI/Object/AirFixture.ini"].Replace(
             "Locomotor AirJetLoco\n  Surfaces = AIR\n  AirborneTargetingHeight = 30\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 360.0",
-            "Locomotor AirJetLoco\n  Appearance = WINGS\n  CirclingRadius = 100.0\n  Surfaces = AIR\n  AirborneTargetingHeight = 30\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 120.0"),
+            "Locomotor AirJetLoco\n  Appearance = WINGS\n  CirclingRadius = 100.0\n  Surfaces = AIR\n  AirborneTargetingHeight = 30\n  Speed = 150.0\n  Acceleration = 450.0\n  Braking = 60.0\n  MinSpeed = 60.0\n  TurnRate = 120.0")
+            // The attack set a jet keeps after its attack (#453) flies with wings as well, as the shipped jets' do (AuroraJetSupersonicLocomotor).
+            .Replace("Locomotor AirFastLoco\n  Surfaces = AIR", "Locomotor AirFastLoco\n  Appearance = WINGS\n  CirclingRadius = 100.0\n  Surfaces = AIR"),
     };
 }

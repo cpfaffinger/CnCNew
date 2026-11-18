@@ -59,7 +59,8 @@ public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSe
 /// (<c>NeedsRunway = No</c>, <c>PRODUCED_AT_HELIPAD</c>) rise from and settle onto the helipad vertically and need no space.</description></item>
 /// <item><description><b>Orders</b>: <see cref="OrderMove"/> and <see cref="OrderEnter"/> (landing at an airfield) are the orders aircraft answer; they are stored while a take-off or landing
 /// runs and carried out when it is over.</description></item>
-/// <item><description><b>Locomotor sets</b>: <c>SET_TAXIING</c> while it cannot fly, the <c>AttackLocomotorType</c> set for <c>AttackLocomotorPersistTime</c> after it fired, the
+/// <item><description><b>Locomotor sets</b>: <c>SET_TAXIING</c> while it cannot fly, the <c>AttackLocomotorType</c> set from its attack on (kept after
+/// <c>AttackLocomotorPersistTime</c> until another set is chosen), the
 /// <c>ReturnForAmmoLocomotorType</c> set while returning for ammunition (<see cref="ObjectTemplate.LocomotorSets"/>); a set the object does not declare falls back to <c>SET_NORMAL</c>.</description></item>
 /// </list>
 /// <b>Kinematics instead of physics and pathfinding</b>: ground movement follows straight segments between the layout points at the taxi locomotor's speed (turning in place at its turn
@@ -117,6 +118,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private long _returnTick;
     private bool _useReturnLocomotor;
     private long _attackExpireTick;
+    /// <summary>
+    /// <c>m_curLocomotorSet</c> is still the attack set: the original chooses it while the attack lasts and keeps it after <c>m_attackLocoExpireFrame</c> ran out, until another set is chosen
+    /// (the return set, the taxi set on the ground, the normal set when a take-off or a landing begins).
+    /// </summary>
+    private bool _attackSetHeld;
     // m_attackersMissExpireFrame: while it lies ahead, attackers aim behind the aircraft and nothing on a projectile's way meets it.
     private long _attackersMissExpireTick;
     private long _checkAirfieldTick;
@@ -176,23 +182,25 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         {
             var normal = Entity.Template.Locomotor;
             if (!_allowAir) return SetOf("SET_TAXIING") ?? normal;
-            if (_attackExpireTick != 0) return SetOf(data.AttackLocomotor) ?? normal;
+            if (AttackSetChosen) return SetOf(data.AttackLocomotor) ?? normal;
             if (_useReturnLocomotor) return SetOf(data.ReturnLocomotor) ?? normal;
             return normal;
         }
     }
 
-    /// <summary>The set <see cref="SelectedLocomotor"/> flies with: taxiing on the ground, the attack set after it fired, the return set, else the normal one.</summary>
+    /// <summary>The set <see cref="SelectedLocomotor"/> flies with: taxiing on the ground, the attack set from its attack on until another set is chosen, the return set, else the normal one.</summary>
     public override string CurrentLocomotorSetName
     {
         get
         {
             if (!_allowAir) return SetOf("SET_TAXIING") is not null ? "SET_TAXIING" : "SET_NORMAL";
-            if (_attackExpireTick != 0) return SetOf(data.AttackLocomotor) is not null ? data.AttackLocomotor : "SET_NORMAL";
+            if (AttackSetChosen) return SetOf(data.AttackLocomotor) is not null ? data.AttackLocomotor : "SET_NORMAL";
             if (_useReturnLocomotor) return SetOf(data.ReturnLocomotor) is not null ? data.ReturnLocomotor : "SET_NORMAL";
             return "SET_NORMAL";
         }
     }
+
+    private bool AttackSetChosen => _attackExpireTick != 0 || _attackSetHeld;
 
     private LocomotorInfo? SetOf(string name)
         => name == "SET_NORMAL" ? Entity.Template.Locomotor : Entity.Template.LocomotorSets.TryGetValue(name, out var found) ? found : null;
@@ -307,6 +315,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     private void Enter(JetPhase phase)
     {
+        // JetTakeoffOrLandingState::onEnter and HeliTakeoffOrLandingState::onEnter choose LOCOMOTORSET_NORMAL (still the attack set while m_attackLocoExpireFrame lies ahead).
+        if (phase is JetPhase.TakingOff or JetPhase.Landing) _attackSetHeld = false;
         _phase = phase;
         _path.Clear();
         _pathIndex = 0;
@@ -500,7 +510,6 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             SetFlightFrameSpeed(world.Time, Fixed.Zero);
             return SimulationTiming.SleepNone;
         }
-        UpdateAttackLocomotor(world);
         UpdateAttackersMiss(world);
         // The airfield states are the reference's state machine, which steps once per logic frame: a state change costs a frame, and what a state moves (taxi, turn, take-off run,
         // landing) is the 30 Hz step, decided once per frame and flown in shares per tick. Between two decisions only the rest of the decided frame is flown.
@@ -565,6 +574,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 break;
         }
 
+        // After the states, before the movement: JetAIUpdate::update chooses the set after its idle logic and before AIUpdateInterface::update moves the aircraft.
+        UpdateAttackLocomotor(world);
         if (_allowAir && _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield) ControlHeight(world);
         // At 30 Hz a frame is a tick: there is nothing to spread and the step is not measured.
         var step = world.Time.TicksPerOriginalFrame > 1
@@ -610,14 +621,25 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         return SimulationTiming.SleepNone;
     }
 
+    /// <summary>
+    /// <c>JetAIUpdate::update</c>: "if (jet->testStatus(OBJECT_STATUS_IS_ATTACKING))" the attack set holds until <c>AttackLocomotorPersistTime</c> after it, and while it holds the update
+    /// chooses <c>AttackLocomotorType</c> (on the ground <c>chooseLocomotorSet</c> takes the taxi set instead); once it ran out the update chooses the return set if the aircraft returns for
+    /// ammunition, and otherwise chooses nothing, so the attack set stays (#453: an Aurora flies its whole attack run and what follows an aborted attack supersonic, until it lands). Asked where
+    /// the states decide a logic frame of the original, after them, as the original's update chooses the set after its idle logic.
+    /// </summary>
     private void UpdateAttackLocomotor(IWorldServices world)
     {
         if (data.AttackLocomotor == "SET_NORMAL") return;
         var now = world.Tick;
-        // Own minimum (the reference has none): the attack set lasts at least one frame of the original, because 0 means "not attacking" here.
-        if (Entity.LastFireTick == now) _attackExpireTick = now + world.Time.AtLeastOneFrame(data.AttackLocomotorPersistTicks);
+        // At least a frame, because 0 means "not attacking" here; a persist time of 0 ends with the next frame as in the original.
+        if (IsAttacking) _attackExpireTick = now + world.Time.AtLeastOneFrame(data.AttackLocomotorPersistTicks);
         else if (_attackExpireTick != 0 && now >= _attackExpireTick) _attackExpireTick = 0;
+        if (_attackExpireTick != 0) _attackSetHeld = _allowAir;
+        else if (_useReturnLocomotor) _attackSetHeld = false;
     }
+
+    /// <summary><c>OBJECT_STATUS_IS_ATTACKING</c>: the aircraft has a victim or attacks a place.</summary>
+    private bool IsAttacking => Entity.Acquisition is { Victim.IsValid: true } || Entity.AttackPlace is not null;
 
     /// <summary>
     /// <c>JetAIUpdate::update</c>: "if (jet->testStatus(OBJECT_STATUS_IS_ATTACKING))" the attackers miss until <c>AttackersMissPersistTime</c> after it, else the time runs out. Asked once per logic
@@ -626,7 +648,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private void UpdateAttackersMiss(IWorldServices world)
     {
         if (data.AttackersMissPersistTicks == 0 || !world.Time.BeginsFrameOf(Entity, world.Tick)) return;
-        if (Entity.Acquisition is { Victim.IsValid: true } || Entity.AttackPlace is not null) _attackersMissExpireTick = world.Tick + data.AttackersMissPersistTicks;
+        if (IsAttacking) _attackersMissExpireTick = world.Tick + data.AttackersMissPersistTicks;
         else if (_attackersMissExpireTick != 0 && world.Tick >= _attackersMissExpireTick) _attackersMissExpireTick = 0;
     }
 
@@ -1083,6 +1105,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 Entity.Y = spot.Y;
                 Entity.Z = spot.Z;
                 _allowAir = false;
+                _attackSetHeld = false;
                 Enter(JetPhase.ReloadAmmo);
                 BeginReload(world);
             }
@@ -1130,6 +1153,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         SetFlightFrameSpeed(world.Time, Fixed.Zero);
         Entity.Z = ground;
         _allowAir = false;
+        _attackSetHeld = false;
         _useReturnLocomotor = false;
         parking.ReleaseRunway(world, Entity.Id);
         var info = _leg;
@@ -1284,6 +1308,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         writer.Int("returnTick", _returnTick);
         writer.Bool("returnLoco", _useReturnLocomotor);
         writer.Int("attackExpire", _attackExpireTick);
+        if (_attackSetHeld) writer.Bool("attackSetHeld", true);
         if (_attackersMissExpireTick != 0) writer.Int("attackersMissExpire", _attackersMissExpireTick);
         writer.Int("checkAirfield", _checkAirfieldTick);
         writer.Fixed("verticalSpeed", _verticalSpeed);
@@ -1358,6 +1383,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _returnTick = reader.Int("returnTick");
         _useReturnLocomotor = reader.Bool("returnLoco");
         _attackExpireTick = reader.Int("attackExpire");
+        _attackSetHeld = reader.Has("attackSetHeld") && reader.Bool("attackSetHeld");
         _attackersMissExpireTick = reader.Has("attackersMissExpire") ? reader.Int("attackersMissExpire") : 0;
         _checkAirfieldTick = reader.Int("checkAirfield");
         _verticalSpeed = reader.Fixed("verticalSpeed");
