@@ -3,8 +3,9 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
-/// <c>Object::attemptHealingFromSoleBenefactor</c>, the non-stacking heal of the healing auras: an object takes it from one healer at a time - the one that healed it last, until
-/// that one has not renewed its claim for the claim's duration. Another healer's offer in the meantime heals nothing.
+/// <c>Object::attemptHealingFromSoleBenefactor</c>, the non-stacking heal: the healing auras with a radius (<c>AutoHealBehavior</c>), the propaganda towers and dozer repair share the
+/// one claim of the object they heal. An object takes the heal from one healer at a time - the one that healed it last, until that one has not renewed its claim for the claim's
+/// duration. Another healer's offer in the meantime heals nothing.
 /// </summary>
 public static class SoleHealingBenefactor
 {

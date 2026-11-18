@@ -40,9 +40,10 @@ public sealed record PropagandaTowerData(Fixed Radius, long ScanDelayTicks, Fixe
 /// <c>PropagandaTowerBehavior.cpp</c>: every <c>DelayBetweenUpdates</c> frames the tower scans for its allies within <c>Radius</c> (centres on the ground plane; living, not
 /// structures, not inside a container; itself only with <c>AffectsSelf</c>); every tick it then gives each of those that count for the score (<c>SCORE</c>, <c>SCORE_CREATE</c>,
 /// <c>SCORE_DESTROY</c> or <c>MP_COUNT_FOR_VICTORY</c>) the <c>ENTHUSIASTIC</c> weapon bonus (when it has a weapon that does damage; with the player's <c>UpgradeRequired</c> also
-/// <c>SUBLIMINAL</c>) and heals it by the (upgraded) rate of its maximum health per second. Healing does not stack: an object takes healing from one tower only, the one that
-/// healed it last, until that tower has not healed it for a scan delay (<c>attemptHealingFromSoleBenefactor</c>; a tower that is gone releases its claims at once instead of letting
-/// them run out). Objects that leave the area, and everything when the tower dies, is removed, is sold, is captured by nobody (neutral), or sits in a container that is itself contained
+/// <c>SUBLIMINAL</c>) and heals it by the (upgraded) rate of its maximum health per second. Healing does not stack: the heal goes through the object's one claim
+/// (<c>Object::attemptHealingFromSoleBenefactor</c>, <see cref="SoleHealingBenefactor"/>), which it shares with the healing auras and dozer repair - the object takes healing from the
+/// healer that healed it last, tower or not, until that one has not healed it for its claim's duration (a scan delay for a tower); a tower that is gone or lets go leaves its claims
+/// to run out. Objects that leave the area, and everything when the tower dies, is removed, is sold, is captured by nobody (neutral), or sits in a container that is itself contained
 /// (an Overlord inside a Helix), lose both bonuses — also when another tower still covers them, as in the reference. A tower under construction does nothing; a tower that is
 /// carried (the Overlord's, the Helix's) does not scan when it is a vehicle itself (the Emperor) or when its carrier is carried. A tower disabled in any way but held lets go of everybody. The pulse FX
 /// have no counterpart.
@@ -64,8 +65,6 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
     private long _nextWake = -1;
     private long _lastScan;
     private readonly List<EntityId> _inside = [];
-    private readonly List<(EntityId Target, long Expiry)> _claims = [];
-    private readonly List<PropagandaTowerBehavior> _others = [];
 
     public override string ModuleName => "PropagandaTowerBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -111,12 +110,6 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
         }
 
         var upgraded = HasUpgrade(world);
-        _others.Clear();
-        if (_inside.Count > 0)
-            foreach (var candidate in world.Entities)
-                if (candidate.Id != Entity.Id)
-                    foreach (var module in candidate.ModuleArray)
-                        if (module is PropagandaTowerBehavior tower && !ReferenceEquals(tower, this)) _others.Add(tower);
         for (var index = 0; index < _inside.Count;)
         {
             var target = world.FindEntity(_inside[index]);
@@ -127,7 +120,6 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             }
             else _inside.RemoveAt(index);
         }
-        _claims.RemoveAll(claim => world.Tick > claim.Expiry);
         return SimulationTiming.SleepNone;
     }
 
@@ -184,30 +176,8 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
         // frame), so above 30 Hz the tower heals the slice of the original in the first tick of each of its frames (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §4).
         if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
         var amount = SimulationRate.Original.Time.PerSecondToPerTick(upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) * body.MaxHealth;
-        // Healing does not stack: another tower that healed this object recently keeps it.
-        foreach (var other in _others)
-            if (other.HoldsClaim(target.Id, world.Tick)) return;
-        SetClaim(target.Id, world.Tick + data.ScanDelayTicks);
-        world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
-    }
-
-    private bool HoldsClaim(EntityId target, long now)
-    {
-        foreach (var (id, expiry) in _claims)
-            if (id == target) return now <= expiry;
-        return false;
-    }
-
-    private void SetClaim(EntityId target, long expiry)
-    {
-        for (var index = 0; index < _claims.Count; index++)
-            if (_claims[index].Target == target)
-            {
-                _claims[index] = (target, expiry);
-                return;
-            }
-        var position = _claims.FindIndex(claim => claim.Target.Value > target.Value);
-        _claims.Insert(position < 0 ? _claims.Count : position, (target, expiry));
+        // "the non-stacking way": another healer - a tower, an aura, a dozer - that holds the object's claim keeps it.
+        SoleHealingBenefactor.AttemptHealing(world, target, Entity, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false), world.Tick, data.ScanDelayTicks);
     }
 
     /// <summary><c>Object::hasAnyDamageWeapon</c>: some slot of the target's active weapon set deals damage.</summary>
@@ -228,7 +198,6 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
         foreach (var id in _inside)
             if (world.FindEntity(id) is { } target) Take(world, target);
         _inside.Clear();
-        _claims.Clear();
     }
 
     public void OnDie(IWorldServices world, in DamageInfo info) => RemoveAllInfluence(world);
@@ -247,15 +216,6 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             writer.EndObject();
         }
         writer.EndArray();
-        writer.BeginArray("claims");
-        foreach (var (target, expiry) in _claims)
-        {
-            writer.BeginObject(null);
-            writer.UInt("id", target.Value);
-            writer.Int("expiry", expiry);
-            writer.EndObject();
-        }
-        writer.EndArray();
     }
 
     public override void Load(IStateReader reader)
@@ -264,8 +224,6 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
         _lastScan = reader.Int("lastScan");
         _inside.Clear();
         foreach (var entry in reader.Array("inside")) _inside.Add(new EntityId(checked((uint)entry.UInt("id"))));
-        _claims.Clear();
-        foreach (var entry in reader.Array("claims")) _claims.Add((new EntityId(checked((uint)entry.UInt("id"))), entry.Int("expiry")));
     }
 }
 
