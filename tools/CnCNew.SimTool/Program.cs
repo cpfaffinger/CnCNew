@@ -502,6 +502,8 @@ static int AiMatch(string directory, string[] args)
             var structures = own.Count(entity => entity.Template.IsKindOf("STRUCTURE"));
             var harvesters = own.Count(entity => entity.Template.IsKindOf("HARVESTER"));
             var builders = own.Count(entity => entity.Template.IsKindOf("DOZER"));
+            var advanced = own.Count(entity => entity.Template.IsKindOf("FS_ADVANCED_TECH") && !entity.HasStatus(ObjectStatusBits.UnderConstruction));
+            var advancedSites = own.Count(entity => entity.Template.IsKindOf("FS_ADVANCED_TECH")) - advanced;
             var army = own.Count - structures - harvesters - builders;
             var stats = session.Ais[index]?.Stats;
             // How far the nearest stocked warehouse is from the player's nearest supply center (cash generators): the length of a gathering trip.
@@ -514,7 +516,7 @@ static int AiMatch(string directory, string[] args)
                     var distance = (long)Math.Sqrt((double)(dx * dx + dy * dy));
                     if (trip < 0 || distance < trip) trip = distance;
                 }
-            line.Append($" | {player.Faction?.Replace("Faction", string.Empty)}: ${(long)world.MoneyOf(player.Id).Floor(),6} bld {structures,2} army {army,3} harv {harvesters,2} doz {builders} trip {trip,4} waves {stats?.Waves ?? 0} prod {stats?.Productions ?? 0}");
+            line.Append($" | {player.Faction?.Replace("Faction", string.Empty)}: ${(long)world.MoneyOf(player.Id).Floor(),6} bld {structures,2} army {army,3} harv {harvesters,2} doz {builders} trip {trip,4} waves {stats?.Waves ?? 0} prod {stats?.Productions ?? 0} adv {advanced}+{advancedSites}");
         }
         Console.WriteLine(line.ToString());
         if (!args.Contains("--trace-army")) return;
