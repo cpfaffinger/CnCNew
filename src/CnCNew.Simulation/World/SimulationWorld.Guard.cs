@@ -722,7 +722,7 @@ public sealed partial class SimulationWorld
             return true;
         }
         AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
-        if (entity.ContainedBy.IsValid || entity.Template.Locomotor is null) return false;
+        if (entity.ContainedBy.IsValid || entity.Template.Locomotor is null || LetsAircraftGo(entity, victim)) return false;
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
             var (victimX, victimY, _) = victim.FrameEnd(tick);

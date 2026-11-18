@@ -628,6 +628,7 @@ public sealed partial class SimulationWorld
         AttackCycleOutOfRange(entity, ref state.Cycle, turrets: !inRange);
         if (squish) AutoFire(entity, victim, turretOnly);
         if (turretOnly || !MayChase(entity)) return squish;
+        if (LetsAircraftGo(entity, victim)) return false;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
         // The chase is decided after the updates of the tick: at 30 Hz both objects have taken their whole step by then. Above 30 Hz they are read where the frame they have
         // begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
@@ -758,6 +759,15 @@ public sealed partial class SimulationWorld
     /// mobile, <c>Object::isMobile</c>; its attack state fails out of range, <c>AIAttackAimAtTargetState::update</c>).
     /// </summary>
     private bool MayChase(Entity entity) => entity.Template.Locomotor is not null && IsComputerPlayer(entity.Owner) && !entity.ContainedBy.IsValid;
+
+    /// <summary>
+    /// <c>AIAttackApproachTargetState::onEnter</c> and <c>updateInternal</c>, "Computer player. Don't chase aircraft, unless we're hunting": the approach of a computer player's unit
+    /// fails out of range when its victim is an aircraft in the air (<c>KINDOF_AIRCRAFT</c>, <c>isAirborneTarget</c>, read where the victim's frame ends) and the unit does not hunt
+    /// (<c>AI_HUNT</c>, <see cref="IAcquisitionAdvisor.IsHunting"/>); the attack machine then exits with failure and the unit is idle again (#460). This holds for an aircraft as the
+    /// attacker too, and for a guard's attack (its state is <c>AI_GUARD</c>; the retaliation's exception in <c>onEnter</c> is undone by <c>updateInternal</c> one frame later).
+    /// </summary>
+    private bool LetsAircraftGo(Entity entity, Entity victim)
+        => IsComputerPlayer(entity.Owner) && victim.Template.IsKindOf("AIRCRAFT") && IsAirborneTargetAtFrameEnd(victim) && AcquisitionAdvisor?.IsHunting(entity) != true;
 
     /// <summary>
     /// <c>AI::getAdjustedVisionRangeForObject(obj, OWNERTYPE | MOOD)</c> for a unit that may walk to its victim: the vision range times the guard-outer factor, times the mood factor of a

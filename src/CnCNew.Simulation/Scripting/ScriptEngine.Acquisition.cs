@@ -23,4 +23,7 @@ public sealed partial class ScriptEngine : IAcquisitionAdvisor
         // AIUpdateInterface::getMoodMatrixValue: an unknown mood counts as normal.
         return value is >= (int)Attitude.Sleep and <= (int)Attitude.Aggressive ? (Attitude)value : Attitude.Normal;
     }
+
+    /// <summary><c>aiHunt</c>: <c>TEAM_HUNT</c>, <c>NAMED_HUNT</c>, a player's hunt and a weapon button's hunt keep the unit hunting until its next order.</summary>
+    public bool IsHunting(Entity entity) => _followers.TryGetValue(entity.Id.Value, out var follower) && follower.Path == HuntMode;
 }

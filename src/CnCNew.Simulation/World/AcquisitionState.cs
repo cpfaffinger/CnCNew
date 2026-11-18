@@ -289,6 +289,9 @@ public interface IAcquisitionAdvisor
 
     /// <summary><c>AIAttackFireWeaponState::onEnter</c>: the unit fires at a victim of its own choice; a team that attacks together and has no victim yet takes this one.</summary>
     void NoteFiring(Entity attacker, Entity victim) { }
+
+    /// <summary>The unit hunts (<c>AIUpdateInterface::getCurrentStateID() == AI_HUNT</c>): a script's or a command button's hunt. Only a hunting computer unit chases an aircraft in the air (#460).</summary>
+    bool IsHunting(Entity entity) => false;
 }
 
 /// <summary><c>AttitudeType</c> (AI.h), same values as the reference and as the <c>teamAggressiveness</c> of a map's team.</summary>
