@@ -113,8 +113,11 @@ public sealed record WeaponInfo(
     /// <summary><c>MissileCallsOnDie</c> (<c>m_dieOnDetonate</c>): a detonating missile kills itself with <c>DEATH_DETONATED</c> so its die modules run.</summary>
     public bool DieOnDetonate { get; init; }
 
-    /// <summary><c>WEAPON_ANTI_GROUND</c> of <c>m_antiMask</c> (<c>AntiGround = Yes</c>); read by <c>PointDefenseLaserUpdate</c> for targets on the ground.</summary>
-    public bool AntiGround { get; init; }
+    /// <summary>
+    /// <c>WEAPON_ANTI_GROUND</c> of <c>m_antiMask</c>; read by <c>PointDefenseLaserUpdate</c> for targets that are not airborne. The bit is set unless the weapon says <c>AntiGround = No</c>
+    /// (the constructor's default): the lasers of the Paladin and the Avenger name no <c>AntiGround</c> and so may shoot at a missile whose locomotor never makes it an airborne target.
+    /// </summary>
+    public bool AntiGround => (AntiMask & AntiMaskGround) != 0;
 
     /// <summary><c>AutoReloadsClip = RETURN_TO_BASE</c> (<c>RETURN_TO_BASE_TO_RELOAD</c>): an emptied clip refills only when the aircraft reloads at an airfield (<c>JetAIUpdate</c>), never by time.</summary>
     public bool ReloadsAtBase { get; init; }
@@ -443,7 +446,6 @@ public sealed class WeaponCatalog
                 FireOcl = Name("FireOCL"),
                 DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),
                 DieOnDetonate = Flag("MissileCallsOnDie"),
-                AntiGround = Flag("AntiGround"),
                 ReloadsAtBase = Field("AutoReloadsClip")?.Value.Value is EnumValue { Name: var reloadName } && reloadName.Equals("RETURN_TO_BASE", StringComparison.OrdinalIgnoreCase),
                 RequestAssistRange = Length("RequestAssistRange"),
                 AntiMask = AntiMaskOf(),
