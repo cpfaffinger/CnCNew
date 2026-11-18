@@ -1266,12 +1266,22 @@ public sealed partial class SimulationWorld : IWorldServices
             var byPlayer = a.Player.Value.CompareTo(b.Player.Value);
             return byPlayer != 0 ? byPlayer : a.Sequence.CompareTo(b.Sequence);
         });
-        for (var index = 0; index < list.Count; index++)
+        _commandGoals.Clear();
+        _executingCommands = true;
+        try
         {
-            var command = list[index];
-            _pendingCommandCount--;
-            _commandSum = unchecked(_commandSum - HashCommand(command));
-            Execute(command);
+            for (var index = 0; index < list.Count; index++)
+            {
+                var command = list[index];
+                _pendingCommandCount--;
+                _commandSum = unchecked(_commandSum - HashCommand(command));
+                Execute(command);
+            }
+        }
+        finally
+        {
+            _executingCommands = false;
+            _commandGoals.Clear();
         }
     }
 

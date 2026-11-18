@@ -6,6 +6,10 @@ namespace CnCNew.Simulation.World;
 
 public sealed partial class SimulationWorld
 {
+    // The command phase of the current tick, and the aircraft that took a goal in it (#449). Not state: both are empty between ticks.
+    private bool _executingCommands;
+    private readonly HashSet<Ids.EntityId> _commandGoals = [];
+
     /// <summary><c>AIUpdateInterface::isAircraftThatAdjustsDestination</c>: a flyer whose locomotor hovers or has wings ("For now, we are only doing HOVER, and WINGS").</summary>
     internal static bool AdjustsAsAircraft(Entity unit)
         => unit.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) != 0 && (locomotor.IsHover || locomotor.IsWings);
@@ -21,6 +25,7 @@ public sealed partial class SimulationWorld
         Search(mover, frame, ref x, ref y);
         // updateAircraftGoal: the aircraft holds the cell it was given from now on.
         mover.Goal = AircraftGoal.Take(mover.Goal, frame, x, y);
+        if (_executingCommands) _commandGoals.Add(mover.Id);
         MarkDirty(mover);
     }
 
@@ -58,7 +63,10 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>checkDestination</c> for an aircraft that adjusts its destination: every cell of its goal box is on the map and no other such aircraft holds it as its goal
-    /// (<c>isAircraftGoal</c>, <c>getGoalAircraft</c>); then <c>adjustCoordToCell</c>. Another aircraft's goal is the one it held before <paramref name="frame"/> (<see cref="AircraftGoal"/>).
+    /// (<c>isAircraftGoal</c>, <c>getGoalAircraft</c>); then <c>adjustCoordToCell</c>. Another aircraft's goal is the one it held before <paramref name="frame"/> (<see cref="AircraftGoal"/>),
+    /// except one taken by an order of this tick's command phase, which every later order of the phase sees: the original's <c>aiMoveToPosition</c> enters
+    /// <c>AIInternalMoveToState</c> at once, so the members of one group order and the orders of one bundle take their goals one after another and see each other's (#449).
+    /// The command phase is one tick at every rate.
     /// </summary>
     private bool TryAircraftCell(Entity mover, long frame, int i, int j, int radius, bool center, ref Fixed x, ref Fixed y)
     {
@@ -67,7 +75,8 @@ public sealed partial class SimulationWorld
         foreach (var other in _mobiles)
         {
             if (other.Id == mover.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid || !AdjustsAsAircraft(other) || other.Goal is null) continue;
-            if (other.Goal?.HeldBefore(frame) is not { } held) continue;
+            var seen = _executingCommands && _commandGoals.Contains(other.Id) ? (other.Goal.X, other.Goal.Y) : other.Goal.HeldBefore(frame);
+            if (seen is not { } held) continue;
             var (goalX, goalY) = held;
             var (otherRadius, otherCenter) = GoalCellRadius(other);
             var (gi, gj) = GoalCellOf(goalX, goalY, otherCenter);

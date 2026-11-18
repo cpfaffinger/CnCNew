@@ -1020,6 +1020,7 @@ if (contentDirectory is not null) run.Test("#376, #378 real data: the Spectre gu
 if (contentDirectory is not null) run.Test("Real data: every airfield takes as many aircraft as it has spaces (#347)", () => Tests.RealAirfieldsTakeAsManyAircraftAsTheyHaveSpaces(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the nuclear missile needs a propaganda center (#346)", () => Tests.RealNuclearMissileNeedsAPropagandaCenter(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: helicopters take goals of their own at the rally point and at one ordered point", () => Tests.RealHelicoptersTakeGoalsOfTheirOwn(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#449): the helicopters of one group order hold places of their own, and a missile volley hurts only the one it is fired at, at every rate", () => Tests.RealHelicopterGroupTakesGoalsOfItsOwn(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a production queue holds the original's 9 entries and a refused order costs nothing", () => Tests.RealProductionQueueHasTheOriginalsLimit(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter and the fuel air bomb explode at their target and destroy what stands there", () => Tests.RealDaisyCutterAndFuelAirBomb(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the Daisy Cutter dropped on a building still blows up (its gas is immobile and meets no building)", () => Tests.RealDaisyCutterOnABuilding(contentDirectory));
