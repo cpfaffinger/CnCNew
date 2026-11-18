@@ -21,8 +21,8 @@ static partial class Tests
     /// one. Every Battle Bus is an army unit to the AI (a transport made with riders that arm it, the Listening Outpost, keeps its roles). In <see cref="BusMap"/> with seed
     /// <see cref="BusSeed"/> and <see cref="BusMoney"/> credits each (a bus has no value of its own in the exchange value, so it comes only with the composition's variety share and
     /// a richer player draws more often), a GLA player that is given a Palace beside its start position at tick 0 queues and owns a Battle Bus within <see cref="BusMinutes"/>
-    /// game minutes, at 30, 60 and 120 Hz - and at 60 Hz the same match without the Palace never plans one, since its prerequisites (<c>GLAArmsDealer</c>, <c>GLAPalace</c>)
-    /// are not met.
+    /// game minutes, at 30, 60 and 120 Hz - and at 60 Hz the same match without the given Palace plans none while it has no finished Palace of its own, since its prerequisites
+    /// (<c>GLAArmsDealer</c>, <c>GLAPalace</c>) are not met (the AI raises its own Palace after five game minutes, #454).
     /// </summary>
     public static void RealSkirmishAiBuildsBattleBuses(string directory)
     {
@@ -51,19 +51,26 @@ static partial class Tests
             var gla = session.Players[0].Id;
             if (palace) GivePalace(world, catalog, gla, (terrain.StartPositions[0].X, terrain.StartPositions[0].Y), label);
             var owned = 0L;
+            var orderedWithoutPalace = 0;
             var end = rate.Time.OriginalFrames(30 * 60 * BusMinutes);
             while (world.Tick < end && !session.IsOver && owned == 0)
             {
                 session.Step();
+                var hasPalace = false;
                 foreach (var entity in world.Entities)
-                    if (entity.Owner == gla && !entity.EffectivelyDead && entity.Template == bus) { owned = world.Tick; break; }
+                {
+                    if (entity.Owner != gla || entity.EffectivelyDead) continue;
+                    if (entity.Template == bus && owned == 0) owned = world.Tick;
+                    if (entity.Template.Name == "GLAPalace" && !entity.HasStatus(ObjectStatusBits.UnderConstruction)) hasPalace = true;
+                }
+                if (!palace && !hasPalace)
+                    orderedWithoutPalace = ai.Stats.ArmyProduction.Where(pair => pair.Key.Contains(":GLAVehicleBattleBus", StringComparison.Ordinal)).Sum(pair => pair.Value);
             }
-            var ordered = ai.Stats.ArmyProduction.Where(pair => pair.Key.Contains(":GLAVehicleBattleBus", StringComparison.Ordinal)).Sum(pair => pair.Value);
             var queued = ai.Stats.ArmyProduction.Where(pair => pair.Key.EndsWith("\tqueued:GLAVehicleBattleBus", StringComparison.Ordinal)).Sum(pair => pair.Value);
             if (palace)
                 Check.That(queued > 0 && owned > 0, $"{label}: the GLA computer player queued {queued} Battle Buses and owned {(owned > 0 ? "one at tick " + owned : "none")} within {BusMinutes} game minutes.");
             else
-                Check.That(ordered == 0 && owned == 0 && world.Tick >= end, $"{label}: the GLA computer player planned {ordered} Battle Buses and owned {(owned > 0 ? "one" : "none")} in {world.Tick} of {end} ticks.");
+                Check.That(orderedWithoutPalace == 0 && (owned > 0 || world.Tick >= end), $"{label}: the GLA computer player planned {orderedWithoutPalace} Battle Buses without a finished Palace in {world.Tick} of {end} ticks.");
         }
     }
 

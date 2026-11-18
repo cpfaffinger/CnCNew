@@ -151,6 +151,7 @@ public sealed partial class SkirmishAi
         Warehouse = 1024,
         Tunnel = 2048,
         Transport = 4096,
+        AdvancedTech = 8192,
     }
 
     private enum PlanState : byte { Impossible, Waiting, Ready }
@@ -438,6 +439,7 @@ public sealed partial class SkirmishAi
             if (template.IsKindOf("FS_WARFACTORY")) role |= Role.Factory;
             if (template.IsKindOf("COMMANDCENTER")) role |= Role.CommandCenter;
             if (template.IsKindOf("FS_BASE_DEFENSE") && template.DefaultWeapon >= 0) role |= Role.Defense;
+            if (template.IsKindOf("FS_ADVANCED_TECH")) role |= Role.AdvancedTech;
         }
         else if ((role & (Role.Builder | Role.Carrier)) == 0 && FightingSet(template)?.Primary >= 0 && template.Locomotor is not null && CostOf(template) > Fixed.Zero
                  && (template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE")))
@@ -807,7 +809,30 @@ public sealed partial class SkirmishAi
         if (CountAlive(Role.Barracks, true) < 2 && _budget > Fixed.FromInt(_plan.SecondBarracksBudget)) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 2 && _budget > Fixed.FromInt(1500)) goals.Add(Role.Factory);
         if (CountAlive(Role.Defense, true) < Math.Min(_plan.MaxDefenses, _plan.DefenseBase + army / _plan.DefensesPerArmy)) goals.Add(Role.Defense);
+        if (WantsAdvancedTech(army)) goals.Add(Role.AdvancedTech);
         return [..goals];
+    }
+
+    /// <summary>Game time (in frames of the original) before the advanced technology building is planned: the skirmish scripts' <c>_ESCALATION</c> counter at 30, one step every ten seconds.</summary>
+    private const long AdvancedTechAfterFrames = 9000;
+
+    /// <summary>
+    /// The GLA Palace (#454). The original's skirmish scripts raise it (<c>GLA Palace - N</c>, <c>- H</c>: <c>SKIRMISH_BUILD_BUILDING</c> of the side's Palace) once the player's Arms
+    /// Dealer stands and the <c>_ESCALATION</c> counter has reached 30 - five game minutes at one step every ten seconds; the build list names it with <c>AutomaticallyBuild = No</c>, so only
+    /// that script builds it. Without it the Battle Bus, the Scud launcher, the bomb truck, the rocket buggy and the side's upgrades of the Palace stay locked. One is planned (a site
+    /// counts) once a war factory stands and the time has passed, as the last goal of the base. While it cannot be paid the army keeps its price back (the reserve of
+    /// <see cref="BuildStructures"/>), as the original's player saves for a structure its script has ordered - but only while the army is as strong as an attack wave
+    /// (<c>_threshold</c>): a player whose army has melted away rebuilds it first, or saving for the Palace leaves the base without defenders (measured: China against GLA on
+    /// Alpine Assault, the GLA army fell from 14 units to 1 while it saved). A lost Palace is planned again. The advanced technology buildings of the other sides (Strategy Center,
+    /// Propaganda Center) are left out: this AI does not plan them.
+    /// </summary>
+    private bool WantsAdvancedTech(int army)
+    {
+        if (!_side.StartsWith("GLA", StringComparison.OrdinalIgnoreCase) || _tick < _time.OriginalFrames(AdvancedTechAfterFrames)) return false;
+        if (CountAlive(Role.AdvancedTech, true) > 0 || CountAlive(Role.Factory, false) == 0) return false;
+        if (army >= _threshold) return true;
+        var candidates = StructureCandidates(Role.AdvancedTech);
+        return candidates.Length > 0 && _budget > candidates[0].BuildCost;
     }
 
     private ImmutableArray<ObjectTemplate> StructureCandidates(Role role)
