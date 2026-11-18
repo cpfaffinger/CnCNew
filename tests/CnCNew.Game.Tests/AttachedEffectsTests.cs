@@ -40,6 +40,7 @@ internal static class AttachedEffectsTests
         harness.Run("The nuclear missile is drawn nose first with its exhaust and the delivery decal, falls in sight, and its blast makes every system of FX_Nuke", () => NuclearMissile(data));
         harness.Run("A particle of the nuclear fallout grows, glows and fades as RadiationFieldLarge's keys say", () => FalloutParticle(data));
         harness.Run("A moving truck raises dust, a standing one none", () => TreadDebris(data));
+        harness.Run("#448: a Comanche and a Raptor with the countermeasures upgrade launch flares under missile fire, and every flare is drawn with its particle systems", () => CountermeasureFlares(data));
         harness.Run("The Spectre's gattling strafes the ground with smoke while the gunship is seen", () => SpectreStrafe(data));
         harness.Run("A muzzle on a turret turns with the turret", () => TurretMuzzle(data));
         harness.Run("#369: a broken hydrant sprays water - the model EXHydrant is a W3D emitter that runs at the WaterSpray object for its life", () => HydrantSpray(data));
@@ -511,6 +512,52 @@ internal static class AttachedEffectsTests
         var stats = scene.Attached.Stats;
         Console.WriteLine($"       missile: {stats}");
         TestHarness.Assert(stats.ExhaustSystems > 0, $"the missiles carry an exhaust ({stats.ExhaustSystems})");
+    }
+
+    /// <summary>
+    /// #448: <c>CountermeasureFlare</c> has no model (<c>Model = None</c>); what is seen of it are the two systems of its state's <c>ParticleSysBone</c>, <c>CountermeasureFlareParticleSys</c> and
+    /// <c>CounterMeasureSmoke</c>, at the object. A Comanche and a Raptor with the countermeasures upgrade are shot at by Tank Hunters until a missile is taken by a flare; every flare
+    /// that leaves them is a drawable of the frame and carries both systems, whose particles stand where the flare is.
+    /// </summary>
+    private static void CountermeasureFlares(GameData data)
+    {
+        foreach (var (aircraft, faction) in new[] { ("AmericaVehicleComanche", "FactionAmerica"), ("AirF_AmericaJetRaptor", "FactionAmericaAirForceGeneral") })
+        {
+            var scenario = new DemoScenario("attached-flares", "attached-flares", "attached-flares", 900,
+                [new ScenarioUnit("air", aircraft, 1, -200f, 0f), new ScenarioUnit("h1", "ChinaInfantryTankHunter", 2, 100f, 0f), new ScenarioUnit("h2", "ChinaInfantryTankHunter", 2, 100f, 20f),
+                 new ScenarioUnit("h3", "ChinaInfantryTankHunter", 2, 100f, -20f), new ScenarioUnit("h4", "ChinaInfantryTankHunter", 2, 120f, 10f)],
+                [new ScenarioOrder(10, "air", ScenarioOrderKind.MoveTo, X: 60f, Y: 0f), new ScenarioOrder(15, "h1", ScenarioOrderKind.Attack, "air"), new ScenarioOrder(15, "h2", ScenarioOrderKind.Attack, "air"),
+                 new ScenarioOrder(15, "h3", ScenarioOrderKind.Attack, "air"), new ScenarioOrder(15, "h4", ScenarioOrderKind.Attack, "air")], 0f, 0f)
+            { HumanFaction = faction, OpponentFaction = "FactionChina", Upgrades = ["Upgrade_AmericaCountermeasures"] };
+            var scene = LiveScenario.Create(data, scenario, Viewport);
+            var flares = new HashSet<uint>();
+            var drawn = new HashSet<uint>();
+            var systems = new Dictionary<int, string>();
+            var particlesAtFlares = 0;
+            Run(scene, () =>
+            {
+                foreach (var entity in scene.World.Entities)
+                {
+                    if (entity.Template.Name != "CountermeasureFlare") continue;
+                    flares.Add(entity.Id.Value);
+                    foreach (var id in scene.Fx.Particles.EmittingAttachedTo(entity.Id)) systems.TryAdd(id, scene.Fx.Particles.TemplateNameOf(id) ?? "");
+                }
+                foreach (var drawable in scene.ObjectFrame.Drawables)
+                    if (flares.Contains(drawable.Entity.Value)) drawn.Add(drawable.Entity.Value);
+                if (systems.Count == 0) return;
+                var near = scene.World.Entities.Where(entity => entity.Template.Name == "CountermeasureFlare")
+                    .Select(entity => new Vector3((float)entity.X.ToDecimal(), (float)entity.Y.ToDecimal(), (float)entity.Z.ToDecimal())).ToList();
+                foreach (var particle in scene.Fx.Particles.Capture().Particles)
+                    if (systems.ContainsKey(particle.SystemId) && near.Any(flare => Vector3.Distance(flare, particle.Position) < 20f)) particlesAtFlares++;
+            });
+            var flareSystems = systems.Values.Count(name => name == "CountermeasureFlareParticleSys");
+            var smokeSystems = systems.Values.Count(name => name == "CounterMeasureSmoke");
+            Console.WriteLine($"       {aircraft}: {flares.Count} flares, {drawn.Count} drawn, {flareSystems} flare and {smokeSystems} smoke systems, {particlesAtFlares} particles at the flares");
+            TestHarness.Assert(flares.Count > 0, $"{aircraft}: flares are launched ({flares.Count})");
+            TestHarness.Assert(drawn.Count == flares.Count && flareSystems == flares.Count && smokeSystems == flares.Count,
+                $"{aircraft}: every flare is drawn with its two systems ({drawn.Count} drawn, {flareSystems} flare and {smokeSystems} smoke systems of {flares.Count})");
+            TestHarness.Assert(particlesAtFlares > 0, $"{aircraft}: the systems' particles stand at the flares ({particlesAtFlares})");
+        }
     }
 
     private static void TreadDebris(GameData data)
