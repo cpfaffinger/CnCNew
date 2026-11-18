@@ -28,13 +28,16 @@ jobs:
     runs-on: [self-hosted, linux, cncnew]   # PowerShell 7 and Git are installed on the runner; setup-dotnet installs the SDK that global.json names
     timeout-minutes: 120
     env:
-      DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}/dotnet   # a runner user cannot write /usr/share/dotnet
       DOTNET_NOLOGO: 'true'
       DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0       # the release notes and the build identity read the history and tags
+
+      - name: Install the SDK into the runner's tool cache
+        shell: bash
+        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"   # a runner user cannot write /usr/share/dotnet
 
       - uses: actions/setup-dotnet@v4
         with:
