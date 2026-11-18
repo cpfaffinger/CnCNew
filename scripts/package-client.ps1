@@ -71,6 +71,7 @@ pwsh -NoLogo -NoProfile -File scripts/licence-report.ps1 -Check -CollectTo (Join
 if ($LASTEXITCODE -ne 0) { Write-Host 'docs/THIRD-PARTY.md is not current (scripts/licence-report.ps1).'; exit 1 }
 $commit = (git rev-parse HEAD).Trim()
 $modified = if (git status --porcelain) { '+modified' } else { '' }
+$productVersion = ([IO.File]::ReadAllText((Join-Path $root 'version.txt'))).Trim()
 $crlf = "`r`n"
 [IO.File]::WriteAllText((Join-Path $target 'Install-CnCNew.cmd'), (@(
     '@echo off',
@@ -90,12 +91,12 @@ $crlf = "`r`n"
     'start "" "%~dp0bin\CnCNew.Client.Stride.exe" --content-dir "%~dp0game\content" %*'
 ) -join $crlf) + $crlf, (New-Object Text.UTF8Encoding($false)))
 [IO.File]::WriteAllText((Join-Path $target 'README-FIRST.txt'), (@(
-    "CnCNew $commit$modified - a new engine for Command & Conquer Generals - Zero Hour.",
+    "CnCNew $productVersion (commit $commit$modified) - a new engine for Command & Conquer Generals - Zero Hour.",
     '',
     'This package holds no file of the game. You need your own copy: the English Steam version of Zero Hour (Steam app 2732960), freshly installed.',
     '',
     '1. Run Install-CnCNew.cmd. It finds the Steam installation, checks every file of it against the one version this package knows, fetches the community patch',
-    '   GeneralsGamePatch from GitHub (36 MB, once, each file checked against its recorded hash) and exports the content into the folder "game" beside this file',
+    '   GeneralsGamePatch from GitHub (about 110 MB, once, each file checked against its recorded hash) and exports the content into the folder "game" beside this file',
     '   (about 3 GB). The Steam installation is only read, never changed.',
     '2. Run Start-CnCNew.cmd.',
     '',
