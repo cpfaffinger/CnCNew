@@ -751,7 +751,7 @@ run.Test("Capture: the capture power as a special power command runs the same st
 run.Test("Capture: snapshots in every stage continue identically, idle objects save nothing new, two runs agree", Tests.StagedCaptureSnapshotAndDeterminism);
 run.Test("#305: a staged ability stops its unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityStopsWhereThe30HzUnitStops);
 run.Test("#305: a staged ability that ends on the way stops its unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityThatEndsOnTheWayStopsWhereThe30HzUnitStops);
-run.Test("#305: a staged ability that prepares stops its chasing unit where the 30 Hz unit stops, at 30, 60 and 120 Hz", Tests.AStagedAbilityThatPreparesStopsItsChaseWhereThe30HzUnitStops);
+run.Test("#305, #441: a staged ability's unit chases nobody while it unpacks and stands where the 30 Hz unit stands, at 30, 60 and 120 Hz", Tests.AStagedAbilityThatPreparesStopsItsChaseWhereThe30HzUnitStops);
 run.Test("#305: a staged ability sees its target taken in its next frame, at 30, 60 and 120 Hz", Tests.AStagedAbilitySeesItsTargetTakenInItsNextFrame);
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
@@ -1031,6 +1031,8 @@ if (contentDirectory is not null) run.Test("Real data (playtest): a wheeled unit
 if (contentDirectory is not null) run.Test("Real data (playtest): five Dozers sent to one place settle around it", () => Tests.RealDozersSentToOnePlaceSettleAroundIt(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (issue 350): tanks run idle infantry over", () => Tests.RealTanksRunIdleInfantryOver(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#370): a tank spares a hijacker and a Tank Hunter that are after it - at 30, 60 and 120 Hz", () => Tests.RealSquishSparesHijackerAndTankHunter(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#441): a Tank Hunter turning to stick its TNT turns at its rate and acquires nothing - at 30, 60 and 120 Hz", () => Tests.RealTankHunterTntFacesAtItsRateAndAcquiresNothing(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#441): a unit its ability turns, unpacks or packs is not idle to the scripts - at 30, 60 and 120 Hz", () => Tests.RealAbilityFacingAndPackingIsNotIdleToScripts(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#373): a crusher spares a hijacker riding hidden in a vehicle", () => Tests.RealCrushSparesAHiddenHijacker(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#373): a hijacker takes the tank before it is squished", () => Tests.RealHijackComesBeforeTheSquish(contentDirectory));
 if (contentDirectory is not null) run.Test("#424 real data: the uranium shell and the AP rocket carry their own weapon bonus to their detonation", () => Tests.RealProjectileCarriesItsOwnWeaponBonus(contentDirectory));

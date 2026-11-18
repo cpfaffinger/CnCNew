@@ -149,13 +149,14 @@ static partial class Tests
     };
 
     /// <summary>
-    /// A computer player's capturer unpacks at a building and chases an enemy that walks by meanwhile (a civilian building: its own enemy would be closer); when its preparation begins it stops (<c>startPreparation</c>'s
-    /// <c>aiIdle</c>) and stands where the 30 Hz capturer stands at the end of every frame, at 30, 60 and 120 Hz (Alpine Assault China against GLA, a Rebel at frame 39,305).
+    /// A computer player's capturer unpacks at a building while an enemy walks by (a civilian building: its own enemy would be closer) and stands where the 30 Hz capturer stands at the end of
+    /// every frame, at 30, 60 and 120 Hz (Alpine Assault China against GLA, a Rebel at frame 39,305). Until #441 it chased the walker while it unpacked and stopped when its preparation began
+    /// (<c>startPreparation</c>'s <c>aiIdle</c>); <c>startUnpacking</c> puts the original's AI into <c>AI_BUSY</c>, whose unit looks for no victim, so it stands throughout now.
     /// </summary>
     public static void AStagedAbilityThatPreparesStopsItsChaseWhereThe30HzUnitStops()
     {
         var reference = new Dictionary<int, List<(Fixed X, Fixed Y)>>();
-        var stoppedWalking = 0;
+        var walkedAtPreparation = 0;
         foreach (var (rate, _) in WorldRates)
             for (var offset = 0; offset <= 3; offset++)
             {
@@ -185,7 +186,7 @@ static partial class Tests
                     stage = ability.Stage;
                     if (world.Time.IsOriginalFrameBoundary(world.Tick)) positions.Add((capturer.X, capturer.Y));
                 }
-                if (rate == SimulationRate.Hz30 && walkingAtPreparation) stoppedWalking++;
+                if (walkingAtPreparation) walkedAtPreparation++;
                 if (!reference.TryGetValue(offset, out var expected))
                 {
                     reference[offset] = positions;
@@ -196,7 +197,7 @@ static partial class Tests
                     $"{rate}, walker {offset} further: the capturer stands where the 30 Hz one stands at the end of every frame (first difference after frame {(first < 0 ? -1 : 41 + first)}: " +
                     $"{(first < 0 ? "-" : $"{positions[first].X.ToDecimal():0.000},{positions[first].Y.ToDecimal():0.000} against {expected[first].X.ToDecimal():0.000},{expected[first].Y.ToDecimal():0.000}")}).");
             }
-        Check.That(stoppedWalking > 0, $"Setup: the capturer chases while it unpacks and walks when its preparation begins ({stoppedWalking} of 4 at 30 Hz).");
+        Check.That(walkedAtPreparation == 0, $"#441: the capturer does not chase the walker while it unpacks ({walkedAtPreparation} of 12 runs walked when the preparation began).");
     }
 
     /// <summary>

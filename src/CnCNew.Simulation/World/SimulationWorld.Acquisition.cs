@@ -80,11 +80,12 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>AIUpdateInterface::isIdle</c> as a script reads it (F-21): the AI's state machine stands in <c>AI_IDLE</c>. An object without an AI is idle. <see cref="AIUpdateInterface.IsIdle"/>
-    /// asks only whether the body has an order, which is what the unit's own look needs; a unit in an attack, on an attack-move or at an ability (<c>AI_BUSY</c>) is in another state.
+    /// asks only whether the body has an order, which is what the unit's own look needs; a unit in an attack, on an attack-move or at an ability (<c>AI_BUSY</c>) is in another state - also
+    /// while its special ability turns it to its target (<c>AI_FACE_OBJECT</c>) or unpacks or packs it (<c>AI_BUSY</c>), which the port does without an order of the AI (#441).
     /// </summary>
     public bool IsAiIdle(Entity entity)
         => AiOf(entity) is not { } ai
-           || (ai.IsIdle && !ai.HidesIdle && entity.Acquisition is not ({ Victim.IsValid: true } or { AttackMove: true }) && !entity.HasStatus(UsingAbilityBit));
+           || (ai.IsIdle && !ai.HidesIdle && entity.Acquisition is not ({ Victim.IsValid: true } or { AttackMove: true }) && !entity.HasStatus(UsingAbilityBit) && !AbilityHoldsAi(entity));
 
     /// <summary>
     /// The condition of <c>InGameUI::addIdleWorker</c> (<c>DozerPrimaryIdleState::update</c>, <c>Player::becomingTeamMember</c>): the object's dozer brain stands in its idle state - the AI is idle
@@ -379,8 +380,12 @@ public sealed partial class SimulationWorld
             }
             else
             {
-                if (attackable && Engage(entity, ai, state, victim!, ModeOf(entity, ai, state), tick)) return;
-                if (ContinueAttack(entity, state, victim) is { } next && Engage(entity, ai, state, next, ModeOf(entity, ai, state), tick)) return;
+                // The ability's aiIdle before it turns or unpacks the unit ends the body's own attack (AIAttackState::onExit); an idle turret keeps its victim (#441).
+                if (ModeOf(entity, ai, state) != AcquireMode.None || !AbilityHoldsAi(entity))
+                {
+                    if (attackable && Engage(entity, ai, state, victim!, ModeOf(entity, ai, state), tick)) return;
+                    if (ContinueAttack(entity, state, victim) is { } next && Engage(entity, ai, state, next, ModeOf(entity, ai, state), tick)) return;
+                }
                 EndEngagement(entity, ai, state);
                 // AIAttackMoveToState::update (forceRetargetThisFrame): on an attack-move the next victim is looked for at once. An idle unit or turret enters its idle state again,
                 // whose look is due two frames later.
@@ -514,7 +519,8 @@ public sealed partial class SimulationWorld
         // "Being in a firing container is an exception to this veto" (getNextMoodTarget asks the container without an id).
         if (entity.HasStatus(StealthedStatus) && (ai.AutoAcquire & AutoAcquire.Stealthed) == 0
             && !(FiringContainerOf(entity)?.Container is { } container && container.IsPassengerAllowedToFire(this, null))) return AcquireMode.None;
-        if (ai.IsIdle) return AcquireMode.Idle;
+        // startFacing (AI_FACE_OBJECT) and startUnpacking/startPacking (AI_BUSY) take the body out of the idle state whose look picks victims; only an idle turret still looks (#441).
+        if (ai.IsIdle && !AbilityHoldsAi(entity)) return AcquireMode.Idle;
         return HasAimingTurret(entity) ? AcquireMode.Turret : AcquireMode.None;
     }
 
