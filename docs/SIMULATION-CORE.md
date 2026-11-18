@@ -5599,3 +5599,31 @@ The built-in AI judges a Technical by the chassis it becomes and a combat bike b
 - A team attack's victim on easy and hard among the selectable members (#397): `docs/SCRIPT-ENGINE.md`.
 - The pointer over another player's object, and a structure under the fog (#399, #400): `docs/PRESENTATION-INPUT.md`.
 - The powers bar is computed when the HUD updates (#401): `docs/GAME-HUD.md`.
+
+## 91. Phase 67: the owner's playtest of release 0.0.1 (18 November 2026)
+
+Eight findings of the owner's play of v0.0.1 (#443 to #450), each read in the original; agents in worktrees of their own, integrated by the lead. **No human has seen the fixes.**
+
+### 91.1 A weapon is anti-ground unless it says so (#443, #444)
+
+`WeaponTemplate`'s constructor sets `m_antiMask` to `WEAPON_ANTI_GROUND`, and an `Anti*` key only sets or clears its bit. The port typed `WeaponInfo.AntiGround` as "the data says `AntiGround = Yes`", so every weapon that names no `AntiGround` read as not anti-ground. `PointDefenseLaserUpdate::scanClosestTarget` skips a victim that is not an airborne target unless its weapon is anti-ground, and a missile whose locomotor names no `AirborneTargetingHeight` is never an airborne target: no point-defence laser of the shipped data (Paladin, Avenger, the Air Force's and the drones' lasers - none names `AntiGround`) ever fired at a missile. `AntiGround` now reads the ground bit of the anti mask. As in the original, those lasers also take infantry as their second kind of victim. Pinned on real data at 30, 60 and 120 Hz (`Tests.PointDefenseReal.cs`): a Paladin and an Avenger under fire from four Missile Defenders shoot missiles down (before: none). The beam to a missile killed in the shot: `docs/PRESENTATION-FX.md`.
+
+### 91.2 An airfield's rally point is its helicopters' (#445)
+
+`ParkingPlaceBehavior::exitObjectViaDoor` moves only a `PRODUCED_AT_HELIPAD` object to `m_heliRallyPoint`; a jet follows its exit path to its parking space and waits there whatever the rally point says, and a carrier's deck has no rally point (`FlightDeckBehavior::getRallyPoint` is null). The port handed the airfield's rally point to everything it made, so a new jet took off for it and came home later by its idle return. An exit now decides through `IProductionExit.SendsToRallyPoint`, and `ProductionUpdate.Produce` hands the rally point only to what the exit sends there; the rule fix `HealedHelicopterToRally` is unchanged. Test "Real data: an airfield's rally point is for its helicopters, its jets wait on their spaces" (`Tests.AirfieldRally.cs`; the American, Air Force and Chinese airfields; fails on the code before at 30 and 60 Hz).
+
+### 91.3 Countermeasures (#448)
+
+Every American aircraft with countermeasures reads `Upgrade_AmericaCountermeasures`. As in the original, a volley starts only when a missile is diverted (`EvasionRate`, 30 %), then three volleys a second apart; the Comanche reloads after 4 s, a jet only at an airfield; bullets never trigger one - so a player may see no flare for several missiles. What differed was the flare's flight: `CountermeasuresBehavior::launchVolley` gives a flare the plane's velocity plus one push of `VolleyVelocityFactor` times the plane's speed per frame (-10 per frame below one unit a frame) over the flare's mass; its `PhysicsBehavior` takes its speed across its heading every frame and along it once the push's `MOTIVE_FRAMES` (10) are over, with its frictions plus the locomotor's `Extra2DFriction` (read as text, as `Lift` is), clamped to 0.01 to 0.99. The port read the -10 per second and only braked the flare, so a hovering Comanche's flares stayed under its hull and a Raptor's were thrown 300 units aside. Now the Comanche throws them about 18 units back past its tail; a jet's fly on with it. A flare sinks on at `SpeedLimitZ` after its plane died. Test "Real data (#448) ..." at 30, 60 and 120 Hz; the drawing: `AttachedEffectsTests` "#448". Open (#452): a scattered small-missile shot is not reported to the countermeasures, the supersonic jet is not modelled, a flare stands while its plane is held or disabled.
+
+### 91.4 Aircraft of one bundle see each other's goal cells (#449)
+
+A group of helicopters died to missile infantry as if every missile hit the whole group. The radius damage is the original's (`dealDamageInternal`: the detonation point against every bounding sphere, `FROM_BOUNDINGSPHERE_3D`); the group stood inside one another. `AIInternalMoveToState::onEnter` adjusts an aircraft's destination to a box of goal cells nobody holds and takes it at once, and `aiMoveToPosition` enters that state when the order is given, so the members of one group order and the orders of one bundle see each other's goals. The port hid every goal taken in the current frame of the original from the others. A goal taken by an order of this tick's command phase is now seen by every later order of that phase; goals taken by updates keep the frame's rule; the command phase is one tick at every rate. Test "Real data (#449) ..." (`Tests.HelicopterGroupGoals.cs`): six Comanches as a group and one by one to one point hold boxes of their own, and a volley of four Missile Defenders hurts only the one it is fired at, at 30, 60 and 120 Hz. Open (#451): an attacking aircraft flies onto its victim instead of to a place within range (`computeApproachTarget`).
+
+### 91.5 A Raptor's missiles home (#450)
+
+On real data a Raptor at speed fires its clip at a Battlemaster and a MiG crossing its path: every missile keeps its victim (`TryToFollowTarget`), turns after it at the original's rate and hits, at 30, 60 and 120 Hz (`Tests.RaptorMissilesReal.cs`). The cause of the owner's report is not found in the simulation; the issue stays open.
+
+### 91.6 Elsewhere
+
+- A power bought at a higher rank shows that rank's picture (#446); the recharge clock on the side bar (#447, not reproduced): `docs/GAME-HUD.md`.
