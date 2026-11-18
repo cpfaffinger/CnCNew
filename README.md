@@ -77,7 +77,7 @@ Electronic Arts.
 The launcher never writes into your Steam folder and never sends anything anywhere. If it stops, the window says why in plain words; see
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
-*Until the first release is published*, or if you prefer to see what is installed, clone this repository and run `CnCNew-Launcher.cmd` in it: that launcher checks
+If you prefer to build from source and see what is installed, clone this repository and run `CnCNew-Launcher.cmd` in it: that launcher checks
 the machine, installs what is missing (with your click), builds the client from source and makes the game folder. You can also work by hand:
 [docs/INSTALLATION.md](docs/INSTALLATION.md) describes every step, the patcher, and what it checks.
 
