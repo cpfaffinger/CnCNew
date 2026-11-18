@@ -182,6 +182,18 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
     }
 
+    /// <summary>The set <see cref="SelectedLocomotor"/> flies with: taxiing on the ground, the attack set after it fired, the return set, else the normal one.</summary>
+    public override string CurrentLocomotorSetName
+    {
+        get
+        {
+            if (!_allowAir) return SetOf("SET_TAXIING") is not null ? "SET_TAXIING" : "SET_NORMAL";
+            if (_attackExpireTick != 0) return SetOf(data.AttackLocomotor) is not null ? data.AttackLocomotor : "SET_NORMAL";
+            if (_useReturnLocomotor) return SetOf(data.ReturnLocomotor) is not null ? data.ReturnLocomotor : "SET_NORMAL";
+            return "SET_NORMAL";
+        }
+    }
+
     private LocomotorInfo? SetOf(string name)
         => name == "SET_NORMAL" ? Entity.Template.Locomotor : Entity.Template.LocomotorSets.TryGetValue(name, out var found) ? found : null;
 

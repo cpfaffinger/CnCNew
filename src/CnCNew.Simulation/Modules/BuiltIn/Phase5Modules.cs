@@ -1020,6 +1020,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary><see cref="SelectedLocomotor"/> for the world.</summary>
     public LocomotorInfo? CurrentLocomotor => SelectedLocomotor;
 
+    /// <summary><c>AIUpdateInterface::getCurLocomotorSetType</c>: the name of the set <see cref="SelectedLocomotor"/> comes from (<c>SET_NORMAL</c>, <c>SET_WANDER</c>, ...).</summary>
+    public virtual string CurrentLocomotorSetName => _locomotorSet ?? "SET_NORMAL";
+
     // AIUpdateInterface::m_curLocomotorSet when it is not SET_NORMAL: a script's wander or panic, a run from a repulsor.
     private string? _locomotorSet;
 

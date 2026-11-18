@@ -99,8 +99,8 @@ public sealed partial class SimulationWorld
             // projectileLaunchAtObjectOrPosition keeps the launcher's own getWeaponBonusCondition() (m_extraBonusFlags), not computeBonus's set: what a Battle Bus passes to its
             // riders counts for their immediate shots and not for their projectiles (#424).
             // Weapon::fireWeaponTemplate reports a small missile to its victim's countermeasures after the launch, with the victim it was fired at: a scattered shot follows no victim and
-            // is reported all the same (#452).
-            var reported = victim?.Id ?? EntityId.Invalid;
+            // is reported all the same - "only allow jets not currently supersonic to launch countermeasures": to a victim with an AI whose locomotor set is not SET_SUPERSONIC (#452).
+            var reported = victim is not null && AiOf(victim) is { } victimAi && victimAi.CurrentLocomotorSetName != "SET_SUPERSONIC" ? victim.Id : EntityId.Invalid;
             var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, source.WeaponBonusConditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ,
                 velocityX, velocityY, velocityZ, reported);
             var heading = pose.ForwardX != Fixed.Zero || pose.ForwardY != Fixed.Zero ? FixedTrig.Atan2(pose.ForwardY, pose.ForwardX) : sourceAngle;
