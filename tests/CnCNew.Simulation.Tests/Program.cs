@@ -207,6 +207,7 @@ run.Test("Auto heal (#432): a self-heal waits its start delay after the last hit
 run.Test("Auto heal (#432): an aura that starts active first wakes at a random phase, at 30, 60 and 120 Hz", Tests.AnAuraThatStartsActiveFirstWakesAtARandomPhase);
 run.Test("Auto heal (#438): a radius aura heals its allies, at 30, 60 and 120 Hz", Tests.ARadiusAuraHealsItsAllies);
 run.Test("Auto heal (#438): two healing auras do not stack, at 30, 60 and 120 Hz", Tests.TwoHealingAurasDoNotStack);
+run.Test("Auto heal (#440): a stopped healing aura stays stopped when its upgrade comes again, at 30, 60 and 120 Hz", Tests.AStoppedHealingAuraStaysStopped);
 run.Test("Auto heal (#438): a healing aura keeps to its side of the map edge, at 30, 60 and 120 Hz", Tests.AHealingAuraKeepsToItsSideOfTheMapEdge);
 run.Test("Auto heal (#438): an aura without a delay that starts active does not wake, at 30, 60 and 120 Hz", Tests.AnAuraWithoutADelayThatStartsActiveDoesNotWake);
 run.Test("Auto heal (#438): auras without a delay heal every frame and add up, at 30, 60 and 120 Hz", Tests.AurasWithoutADelayHealEveryFrameAndAddUp);

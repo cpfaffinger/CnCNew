@@ -460,6 +460,12 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     /// </summary>
     private long _soonestHealTick;
 
+    /// <summary>
+    /// <c>m_stopped</c>: <see cref="StopHealing"/> ended the aura for good. It stays switched on (<c>isUpgradeActive</c>), but nothing wakes it again - no hit, no pulse and no
+    /// upgrade that is taken away and given again.
+    /// </summary>
+    private bool _stopped;
+
     public override string ModuleName => "AutoHealBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
@@ -514,7 +520,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     /// </summary>
     public void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt)
     {
-        if (!_active || data.Radius != Fixed.Zero) return;
+        if (_stopped || !_active || data.Radius != Fixed.Zero) return;
         var frameStart = OwnFrameStart(world);
         if (data.StartHealingDelayTicks > 0)
         {
@@ -536,10 +542,13 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         if (_mux.ResetUpgrade(keyMask)) _active = false;
     }
 
-    /// <summary><c>AutoHealBehavior::stopHealing</c> (called by <c>MinefieldBehavior</c> once the mine's creator is gone): the aura goes off and the module sleeps for good.</summary>
+    /// <summary>
+    /// <c>AutoHealBehavior::stopHealing</c> (called by <c>MinefieldBehavior</c> once the mine's creator is gone): the module sleeps for good and is stopped (<c>m_stopped</c>) - its
+    /// upgrade stays executed, and an update, a hit or a pulse of a stopped aura does nothing, so an upgrade that wakes it again (<c>upgradeImplementation</c>) heals nothing either.
+    /// </summary>
     public void StopHealing(IWorldServices world)
     {
-        _active = false;
+        _stopped = true;
         world.WakeAt(Entity, this, SimulationTiming.SleepForever);
     }
 
@@ -550,7 +559,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     /// </summary>
     public long Update(IWorldServices world)
     {
-        if (!_active || Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        if (_stopped || !_active || Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         // A missing or zero HealingDelay heals once per logic frame of the original, at every rate (DelayTicks).
         var delay = world.Time.AtLeastOneFrame(data.DelayTicks);
         if (!data.AffectsWholePlayer && data.Radius == Fixed.Zero)
@@ -576,6 +585,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     /// </summary>
     private void Pulse(IWorldServices world, Entity candidate)
     {
+        if (_stopped) return;
         var heal = new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false);
         if (data.Radius == Fixed.Zero) world.Damage(candidate.Id, heal);
         // Without a HealingDelay the claim ends a frame before it begins (now + UINT_MAX): any healer may take the object over at once.
@@ -615,6 +625,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         writer.Bool("active", _active);
         _mux.Describe(writer);
         if (_soonestHealTick != 0) writer.Int("soonestHealTick", _soonestHealTick);
+        if (_stopped) writer.Bool("stopped", true);
     }
 
     public override void Load(IStateReader reader)
@@ -623,6 +634,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         _active = reader.Bool("active");
         _mux.Load(reader);
         _soonestHealTick = reader.Has("soonestHealTick") ? reader.Int("soonestHealTick") : 0;
+        _stopped = reader.Has("stopped") && reader.Bool("stopped");
     }
 }
 
