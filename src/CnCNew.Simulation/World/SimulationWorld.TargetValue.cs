@@ -108,12 +108,14 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>The enemy has a weapon of its own, or riders that fire from it.</summary>
-    private bool IsArmed(Entity enemy)
+    private bool IsArmed(Entity enemy) => FightsWithWeapon(enemy) || HasRidersThatFire(enemy);
+
+    /// <summary>A rider of this container may fire from inside (<see cref="IContainerModule.IsPassengerAllowedToFire"/>) and has a weapon that does damage.</summary>
+    internal bool HasRidersThatFire(Entity container)
     {
-        if (FightsWithWeapon(enemy)) return true;
-        if (enemy.Container is { ContainCount: > 0 } inside)
-            foreach (var id in inside.Contained)
-                if (FindEntity(id) is { EffectivelyDead: false } rider && ContainerLetsFire(rider) && FightsWithWeapon(rider)) return true;
+        if (container.Container is not { ContainCount: > 0 } inside) return false;
+        foreach (var id in inside.Contained)
+            if (FindEntity(id) is { EffectivelyDead: false } rider && ContainerLetsFire(rider) && FightsWithWeapon(rider)) return true;
         return false;
     }
 

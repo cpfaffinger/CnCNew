@@ -1557,7 +1557,9 @@ public sealed partial class SkirmishAi
 
     /// <summary>
     /// Transports of the army (<c>TransportContain</c>/<c>HelixContain</c> on an armed unit, e.g. Humvee, Listening Outpost): when a wave marches,
-    /// nearby infantry boards; a loaded transport that sees enemies or reaches the goal lets its passengers out there.
+    /// nearby infantry boards; a loaded transport that sees enemies or reaches the goal lets its passengers out there - unless a rider fires from inside
+    /// (<c>PassengersAllowedToFire</c>: the Humvee, the Battle Bus), where the riders fight with the transport's armour around them
+    /// and keep it in its armed weapon set (#455). The AI uses no rider of a transport outside for anything else.
     /// </summary>
     private void UseTransports()
     {
@@ -1568,6 +1570,7 @@ public sealed partial class SkirmishAi
             var arrived = _armyGoal is { } goal && DistanceSquared(transport.X, transport.Y, goal.X, goal.Y) < Fixed.FromInt(90_000);
             var engaged = _enemyTargets.Any(enemy => SquaredReach.Of(EngageRadius).ContainsStrictly(DistanceSquared(enemy.X, enemy.Y, transport.X, transport.Y)));
             if (!arrived && !engaged) continue;
+            if (_world.HasRidersThatFire(transport)) continue;
             if (Backoff(unchecked(0x82000000u + transport.Id.Value), ShortRetryFrames)) continue;
             if (Send(sequence => new EvacuateCommand(_player, sequence, _tick, transport.Id, false, Fixed.Zero, Fixed.Zero)).Accepted) Stats.Evacuations++;
         }
