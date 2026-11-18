@@ -766,9 +766,10 @@ public interface IWorldServices
 /// weapon (its detonation weapon), the launcher, the victim it may follow (invalid for a position shot or a scattered one), the aim point and
 /// the launcher's weapon bonus conditions (<c>m_extraBonusFlags</c>). The forward vector is the x axis of the matrix <c>Weapon::positionProjectileForLaunch</c> gives the projectile, a unit
 /// vector: the launch bone turned with the turret and the launcher (docs/SIMULATION-CORE.md §76). The velocity is the launcher's, per logic frame of the original (<c>transferVelocityTo</c>).
+/// <see cref="Reported"/> is the object whose countermeasures hear of a small missile (<c>reportMissileForCountermeasures</c>): the victim it was fired at, also when the shot scattered (#452).
 /// </summary>
 public readonly record struct ProjectileLaunch(int Weapon, EntityId Launcher, EntityId Victim, Fixed X, Fixed Y, Fixed Z, uint Conditions, Fixed ForwardX, Fixed ForwardY, Fixed ForwardZ,
-    Fixed VelocityX = default, Fixed VelocityY = default, Fixed VelocityZ = default);
+    Fixed VelocityX = default, Fixed VelocityY = default, Fixed VelocityZ = default, EntityId Reported = default);
 
 /// <summary><c>ProjectileUpdateInterface</c>: <c>DumbProjectileBehavior</c> and <c>MissileAIUpdate</c>.</summary>
 public interface IProjectileModule

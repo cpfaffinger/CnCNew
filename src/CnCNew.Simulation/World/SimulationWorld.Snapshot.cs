@@ -114,7 +114,8 @@ public sealed partial class SimulationWorld
                         ? new ProjectileLaunch(checked((int)pending.Int("launchWeapon")), new EntityId(checked((uint)pending.UInt("launcher"))), new EntityId(checked((uint)pending.UInt("launchVictim"))),
                             pending.Fixed("launchX"), pending.Fixed("launchY"), pending.Fixed("launchZ"), checked((uint)pending.UInt("launchConditions")),
                             pending.Fixed("launchForwardX"), pending.Fixed("launchForwardY"), pending.Fixed("launchForwardZ"),
-                            pending.Fixed("launchVelocityX"), pending.Fixed("launchVelocityY"), pending.Fixed("launchVelocityZ"))
+                            pending.Fixed("launchVelocityX"), pending.Fixed("launchVelocityY"), pending.Fixed("launchVelocityZ"),
+                            new EntityId(checked((uint)(pending.Has("launchReported") ? pending.UInt("launchReported") : pending.UInt("launchVictim")))))
                         : null,
                     pending.Has("deliveryMoveX")
                         ? new Modules.BuiltIn.DeliveryOrder(pending.Fixed("deliveryMoveX"), pending.Fixed("deliveryMoveY"), pending.Fixed("deliveryTargetX"), pending.Fixed("deliveryTargetY"), CnCNew.Simulation.Templates.DeliveryRun.Load(pending), pending.Int("deliveryDelay"))

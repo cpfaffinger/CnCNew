@@ -2342,7 +2342,7 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 projectile.Launch(this, launch);
                 // Weapon::fireWeaponTemplate: a small missile fired at an object with active countermeasures lets it decide now whether a flare will take the missile.
-                if (launch.Victim.IsValid && template.IsKindOf("SMALL_MISSILE") && FindEntity(launch.Victim) is { } victim
+                if (launch.Reported.IsValid && template.IsKindOf("SMALL_MISSILE") && FindEntity(launch.Reported) is { } victim
                     && Array.Find(victim.ModuleArray, module => module is Modules.BuiltIn.ICountermeasuresModule { IsActive: true }) is Modules.BuiltIn.ICountermeasuresModule countermeasures)
                     countermeasures.ReportMissile(this, entity);
             }
@@ -2890,6 +2890,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 writer.Fixed("launchVelocityX", launch.VelocityX);
                 writer.Fixed("launchVelocityY", launch.VelocityY);
                 writer.Fixed("launchVelocityZ", launch.VelocityZ);
+                if (launch.Reported != launch.Victim) writer.UInt("launchReported", launch.Reported.Value);
             }
             if (setup.Delivery is { } delivery)
             {

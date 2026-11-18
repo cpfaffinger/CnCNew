@@ -98,7 +98,11 @@ public sealed partial class SimulationWorld
             var (velocityX, velocityY, velocityZ) = VelocityOf(source);
             // projectileLaunchAtObjectOrPosition keeps the launcher's own getWeaponBonusCondition() (m_extraBonusFlags), not computeBonus's set: what a Battle Bus passes to its
             // riders counts for their immediate shots and not for their projectiles (#424).
-            var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, source.WeaponBonusConditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ, velocityX, velocityY, velocityZ);
+            // Weapon::fireWeaponTemplate reports a small missile to its victim's countermeasures after the launch, with the victim it was fired at: a scattered shot follows no victim and
+            // is reported all the same (#452).
+            var reported = victim?.Id ?? EntityId.Invalid;
+            var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, source.WeaponBonusConditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ,
+                velocityX, velocityY, velocityZ, reported);
             var heading = pose.ForwardX != Fixed.Zero || pose.ForwardY != Fixed.Zero ? FixedTrig.Atan2(pose.ForwardY, pose.ForwardX) : sourceAngle;
             _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, pose.X, pose.Y, pose.Z, heading, default(SpawnSetup) with { Launch = launch }));
             EmitAt(SimEventKind.ProjectileLaunched, id, source.Id, weapon.Name, 0, destinationX, destinationY, destinationZ);
