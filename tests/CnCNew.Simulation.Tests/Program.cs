@@ -1014,6 +1014,7 @@ var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1)
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#440): a propaganda tower and an Ambulance share one healing claim and do not stack, at 30, 60 and 120 Hz", () => Tests.RealPropagandaTowerAndAmbulanceDoNotStack(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#440): two Dozers repair a building as fast as one, at 30, 60 and 120 Hz", () => Tests.RealTwoDozersDoNotStackTheirRepair(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: word descriptions of every shipped object equal the sequential hash, every update moves the description", () => Tests.HashWorkOnRealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
