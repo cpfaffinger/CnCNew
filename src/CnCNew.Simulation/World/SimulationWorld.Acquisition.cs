@@ -413,7 +413,7 @@ public sealed partial class SimulationWorld
             // getNextMoodTarget: the common victim of the unit's team comes before the unit's own look and does not wait for the look to be due.
             if (AcquisitionAdvisor is { } teams && teams.CommonTargetOf(entity) is { } common && IsAttackable(entity, common)
                 && CanAttack(entity, common, mode == AcquireMode.Turret, out var commonInRange)
-                && (commonInRange || (mode == AcquireMode.AttackMove && MayChase(entity, entity.Template.IsKindOf("AIRCRAFT")))))
+                && (commonInRange || (mode == AcquireMode.AttackMove && MayChase(entity))))
             {
                 state.Victim = common.Id;
                 AimTurretsForAttack(entity, common, TurretAimOrder.Attack);
@@ -597,8 +597,11 @@ public sealed partial class SimulationWorld
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
         // wantToSquishTarget: a computer's tank in range goes on towards the infantry with its turret firing.
         var squish = inRange && !turretOnly && WantsToSquish(entity, victim);
+        // An airborne chaser flies on to its approach target before it fires: an attack path's approach does not stop in range (m_stopIfInRange, #451).
+        if (inRange && !squish && state.Chasing && state.Approaching && entity.HasMoveTarget && ApproachesInFlight(entity)) return true;
         if (inRange && !squish)
         {
+            if (state.Approaching) state.ClearApproach();
             // The unit stops where the 30 Hz unit stops: after the whole step of the frame in which it came into range (nothing to do at 30 Hz).
             if (state.Chasing)
             {
@@ -624,7 +627,7 @@ public sealed partial class SimulationWorld
         // outOfWeaponRangeObject and wantToSquishTarget take the body's machine to its chase (F-140); out of range a turret's fire state goes back to its aim.
         AttackCycleOutOfRange(entity, ref state.Cycle, turrets: !inRange);
         if (squish) AutoFire(entity, victim, turretOnly);
-        if (turretOnly || !MayChase(entity, aircraft)) return squish;
+        if (turretOnly || !MayChase(entity)) return squish;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
         // The chase is decided after the updates of the tick: at 30 Hz both objects have taken their whole step by then. Above 30 Hz they are read where the frame they have
         // begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
@@ -633,6 +636,21 @@ public sealed partial class SimulationWorld
         var dx = victimX - ownX;
         var dy = victimY - ownY;
         if (!SquaredReach.Of(leash).Contains(dx * dx + dy * dy)) return false;
+        // computeAttackPath: "airborne objects don't pathfind" - an aircraft above the terrain flies straight to its approach target, computed again as computePath does (#451, #456).
+        if (ApproachesInFlight(entity) && ApproachWeapon(entity, victim) is { } weapon && !IsContactWeapon(weapon))
+        {
+            if (RecomputeApproach(entity, state, victim, weapon) is { } approach && !(entity.HasMoveTarget && entity.MoveTargetX == approach.X && entity.MoveTargetY == approach.Y))
+            {
+                if (!ai.StartInternalMove(approach.X, approach.Y)) return false;
+                ai.BeginMoveWithNextFrame(this);
+                WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
+                AimTurretsForAttack(entity, victim, TurretAimOrder.Pursuit);
+            }
+            if (!state.Chasing) state.ChaseTick = tick;
+            state.Chasing = true;
+            state.Halted = true;
+            return true;
+        }
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
             // A unit that needs a line of sight walks to where it can fire (findAttackPath, F-55), the others at the victim.
@@ -735,10 +753,11 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// Only a computer player's ground unit walks to a victim it picked itself; a human player's unit stays where its player put it, and a rider never walks (it is held and not
+    /// Only a computer player's unit walks - or flies (#456) - to a victim it picked itself; a human player's unit stays where its player put it (<c>AIAttackApproachTargetState::onEnter</c>
+    /// fails for a human player's <c>CMD_FROM_AI</c> attack without <c>isAllowedToChase</c>, and nothing there leaves an aircraft out), and a rider never walks (it is held and not
     /// mobile, <c>Object::isMobile</c>; its attack state fails out of range, <c>AIAttackAimAtTargetState::update</c>).
     /// </summary>
-    private bool MayChase(Entity entity, bool aircraft) => !aircraft && entity.Template.Locomotor is not null && IsComputerPlayer(entity.Owner) && !entity.ContainedBy.IsValid;
+    private bool MayChase(Entity entity) => entity.Template.Locomotor is not null && IsComputerPlayer(entity.Owner) && !entity.ContainedBy.IsValid;
 
     /// <summary>
     /// <c>AI::getAdjustedVisionRangeForObject(obj, OWNERTYPE | MOOD)</c> for a unit that may walk to its victim: the vision range times the guard-outer factor, times the mood factor of a
@@ -811,8 +830,7 @@ public sealed partial class SimulationWorld
         // A passive unit answers its last attacker: "Do not allow units that healed me to get acquired!"
         if (attitude == Attitude.Passive)
             return !entity.LastDamageHealing && FindEntity(entity.LastDamageSource) is { } attacker && IsAttackable(entity, attacker) ? attacker : null;
-        var aircraft = entity.Template.IsKindOf("AIRCRAFT");
-        var chase = mode != AcquireMode.Turret && (!calledByAi || MayChase(entity, aircraft));
+        var chase = mode != AcquireMode.Turret && (!calledByAi || MayChase(entity));
         var radius = AcquireRadius(entity, chase);
         if (radius <= Fixed.Zero) return null;
         var turretOnly = mode == AcquireMode.Turret;
