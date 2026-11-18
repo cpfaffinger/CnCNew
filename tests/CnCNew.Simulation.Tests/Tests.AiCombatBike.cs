@@ -19,6 +19,13 @@ static partial class Tests
     /// its weapon set (<c>RiderChangeContain::onContaining</c>); its default set is unarmed, so the AI took it for no army unit and never built one. Every buildable bike whose initial
     /// rider arms it is an army unit to the AI, and in <see cref="BikeMap"/> with seed <see cref="BikeSeed"/> the GLA player has queued a combat bike and owns one with its rider
     /// within <see cref="BikeMinutes"/> game minutes. At 30, 60 and 120 Hz.
+    /// <para>
+    /// A bike comes with the composition's draw, so when it comes depends on the seed. With seed 1 the first bike was queued at 7.6 game minutes until the Palace (#454) was
+    /// planned from minute five; saving for it changes every later draw, and the first bike of seed 1 came at 12.6 minutes. Over 36 seeds (30 Hz, the first ten minutes) the
+    /// AI queued 53 bikes of 392 vehicles without the Palace goal and 43 of 375 with it, a bike in 26 and 20 of the 36 matches: the Palace's price is paid mostly by infantry
+    /// (2,494 against 2,218), the share of bikes among the vehicles stays within chance. <see cref="BikeSeed"/> 10 queues its first bike at 2.5 minutes at every rate, before
+    /// the Palace is planned, so the test asks what it is about - a bike is an army unit and is built - and not the timing of one draw.
+    /// </para>
     /// </summary>
     public static void RealSkirmishAiBuildsCombatBikes(string directory)
     {
@@ -57,7 +64,7 @@ static partial class Tests
     }
 
     private const string BikeMap = "Maps/Alpine Assault/Alpine Assault.map";
-    private const uint BikeSeed = 1;
+    private const uint BikeSeed = 10;
 
     /// <summary>The game minutes within which the GLA player of <see cref="RealSkirmishAiBuildsCombatBikes"/> must own a combat bike.</summary>
     private const int BikeMinutes = 10;
