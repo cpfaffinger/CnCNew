@@ -148,6 +148,8 @@ static partial class Tests
         Object AlphaFlare
           KindOf = PROJECTILE
           Locomotor = SET_NORMAL FlareLoco
+          Behavior = PhysicsBehavior Physics01
+          End
           Body = ActiveBody Body01
             MaxHealth = 10.0
             InitialHealth = 10.0

@@ -256,6 +256,80 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <summary><c>PhysicsBehavior::getCenterOfMassOffset</c>.</summary>
     public Fixed CenterOfMassOffset => data.CenterOfMassOffset;
 
+    // The flight of a countermeasure flare (#452): its velocity per tick and the tick it appeared. Written only when set.
+    private bool _motive;
+    private long _motiveStart;
+    private Fixed _motiveX;
+    private Fixed _motiveY;
+
+    /// <summary>
+    /// <c>CountermeasuresBehavior::launchVolley</c>'s flare: <c>transferVelocityTo</c> gives it the plane's velocity and <c>applyMotiveForce</c> its push (<paramref name="velocityX"/>,
+    /// <paramref name="velocityY"/> per tick). From the next tick on the flare flies with its own physics, whatever becomes of the plane - a flare is an object of its own in the original.
+    /// </summary>
+    public void LaunchMotive(IWorldServices world, Fixed velocityX, Fixed velocityY)
+    {
+        _motive = true;
+        _motiveStart = world.Tick;
+        (_motiveX, _motiveY) = (velocityX, velocityY);
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>MOTIVE_FRAMES</c> of <c>PhysicsUpdate.cpp</c>: for a third of a second after its push a flare's forward speed knows no friction (<c>isMotive</c>).</summary>
+    private const int MotiveFrames = SimulationRate.OriginalFramesPerSecond / 3;
+
+    /// <summary>
+    /// One tick of a flare's flight: once per logic frame of the original, from the flare's second frame of flight, the friction of <c>PhysicsBehavior::applyFrictionalForces</c> takes
+    /// its speed (<see cref="MotiveFriction"/>); it moves every tick and sinks at its locomotor's <c>SpeedLimitZ</c>, never below the ground.
+    /// </summary>
+    private long FlyMotive(IWorldServices world)
+    {
+        if (Entity.DestroyRequested) return SimulationTiming.SleepForever;
+        var now = world.Tick;
+        var locomotor = Entity.Template.Locomotor;
+        // The friction is the 30 Hz step: it acts once per logic frame of the original, counted from the flare's first move (the tick after it was launched), and not in that
+        // first frame, whose physics weighed the plane's own velocity before the push arrived; in between the flare keeps its speed and moves every tick.
+        var flown = now - _motiveStart - TickOrder.Next;
+        if (world.Time.IsOriginalFrameBoundary(flown) && flown >= world.Time.TicksPerOriginalFrame)
+            (_motiveX, _motiveY) = MotiveFriction(world, _motiveX, _motiveY, flown + world.Time.TicksPerOriginalFrame >= world.Time.OriginalFrames(MotiveFrames));
+        Entity.X += _motiveX;
+        Entity.Y += _motiveY;
+        var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
+        var sink = locomotor?.SpeedLimitZ ?? Fixed.Zero;
+        Entity.Z = Fixed.Max(ground, Entity.Z - sink);
+        var stride = world.Time.TicksPerOriginalFrame;
+        if (stride > 1)
+        {
+            // A missile that follows the flare reads it where its frame ends (Entity.FrameEnd): the ticks of the flare's frame still to come at the speed it keeps for that frame.
+            var left = stride - 1 - flown % stride;
+            Entity.SetAhead(now, _motiveX * left, _motiveY * left, Fixed.Max(ground - Entity.Z, -(sink * left)));
+        }
+        world.MarkDirty(Entity);
+        return SimulationTiming.SleepNone;
+    }
+
+    /// <summary>
+    /// <c>PhysicsBehavior::applyFrictionalForces</c> on a flare for one logic frame of the original: with 2D friction in the air (<c>Apply2DFrictionWhenAirborne</c>) it loses the share of
+    /// its speed across its heading that its lateral friction names, and of its speed along its heading the share of its forward friction once its push is no longer motive
+    /// (<paramref name="forwardToo"/>), each friction the module's plus its locomotor's <c>Extra2DFriction</c> within 0.01 and 0.99; without, the aerodynamic friction takes its share of all of it.
+    /// </summary>
+    private (Fixed X, Fixed Y) MotiveFriction(IWorldServices world, Fixed velocityX, Fixed velocityY, bool forwardToo)
+    {
+        var locomotor = Entity.Template.Locomotor;
+        var extra = locomotor?.Extra2DFrictionPerFrame ?? Fixed.Zero;
+        if (locomotor is { Apply2DFrictionWhenAirborne: true } || !world.IsSignificantlyAboveTerrain(Entity))
+        {
+            var (dirX, dirY) = (FixedTrig.Cos(Entity.Angle), FixedTrig.Sin(Entity.Angle));
+            var lateral = velocityX * -dirY + velocityY * dirX;
+            var forward = velocityX * dirX + velocityY * dirY;
+            var lf = Clamp(data.LateralFriction + extra, MinNonAeroFriction, MaxFriction);
+            var ff = forwardToo ? Clamp(data.ForwardFriction + extra, MinNonAeroFriction, MaxFriction) : Fixed.Zero;
+            return (velocityX - (lf * lateral * -dirY + ff * forward * dirX), velocityY - (lf * lateral * dirX + ff * forward * dirY));
+        }
+        var aero = Clamp(data.AerodynamicFriction + extra, Fixed.Zero, MaxFriction);
+        return (velocityX - velocityX * aero, velocityY - velocityY * aero);
+    }
+
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {
         _falling = true;
@@ -268,6 +342,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 
     public long Update(IWorldServices world)
     {
+        if (_motive) return FlyMotive(world);
         if (!_flying && !_falling && HasRates)
         {
             // A held object at rest whose shock gave it rates: HAS_PITCHROLLYAW keeps the original's physics awake while it is held (it integrates nothing then); the first update
@@ -642,6 +717,12 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         if (_stunnedPose) writer.Bool("stunnedPose", true);
         if (_flying) DescribeFlight(writer);
         else DescribeRest(writer);
+        if (_motive)
+        {
+            writer.Int("motiveStart", _motiveStart);
+            writer.Fixed("motiveX", _motiveX);
+            writer.Fixed("motiveY", _motiveY);
+        }
         if (!_falling) return;
         writer.Bool("falling", true);
         writer.Fixed("velocityX", _velocityX);
@@ -664,6 +745,10 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _stunnedPose = reader.Has("stunnedPose");
         LoadFlight(reader);
         if (!_flying) LoadRest(reader);
+        _motive = reader.Has("motiveStart");
+        _motiveStart = _motive ? reader.Int("motiveStart") : 0;
+        _motiveX = _motive ? reader.Fixed("motiveX") : Fixed.Zero;
+        _motiveY = _motive ? reader.Fixed("motiveY") : Fixed.Zero;
         Entity.InPhysicsFlight = _flying;
         Entity.PhysicsStunned = _stunned;
     }

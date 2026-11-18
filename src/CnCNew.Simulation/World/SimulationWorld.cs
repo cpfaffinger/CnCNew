@@ -188,7 +188,7 @@ public sealed partial class SimulationWorld : IWorldServices
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
         SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default, EntityId Spawner = default, MapObjectFlags MapFlags = MapObjectFlags.None,
-        int Attitude = 0, bool Held = false);
+        int Attitude = 0, bool Held = false, (Fixed X, Fixed Y)? Motive = null);
 
     /// <summary>
     /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
@@ -761,7 +761,8 @@ public sealed partial class SimulationWorld : IWorldServices
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
             extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer,
             HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY, StickTo: extras.StickTo, Bomber: extras.Bomber,
-            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null, Spawner: extras.Spawner, Held: extras.Held);
+            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null, Spawner: extras.Spawner, Held: extras.Held,
+            Motive: extras.Motive ? (extras.MotiveX, extras.MotiveY) : null);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -2289,6 +2290,14 @@ public sealed partial class SimulationWorld : IWorldServices
                         (thrown.InheritX, thrown.InheritY, thrown.InheritZ), thrown.ExtraFriction, thrown.AllowToFall);
                     break;
                 }
+        // CountermeasuresBehavior::launchVolley: the flare's own physics takes the plane's velocity and the push, and flies it from now on whatever becomes of the plane (#452).
+        if (setup.Motive is { } motive)
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.PhysicsBehavior physics)
+                {
+                    physics.LaunchMotive(this, motive.X, motive.Y);
+                    break;
+                }
         // FLOATING: findUpdateModule("FloatUpdate")->setEnabled(TRUE).
         if (setup.Floating)
             foreach (var module in entity.ModuleArray)
@@ -2920,6 +2929,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 }
                 if (thrown.ExtraFriction != Fixed.Zero) writer.Fixed("throwExtraFriction", thrown.ExtraFriction);
                 if (thrown.AllowToFall) writer.Bool("throwFall", true);
+            }
+            if (setup.Motive is { } motive)
+            {
+                writer.Fixed("motiveX", motive.X);
+                writer.Fixed("motiveY", motive.Y);
             }
             writer.EndObject();
         }
