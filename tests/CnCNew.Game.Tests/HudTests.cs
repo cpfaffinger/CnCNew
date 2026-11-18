@@ -72,6 +72,8 @@ internal static class HudTests
         harness.Run("A cameo that cannot be built yet is grey, one that cannot be paid for is dark", () => DisabledCameosShowWhy(data));
         harness.Run("The bar of the special powers: a power the player has shows, recharges, and a press aims it", () => PowerBar(data));
         harness.Run("#348: a button of the bar of the special powers shows its description under the pointer, in both skins", () => { PowerBarTooltip(data, UiSkinName.Original); PowerBarTooltip(data, UiSkinName.Modern); });
+        harness.Run("#446, #447: a power bought at a higher rank shows the picture of that rank on the bar and on the command bar, and its recharge as a clock over it, in both skins",
+            () => { UpgradedPowerOnBar(data, UiSkinName.Original); UpgradedPowerOnBar(data, UiSkinName.Modern); });
         harness.Run("#348: the modern skin draws the bar of the special powers itself - trays, states, the recharge strip, a flash when a power becomes ready - and no tray picture", () => ModernPowerBar(data));
         harness.Run("#348: the flash of a power that has become ready: 60 frames, bright first, switching every 10, at every rate", PowerReadyFlashSchedule);
         harness.Run("#386: a button of the bar of the special powers shows how many of its power are ready when more than one, in both skins", () => { PowerReadyCount(data, UiSkinName.Original); PowerReadyCount(data, UiSkinName.Modern); });
@@ -806,6 +808,56 @@ internal static class HudTests
         controller.BuildDrawList(1280, 720);
         TestHarness.Assert(controller.Powers.Length == 2, $"{skin}: the bar has the paradrop and the scan ({string.Join(", ", controller.Powers.Select(power => power.Button.Name))})");
         return (match, controller);
+    }
+
+    /// <summary>
+    /// #446: <c>ControlBar::populateSpecialPowerShortcut</c> and <c>populateCommand</c> give a power button the picture of the purchase button of the highest rank of its
+    /// <c>Science</c> list the player holds - the A-10 strike is <c>SSA10Attack</c>, <c>SSA10Attack2</c> and <c>SAWarthog</c> at ranks 1 to 3. The port kept the first picture.
+    /// #447: a power that recharges wears the clock (<c>GadgetButtonDrawInverseClock</c>, the scheme's <c>BuildUpClockColor</c>) over that picture on the bar of the powers.
+    /// </summary>
+    private static void UpgradedPowerOnBar(GameData data, UiSkinName skin)
+    {
+        var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard);
+        var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+        var controller = new MatchController(match, GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }) { StarBlinks = false };
+        Advance(match, controller, (int)match.World.Time.OriginalFrames(4));
+        var centre = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.Name == "AmericaCommandCenter");
+        controller.Input.Selection.Replace([centre.Id]);
+        string[] sciences = ["SCIENCE_A10ThunderboltMissileStrike1", "SCIENCE_A10ThunderboltMissileStrike2", "SCIENCE_A10ThunderboltMissileStrike3"];
+        string[] pictures = ["SSA10Attack", "SSA10Attack2", "SAWarthog"];
+        for (var rank = 0; rank < sciences.Length; rank++)
+        {
+            match.World.GrantScience(match.Human, sciences[rank]);
+            Advance(match, controller, 2);
+            var list = controller.BuildDrawList(1280, 720).Commands.ToList();
+            var index = controller.Powers.IndexOf(controller.Powers.FirstOrDefault(button => button.Button.SpecialPower == "SuperweaponA10ThunderboltMissileStrike")!);
+            TestHarness.Assert(index >= 0, $"{skin}: the strike is on the bar at rank {rank + 1} ({string.Join(", ", controller.Powers.Select(power => power.Button.Name))})");
+            var power = controller.Powers[index];
+            TestHarness.Assert(power.Button.ButtonImage == pictures[rank], $"{skin}: at rank {rank + 1} the bar's strike is {pictures[rank]} ({power.Button.ButtonImage})");
+            var rect = controller.PowerButtonRect(index + 1);
+            var cameo = list.FindIndex(command => command is UiImageDraw image && image.Image == pictures[rank] && image.Destination == rect);
+            TestHarness.Assert(cameo >= 0 && !list.Any(command => command is UiImageDraw image && image.Destination == rect && pictures.Contains(image.Image) && image.Image != pictures[rank]),
+                $"{skin}: at rank {rank + 1} only {pictures[rank]} is drawn on the bar ({string.Join(", ", list.OfType<UiImageDraw>().Where(image => image.Destination == rect).Select(image => image.Image))})");
+            var slot = controller.CommandBar.Slots.FirstOrDefault(button => button?.Button.SpecialPower == "SuperweaponA10ThunderboltMissileStrike");
+            TestHarness.Assert(slot?.Button.ButtonImage == pictures[rank], $"{skin}: at rank {rank + 1} the command center's strike is {pictures[rank]} ({slot?.Button.ButtonImage ?? "no button"})");
+
+            // A shared power is ready when its science comes (Player::expressSpecialPowerReadyFrame); fired once, it recharges, and its clock lies over the picture.
+            if (power.Availability == ButtonAvailability.Available)
+            {
+                TestHarness.Assert(controller.PressPowerButton(index + 1), $"{skin}: the strike's button is pressed");
+                var place = new Vector3(CnCNew.Presentation.FixedConvert.ToSingle(centre.X) + 200f, CnCNew.Presentation.FixedConvert.ToSingle(centre.Y), 0f);
+                TestHarness.Assert(controller.Input.Commands.CompleteTarget(match.World, null, place), $"{skin}: the strike is called at a place ({controller.Input.Commands.Mode})");
+                Advance(match, controller, (int)match.World.Time.OriginalFrames(4));
+                list = controller.BuildDrawList(1280, 720).Commands.ToList();
+                power = controller.Powers[index];
+                cameo = list.FindIndex(command => command is UiImageDraw image && image.Image == pictures[rank] && image.Destination == rect);
+            }
+            TestHarness.Assert(power is { Availability: ButtonAvailability.NotReady, ReadyFraction: < 1f }, $"{skin}: the strike recharges ({power.Availability}, {power.ReadyFraction})");
+            var clock = list.Select((command, at) => (command, at)).Where(entry => entry.command is UiFillRect { Color.A: 160 } fill && rect.Contains(fill.Rect.X, fill.Rect.Y)).ToArray();
+            var share = clock.Sum(entry => ((UiFillRect)entry.command).Rect.Width * ((UiFillRect)entry.command).Rect.Height) / (double)(rect.Width * rect.Height);
+            TestHarness.Assert(clock.Length > 0 && clock.All(entry => entry.at > cameo) && share > 0.9 * (1 - power.ReadyFraction!.Value) - 0.05 && share < 1 - power.ReadyFraction.Value + 0.05,
+                $"{skin}: at rank {rank + 1} the clock covers the share still to come, over the picture ({share:F2} of the cameo, {power.ReadyFraction:F2} ready, {clock.Length} parts)");
+        }
     }
 
     /// <summary>

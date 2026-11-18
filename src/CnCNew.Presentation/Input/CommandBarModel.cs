@@ -299,7 +299,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             // arbitrary stand-in are not asked.
             var state = EvaluateButton(world, player, anyone, button);
             if (state.Availability == ButtonAvailability.Hidden || state.Reason is ButtonReason.MissingScience or ButtonReason.MissingUpgrade) continue;
-            buttons.Add(Make(index + 1, button, state, [anyone.Id], hotkeys));
+            buttons.Add(Make(world, player, index + 1, button, state, [anyone.Id], hotkeys, shortcut: true));
         }
         return buttons.ToImmutable();
     }
@@ -358,7 +358,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             if (ButtonOf(set, index) is not { } button) continue;
             var state = Evaluate(world, player, entity, button);
             if (state.Availability == ButtonAvailability.Hidden) continue;
-            slots[index] = Make(index + 1, button, state, sources ?? [entity.Id], hotkeys);
+            slots[index] = Make(world, player, index + 1, button, state, sources ?? [entity.Id], hotkeys);
         }
         AddRiders(world, entity, set, slots);
         return new CommandBarView(CommandBarContext.Command, set.Name, [..slots], QueueOf(world, entity, set), entity.Id, UpgradesOf(world, entity), false);
@@ -440,7 +440,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             if (enabled < 0) enabled = states.FindIndex(state => state.Availability == ButtonAvailability.Active);
             var chosen = enabled >= 0 ? states[enabled] : states[0];
             var sources = owners.Where((_, i) => states[i].Availability is ButtonAvailability.Available or ButtonAvailability.Active).Select(owner => owner.Id).ToImmutableArray();
-            slots[index] = Make(index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(owner => owner.Id)] : sources, hotkeys);
+            slots[index] = Make(world, player, index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(owner => owner.Id)] : sources, hotkeys);
         }
         var lead = ready[0];
         var loads = ready.Select(member => SimulationQueries.ProductionOf(member) is { } production ? new QueueLoad(member.Id, production.Queue.Length, production.Data.MaxQueueEntries) : (QueueLoad?)null)
@@ -480,18 +480,64 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             if (enabled < 0) enabled = states.FindIndex(state => state.Availability == ButtonAvailability.Active);
             var chosen = enabled >= 0 ? states[enabled] : states[0];
             var sources = owners.Where((_, i) => states[i].Availability is ButtonAvailability.Available or ButtonAvailability.Active).Select(unit => unit.Id).ToImmutableArray();
-            slots[index] = Make(index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(unit => unit.Id)] : sources, hotkeys);
+            slots[index] = Make(world, player, index + 1, button, chosen, sources.IsEmpty ? [..owners.Select(unit => unit.Id)] : sources, hotkeys);
         }
         return new CommandBarView(CommandBarContext.MultiSelect, string.Empty, [..slots], [], EntityId.Invalid, [], false);
     }
 
-    private CommandBarButton Make(int slot, CommandButtonInfo button, (ButtonAvailability Availability, ButtonReason Reason, float? Ready, Fixed Cost, long Ticks) state,
-        ImmutableArray<EntityId> sources, HashSet<char> hotkeys)
+    private CommandBarButton Make(SimulationWorld world, PlayerId player, int slot, CommandButtonInfo button,
+        (ButtonAvailability Availability, ButtonReason Reason, float? Ready, Fixed Cost, long Ticks) state, ImmutableArray<EntityId> sources, HashSet<char> hotkeys, bool shortcut = false)
     {
+        button = Upgraded(world, player, button, shortcut);
         // HotKeyManager::addHotKey: a key already taken by an earlier slot is ignored.
         var hotkey = text is null ? null : CommandButtonCatalog.HotkeyOf(button, text);
         if (hotkey is { } key && !hotkeys.Add(key)) hotkey = null;
         return new CommandBarButton(slot, button, state.Availability, state.Reason, hotkey, state.Cost, state.Ticks, state.Ready, sources);
+    }
+
+    /// <summary>
+    /// The look of a special power button whose power the player owns at a higher rank (#446): <c>ControlBar::populateCommand</c> and <c>populateSpecialPowerShortcut</c> walk the
+    /// button's <c>Science</c> list ("these will cause the buttons to change icons, nothing more") while the player has each, take the last one held, find the
+    /// <c>PURCHASE_SCIENCE</c> button of the faction's rank 1, 3 and 8 sets that sells it, and copy its picture (<c>copyImagesFrom</c>) and its words
+    /// (<c>copyButtonTextFrom</c>: the description, and the label - the purchase button's <c>ConflictingLabel</c> on the shortcut bar, its <c>TextLabel</c> on the command bar - where
+    /// it has them). The original writes them into the shared button for good; sciences are never lost, so deciding it anew each time shows the same. Only a button that needs its
+    /// power's science, whose player has that science, and that is not itself a purchase or an upgrade.
+    /// </summary>
+    public CommandButtonInfo Upgraded(SimulationWorld world, PlayerId player, CommandButtonInfo button, bool shortcut)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(button);
+        if (!button.Has(CommandOptions.NeedSpecialPowerScience) || button.Sciences.IsEmpty
+            || button.Kind is GuiCommandKind.PurchaseScience or GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade) return button;
+        if (!world.SpecialPowers.TryGet(button.SpecialPower, out var power) || power.RequiredScience < 0) return button;
+        var owned = world.PlayerSciences(player);
+        if (!owned.Has(power.RequiredScience)) return button;
+        var best = -1;
+        foreach (var name in button.Sciences)
+        {
+            if (!world.Sciences.TryGet(name, out var science) || !owned.Has(science.Index)) break;
+            best = science.Index;
+        }
+        if (best < 0) return button;
+        if (world.FactionOf(player) is not { } faction || !Catalog.TryGetSet(faction.ScienceSetRank1, out var rank1) || !Catalog.TryGetSet(faction.ScienceSetRank3, out var rank3)
+            || !Catalog.TryGetSet(faction.ScienceSetRank8, out var rank8)) return button;
+        var purchase = Seller(rank1, GeneralsRank1Buttons) ?? Seller(rank3, GeneralsRank3Buttons) ?? Seller(rank8, GeneralsRank8Buttons);
+        if (purchase is null) return button;
+        var label = shortcut ? purchase.ConflictingLabel : purchase.TextLabel;
+        return button with
+        {
+            ButtonImage = purchase.ButtonImage,
+            TextLabel = label.Length > 0 ? label : button.TextLabel,
+            DescriptLabel = purchase.DescriptLabel.Length > 0 ? purchase.DescriptLabel : button.DescriptLabel,
+        };
+
+        CommandButtonInfo? Seller(CommandSetInfo set, int count)
+        {
+            for (var index = 0; index < count && index < set.Slots.Length; index++)
+                if (ButtonOf(set, index) is { Kind: GuiCommandKind.PurchaseScience, Sciences: [var sold, ..] } candidate && world.Sciences.TryGet(sold, out var science) && science.Index == best)
+                    return candidate;
+            return null;
+        }
     }
 
     /// <summary>
