@@ -917,6 +917,11 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             var pose = view.GetPose(beam.Source)!.Value;
             if (world.FindEntity(beam.Victim) is { } victim && view.GetPose(beam.Victim) is { } aimed)
                 _beamEnds[beam.Victim] = aimed.Position + (victim.Template.IsKindOf("PROJECTILE") || victim.Z > world.GroundHeightAt(victim.X, victim.Y) + Simulation.Numerics.Fixed.FromInt(9) ? Vector3.Zero : new Vector3(0f, 0f, 10f));
+            // A point-defence laser kills its missile in the tick it fires, so the victim has left the world before its beam is first placed; the shot was aimed at where it was
+            // (the victimPos of createLaser), which the view still holds for the tick of its removal. Only a victim on the ground has its end raised.
+            else if (!_beamEnds.ContainsKey(beam.Victim) && view.GetPose(beam.Victim) is { } last)
+                _beamEnds[beam.Victim] = last.Position + (world.Templates.TryGet(last.TemplateName, out var gone) && gone.IsKindOf("PROJECTILE")
+                    || last.Position.Z > view.GroundHeight(last.Position.X, last.Position.Y) + 9f ? Vector3.Zero : new Vector3(0f, 0f, 10f));
             if (!_beamEnds.TryGetValue(beam.Victim, out var end)) continue;
             var start = beam.Laser.Bone.Length > 0 && BonePosition(beam.Source, beam.Laser.Bone, pose) is { } found ? found : pose.Position;
             PlaceFlares((0, beam.Source.Value, beam.Victim.Value, beam.Shot), beam.Laser.Laser, start, end);

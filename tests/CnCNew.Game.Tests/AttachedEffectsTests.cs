@@ -32,6 +32,7 @@ internal static class AttachedEffectsTests
         harness.Run("F-158: a Patriot battery that joins another's attack draws its data stream to the victim for the laser object's life", () => PatriotDataStream(data));
         harness.Run("W3DLaserDraw: the data stream is green, tiled by its width and scrolls along the beam as the data says", () => LaserLooks(data, args[index + 1]));
         harness.Run("LaserUpdate: the laser objects' muzzle and target particle systems stand at the beam's ends for the laser's life", () => LaserFlares(data));
+        harness.Run("#443, #444: a point-defence laser that shoots a missile down draws its beam, though the missile is gone in the tick of the shot", () => PointDefenseBeams(data));
         harness.Run("A damaged building smokes and burns: TransitionDamageFX and the body's bones", () => DamagedBuilding(data));
         harness.Run("A building set on fire by the flame burns: the body's aflame category and the fire one size up", () => BurningBuilding(data));
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
@@ -400,6 +401,43 @@ internal static class AttachedEffectsTests
         TestHarness.Assert(withFlares.SetEquals(shotFrames), "the two systems exist exactly while the beam is drawn, and are gone when the laser dies");
         TestHarness.Assert(placed > 0, "and their particles stand at the muzzle and at the target");
         TestHarness.Assert(ran, "the flare systems run");
+    }
+
+    /// <summary>
+    /// <c>Weapon::createLaser</c>: the beam is made in the shot with the victim's place of that moment, and <c>LaserUpdate</c> keeps that place when the victim is gone. A point-defence laser
+    /// kills a missile in the tick it fires, so the missile has left the world before the frame is drawn. A Paladin and an Avenger stand while two Tank Hunters fire at each; for every
+    /// missile a laser shoots down a laser beam is drawn that ends where the missile was last seen.
+    /// </summary>
+    private static void PointDefenseBeams(GameData data)
+    {
+        foreach (var tank in new[] { "AmericaTankPaladin", "AmericaTankAvenger" })
+        {
+            var scene = Stage(data, "attached-point-defense-" + tank,
+                [new ScenarioUnit("tank", tank, 2, 0f, 0f), new ScenarioUnit("h1", "ChinaInfantryTankHunter", 1, 150f, 0f), new ScenarioUnit("h2", "ChinaInfantryTankHunter", 1, -150f, 0f)],
+                [new ScenarioOrder(15, "h1", ScenarioOrderKind.Attack, "tank"), new ScenarioOrder(15, "h2", ScenarioOrderKind.Attack, "tank")], 300);
+            var seen = new Dictionary<uint, Vector3>();
+            var shotDown = new Dictionary<uint, Vector3>();
+            var drawn = new SortedSet<uint>();
+            scene.TickStepped += result =>
+            {
+                foreach (var simEvent in result.Events)
+                    if (simEvent.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired && simEvent.Text.Contains("PointDefenseLaser", StringComparison.Ordinal)
+                        && scene.World.FindEntity(simEvent.Other) is null && seen.TryGetValue(simEvent.Other.Value, out var last))
+                        shotDown[simEvent.Other.Value] = last;
+                foreach (var entity in scene.World.Entities)
+                    if (entity.Template.IsKindOf("PROJECTILE"))
+                        seen[entity.Id.Value] = new Vector3(CnCNew.Presentation.FixedConvert.ToSingle(entity.X), CnCNew.Presentation.FixedConvert.ToSingle(entity.Y), CnCNew.Presentation.FixedConvert.ToSingle(entity.Z));
+            };
+            Run(scene, () =>
+            {
+                foreach (var beam in scene.Attached.ProjectileStreams.Where(stream => stream.Laser is not null))
+                    foreach (var (id, at) in shotDown)
+                        if (Vector3.Distance(beam.Points[^1], at) < 20f) drawn.Add(id);
+            });
+            Console.WriteLine($"       {tank}: {shotDown.Count} missiles shot down by the laser, a beam drawn to {drawn.Count} of them");
+            TestHarness.Assert(shotDown.Count > 0, $"{tank}: the laser shoots missiles down");
+            TestHarness.Assert(drawn.Count == shotDown.Count, $"{tank}: a beam is drawn to every missile the laser shot down ({drawn.Count} of {shotDown.Count})");
+        }
     }
 
     private static void DragonFlame(GameData data)
