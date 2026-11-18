@@ -449,7 +449,13 @@ public sealed partial class SkirmishAi
     /// <summary>
     /// The weapon set a new object of this template fights with. A vehicle with <c>RiderChangeContain</c> (the combat bike) is made with its <c>InitialPayload</c> inside, and the
     /// rider line that names it raises the line's weapon set flag (<c>RiderChangeContain::onContaining</c>, <c>setWeaponSetFlag</c>); the bike's set without a rider is unarmed, so read
-    /// by its default set it was no army unit and the AI never built one (#434). Every other template fights with its default set.
+    /// by its default set it was no army unit and the AI never built one (#434).
+    /// <para>
+    /// A transport that is made empty and fights with its passengers (the Battle Bus: <c>PassengersAllowedToFire</c>, <c>ArmedRidersUpgradeMyWeaponSet</c>, no
+    /// <c>InitialPayload</c>, a default set without a primary weapon) fights with the <c>PLAYER_UPGRADE</c> set its armed riders raise
+    /// (<c>TransportContain::letRidersUpgradeWeaponSet</c>) once the army's infantry boards it (<see cref="UseTransports"/>); read by its default set it was no army unit either
+    /// (#434). A transport made with riders that arm it (the Listening Outpost) is left to its default set. Every other template fights with its default set.
+    /// </para>
     /// </summary>
     private WeaponSetInfo? FightingSet(ObjectTemplate template)
     {
@@ -458,6 +464,11 @@ public sealed partial class SkirmishAi
                 foreach (var line in rider.Riders)
                     if (_catalog.AreEquivalent(line.TemplateName, rider.InitialPayload))
                         return CnCNew.Data.Definitions.NameTablesPhase5.WeaponSetCondition.TryIndexOf(line.WeaponSet, out var bit) ? WeaponSetResolver.Find(template.WeaponSets, 1u << bit) : template.DefaultWeaponSet;
+        if (template.DefaultWeaponSet?.Primary >= 0) return template.DefaultWeaponSet;
+        foreach (var module in template.Modules)
+            if (module.Data is TransportContainData { PassengersAllowedToFire: true, ArmedRidersUpgradeMyWeaponSet: true, InitialPayload.Length: 0 }
+                && CnCNew.Data.Definitions.NameTablesPhase5.WeaponSetCondition.TryIndexOf("PLAYER_UPGRADE", out var upgrade))
+                return WeaponSetResolver.Find(template.WeaponSets, 1u << upgrade);
         return template.DefaultWeaponSet;
     }
 
