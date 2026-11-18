@@ -85,6 +85,12 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
     /// <summary><c>Locomotor::m_lift</c>: the upward acceleration of an aircraft at full lift, per tick² (<c>Lift</c> in the data is per second²).</summary>
     public Fixed Lift { get; init; }
 
+    /// <summary><c>LocomotorTemplate::m_extra2DFriction</c> (<c>Extra2DFriction</c>, <c>parseFrictionPerSec</c>): the friction the locomotor adds to its object's physics, per logic frame of the original.</summary>
+    public Fixed Extra2DFrictionPerFrame { get; init; }
+
+    /// <summary><c>Apply2DFrictionWhenAirborne</c>: the physics applies its lateral and forward friction in the air too (<c>Locomotor::setPhysicsOptions</c>, <c>setAllowAirborneFriction</c>).</summary>
+    public bool Apply2DFrictionWhenAirborne { get; init; }
+
     /// <summary><c>CanMoveBackwards</c>: read by <c>Locomotor::moveTowardsPositionWheels</c> only.</summary>
     public bool CanMoveBackwards { get; init; }
 
@@ -1021,6 +1027,18 @@ public sealed class TemplateCatalog
                         : throw new TemplateBuildException($"Locomotor '{definition.OriginalName}': {name} expects a number, got '{field.Value.OriginalText.Trim()}'."),
                 };
             }
+            bool YesNo(string name)
+            {
+                var field = definition.Fields.LastOrDefault(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (field is null) return false;
+                if (field.Value.Value is bool flag) return flag;
+                return field.Value.OriginalText.Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToUpperInvariant() switch
+                {
+                    "YES" => true,
+                    "NO" => false,
+                    _ => throw new TemplateBuildException($"Locomotor '{definition.OriginalName}': {name} expects Yes or No, got '{field.Value.OriginalText.Trim()}'."),
+                };
+            }
             var speedDamaged = Optional("SpeedDamaged") is { } sd && sd >= 0 ? sd : speed;
             var turnRateDamaged = Optional("TurnRateDamaged") is { } td && td >= 0 ? td : turnRate;
             var accelerationDamaged = Optional("AccelerationDamaged") is { } ad && ad >= 0 ? ad : acceleration;
@@ -1049,6 +1067,9 @@ public sealed class TemplateCatalog
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
                 StickToGround = definition.Fields.LastOrDefault(field => field.Name.Equals("StickToGround", StringComparison.OrdinalIgnoreCase))?.Value.Value is true,
+                // Deferred fields of the schema: the values arrive as text (parseFrictionPerSec, INI::scanBool).
+                Extra2DFrictionPerFrame = Fixed.FromDecimal(Optional("Extra2DFriction") ?? 0m) / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond),
+                Apply2DFrictionWhenAirborne = YesNo("Apply2DFrictionWhenAirborne"),
                 IsWheeled = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().ToUpperInvariant() is "FOUR_WHEELS" or "MOTORCYCLE",
                 TurnPivotOffset = Fixed.FromDecimal(Signed("TurnPivotOffset")),
                 MovePriority = definition.Fields.LastOrDefault(field => field.Name.Equals("GroupMovementPriority", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().ToUpperInvariant() switch

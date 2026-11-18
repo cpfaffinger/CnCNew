@@ -292,10 +292,13 @@ public sealed record CountermeasuresData(UpgradeMuxData UpgradeMux, string Flare
 /// logic stream); a diverted missile turns to a flare <c>MissileDecoyDelay</c> ticks later (<see cref="MissileAIUpdate.SetFramesTillCountermeasureDiversionOccurs"/>) and the first
 /// volley leaves <c>ReactionLaunchLatency</c> ticks after the first diverted report. While the plane is airborne a volley of <c>VolleySize</c> flares is launched every
 /// <c>DelayBetweenVolleys</c> ticks until the flares run out; <c>ReloadTime</c> (0: only at an airfield, which does not exist here) restocks them. The flare is a real object
-/// (<c>FlareTemplateName</c>, short-lived by its own <c>LifetimeUpdate</c>) that the module moves: it leaves the plane at <c>VolleyVelocityFactor</c> times the plane's speed along the
-/// heading turned by the volley's spread (<c>VolleyArcAngle</c>), slows down at the flare locomotor's braking and sinks at its <c>SpeedLimitZ</c> — the reference pushes it with a
-/// force through <c>PhysicsBehavior</c>. Not modeled: placing the flare on the model's flare bone (<c>FlareBoneBaseName</c>), <c>MustReloadAtAirfield</c> (no airfield reload),
-/// the supersonic locomotor set that cannot launch flares.
+/// (<c>FlareTemplateName</c>, short-lived by its own <c>LifetimeUpdate</c>) that the module moves as the flare's own <c>PhysicsBehavior</c> moves it in the reference (#448):
+/// <c>launchVolley</c> gives it the plane's velocity (<c>transferVelocityTo</c>) and one push (<c>applyMotiveForce</c>) of <c>VolleyVelocityFactor</c> times the plane's speed per
+/// logic frame - or of -10 per frame for a plane slower than one unit per frame, which throws the flares backwards - along the heading turned by the volley's spread
+/// (<c>VolleyArcAngle</c>), divided by the flare's mass; then <c>applyFrictionalForces</c> takes the flare's lateral and, once the push's motive frames are over, its forward
+/// speed with the flare's frictions and its locomotor's <c>Extra2DFriction</c> (or the aerodynamic friction when the locomotor does not apply 2D friction in the air), and the
+/// flare sinks at its locomotor's <c>SpeedLimitZ</c>. A flare flies on when the plane has died. Not modeled: the flare's gravity and lift (it sinks at the limit), the flares of a
+/// held plane (its module stands, and with it its flares), a plane removed before its flares end, the supersonic locomotor set that cannot launch flares.
 /// </summary>
 public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModule, IUpdateModule, IUpgradeModule, ICountermeasuresModule
 {
@@ -313,6 +316,14 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
     private long _reloadTick;
 
     private sealed record Flare(EntityId Id, long AddedTick, Fixed VelocityX, Fixed VelocityY);
+
+    /// <summary><c>MOTIVE_FRAMES</c> of <c>PhysicsUpdate.cpp</c>: for a third of a second after its push a flare's forward speed knows no friction (<c>isMotive</c>).</summary>
+    private const int MotiveFrames = SimulationRate.OriginalFramesPerSecond / 3;
+
+    // MIN_NON_AERO_FRICTION and MAX_FRICTION of PhysicsUpdate.cpp; the default lateral and forward friction of PhysicsBehaviorModuleData.
+    private static readonly Fixed MinNonAeroFriction = Fixed.FromDecimal(0.01m);
+    private static readonly Fixed MaxFriction = Fixed.FromDecimal(0.99m);
+    private static readonly Fixed DefaultFriction = Fixed.FromDecimal(0.15m);
 
     public override string ModuleName => "CountermeasuresBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -392,9 +403,10 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
 
     public long Update(IWorldServices world)
     {
-        if (Entity.EffectivelyDead || !_mux.Executed) return SimulationTiming.SleepForever;
         var now = world.Tick;
+        // The flares are objects of their own in the reference, moved by their own physics: they fly on after the plane has died.
         MoveFlares(world, now);
+        if (Entity.EffectivelyDead || !_mux.Executed) return _flares.Count > 0 ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
         if (world.IsAirborneTarget(Entity) && _available > 0)
         {
             if (_reactionTick != 0 && now >= _reactionTick)
@@ -422,7 +434,10 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
         return SimulationTiming.SleepNone;
     }
 
-    /// <summary>Forgets flares that are gone and carries the others along: horizontal speed bleeds off at the flare locomotor's braking, the flare sinks at its <c>SpeedLimitZ</c>.</summary>
+    /// <summary>
+    /// Forgets flares that are gone and carries the others along: once per logic frame of the original, from the flare's second frame of flight, the friction of
+    /// <c>PhysicsBehavior::applyFrictionalForces</c> takes its speed (<see cref="Friction"/>); the flare sinks at its locomotor's <c>SpeedLimitZ</c>.
+    /// </summary>
     private void MoveFlares(IWorldServices world, long now)
     {
         for (var index = _flares.Count - 1; index >= 0; index--)
@@ -438,15 +453,12 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
             var locomotor = entity.Template.Locomotor;
             var velocityX = flare.VelocityX;
             var velocityY = flare.VelocityY;
-            // The braking is the 30 Hz step: it takes the braking of a whole logic frame of the original off the speed once per frame, counted from the flare's first move
-            // (the tick after it was launched); in between the flare keeps its speed and moves every tick.
-            if (world.Time.IsOriginalFrameBoundary(now - flare.AddedTick - TickOrder.Next))
+            // The friction is the 30 Hz step: it acts once per logic frame of the original, counted from the flare's first move (the tick after it was launched), and not in that
+            // first frame, whose physics weighed the plane's own velocity before the push arrived; in between the flare keeps its speed and moves every tick.
+            var flown = now - flare.AddedTick - TickOrder.Next;
+            if (world.Time.IsOriginalFrameBoundary(flown) && flown >= world.Time.TicksPerOriginalFrame)
             {
-                var braking = FlightFrames.PerFrame(world.Time, locomotor?.Braking ?? Fixed.Zero);
-                var speed = Fixed.Sqrt(velocityX * velocityX + velocityY * velocityY);
-                var scale = speed <= braking || speed == Fixed.Zero ? Fixed.Zero : (speed - braking) / speed;
-                velocityX *= scale;
-                velocityY *= scale;
+                (velocityX, velocityY) = Friction(world, entity, velocityX, velocityY, flown + world.Time.TicksPerOriginalFrame >= world.Time.OriginalFrames(MotiveFrames));
                 _flares[index] = flare with { VelocityX = velocityX, VelocityY = velocityY };
             }
             entity.X += velocityX;
@@ -465,6 +477,30 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
         }
     }
 
+    /// <summary>
+    /// <c>PhysicsBehavior::applyFrictionalForces</c> on a flare for one logic frame of the original: with 2D friction in the air (<c>Apply2DFrictionWhenAirborne</c>) it loses the share of
+    /// its speed across its heading that its lateral friction names, and of its speed along its heading the share of its forward friction once its push is no longer motive
+    /// (<paramref name="forwardToo"/>), each friction its <c>PhysicsBehavior</c>'s plus its locomotor's <c>Extra2DFriction</c> within 0.01 and 0.99; without, the aerodynamic friction takes
+    /// its share of all of it.
+    /// </summary>
+    private static (Fixed X, Fixed Y) Friction(IWorldServices world, Entity flare, Fixed velocityX, Fixed velocityY, bool forwardToo)
+    {
+        var physics = flare.Template.Modules.Select(module => module.Data).OfType<PhysicsData>().FirstOrDefault();
+        var locomotor = flare.Template.Locomotor;
+        var extra = locomotor?.Extra2DFrictionPerFrame ?? Fixed.Zero;
+        if (locomotor is { Apply2DFrictionWhenAirborne: true } || !world.IsSignificantlyAboveTerrain(flare))
+        {
+            var (dirX, dirY) = (FixedTrig.Cos(flare.Angle), FixedTrig.Sin(flare.Angle));
+            var lateral = velocityX * -dirY + velocityY * dirX;
+            var forward = velocityX * dirX + velocityY * dirY;
+            var lf = Fixed.Min(MaxFriction, Fixed.Max(MinNonAeroFriction, (physics?.LateralFriction ?? DefaultFriction) + extra));
+            var ff = forwardToo ? Fixed.Min(MaxFriction, Fixed.Max(MinNonAeroFriction, (physics?.ForwardFriction ?? DefaultFriction) + extra)) : Fixed.Zero;
+            return (velocityX - (lf * lateral * -dirY + ff * forward * dirX), velocityY - (lf * lateral * dirX + ff * forward * dirY));
+        }
+        var aero = Fixed.Min(MaxFriction, Fixed.Max(Fixed.Zero, (physics?.AerodynamicFriction ?? Fixed.Zero) + extra));
+        return (velocityX - velocityX * aero, velocityY - velocityY * aero);
+    }
+
     private void LaunchVolley(IWorldServices world, long now)
     {
         if (!world.Templates.TryGet(data.FlareTemplate, out var template) || !template.IsInstantiable)
@@ -474,15 +510,23 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
             return;
         }
         var size = data.VolleySize;
+        // transferVelocityTo: the flare starts with the plane's velocity, per logic frame of the original.
+        var (planeX, planeY, planeZ) = world.VelocityOf(Entity);
+        // "if velocity < 1 then -10", both per frame (getVelocityMagnitude): a plane that stands throws its flares backwards.
+        var speed = Fixed.Sqrt(planeX * planeX + planeY * planeY + planeZ * planeZ);
+        if (speed < Fixed.One) speed = -Fixed.FromInt(10);
+        // applyMotiveForce: the push is a force, the flare's acceleration that force over its mass.
+        var mass = template.Modules.Select(module => module.Data).OfType<PhysicsData>().FirstOrDefault()?.Mass ?? Fixed.One;
+        var push = speed * data.VolleyVelocityFactor / (mass > Fixed.Zero ? mass : Fixed.One);
+        var stride = Fixed.FromInt(world.Time.TicksPerOriginalFrame);
         for (var index = 0; index < size && _available > 0; index++)
         {
             // Two flares leave at the extreme spread, one straight along the heading, more are divided equally.
             var ratio = size == 1 ? Fixed.Zero : Fixed.FromInt(index) / Fixed.FromInt(size - 1) * Fixed.FromInt(2) - Fixed.One;
             var angle = FixedTrig.Normalize(Entity.Angle + ratio * data.VolleyArcRadians);
-            // "if velocity < 1 then -10": a parked plane throws its flares backwards.
-            var speed = Entity.Speed * world.Time.TicksPerSecondFixed < Fixed.One ? world.Time.PerSecondToPerTick(-Fixed.FromInt(10)) : Entity.Speed;
             var id = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
-            _flares.Add(new Flare(id, now, FixedTrig.Cos(angle) * speed * data.VolleyVelocityFactor, FixedTrig.Sin(angle) * speed * data.VolleyVelocityFactor));
+            // The module moves the flare every tick: the velocity per frame in equal shares of the frame's ticks.
+            _flares.Add(new Flare(id, now, (planeX + FixedTrig.Cos(angle) * push) / stride, (planeY + FixedTrig.Sin(angle) * push) / stride));
             _available--;
         }
     }

@@ -313,7 +313,7 @@ static partial class Tests
     }
 
     /// <summary>
-    /// <c>CountermeasuresBehavior.MoveFlares</c>: a flare leaves the plane at twice the plane's speed, loses speed at its locomotor's braking and sinks at its <c>SpeedLimitZ</c>. The braking
+    /// <c>CountermeasuresBehavior.MoveFlares</c>: a flare leaves the plane with its velocity and a push, loses speed to its friction and sinks at its <c>SpeedLimitZ</c>. The friction
     /// acts once per logic frame of the original; the flare moves every tick. Compared from where the flare appeared (when it appears depends on the missile it answers).
     /// </summary>
     public static void RateFlightFlaresAreTheSame()
