@@ -304,7 +304,10 @@ public sealed partial class SimulationWorld
         var (victimX, victimY, _) = victim.FrameEnd(tick);
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
-            var (goalX, goalY) = FindAttackPosition(entity, victim) ?? (victimX, victimY);
+            // An airborne attacker flies to its approach target (computeAttackPath, #451); a unit on the ground walks at the victim or where it can fire from.
+            var (goalX, goalY) = ApproachesInFlight(entity) && CurrentWeapon(entity) is { } weapon && !IsContactWeapon(weapon)
+                ? AircraftApproachTarget(entity, victim, weapon)
+                : FindAttackPosition(entity, victim) ?? (victimX, victimY);
             if (!ai.StartInternalMove(goalX, goalY)) return false;
             ai.NotePursuit(victim.Id);
             NoteContactApproach(entity, ai, victim);
@@ -333,30 +336,17 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>AIAttackApproachTargetState</c> of an aircraft that flies at its victim (#436; <see cref="Modules.BuiltIn.AIUpdateInterface.FliesAtAimedVictim"/>) whose ordered attack is out of reach:
-    /// <c>computeAttackPath</c> - "airborne objects don't pathfind" - flies it straight to <c>Weapon::computeApproachTarget</c>. Too close (inside a minimum range above a cell, between the
-    /// bounding circles) it heads for the point halfway between minimum and maximum range from the victim, on its own side of it, or on the far side when it heads toward the victim ("Don't
-    /// do a 180 degree turn"); too far it flies at the victim, and the aim takes over where the weapon reaches. Not modelled: <c>clipToTerrainExtent</c> of the point.
+    /// <c>computeAttackPath</c> - "airborne objects don't pathfind" - flies it straight to <c>Weapon::computeApproachTarget</c> (<see cref="AircraftApproachTarget"/>, #451), computed again as
+    /// <c>computePath</c> does (<see cref="RecomputeApproach"/>).
     /// </summary>
-    private void ApproachInFlight(Entity entity, Entity victim)
+    private void ApproachInFlight(Entity entity, AcquisitionState state, Entity victim)
     {
         if (AiOf(entity) is not { FliesAtAimedVictim: true } ai || CurrentWeapon(entity) is not { } weapon || IsContactWeapon(weapon)) return;
-        var (ownX, ownY, _) = entity.FrameEnd(_tick);
-        var (victimX, victimY, _) = victim.FrameEnd(_tick);
-        var (goalX, goalY) = (victimX, victimY);
-        var radii = CircleRadius(entity) + CircleRadius(victim);
-        var minimum = weapon.MinimumRange();
-        var (dx, dy) = (ownX - victimX, ownY - victimY);
-        if (minimum > Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize) && SquaredReach.Of(minimum + radii).ContainsStrictly(dx * dx + dy * dy))
-        {
-            var heading = entity.FrameEndAngle(_tick);
-            var length = Fixed.Sqrt(dx * dx + dy * dy);
-            var (dirX, dirY) = length > Fixed.Zero ? (dx / length, dy / length) : (-FixedTrig.Cos(heading), -FixedTrig.Sin(heading));
-            if (FixedTrig.AngleDifference(heading, FixedTrig.Atan2(-dirY, -dirX)).Abs() < FixedTrig.HalfPi) (dirX, dirY) = (-dirX, -dirY);
-            var distance = (AttackRangeOf(entity, weapon) + minimum) / Fixed.FromInt(2) + radii;
-            (goalX, goalY) = (victimX + dirX * distance, victimY + dirY * distance);
-        }
+        if (RecomputeApproach(entity, state, victim, weapon) is not { } goal) return;
+        MarkDirty(entity);
+        var (goalX, goalY) = goal;
         if (entity.HasMoveTarget && entity.MoveTargetX == goalX && entity.MoveTargetY == goalY) return;
-        if (ai.StartInternalMove(goalX, goalY)) MarkDirty(entity);
+        ai.StartInternalMove(goalX, goalY);
     }
 
     /// <summary>
@@ -420,7 +410,14 @@ public sealed partial class SimulationWorld
         {
             // The approach comes before the weapon check: with the victim out of reach the chooser names no weapon, which is not a change of the locked one.
             if ((state.LockedSlot < 0 || entity.CurrentWeaponSlot == state.LockedSlot) && ApproachLimitedAttack(entity, state, victim, _tick)) return;
-            // In reach: the walk ends where the unit stands (AIAttackApproachTargetState succeeds into the aim state).
+            // In reach: the walk ends where the unit stands (AIAttackApproachTargetState succeeds into the aim state). An airborne attacker flies on to its approach target first:
+            // an attack path's approach does not stop in range (m_stopIfInRange, #451).
+            if (state.Chasing && entity.HasMoveTarget && ApproachesInFlight(entity))
+            {
+                state.OrderedTick = _tick;
+                MarkDirty(entity);
+                return;
+            }
             if (state.Chasing && AiOf(entity) is { } walking)
             {
                 walking.StopInternalMoveAtFrameEnd(this);
@@ -440,8 +437,14 @@ public sealed partial class SimulationWorld
         if (choice.Slot < 0 || choice.Rejection == CommandRejection.OutOfRange)
         {
             if (choice.Rejection is CommandRejection.OutOfRange or CommandRejection.WeaponNotReady) AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
-            if (choice.Rejection == CommandRejection.OutOfRange) ApproachInFlight(entity, victim);
+            if (choice.Rejection == CommandRejection.OutOfRange) ApproachInFlight(entity, state, victim);
             return;
+        }
+        // In reach: the approach state is left; entering it again computes the approach afresh (AIAttackApproachTargetState::onEnter).
+        if (state.Approaching)
+        {
+            state.ClearApproach();
+            MarkDirty(entity);
         }
         if (choice.Rejection is not (0 or CommandRejection.WeaponNotReady) || !GateAllowsFire(entity, victim)) return;
         if (!AttackCycleFires(entity, ref state.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: false) || !state.ShotPending) return;

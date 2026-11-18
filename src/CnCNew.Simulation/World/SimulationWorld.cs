@@ -1612,8 +1612,14 @@ public sealed partial class SimulationWorld : IWorldServices
                 ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
                 // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim. A unit that needs a line of
                 // sight and cannot fire from where it stands goes where it can (AIAttackApproachTargetState::computePath -> findAttackPath, F-55).
+                // An airborne attacker does not pathfind: it flies to its approach target, a place within its weapon's range in a box of goal cells of its own (computeAttackPath,
+                // Weapon::computeApproachTarget, #451).
                 var (pursueX, pursueY) = (pursue.X, pursue.Y);
-                if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere && FindAttackPosition(unit, victim) is { } place) (pursueX, pursueY) = place;
+                if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere)
+                {
+                    if (ApproachesInFlight(unit) && ApproachWeapon(unit, victim) is { } approachWeapon) (pursueX, pursueY) = AircraftApproachTarget(unit, victim, approachWeapon);
+                    else if (FindAttackPosition(unit, victim) is { } place) (pursueX, pursueY) = place;
+                }
                 AiOf(unit)!.OrderMove(this, pursueX, pursueY, true);
                 AiOf(unit)!.NotePursuit(victim.Id);
                 NoteContactApproach(unit, AiOf(unit)!, victim);

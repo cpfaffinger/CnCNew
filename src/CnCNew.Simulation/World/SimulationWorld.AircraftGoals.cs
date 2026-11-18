@@ -19,24 +19,36 @@ public sealed partial class SimulationWorld
     {
         // A drone (the Hellfire drone) is left out, a named difference: the original adjusts its moves as well, but here a drone's moves - following its master, ending an
         // attack - do not all fall in the same logic frame of the original at every rate, and what one drone saw of another's goal then differed between the rates.
-        if (!AdjustsAsAircraft(mover) || mover.Template.IsKindOf("DRONE")) return;
+        if (!TakesAircraftGoals(mover)) return;
         // The world frame the tick lies in: a decision a 30 Hz world makes in its step of frame f is made above 30 Hz in one of the ticks of that frame.
         var frame = Time.ToOriginalFrames(_tick);
-        Search(mover, frame, ref x, ref y);
-        // updateAircraftGoal: the aircraft holds the cell it was given from now on.
+        Search(mover, frame, ref x, ref y, null);
+        TakeAircraftGoal(mover, frame, x, y);
+    }
+
+    /// <summary>An aircraft whose moves are adjusted to a box of goal cells of its own (<see cref="AdjustAircraftDestination"/>; a drone is left out, see there).</summary>
+    private static bool TakesAircraftGoals(Entity mover) => AdjustsAsAircraft(mover) && !mover.Template.IsKindOf("DRONE");
+
+    /// <summary><c>updateAircraftGoal</c>: the aircraft holds the cell of (<paramref name="x"/>, <paramref name="y"/>) from now on.</summary>
+    private void TakeAircraftGoal(Entity mover, long frame, Fixed x, Fixed y)
+    {
         mover.Goal = AircraftGoal.Take(mover.Goal, frame, x, y);
         if (_executingCommands) _commandGoals.Add(mover.Id);
         MarkDirty(mover);
     }
 
-    private void Search(Entity mover, long frame, ref Fixed x, ref Fixed y)
+    /// <summary>
+    /// The counter-clockwise spiral of cells around the point (<c>adjustDestination</c>, <c>adjustTargetDestination</c>: <c>MAX_CELLS_TO_TRY</c> cells): the first box nobody else holds,
+    /// and - with <paramref name="accept"/> - whose point it accepts; false when there is none, and the point stays.
+    /// </summary>
+    private bool Search(Entity mover, long frame, ref Fixed x, ref Fixed y, System.Func<Fixed, Fixed, bool>? accept)
     {
         var (radius, center) = GoalCellRadius(mover);
-        // adjustDestination: the cell of the point (a box without a centre cell is anchored half a cell on), then the counter-clockwise spiral around it.
+        // The cell of the point (a box without a centre cell is anchored half a cell on), then the spiral around it.
         var half = Fixed.FromInt(TerrainMap.CellSize) / Fixed.FromInt(2);
         var i = TerrainMap.CellOf(center ? x : x + half);
         var j = TerrainMap.CellOf(center ? y : y + half);
-        if (TryAircraftCell(mover, frame, i, j, radius, center, ref x, ref y)) return;
+        if (TryAircraftCell(mover, frame, i, j, radius, center, accept, ref x, ref y)) return true;
         var limit = MaxCellsToTry;
         var segment = 1;
         while (limit > 0)
@@ -53,12 +65,13 @@ public sealed partial class SimulationWorld
                         default: j--; break;
                     }
                     limit--;
-                    if (TryAircraftCell(mover, frame, i, j, radius, center, ref x, ref y)) return;
+                    if (TryAircraftCell(mover, frame, i, j, radius, center, accept, ref x, ref y)) return true;
                 }
                 if (leg % 2 == 1) segment++;
             }
         }
         // No free cell: the point stays as ordered (snapClosestGoalPosition keeps a hovering aircraft's point).
+        return false;
     }
 
     /// <summary>
@@ -66,9 +79,9 @@ public sealed partial class SimulationWorld
     /// (<c>isAircraftGoal</c>, <c>getGoalAircraft</c>); then <c>adjustCoordToCell</c>. Another aircraft's goal is the one it held before <paramref name="frame"/> (<see cref="AircraftGoal"/>),
     /// except one taken by an order of this tick's command phase, which every later order of the phase sees: the original's <c>aiMoveToPosition</c> enters
     /// <c>AIInternalMoveToState</c> at once, so the members of one group order and the orders of one bundle take their goals one after another and see each other's (#449).
-    /// The command phase is one tick at every rate.
+    /// The command phase is one tick at every rate. With <paramref name="accept"/> the point of the cell must also please it (<c>checkForTarget</c>: <c>isGoalPosWithinAttackRange</c>).
     /// </summary>
-    private bool TryAircraftCell(Entity mover, long frame, int i, int j, int radius, bool center, ref Fixed x, ref Fixed y)
+    private bool TryAircraftCell(Entity mover, long frame, int i, int j, int radius, bool center, System.Func<Fixed, Fixed, bool>? accept, ref Fixed x, ref Fixed y)
     {
         var above = center ? radius + 1 : radius;
         if (Navigation is { } navigation && (!navigation.Terrain.IsInside(i - radius, j - radius) || !navigation.Terrain.IsInside(i + above - 1, j + above - 1))) return false;
@@ -85,8 +98,10 @@ public sealed partial class SimulationWorld
             if (i - radius < gi + otherAbove && gi - otherRadius < i + above && j - radius < gj + otherAbove && gj - otherRadius < j + above) return false;
         }
         var cell = Fixed.FromInt(TerrainMap.CellSize);
-        x = Fixed.FromInt(i) * cell + (center ? cell / Fixed.FromInt(2) : Fixed.Zero);
-        y = Fixed.FromInt(j) * cell + (center ? cell / Fixed.FromInt(2) : Fixed.Zero);
+        var pointX = Fixed.FromInt(i) * cell + (center ? cell / Fixed.FromInt(2) : Fixed.Zero);
+        var pointY = Fixed.FromInt(j) * cell + (center ? cell / Fixed.FromInt(2) : Fixed.Zero);
+        if (accept is not null && !accept(pointX, pointY)) return false;
+        (x, y) = (pointX, pointY);
         return true;
     }
 

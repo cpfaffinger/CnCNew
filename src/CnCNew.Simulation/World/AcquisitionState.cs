@@ -96,6 +96,15 @@ internal sealed class AcquisitionState
     /// </summary>
     public int LockedSlot = -1;
 
+    /// <summary>
+    /// An airborne attacker is on the approach of this attack (<c>AIAttackApproachTargetState</c>, #451): the tick it last computed the approach in
+    /// (<c>m_approachTimestamp</c>) and where the victim stood then (<c>m_prevVictimPos</c>). Cleared when the victim is in reach (the state is left).
+    /// </summary>
+    public bool Approaching;
+    public long ApproachTick;
+    public Fixed ApproachVictimX;
+    public Fixed ApproachVictimY;
+
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
     /// <summary><c>Weapon::m_leechWeaponRangeActive</c>: a leech-range weapon has fired or begun its wind-up in this attack.</summary>
@@ -117,6 +126,14 @@ internal sealed class AcquisitionState
         ShotPending = false;
         ShotsLeft = 0;
         LockedSlot = -1;
+        ClearApproach();
+    }
+
+    public void ClearApproach()
+    {
+        Approaching = false;
+        ApproachTick = 0;
+        (ApproachVictimX, ApproachVictimY) = (Fixed.Zero, Fixed.Zero);
     }
 
     public void Describe(IStateWriter writer)
@@ -155,6 +172,13 @@ internal sealed class AcquisitionState
         {
             writer.Bool("chasing", true);
             writer.Int("chaseTick", ChaseTick);
+        }
+        if (Approaching)
+        {
+            writer.Bool("approaching", true);
+            writer.Int("approachTick", ApproachTick);
+            writer.Fixed("approachVictimX", ApproachVictimX);
+            writer.Fixed("approachVictimY", ApproachVictimY);
         }
         if (Forced) writer.Bool("forced", true);
         if (Neutral) writer.Bool("neutral", true);
@@ -207,6 +231,14 @@ internal sealed class AcquisitionState
             state.Chasing = reader.Bool("chasing");
             state.ChaseTick = reader.Int("chaseTick");
         }
+        if (reader.Has("approaching"))
+        {
+            state.Approaching = reader.Bool("approaching");
+            state.ApproachTick = reader.Int("approachTick");
+            state.ApproachVictimX = reader.Fixed("approachVictimX");
+            state.ApproachVictimY = reader.Fixed("approachVictimY");
+            if (!state.Victim.IsValid || state.ApproachTick < 0) throw new InvalidDataException("An approach needs a victim and a tick in snapshot.");
+        }
         state.Forced = reader.Has("forced") && reader.Bool("forced");
         state.Neutral = reader.Has("neutral") && reader.Bool("neutral");
         if (reader.Has("continueOwner"))
@@ -229,12 +261,12 @@ internal sealed class AcquisitionState
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
 internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral,
     int ContinueOwner, Fixed ContinueX, Fixed ContinueY, FireCycleStamp Cycle, bool FireOrdered, FireOrigin OrderOrigin, bool ShotPending, int ShotsLeft,
-    int LockedSlot)
+    int LockedSlot, bool Approaching, long ApproachTick, Fixed ApproachVictimX, Fixed ApproachVictimY)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
         => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral,
             state.ContinueOwner, state.ContinueX, state.ContinueY, FireCycleStamp.Of(state.Cycle), state.FireOrdered, state.OrderOrigin, state.ShotPending, state.ShotsLeft,
-            state.LockedSlot);
+            state.LockedSlot, state.Approaching, state.ApproachTick, state.ApproachVictimX, state.ApproachVictimY);
 }
 
 /// <summary>
