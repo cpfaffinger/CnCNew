@@ -253,6 +253,10 @@ public static class DefinitionCompiler
             }
             else if (type.Equals("UnitSpecificSounds", StringComparison.OrdinalIgnoreCase) || type.Equals("UnitSpecificFX", StringComparison.OrdinalIgnoreCase))
                 state.Sections.RemoveAll(value => SectionType(value).Equals(type, StringComparison.OrdinalIgnoreCase));
+            // ThingTemplate::parsePrerequisites appends its lines to m_prereqInfo, so a second block adds to the first; only a map's overrides
+            // (INI_LOAD_CREATE_OVERRIDES) clear what the block replaces - the copied template's lines, or an earlier block of the same override.
+            else if (type.Equals("Prerequisites", StringComparison.OrdinalIgnoreCase) && doc.IsOverride)
+                state.Sections.RemoveAll(value => SectionType(value).Equals(type, StringComparison.OrdinalIgnoreCase));
         }
         state.Sections.Add(section);
     }

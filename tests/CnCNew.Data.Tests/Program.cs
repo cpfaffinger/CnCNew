@@ -46,6 +46,7 @@ FieldsWithoutAnEqualsSignAreFields();
 AnEqualsSignInAValueIsASeparator();
 PrerequisiteObjectLinesNameAlternatives();
 CommandButtonScienceIsAList();
+PrerequisiteBlocksAppendUnlessOverridden();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -152,6 +153,24 @@ static void CommandButtonScienceIsAList()
     Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One(unknown), options: DefinitionCompilerOptions.Audit with { StrictReferences = true }), "SCIENCE_Unknown");
 }
 
+static void PrerequisiteBlocksAppendUnlessOverridden()
+{
+    // ThingTemplate::parsePrerequisites appends to m_prereqInfo; it clears it only when the INI loads as INI_LOAD_CREATE_OVERRIDES (a map's map.ini), so a second
+    // block of an object adds its lines, and a map's block replaces the object's lines - and an earlier block of the same override.
+    var files = new Dictionary<string, string>
+    {
+        ["Data/INI/Object/A.ini"] = "Object Plant\nEnd\nObject Yard\nEnd\nObject Depot\nEnd\nObject Tower\n  Prerequisites\n    Object = Plant\n  End\n  Prerequisites\n    Object = Yard\n  End\nEnd\n",
+        ["Maps/M/map.ini"] = "Object Tower\n  Prerequisites\n    Object = Yard\n  End\n  Prerequisites\n    Object = Depot\n  End\nEnd\n",
+    };
+    string[] Lines(MapOverlayMode overlays)
+    {
+        var graph = DefinitionCompiler.Compile(new MemorySource(files, files.Keys.ToArray()), options: DefinitionCompilerOptions.Audit with { MapOverlays = overlays });
+        return [..graph.Definitions.OfType<ObjectDefinition>().Single(value => value.OriginalName == "Tower").Sections
+            .Where(value => value.Declaration == "Prerequisites").SelectMany(value => value.Fields).Select(field => field.Value.OriginalText)];
+    }
+    Assert(Lines(MapOverlayMode.Exclude).SequenceEqual(["Plant", "Yard"]), $"A second Prerequisites block adds its lines ({string.Join(", ", Lines(MapOverlayMode.Exclude))}).");
+    Assert(Lines(MapOverlayMode.Include).SequenceEqual(["Depot"]), $"A map's override clears the object's lines and its own earlier block ({string.Join(", ", Lines(MapOverlayMode.Include))}).");
+}
 
 static void FieldsWithoutAnEqualsSignAreFields()
 {

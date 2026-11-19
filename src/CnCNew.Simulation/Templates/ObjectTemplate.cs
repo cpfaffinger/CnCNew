@@ -1142,11 +1142,14 @@ public sealed class TemplateCatalog
         return null;
     }
 
+    /// <summary>
+    /// <c>ThingTemplate::m_prereqInfo</c>: the lines of every <c>Prerequisites</c> block in file order (<c>parsePrerequisites</c> appends; a map's override has already
+    /// dropped what it clears, see the compiler).
+    /// </summary>
     private static ImmutableArray<PrerequisiteLine> ResolvePrerequisites(ObjectDefinition definition)
     {
-        var section = definition.Sections.FirstOrDefault(value => value.Declaration.Equals("Prerequisites", StringComparison.OrdinalIgnoreCase));
-        if (section is null) return [];
         var lines = ImmutableArray.CreateBuilder<PrerequisiteLine>();
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Trim().Equals("Prerequisites", StringComparison.OrdinalIgnoreCase)))
         foreach (var field in section.Fields)
         {
             var isScience = field.Name.Equals("Science", StringComparison.OrdinalIgnoreCase);
