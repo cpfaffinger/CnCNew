@@ -475,7 +475,15 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     private bool TakeOrStore(IWorldServices world, PendingKind kind, Fixed x, Fixed y, int shots, bool fromPlayer, EntityId target)
     {
-        if (!TakeoffOrLandingInProgress && _allowAir) return true;
+        if (!TakeoffOrLandingInProgress && _allowAir)
+        {
+            // AIUpdateInterface::aiDoCommand clears the state machine: the attack replaces a return for landing or to a dead airfield (#463), as a move or a guard does.
+            _pending = PendingKind.None;
+            _returnTick = 0;
+            _phase = JetPhase.None;
+            _useReturnLocomotor = false;
+            return true;
+        }
         // The stored order replaces whatever was stored, a guard included.
         world.EndGuard(Entity);
         Store(kind, x, y, fromPlayer, target);
