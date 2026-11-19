@@ -35,6 +35,12 @@ public sealed partial class SimulationWorld
     public bool IsLimitedAttackRunning(Entity unit, EntityId victim)
         => unit.Acquisition is { Ordered: true, ShotsLeft: > 0 } state && state.Victim == victim;
 
+    /// <summary>
+    /// The unit runs an attack an order named on <paramref name="victim"/> (<c>AIAttackState</c> by order): it approaches, aims and fires until the victim is gone, the attack fails or
+    /// another order replaces it (#462).
+    /// </summary>
+    public bool IsOrderedAttackRunning(Entity unit, EntityId victim) => unit.Acquisition is { Ordered: true } state && state.Victim == victim;
+
     private const long FireOrderRepeatFrames = 2;
 
     /// <summary>The first tick of <paramref name="entity"/>'s own logic frame of the original that holds <paramref name="tick"/> (the tick itself at 30 Hz).</summary>

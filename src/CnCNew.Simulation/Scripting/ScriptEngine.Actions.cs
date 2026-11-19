@@ -724,10 +724,16 @@ public sealed partial class ScriptEngine
             // leaveGroup; chooseLocomotorSet(LOCOMOTORSET_NORMAL); and the speed a script capped is the unit's own again.
             AiOf(attacker)?.ChooseLocomotorSet(_world, "SET_NORMAL");
             if (AiOf(attacker) is { SpeedCap.Raw: > 0 } slowed) slowed.SpeedCap = Fixed.Zero;
-            var (owner, unit, target, x, y) = (attacker.Owner, attacker.Id, victim.Id, victim.X, victim.Y);
-            if (!_issue(owner, (sequence, tick) => new PursueCommand(owner, sequence, tick, unit, target, x, y)).Accepted) Diagnose("order rejected");
-            else _busyThisTick.Add(unit.Value);
+            IssueAttack(attacker, victim);
         }
+    }
+
+    /// <summary>The attack order of <paramref name="attacker"/> on <paramref name="victim"/> (<see cref="PursueCommand"/>), by its owner.</summary>
+    private void IssueAttack(Entity attacker, Entity victim)
+    {
+        var (owner, unit, target, x, y) = (attacker.Owner, attacker.Id, victim.Id, victim.X, victim.Y);
+        if (!_issue(owner, (sequence, tick) => new PursueCommand(owner, sequence, tick, unit, target, x, y)).Accepted) Diagnose("order rejected");
+        else _busyThisTick.Add(unit.Value);
     }
 
     private void StartFollowing(Entity entity, string mode)
@@ -742,8 +748,9 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// Advances every standing order (waypoint paths, hunts, attacks, guard positions). A path is followed waypoint by waypoint and looped when the path's last
-    /// link returns to its first waypoint; hunts, attacks and area orders move toward the current target every <see cref="RetargetIntervalFrames"/> frames of the original and let
-    /// the combat driver of the session open fire in range (<c>MAP-SCRIPTS.md</c> §8: the simulation has no attack-move AI state).
+    /// link returns to its first waypoint; hunts and area orders move toward the current target every <see cref="RetargetIntervalFrames"/> frames of the original and let
+    /// the combat driver of the session open fire in range (<c>MAP-SCRIPTS.md</c> §8: the simulation has no attack-move AI state); an attack on a team orders an attack on one of its
+    /// members after the other (<see cref="UpdateSquadAttacker"/>).
     /// </summary>
     private void UpdateFollowers()
     {
@@ -797,9 +804,13 @@ public sealed partial class ScriptEngine
                 }
                 continue;
             }
-            var squadVictim = mode.StartsWith(TeamMode, StringComparison.Ordinal) ? SquadVictim(follower, entity, int.Parse(ModeArgument(mode, TeamMode.Length), CultureInfo.InvariantCulture)) : null;
-            if (squadVictim is not null && FireAtOrdered(entity, squadVictim)) continue;
-            if (_tick % retargetInterval != follower.Entity % RetargetIntervalFrames * ticksPerFrame) continue;
+            var retargets = _tick % retargetInterval == follower.Entity % RetargetIntervalFrames * ticksPerFrame;
+            if (mode.StartsWith(TeamMode, StringComparison.Ordinal))
+            {
+                UpdateSquadAttacker(follower, entity, int.Parse(ModeArgument(mode, TeamMode.Length), CultureInfo.InvariantCulture), retargets);
+                continue;
+            }
+            if (!retargets) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
             {
                 if (WaypointOrDiagnose(ModeArgument(mode, PositionMode.Length)) is { } spot)
@@ -812,7 +823,6 @@ public sealed partial class ScriptEngine
             }
             (Fixed X, Fixed Y)? target = null;
             if (mode == HuntMode) target = HuntVictim(entity) is { } enemy ? (enemy.X, enemy.Y) : null;
-            else if (squadVictim is not null) target = (squadVictim.X, squadVictim.Y);
             else if (mode.StartsWith(AreaMode, StringComparison.Ordinal)) target = AreaCentre(ModeArgument(mode, AreaMode.Length));
             if (target is not { } goal)
             {
@@ -853,16 +863,6 @@ public sealed partial class ScriptEngine
         MoveTo(entity, x, y, attack: true);
     }
 
-    /// <summary>One shot at the victim of an attack order when a weapon of the unit reaches it and is ready; true when the order went out.</summary>
-    private bool FireAtOrdered(Entity entity, Entity victim)
-    {
-        if (entity.Owner.IsSystem || !_world.ChooseWeapon(entity, victim, FireOrigin.Ai).CanFire) return false;
-        var owner = entity.Owner;
-        var source = entity.Id;
-        var target = victim.Id;
-        return _issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target, WeaponSlot.Best, FireOrigin.Ai)).Accepted;
-    }
-
     private static Fixed DistanceSquared(Entity entity, Fixed x, Fixed y)
     {
         var dx = entity.X - x;
@@ -891,8 +891,41 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIAttackSquadState::chooseVictim</c>: the attacker keeps its victim until it is dead (<c>AI_ATTACK_OBJECT</c> of the sub-machine), then chooses by the difficulty of its player: on
-    /// easy a random unit of the team, on normal the closest, on hard the one every attacker picks, the first of the team's list - the last that joined, as a team's list is prepended to.
+    /// <c>AIAttackSquadState::update</c> of an attack on a team (<c>aiAttackTeam</c>: <c>NAMED_ATTACK_TEAM</c>, <c>TEAM_ATTACK_TEAM</c> through <c>groupAttackTeam</c>), once per logic frame:
+    /// while the attack on the chosen member runs (the sub-machine's <c>AIAttackState</c>, the port's ordered attack, <see cref="PursueCommand"/>), nothing; when it is over - the victim
+    /// is gone or the attack failed - the attacker chooses again (<see cref="SquadVictim"/>) and attacks that member; with nobody left to choose the state succeeds and the unit is idle. An
+    /// attack that would fail before its first step (<see cref="SimulationWorld.OrderedAttackFailsAtOnce"/>: no weapon of the unit can hit the member, or a computer player's unit would
+    /// have to approach an aircraft in the air, #460) is not ordered; the attacker stands and chooses again in its next frame, as the original's sub-machine does (#471).
+    /// <para>
+    /// A member the attacker's player does not see cannot be named in a player's attack order (the port's check of a <see cref="PursueCommand"/>), while the original's attack goes into
+    /// the fog ("Fog no longer prevents attacking at all"): the attacker keeps that member and attack-moves toward it every <see cref="RetargetIntervalFrames"/> frames until it sees it.
+    /// </para>
+    /// </summary>
+    private void UpdateSquadAttacker(Follower follower, Entity attacker, int teamId, bool retargets)
+    {
+        if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept)
+        {
+            if (_world.IsOrderedAttackRunning(attacker, kept.Id)) return;
+            if (!_world.CanPlayerSee(attacker.Owner, kept) && !_world.OrderedAttackFailsAtOnce(attacker, kept))
+            {
+                if (retargets) AttackToward(attacker, kept.X, kept.Y);
+                return;
+            }
+        }
+        follower.Victim = 0;
+        if (SquadVictim(follower, attacker, teamId) is not { } victim)
+        {
+            _followers.Remove(follower.Entity);
+            return;
+        }
+        if (_world.OrderedAttackFailsAtOnce(attacker, victim)) return;
+        if (!_world.CanPlayerSee(attacker.Owner, victim)) AttackToward(attacker, victim.X, victim.Y);
+        else IssueAttack(attacker, victim);
+    }
+
+    /// <summary>
+    /// <c>AIAttackSquadState::chooseVictim</c>, asked whenever the attack on the last choice is over (<see cref="UpdateSquadAttacker"/>): the attacker chooses by the difficulty of its
+    /// player: on easy a random unit of the team, on normal the closest, on hard the one every attacker picks, the first of the team's list - the last that joined, as a team's list is prepended to.
     /// <c>CHOOSE_VICTIM_ALWAYS_USES_NORMAL</c> makes it the closest at every difficulty. Easy and hard take <c>Squad::getLiveObjects</c>, which leaves out what is not selectable
     /// (<see cref="SimulationWorld.IsSelectable"/>: a drone or a stinger soldier of a living master, a rider); normal asks the partition for the closest member of the squad, which does not,
     /// but finds only what the partition holds - not a rider its container encloses (<c>OpenContain::addOrRemoveObjFromWorld</c>) - and only what is on the map when the attacker is, off
@@ -900,7 +933,6 @@ public sealed partial class ScriptEngine
     /// </summary>
     private Entity? SquadVictim(Follower follower, Entity attacker, int teamId)
     {
-        if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept) return kept;
         var difficulty = _chooseVictimAlwaysNormal ? ScriptDifficulty.Normal : AiOfPlayer(attacker.Owner)?.Setup.Difficulty ?? _options.Difficulty;
         var liveObjectsOnly = difficulty != ScriptDifficulty.Normal;
         var attackerOffMap = Modules.BuiltIn.FlightModules.IsOffMap(_world, attacker.X, attacker.Y);

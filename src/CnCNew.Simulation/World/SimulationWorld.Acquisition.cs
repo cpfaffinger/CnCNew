@@ -768,6 +768,13 @@ public sealed partial class SimulationWorld
         => IsComputerPlayer(entity.Owner) && victim.Template.IsKindOf("AIRCRAFT") && IsAirborneTargetAtFrameEnd(victim) && AcquisitionAdvisor?.IsHunting(entity) != true;
 
     /// <summary>
+    /// The attack an order would begin on <paramref name="victim"/> fails before the unit takes a step (<c>AIAttackState</c>'s first frame): no weapon the unit may choose can attack the
+    /// victim ("none of our weapons work"), or a computer player's unit would have to approach an aircraft in the air (<c>AIAttackApproachTargetState::onEnter</c>, #460).
+    /// </summary>
+    public bool OrderedAttackFailsAtOnce(Entity unit, Entity victim)
+        => !CanAttack(unit, victim, false, out var inRange) || (!inRange && LetsAircraftGo(unit, victim));
+
+    /// <summary>
     /// <c>AI::getAdjustedVisionRangeForObject(obj, OWNERTYPE | MOOD)</c> for a unit that may walk to its victim: the vision range times the guard-outer factor, times the mood factor of a
     /// computer player's alert or aggressive team. A unit that may not walk looks no further than its weapons reach (<c>AI::WITHIN_ATTACK_RANGE</c>) and its vision times the human factor.
     /// </summary>
