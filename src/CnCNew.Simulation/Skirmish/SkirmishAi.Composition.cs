@@ -23,7 +23,7 @@ public enum ArmyComposition : byte
 /// unit u, read from the catalog only:
 /// <list type="bullet">
 /// <item><b>damage per frame</b> d(a, b) of a against b: the best weapon of the weapon set a fights with (a bike's rider's) that may be fired at b (ground or airborne), its primary damage times the
-/// coefficient of b's armour for the damage type, times shots per logic frame (clip and reload included); a weapon that kills its owner counts as one shot in a lifetime;</item>
+/// coefficient of b's armour for the damage type, times shots per logic frame (clip and reload included); a weapon that kills its owner counts as one shot in a lifetime, worth at most one kill of b;</item>
 /// <item><b>offence</b> O(u) = Σ over E of n(e) · cost(e) · d(u, e) / health(e): the credits of the enemy u destroys per frame while it fires;</item>
 /// <item><b>exposure</b> X(u) = 1 / <see cref="LifetimeFrames"/> + Σ over E of n(e) · d(e, u) / health(u): the share of itself u loses per frame, never less than "lives one
 /// minute";</item>
@@ -188,7 +188,9 @@ public sealed partial class SkirmishAi
                 if (perShot <= 0) perShot = 1;
                 var reload = _time.FramesIn(weapon.ClipReloadTicks);
                 Fixed perFrame;
-                if ((weapon.AffectsMask & WeaponInfo.KillsSelf) != 0) perFrame = damage / Fixed.FromInt(LifetimeFrames);
+                // A weapon that kills its owner fires once in a lifetime: at most the victim's health, spread over the lifetime. Spreading the uncapped damage instead let the
+                // bomb truck's 999,999 (capped at 100,000: 55 per frame) count as a kill of every enemy in every frame, and bomb trucks took a fifth of a GLA player's vehicles (#464).
+                if ((weapon.AffectsMask & WeaponInfo.KillsSelf) != 0) perFrame = Fixed.Min(damage, Fixed.Max(HealthOf(victim), Fixed.One)) / Fixed.FromInt(LifetimeFrames);
                 else if (weapon.ClipSize > 0) perFrame = damage * Fixed.FromInt(weapon.ClipSize) / Fixed.FromInt(weapon.ClipSize * perShot + reload);
                 else perFrame = damage / Fixed.FromInt(perShot);
                 if (perFrame > best) best = perFrame;

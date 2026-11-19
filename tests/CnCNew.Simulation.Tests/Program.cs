@@ -762,6 +762,7 @@ run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot conti
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
 run.Test("Skirmish: the AI saves for the army unit it drew, so the factory builds", Tests.SkirmishAiSavesForItsArmyOrder);
 run.Test("Skirmish: the composition rule builds what hurts the enemy the AI has seen", Tests.SkirmishAiComposesItsArmyAgainstWhatItSees);
+run.Test("Skirmish (#464): the composition rule counts a weapon that kills its owner as one shot in a lifetime", Tests.SkirmishAiCountsASuicideWeaponAsOneShot);
 run.Test("Skirmish profiles: rush, balanced, eco and turtle march and defend by their plans", Tests.SkirmishTacticsProfilesBehave);
 run.Test("Skirmish profiles: easy, medium and hard decide at their pace and know what they may", Tests.SkirmishStrengthsDecideAtTheirPace);
 run.Test("Skirmish AI: an army that stopped growing marches with what it has", Tests.SkirmishArmyDoesNotStandStill);
