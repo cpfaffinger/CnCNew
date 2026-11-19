@@ -706,9 +706,9 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>aiAttackObject</c> (<c>CMD_FROM_SCRIPT</c>) of each attacker on <paramref name="victim"/>, the attack order a player gives (<see cref="PursueCommand"/>), by their owners: the attack
-    /// approaches, aims and fires until the victim is gone, the attack fails or another order comes (#462) - one order, not a standing one of the script (#461). A computer player's unit
-    /// does not approach an aircraft in the air (#460).
+    /// <c>aiAttackObject</c> and <c>aiForceAttackObject</c> (<c>CMD_FROM_SCRIPT</c>) of each attacker on <paramref name="victim"/>, the attack order a player gives (<see cref="PursueCommand"/>)
+    /// with the script as its source, by their owners: the attack approaches, aims and fires until the victim is gone, the attack fails or another order comes (#462) - one order, not a
+    /// standing one of the script (#461) -, at a victim of any relationship and into the fog (#471, #472). A computer player's unit does not approach an aircraft in the air (#460).
     /// </summary>
     private void AttackObjectBy(IReadOnlyList<Entity> attackers, Entity victim)
     {
@@ -728,11 +728,14 @@ public sealed partial class ScriptEngine
         }
     }
 
-    /// <summary>The attack order of <paramref name="attacker"/> on <paramref name="victim"/> (<see cref="PursueCommand"/>), by its owner.</summary>
+    /// <summary>
+    /// The attack order of <paramref name="attacker"/> on <paramref name="victim"/> (<see cref="PursueCommand"/>), by its owner, with the script as its source (<c>CMD_FROM_SCRIPT</c>): it
+    /// goes on whatever the relationship and into the fog (#471, #472).
+    /// </summary>
     private void IssueAttack(Entity attacker, Entity victim)
     {
         var (owner, unit, target, x, y) = (attacker.Owner, attacker.Id, victim.Id, victim.X, victim.Y);
-        if (!_issue(owner, (sequence, tick) => new PursueCommand(owner, sequence, tick, unit, target, x, y)).Accepted) Diagnose("order rejected");
+        if (!_issue(owner, (sequence, tick) => new PursueCommand(owner, sequence, tick, unit, target, x, y, FireOrigin.Script)).Accepted) Diagnose("order rejected");
         else _busyThisTick.Add(unit.Value);
     }
 
@@ -804,13 +807,12 @@ public sealed partial class ScriptEngine
                 }
                 continue;
             }
-            var retargets = _tick % retargetInterval == follower.Entity % RetargetIntervalFrames * ticksPerFrame;
             if (mode.StartsWith(TeamMode, StringComparison.Ordinal))
             {
-                UpdateSquadAttacker(follower, entity, int.Parse(ModeArgument(mode, TeamMode.Length), CultureInfo.InvariantCulture), retargets);
+                UpdateSquadAttacker(follower, entity, int.Parse(ModeArgument(mode, TeamMode.Length), CultureInfo.InvariantCulture));
                 continue;
             }
-            if (!retargets) continue;
+            if (_tick % retargetInterval != follower.Entity % RetargetIntervalFrames * ticksPerFrame) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
             {
                 if (WaypointOrDiagnose(ModeArgument(mode, PositionMode.Length)) is { } spot)
@@ -896,31 +898,19 @@ public sealed partial class ScriptEngine
     /// is gone or the attack failed - the attacker chooses again (<see cref="SquadVictim"/>) and attacks that member; with nobody left to choose the state succeeds and the unit is idle. An
     /// attack that would fail before its first step (<see cref="SimulationWorld.OrderedAttackFailsAtOnce"/>: no weapon of the unit can hit the member, or a computer player's unit would
     /// have to approach an aircraft in the air, #460) is not ordered; the attacker stands and chooses again in its next frame, as the original's sub-machine does (#471).
-    /// <para>
-    /// A member the attacker's player does not see cannot be named in a player's attack order (the port's check of a <see cref="PursueCommand"/>), while the original's attack goes into
-    /// the fog ("Fog no longer prevents attacking at all"): the attacker keeps that member and attack-moves toward it every <see cref="RetargetIntervalFrames"/> frames until it sees it.
-    /// </para>
+    /// The order is the script's (<see cref="IssueAttack"/>): it goes into the fog and at a member of any relationship (#472).
     /// </summary>
-    private void UpdateSquadAttacker(Follower follower, Entity attacker, int teamId, bool retargets)
+    private void UpdateSquadAttacker(Follower follower, Entity attacker, int teamId)
     {
-        if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept)
-        {
-            if (_world.IsOrderedAttackRunning(attacker, kept.Id)) return;
-            if (!_world.CanPlayerSee(attacker.Owner, kept) && !_world.OrderedAttackFailsAtOnce(attacker, kept))
-            {
-                if (retargets) AttackToward(attacker, kept.X, kept.Y);
-                return;
-            }
-        }
+        if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept && _world.IsOrderedAttackRunning(attacker, kept.Id))
+            return;
         follower.Victim = 0;
         if (SquadVictim(follower, attacker, teamId) is not { } victim)
         {
             _followers.Remove(follower.Entity);
             return;
         }
-        if (_world.OrderedAttackFailsAtOnce(attacker, victim)) return;
-        if (!_world.CanPlayerSee(attacker.Owner, victim)) AttackToward(attacker, victim.X, victim.Y);
-        else IssueAttack(attacker, victim);
+        if (!_world.OrderedAttackFailsAtOnce(attacker, victim)) IssueAttack(attacker, victim);
     }
 
     /// <summary>

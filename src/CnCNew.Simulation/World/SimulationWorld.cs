@@ -840,8 +840,13 @@ public sealed partial class SimulationWorld : IWorldServices
     /// attacker does not pathfind: it flies to its approach target, a place within its weapon's range in a box of goal cells of its own (<c>computeAttackPath</c>,
     /// <c>Weapon::computeApproachTarget</c>, #451). (<paramref name="x"/>, <paramref name="y"/>) is where it heads when it can fire from where it stands or cannot attack the victim.
     /// </summary>
-    private void AttackObject(Entity unit, Entity victim, Fixed x, Fixed y, bool fromPlayer)
+    private void AttackObject(Entity unit, Entity victim, Fixed x, Fixed y, bool fromPlayer) => AttackObject(unit, victim, x, y, fromPlayer ? FireOrigin.Player : FireOrigin.Ai);
+
+    /// <summary><see cref="AttackObject(Entity, Entity, Fixed, Fixed, bool)"/> with the order's command source (<see cref="PursueCommand.Origin"/>).</summary>
+    private void AttackObject(Entity unit, Entity victim, Fixed x, Fixed y, FireOrigin origin)
     {
+        // A script's order is a command of the player to the unit's move as before (a script's move is the player's SetMoveTargetCommand); only the attack keeps its source.
+        var fromPlayer = origin != FireOrigin.Ai;
         var ai = AiOf(unit)!;
         if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere)
         {
@@ -852,7 +857,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ai.NotePursuit(victim.Id);
         NoteContactApproach(unit, ai, victim);
         BeginPursuit(unit, victim);
-        NoteOrderedAttack(unit, victim, fromPlayer ? FireOrigin.Player : FireOrigin.Ai);
+        NoteOrderedAttack(unit, victim, origin);
     }
 
     /// <inheritdoc cref="IWorldServices.GuardPlaceFor"/>
@@ -1102,8 +1107,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (pursuer.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(pursue.Victim.Value, out var pursued) || pursued.DestroyRequested || pursued.Body is null) return CommandRejection.UnknownEntity;
+                if (!Enum.IsDefined(pursue.Origin)) return CommandRejection.InvalidArguments;
                 if (!CanMove(pursuer) && !PassesAttackToRiders(pursuer) && !PassesAttackToSlaves(pursuer) && DeckOf(pursuer) is null) return CommandRejection.CannotMove;
-                if (!CanPlayerSee(command.Player, pursued)) return CommandRejection.TargetNotVisible;
+                // A mission script's attack goes into the fog: "Fog no longer prevents attacking at all" (WeaponSet::getAbleToAttackSpecificObject, #472).
+                if (pursue.Origin != FireOrigin.Script && !CanPlayerSee(command.Player, pursued)) return CommandRejection.TargetNotVisible;
                 break;
             }
             case FireWeaponCommand fire:
@@ -1115,7 +1122,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!TurretsLetAttack(source)) return CommandRejection.NoWeapon;
                 var choice = ChooseWeaponInView(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0 && !FireOrderApproaches(fire, choice, source, fireTarget)) return choice.Rejection;
-                if (!(fire.Origin == FireOrigin.Player ? CanPlayerForceTarget(command.Player, fireTarget) : CanPlayerSee(command.Player, fireTarget))) return CommandRejection.TargetNotVisible;
+                if (fire.Origin != FireOrigin.Script && !(fire.Origin == FireOrigin.Player ? CanPlayerForceTarget(command.Player, fireTarget) : CanPlayerSee(command.Player, fireTarget)))
+                    return CommandRejection.TargetNotVisible;
                 break;
             }
             case SetWeaponLockCommand lockOrder:
@@ -1661,7 +1669,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
                 // JetAIUpdate::aiDoCommand: a jet that is parked, taking off or landing stores the attack whole and gives it again when it flies (#458).
                 if (AiOf(unit) is Modules.BuiltIn.JetAIUpdate jet && !jet.TakeAttackNow(this, victim.Id, fromPlayer: true)) break;
-                AttackObject(unit, victim, pursue.X, pursue.Y, fromPlayer: true);
+                AttackObject(unit, victim, pursue.X, pursue.Y, pursue.Origin);
                 break;
             }
             case FireWeaponCommand fire:

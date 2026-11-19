@@ -359,7 +359,10 @@ public sealed partial class SimulationWorld
                 // aiAttackObject: the order names the attack, and its state approaches, aims and fires in the unit's frames (F-140) until the victim is gone, the attack fails or another
                 // order replaces it (#462) - an order is given once, a command giver that orders on adds nothing to it.
                 // A fire order may name a victim that is no enemy (the force-fire of a player): its attack goes on as long as any other attack would.
-                var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false, forced: state.OrderOrigin == FireOrigin.Player));
+                // A mission script's attack does not care about relationships either ("If scripts or AI order attacks, they don't care about relationships", #471); a script's
+                // NAMED_ATTACK_NAMED is a force-attack (aiForceAttackObject), and its stealth rules are the force's.
+                var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false, forced: state.OrderOrigin == FireOrigin.Player))
+                              || (state.OrderOrigin == FireOrigin.Script && victim is not null && IsAttackable(entity, victim, enemiesOnly: false, forced: true));
                 if (ordered)
                 {
                     StepOrderedFire(entity, state, victim!);

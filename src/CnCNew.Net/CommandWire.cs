@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Replay;
+using CnCNew.Simulation.Templates;
 
 namespace CnCNew.Net;
 
@@ -105,6 +106,9 @@ public static class CommandWire
         // The leave comes from the relay itself (origin 0); nothing else that is not a player's order belongs in a bundle.
         if (!CommandTypes.IsPlayerOrder(decoded.TypeCode) && !(decoded is PlayerLeaveCommand && entry.Origin == 0))
             throw new ProtocolException("A bundle carries a command that is not an order of a player.");
+        // A mission script's order attacks into the fog and whatever the relationship (#472): a player's order on the wire never claims it.
+        if (decoded is PursueCommand { Origin: not FireOrigin.Player } or FireWeaponCommand { Origin: FireOrigin.Script })
+            throw new ProtocolException("A bundle carries an order that claims a script as its source.");
         return (sequence, tick) => decoded with { Sequence = sequence, Tick = tick };
     }
 }

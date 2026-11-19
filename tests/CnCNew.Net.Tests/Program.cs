@@ -9,6 +9,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
 using CnCNew.Tests;
 
@@ -331,6 +332,22 @@ static partial class NetTests
         var system = ReplayFormat.EncodeCommand(new GiveMoneyCommand(PlayerId.System, 1, 0, new PlayerId(1), Fixed.FromInt(5)));
         Throws(() => CommandWire.DecodeIntent(new BundleCommand(1, 1, 1, 1, CommandWire.Stamp(system, 1, 5))), "only the system may give");
         Throws(() => CommandWire.DecodeIntent(new BundleCommand(1, 1, 1, 1, [..CommandWire.Stamp(bytes, 1, 5), 0])), "does not decode");
+
+        // The source of an attack order (#472): a script's survives the codec, and the wire carries a player's only.
+        foreach (var origin in new[] { FireOrigin.Player, FireOrigin.Script, FireOrigin.Ai })
+        {
+            var pursue = ReplayFormat.EncodeCommand(new PursueCommand(new PlayerId(1), 3, 77, new EntityId(5), new EntityId(6), Fixed.FromInt(1), Fixed.FromInt(2), origin));
+            Check.That(ReplayFormat.DecodeCommand(pursue) is PursueCommand { Origin: var decodedOrigin } && decodedOrigin == origin && ReplayFormat.EncodeCommand(ReplayFormat.DecodeCommand(pursue)).AsSpan().SequenceEqual(pursue),
+                $"an attack order of the source {origin} survives the codec");
+            var entry = new BundleCommand(1, 1, 1, 1, CommandWire.Stamp(pursue, 1, 5));
+            if (origin == FireOrigin.Player) Check.That(CommandWire.DecodeIntent(entry)(1, 5) is PursueCommand { Origin: FireOrigin.Player }, "a player's attack order goes through the wire");
+            else Throws(() => CommandWire.DecodeIntent(entry), "claims a script");
+        }
+        var scriptFire = ReplayFormat.EncodeCommand(new FireWeaponCommand(new PlayerId(1), 3, 77, new EntityId(5), new EntityId(6), WeaponSlot.Best, FireOrigin.Script, FireWeaponCommand.NoMaxShotsLimit));
+        Throws(() => CommandWire.DecodeIntent(new BundleCommand(1, 1, 1, 1, CommandWire.Stamp(scriptFire, 1, 5))), "claims a script");
+        var badOrigin = ReplayFormat.EncodeCommand(new PursueCommand(new PlayerId(1), 3, 77, new EntityId(5), new EntityId(6), Fixed.FromInt(1), Fixed.FromInt(2)));
+        badOrigin[^1] = 9;
+        Throws(() => CommandWire.DecodeIntent(new BundleCommand(1, 1, 1, 1, CommandWire.Stamp(badOrigin, 1, 5))), "does not decode");
     }
 
     private static void Throws(Action action, string part)

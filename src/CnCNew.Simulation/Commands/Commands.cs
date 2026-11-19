@@ -12,7 +12,7 @@ namespace CnCNew.Simulation.Commands;
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
 /// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
 /// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277; version 29: the debug money command;
-/// version 30: the exit command names the container the rider leaves through, #435; version 31: the stop order, #463).
+/// version 30: the exit command names the container the rider leaves through, #435; version 31: the stop order, #463, and the source of an attack order, #472).
 /// </summary>
 public static class CommandTypes
 {
@@ -235,7 +235,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), checked((int)reader.Int("slot")),
                 (WeaponLockKind)checked((byte)reader.Int("lock"))),
-            CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y"),
+                reader.Has("origin") ? (FireOrigin)checked((byte)reader.Int("origin")) : FireOrigin.Player),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack"), reader.Has("fromPlayer")),
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
@@ -368,8 +369,14 @@ public sealed record StopCommand(PlayerId Player, ulong Sequence, long Tick, Ent
 /// The approach half of an attack order (<c>AIAttackApproachTargetState</c>): the unit moves to (X, Y) — the victim's position to chase it, its own position to stand and wait — and from now on
 /// <em>attacks</em> <see cref="Victim"/>: its turrets track the victim while it approaches, reloads or waits, until the victim is gone, the unit gets another order, or the victim stays out of
 /// reach of every weapon while the unit stands still. A plain <see cref="SetMoveTargetCommand"/> ends an attack; this one carries it along. Firing stays <see cref="FireWeaponCommand"/>.
+/// <para>
+/// <paramref name="Origin"/> is the order's command source: a player's (<c>CMD_FROM_PLAYER</c>, the only one a player's command giver and the wire may carry) or a mission script's
+/// (<c>CMD_FROM_SCRIPT</c>, #471, #472): a script's attack does not care about relationships ("If scripts or AI order attacks, they don't care about relationships",
+/// <c>WeaponSet::getAbleToAttackSpecificObject</c>) and goes into the fog ("Fog no longer prevents attacking at all").
+/// </para>
 /// </summary>
-public sealed record PursueCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Unit, EntityId Victim, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+public sealed record PursueCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Unit, EntityId Victim, Fixed X, Fixed Y, FireOrigin Origin = FireOrigin.Player)
+    : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.Pursue;
 
@@ -379,6 +386,7 @@ public sealed record PursueCommand(PlayerId Player, ulong Sequence, long Tick, E
         writer.UInt("victim", Victim.Value);
         writer.Fixed("x", X);
         writer.Fixed("y", Y);
+        if (Origin != FireOrigin.Player) writer.Int("origin", (long)Origin);
     }
 }
 

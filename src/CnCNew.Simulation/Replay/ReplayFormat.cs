@@ -47,7 +47,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 21: command table 22 with the two beacon orders (a place; units; F-24); version 20 is rejected.
 /// Version 27: command table 28, the fire command's shot limit (the origin byte's top bit says an i32 follows; #277); version 26 is rejected.
 /// Version 29: command table 30, the exit command's container after the rider (u32, 0 = the one it is in; #435); version 28 is rejected.
-/// Version 30: command table 31 with the stop order (u32 unit; #463, #466); version 29 is rejected.
+/// Version 30: command table 31 with the stop order (u32 unit; #463, #466) and the source of an attack order (a byte after the pursuit's point; #472); version 29 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
@@ -406,6 +406,7 @@ public static class ReplayFormat
                 writer.Write(pursue.Victim.Value);
                 writer.Write(pursue.X.Raw);
                 writer.Write(pursue.Y.Raw);
+                writer.Write((byte)pursue.Origin);
                 break;
             case PlayerLeaveCommand leave:
                 writer.Write(leave.TransferToAlly);
@@ -534,7 +535,7 @@ public static class ReplayFormat
             CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.HackInternet => new HackInternetCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
-            CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.Pursue => ReadPursue(reader, player, sequence, tick),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean(), reader.ReadBoolean()),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.ReadBoolean()),
@@ -562,6 +563,17 @@ public static class ReplayFormat
         var kind = (SpecialPowerTargetKind)reader.ReadByte();
         return new UseSpecialPowerCommand(player, sequence, tick, source, power, kind, new EntityId(reader.ReadUInt32()),
             Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadByte());
+    }
+
+    private static PursueCommand ReadPursue(BinaryReader reader, PlayerId player, ulong sequence, long tick)
+    {
+        var unit = new EntityId(reader.ReadUInt32());
+        var victim = new EntityId(reader.ReadUInt32());
+        var x = Fixed.FromRaw(reader.ReadInt64());
+        var y = Fixed.FromRaw(reader.ReadInt64());
+        var origin = reader.ReadByte();
+        if (!Enum.IsDefined((FireOrigin)origin)) throw new ReplayFormatException($"Pursue command with origin {origin} is invalid.");
+        return new PursueCommand(player, sequence, tick, unit, victim, x, y, (FireOrigin)origin);
     }
 
     private static FireWeaponCommand ReadFireWeapon(BinaryReader reader, PlayerId player, ulong sequence, long tick)
