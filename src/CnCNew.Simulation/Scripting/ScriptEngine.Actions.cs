@@ -686,7 +686,9 @@ public sealed partial class ScriptEngine
         _buttonHunts.Remove(entity.Id.Value);
         _followers.Remove(entity.Id.Value);
         if (AiOf(entity) is { SpeedCap.Raw: > 0 } capped) capped.SpeedCap = Fixed.Zero;
-        if (entity.Template.Locomotor is null || entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
+        // A carrier's deck takes the stop as well (FlightDeckBehavior::aiDoCommand): it calls its jets home.
+        var deck = entity.Modules.Any(module => module is Modules.BuiltIn.FlightDeckBehavior);
+        if ((entity.Template.Locomotor is null && !deck) || entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
         var owner = entity.Owner;
         var id = entity.Id;
         if (!_issue(owner, (sequence, tick) => new StopCommand(owner, sequence, tick, id)).Accepted) Diagnose("order rejected");

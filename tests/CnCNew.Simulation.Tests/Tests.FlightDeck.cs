@@ -144,7 +144,7 @@ static partial class Tests
         }
     }
 
-    /// <summary><c>AICMD_IDLE</c>, <c>JetTakeoffOrLandingState</c>, <c>JetOrHeliTaxiState</c>: the jets that are out come back over the deck's own landing strip and stand on a space of their runway.</summary>
+    /// <summary><c>AICMD_IDLE</c> (the player's stop of the carrier, <c>FlightDeckBehavior::aiDoCommand</c>, #467), <c>JetTakeoffOrLandingState</c>, <c>JetOrHeliTaxiState</c>: the jets that are out come back over the deck's own landing strip and stand on a space of their runway.</summary>
     public static void ACarrierCallsItsJetsHome()
     {
         foreach (var rate in new[] { SimulationRate.FromTicksPerSecond(30), SimulationRate.FromTicksPerSecond(60), SimulationRate.FromTicksPerSecond(120) })
@@ -155,7 +155,10 @@ static partial class Tests
             Check.That(world.Submit(new PursueCommand(carrier.Owner, 1000, world.Tick, carrier.Id, victim.Id, victim.X, victim.Y)).Accepted, $"{rate}: the order is accepted.");
             StepUntil(world, () => world.IsAirborneTarget(world.FindEntity(front)!), 900, $"{rate}: the front jet never flew.");
             for (var step = 0; step < world.Frames(120); step++) world.Step();
-            deck.TakeOrder(world, DeckOrder.Idle, EntityId.Invalid, Fixed.Zero, Fixed.Zero);
+            // The player's stop of the carrier (FlightDeckBehavior::aiDoCommand(AICMD_IDLE), #467).
+            Check.That(world.Submit(new StopCommand(carrier.Owner, 1001, world.Tick, carrier.Id)).Accepted, $"{rate}: the carrier takes the stop.");
+            world.Step();
+            Check.That(deck.Order == DeckOrder.Idle, $"{rate}: the deck holds the stop ({deck.Order}).");
             var jet = world.FindEntity(front)!;
             StepUntil(world, () => !JetOf(jet).AllowAirLoco, 3600, $"{rate}: the jet never landed.");
             StepUntil(world, () => JetOf(jet).Phase == JetAIUpdate.JetPhase.None, 1800, $"{rate}: the jet never parked ({JetOf(jet).Phase}).");

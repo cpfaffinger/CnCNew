@@ -1055,7 +1055,7 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 if (!_entities.TryGetValue(stop.Target.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (target.Owner != command.Player) return CommandRejection.NotPermitted;
-                if (!CanMove(target)) return CommandRejection.CannotMove;
+                if (!CanMove(target) && DeckOf(target) is null) return CommandRejection.CannotMove;
                 break;
             }
             case AttackMoveCommand attackMove:
@@ -1525,6 +1525,12 @@ public sealed partial class SimulationWorld : IWorldServices
                 var target = FindEntity(stop.Target);
                 if (target is null || target.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (target.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                // FlightDeckBehavior::aiDoCommand(AICMD_IDLE): the carrier's stop calls its jets home - those in the air and those not parked land on it (#467).
+                if (DeckOf(target) is { } stoppedDeck)
+                {
+                    stoppedDeck.TakeOrder(this, Modules.BuiltIn.DeckOrder.Idle, EntityId.Invalid, Fixed.Zero, Fixed.Zero);
+                    break;
+                }
                 if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
                 // groupIdle -> aiIdle: idle where the order finds it (#466); a jet answers it in JetAIUpdate::aiDoCommand (#463).
                 AiOf(target)!.OrderStop(this, fromPlayer: true);

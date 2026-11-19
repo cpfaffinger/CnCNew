@@ -482,7 +482,8 @@ public sealed class CommandModeController
         foreach (var unit in units)
         {
             Orders.Clear(unit.Id);
-            if (SimulationQueries.CanMove(unit)) Issue((sequence, tick) => new StopCommand(Player, sequence, tick, unit.Id));
+            // The carrier's deck takes the stop too and calls its jets home (FlightDeckBehavior::aiDoCommand, #467).
+            if (SimulationQueries.CanMove(unit) || SimulationQueries.HasModule(unit, "FlightDeckBehavior")) Issue((sequence, tick) => new StopCommand(Player, sequence, tick, unit.Id));
         }
     }
 
