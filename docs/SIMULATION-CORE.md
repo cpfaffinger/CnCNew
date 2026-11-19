@@ -3477,6 +3477,8 @@ where the port already waited a frame; measured with the full set). Test `Fideli
 `StateMachine::updateStateMachine` runs a state's `update` before its transition conditions; `GameLogic::update` processes the frame's commands before the object updates. A player's
 command that arrives in the frame after the machine entered "wanting" is therefore overwritten in the original as well. Not changed; the register names it as the original's.
 
+Since #6 the product carries Zero Hour Reforged's change as rule fix 31 (§91.23); the original profile keeps this behaviour.
+
 ### 53.5 F-10: `<This Team>` in a mission's team scripts (`ScriptEngine::executeScript`, `getTeamNamed`)
 
 `executeScript` keeps `m_callingTeam` and sets only `m_conditionTeam` for the instances its conditions name; `getTeamNamed(THIS_TEAM)` returns the calling team first. The mission
@@ -5688,6 +5690,10 @@ An ordered attack (a pursue or fire order of the client, a module's, a script's)
 
 `NAMED_ATTACK_TEAM` and `TEAM_ATTACK_TEAM` are the original's squad attack (`aiAttackTeam`, `AIAttackSquadState`): once per frame the VM sees whether the attack on the member it chose still runs, and if not chooses a member (`chooseVictim`) and gives the ordinary attack; an attack that would fail at once (no weapon fits; a computer player's unit against an aircraft in the air, #460) is not ordered, and with nobody left the unit is idle. An attack order (`PursueCommand`) carries its command source (one byte; command table 31, replay 30). The script engine's attacks are the script's (`CMD_FROM_SCRIPT`): they go on at a victim of any relationship (`NAMED_ATTACK_NAMED` is `aiForceAttackObject`; "If scripts or AI order attacks, they don't care about relationships", `WeaponSet::getAbleToAttackSpecificObject`) and into the fog ("Fog no longer prevents attacking at all"), and a script's fire order is not refused in the fog either. The wire carries a player's order only: a bundle command that claims a script's source is skipped by every client (`CommandWire.DecodeIntent`). Not covered: a parked jet gives a stored script attack again as a player's; the riders of a garrison get no script source; the squad state's checks of a passive or sleeping computer unit; a unit of the squad attack still picks targets by itself. Tests `Tests.ScriptAttackSource472.cs` and the team-attack tests at 30, 60 and 120 Hz; `Net.Tests` `CommandStamp`.
 
-### 91.23 Elsewhere
+### 91.23 A supply carrier keeps an order given as it wants to dock (#6)
+
+Rule fix 31 `supply-truck-keeps-player-order`. The original's `SupplyTruckWantsToPickUpOrDeliverBoxesState::update` orders the next dock without a check, and the machine runs it before its transitions, so an order of the player or a script that arrives in the frame after a carrier's dock ended was overwritten (F-06, §53.4). Under the product the "wanting" state sends a carrier that is not idle and whose last command was not the AI's to "busy" instead, as Zero Hour Reforged does (R-36). Supply truck, worker and Chinook share the machine; the original profile is unchanged. Test `SupplyCarrierKeepsAPlayerOrderGivenAsItWantsToDock` at 30, 60 and 120 Hz under the original, the fix alone and the product.
+
+### 91.24 Elsewhere
 
 - A power bought at a higher rank shows that rank's picture (#446); the recharge clock on the side bar (#447, not reproduced): `docs/GAME-HUD.md`.
