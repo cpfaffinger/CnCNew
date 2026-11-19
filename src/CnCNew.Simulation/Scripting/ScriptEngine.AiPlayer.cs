@@ -1439,7 +1439,7 @@ public sealed partial class ScriptEngine
             if (recruit.Template.Locomotor is not null)
             {
                 if (hasHome) MoveTo(recruit, home.X, home.Y);
-                else Stop(recruit);
+                else Stop(recruit, asGroup: false); // "stop, you've been recruited" (aiIdle)
             }
             order.Queued++;
             order.Joined++;

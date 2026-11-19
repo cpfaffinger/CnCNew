@@ -59,7 +59,7 @@ internal static class Phase5Modules
 /// applied fields are cosmetic or belong to systems phase 5 does not model: <c>FriendlyOpacityMin/Max</c>, <c>PulseFrequency</c>,
 /// the disguise fields, <c>EnemyDetectionEvaEvent</c>/<c>OwnDetectionEvaEvent</c> (presentation), <c>RevealDistanceFromTarget</c>,
 /// <c>BlackMarketCheckDelay</c> (no
-/// black-market economy hack) and <c>GrantedBySpecialPower</c> (no special-power system). None of the object's targeting
+/// black-market economy hack). <c>GrantedBySpecialPower</c> is read by the stop (#470). None of the object's targeting
 /// consumes the resulting <c>STEALTHED</c> status bit yet either: phase 5's <c>FireWeaponCommand</c> is direct-target only,
 /// with no automatic target acquisition or line of sight to hide from — see docs/GAME-RULES.md.
 /// </summary>
@@ -84,7 +84,11 @@ public sealed record StealthData(
         DisguiseFx = ModuleConfigReader.Text(configuration, "DisguiseFX"),
         DisguiseRevealFx = ModuleConfigReader.Text(configuration, "DisguiseRevealFX"),
         OrderIdleEnemiesToAttack = ModuleConfigReader.Bool(configuration, "OrderIdleEnemiesToAttackMeUponReveal", false),
+        GrantedBySpecialPower = ModuleConfigReader.Bool(configuration, "GrantedBySpecialPower", false),
     };
+
+    /// <summary><c>m_grantedBySpecialPower</c>: the stealth comes from a special power (the GPS scrambler); <c>canAutoAcquireWhileStealthed</c> is then true (#470).</summary>
+    public bool GrantedBySpecialPower { get; init; }
 
     /// <summary><c>m_orderIdleEnemiesToAttackMeUponReveal</c>: when the object is detected, the enemies that see it look for a victim at once.</summary>
     public bool OrderIdleEnemiesToAttack { get; init; }
@@ -103,6 +107,12 @@ public sealed record StealthData(
 /// </summary>
 public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule, IProducerReceiver
 {
+    /// <summary><c>getStealthDelay</c>.</summary>
+    public long StealthDelayTicks => data.StealthDelayTicks;
+
+    /// <summary><c>isGrantedBySpecialPower</c>.</summary>
+    public bool GrantedBySpecialPower => data.GrantedBySpecialPower;
+
     /// <summary><c>isTemporaryGrant</c>.</summary>
     private bool IsTemporaryGrant => _framesGranted > 0;
 

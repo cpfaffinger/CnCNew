@@ -470,6 +470,7 @@ run.Test("Phase 58: a carrier is saved", Tests.ACarrierIsSaved);
 run.Test("Phase 58: a carrier calls its jets home", Tests.ACarrierCallsItsJetsHome);
 run.Test("Scripting (#467): a script's stop is the player's stop - the soldiers stand where it finds them, at every rate", Tests.ScriptStopIsThePlayersStop);
 run.Test("Scripting (#467): IDLE_ALL_UNITS moves a unit to its own place - a jet in the air flies on, at every rate", Tests.ScriptIdleAllUnitsIsAMoveToItsPlace);
+run.Test("Scripting (#470): a script's stop of a carrier calls its jets home, at every rate", Tests.ScriptStopsACarrier);
 run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSampling);
 run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
 run.Test("Terrain: world placement, snapshot v5 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
@@ -1091,6 +1092,7 @@ if (contentDirectory is not null) run.Test("Real data (#458): a parked jet order
 if (contentDirectory is not null) run.Test("Real data (#463): a jet answers a stop as its own AI does - stored during a take-off or landing, home to land in the air, nothing while parked, at every rate", () => Tests.RealJetAnswersTheStopAsItsOwnAiDoes(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#463): an attack on a place replaces a jet's return to its airfield, at every rate", () => Tests.RealReturningJetAttacksAPlace(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#466): a ground unit's stop leaves it where the order finds it, at every rate", () => Tests.RealGroundUnitStopsWhereTheOrderFindsIt(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#470): a stop reaches riders, a garrison's riders and slaves, and a stopped stealth unit waits to look, at every rate", () => Tests.RealStopReachesRidersSlavesAndStealth(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#312): a Comanche built after the countermeasures research has them and launches flares against Tank Hunter missiles", () => Tests.RealComanchesBuiltAfterTheResearchLaunchFlares(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#339): a supply truck waits at the outer edge of a supply pile, not on it", () => Tests.RealSupplyTrucksWaitOutsideThePile(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#318): a battle drone repairs its own master and no other unit", () => Tests.RealBattleDroneRepairsOnlyItsMaster(contentDirectory));

@@ -56,7 +56,7 @@ public sealed partial class ScriptEngine
                 if (FindTeam(Str(p, 0)) is not { } team) return true;
                 if (_program.FindScript(Str(p, 1)) is not { } teamScript) { Diagnose($"sequential script '{Str(p, 1)}' does not exist"); return true; }
                 // doTeamStartSequentialScript idles the team first so the script starts executing; the loop parameter counts runs, the engine counts repeats (-1 = forever).
-                foreach (var member in LiveMembers(team).ToArray()) Stop(member);
+                foreach (var member in LiveMembers(team).ToArray()) Stop(member, asGroup: true);
                 AppendSequence(team.Id, 0, teamScript, type.EndsWith("LOOPING", StringComparison.Ordinal) ? Int(p, 2) - 1 : 0);
                 return true;
             case "UNIT_EXECUTE_SEQUENTIAL_SCRIPT":
@@ -77,7 +77,7 @@ public sealed partial class ScriptEngine
                 // doTeamIdleForFramecount (the reference maps TEAM_GUARD_FOR_FRAMECOUNT to it too): the team stops, then the sequence waits.
                 if (Has(type, p, 2) && FindTeam(Str(p, 0)) is { } waiting)
                 {
-                    foreach (var member in LiveMembers(waiting).ToArray()) Stop(member);
+                    foreach (var member in LiveMembers(waiting).ToArray()) Stop(member, asGroup: true);
                     SetSequenceTimer(waiting.Id, 0, Int(p, 1));
                 }
                 return true;
@@ -95,7 +95,7 @@ public sealed partial class ScriptEngine
             case "UNIT_IDLE_FOR_FRAMECOUNT":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } idler)
                 {
-                    Stop(idler);
+                    Stop(idler, asGroup: false);
                     SetSequenceTimer(0, idler.Id.Value, Int(p, 1));
                 }
                 return true;

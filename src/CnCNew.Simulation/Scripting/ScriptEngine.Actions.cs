@@ -297,7 +297,7 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } follower) StartFollowing(follower, PathMode + Str(p, 1));
                 break;
             case "NAMED_STOP":
-                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } stopped) Stop(stopped);
+                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } stopped) Stop(stopped, asGroup: false);
                 break;
             case "TEAM_STOP":
             case "TEAM_STOP_AND_DISBAND":
@@ -305,7 +305,7 @@ public sealed partial class ScriptEngine
                     foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray())
                         {
-                            Stop(member);
+                            Stop(member, asGroup: true);
                             MakeRecruitable(member);
                         }
                 break;
@@ -678,20 +678,17 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>doNamedStop</c> (<c>aiIdle</c>) and <c>doTeamStop</c> (<c>AIGroup::groupIdle</c>): the player's stop (<see cref="StopCommand"/>, #467) - the unit stands where the order finds it,
-    /// a jet answers it as <c>JetAIUpdate::aiDoCommand</c> answers <c>AICMD_IDLE</c>.
+    /// <c>doNamedStop</c> (<c>aiIdle</c>, <paramref name="asGroup"/> false) and <c>doTeamStop</c> (<c>AIGroup::groupIdle</c> with <c>CMD_FROM_SCRIPT</c>): the player's stop (#467, #470) - the
+    /// unit stands where the order finds it, a jet answers it as <c>JetAIUpdate::aiDoCommand</c> answers <c>AICMD_IDLE</c>, a carrier calls its jets home, its riders go idle, and a team's
+    /// garrisoned building and spawner let their riders and slaves go idle.
     /// </summary>
-    private void Stop(Entity entity)
+    private void Stop(Entity entity, bool asGroup)
     {
         _buttonHunts.Remove(entity.Id.Value);
         _followers.Remove(entity.Id.Value);
         if (AiOf(entity) is { SpeedCap.Raw: > 0 } capped) capped.SpeedCap = Fixed.Zero;
-        // A carrier's deck takes the stop as well (FlightDeckBehavior::aiDoCommand): it calls its jets home.
-        var deck = entity.Modules.Any(module => module is Modules.BuiltIn.FlightDeckBehavior);
-        if ((entity.Template.Locomotor is null && !deck) || entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
-        var owner = entity.Owner;
-        var id = entity.Id;
-        if (!_issue(owner, (sequence, tick) => new StopCommand(owner, sequence, tick, id)).Accepted) Diagnose("order rejected");
+        if (entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
+        _world.StopObject(entity, fromPlayer: false, asGroup);
     }
 
     /// <summary>
