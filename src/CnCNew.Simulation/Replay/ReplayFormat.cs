@@ -47,7 +47,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 21: command table 22 with the two beacon orders (a place; units; F-24); version 20 is rejected.
 /// Version 27: command table 28, the fire command's shot limit (the origin byte's top bit says an i32 follows; #277); version 26 is rejected.
 /// Version 29: command table 30, the exit command's container after the rider (u32, 0 = the one it is in; #435); version 28 is rejected.
-/// Version 30: command table 31 with the stop order (unit, point; #463); version 29 is rejected.
+/// Version 30: command table 31 with the stop order (u32 unit; #463, #466); version 29 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
@@ -308,8 +308,6 @@ public static class ReplayFormat
                 break;
             case StopCommand stop:
                 writer.Write(stop.Target.Value);
-                writer.Write(stop.X.Raw);
-                writer.Write(stop.Y.Raw);
                 break;
             case FireWeaponCommand fire:
                 writer.Write(fire.Source.Value);
@@ -514,7 +512,7 @@ public static class ReplayFormat
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), ReadString(reader)),
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadInt32()),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
-            CommandTypes.Stop => new StopCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.Stop => new StopCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.FireWeapon => ReadFireWeapon(reader, player, sequence, tick),
             CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadSByte(), (WeaponLockKind)reader.ReadByte()),
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), reader.ReadInt32()),

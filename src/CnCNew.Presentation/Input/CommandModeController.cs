@@ -474,15 +474,15 @@ public sealed class CommandModeController
     }
 
     /// <summary>
-    /// <c>MSG_DO_STOP</c> (<c>groupIdle</c>): drops the standing orders and sends every mobile unit the stop (<see cref="StopCommand"/>): a ground unit halts where it stands, a jet answers it
-    /// as its own AI does (#463).
+    /// <c>MSG_DO_STOP</c> (<c>groupIdle</c>): drops the standing orders and sends every mobile unit the stop (<see cref="StopCommand"/>): a ground unit halts where the order finds it,
+    /// a jet answers it as its own AI does (#463, #466).
     /// </summary>
     public void Stop(SimulationWorld world, IEnumerable<Entity> units)
     {
         foreach (var unit in units)
         {
             Orders.Clear(unit.Id);
-            if (SimulationQueries.CanMove(unit)) Issue((sequence, tick) => new StopCommand(Player, sequence, tick, unit.Id, unit.X, unit.Y));
+            if (SimulationQueries.CanMove(unit)) Issue((sequence, tick) => new StopCommand(Player, sequence, tick, unit.Id));
         }
     }
 

@@ -30,7 +30,6 @@ internal static partial class Tests
 
         // Every kind of order that names a point.
         Check.That(!world.Check(new AttackMoveCommand(player, 0, 0, grunt.Id, beyond, Fixed.Zero)).Accepted, "an attack-move beyond the limit");
-        Check.That(!world.Check(new StopCommand(player, 0, 0, grunt.Id, beyond, Fixed.Zero)).Accepted, "a stop beyond the limit");
         Check.That(!world.Check(new GroupMoveCommand(player, 0, 0, [grunt.Id], Fixed.Zero, beyond, false)).Accepted, "a group move beyond the limit");
         Check.That(!world.Check(new GuardCommand(player, 0, 0, [grunt.Id], beyond, Fixed.Zero, EntityId.Invalid, GuardMode.Normal)).Accepted, "a guard beyond the limit");
         Check.That(!world.Check(new PursueCommand(player, 0, 0, grunt.Id, grunt.Id, beyond, beyond)).Accepted, "a pursuit beyond the limit");

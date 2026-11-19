@@ -26,7 +26,7 @@ static partial class Tests
     }
 
     private static SubmitResult StopJet(ParkedJetScene scene)
-        => scene.Send(next => new StopCommand(new PlayerId(1), next, scene.World.Tick, scene.Jet.Id, scene.Jet.X, scene.Jet.Y));
+        => scene.Send(next => new StopCommand(new PlayerId(1), next, scene.World.Tick, scene.Jet.Id));
 
     /// <summary>Steps until <paramref name="done"/> holds; the jet's own frame it held in, or -1.</summary>
     private static long JetUntil(ParkedJetScene scene, System.Func<ParkedJetScene, bool> done, int seconds)

@@ -207,7 +207,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Text("template")),
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), checked((int)reader.Int("slot"))),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
-            CommandTypes.Stop => new StopCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.Stop => new StopCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target"))),
                 reader.Has("slot") ? checked((int)reader.Int("slot")) : WeaponSlot.Best, reader.Has("origin") ? (FireOrigin)checked((byte)reader.Int("origin")) : FireOrigin.Player,
                 reader.Has("maxShots") ? checked((int)reader.Int("maxShots")) : 0),
@@ -353,20 +353,15 @@ public sealed record SetMoveTargetCommand(PlayerId Player, ulong Sequence, long 
 }
 
 /// <summary>
-/// <c>MSG_DO_STOP</c> to one unit (<c>AIGroup::groupIdle</c> -> <c>aiIdle</c>, #463). An aircraft with a <c>JetAIUpdate</c> answers it as <c>JetAIUpdate::aiDoCommand</c> answers
-/// <c>AICMD_IDLE</c>: stored while a take-off or landing runs or while it reloads, sent home to land while it flies (a fixed-wing jet), nothing while it is parked. Every other unit moves
-/// to (<see cref="X"/>, <see cref="Y"/>), the place the player saw it stand, exactly as a <see cref="SetMoveTargetCommand"/> there (this simulation's stop of a ground unit).
+/// <c>MSG_DO_STOP</c> to one unit (<c>AIGroup::groupIdle</c> -> <c>aiIdle</c>, #463, #466): the unit goes idle where the order finds it (<see cref="Modules.BuiltIn.AIUpdateInterface.OrderStop"/>).
+/// An aircraft with a <c>JetAIUpdate</c> answers it as <c>JetAIUpdate::aiDoCommand</c> answers <c>AICMD_IDLE</c>: stored while a take-off or landing runs or while it reloads, sent home to
+/// land while it flies (a fixed-wing jet), nothing while it is parked.
 /// </summary>
-public sealed record StopCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+public sealed record StopCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target) : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.Stop;
 
-    protected override void DescribeBody(IStateWriter writer)
-    {
-        writer.UInt("target", Target.Value);
-        writer.Fixed("x", X);
-        writer.Fixed("y", Y);
-    }
+    protected override void DescribeBody(IStateWriter writer) => writer.UInt("target", Target.Value);
 }
 
 /// <summary>

@@ -1504,6 +1504,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>Whether this object is still on its way to <paramref name="goal"/> (an approach of <see cref="OrderApproachGoal"/> or <see cref="StartGuardApproach"/>).</summary>
     internal bool IsApproaching(EntityId goal) => _goal.IsValid && _goal == goal;
 
+    /// <summary>
+    /// <c>aiIdle</c> as a stop (<c>MSG_DO_STOP</c> -> <c>AIGroup::groupIdle</c>, a script's stop; #466): <c>privateIdle</c> clears the state machine into <c>AI_IDLE</c>, whose locomotor goal is
+    /// none, and <c>Locomotor::locoUpdate_maintainCurrentPosition</c> of a ground locomotor (legs, wheels, treads: <c>maintainCurrentPositionOther</c>) scrubs the velocity to zero - the unit
+    /// stands at once where the order finds it, without braking along its path. Above 30 Hz an order inside a frame finds it where that frame ends (the 30 Hz order arrives with the next
+    /// frame). A jet answers it in its own way (<see cref="JetAIUpdate.OrderStop"/>).
+    /// </summary>
+    public virtual void OrderStop(IWorldServices world, bool fromPlayer)
+    {
+        StopInternalMoveAtFrameEnd(world);
+        OrderIdle(world, fromPlayer);
+    }
+
     /// <summary><c>aiIdle</c>: drops the move order and the goal object; the object stands where it is.</summary>
     public void OrderIdle(IWorldServices world, bool fromPlayer = false)
     {

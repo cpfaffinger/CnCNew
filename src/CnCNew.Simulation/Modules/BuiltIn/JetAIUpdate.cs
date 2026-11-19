@@ -497,7 +497,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     /// ("have to wait for takeoff or landing to complete, just store the sucker"); a fixed-wing aircraft in the air (<c>isAirborneTarget</c>, not <c>PRODUCED_AT_HELIPAD</c>) returns to
     /// land (<c>RETURNING_FOR_LANDING</c>); a parked aircraft does not take off for it and forgets what it had stored; anything else idles where it is.
     /// </summary>
-    public void OrderStop(IWorldServices world, bool fromPlayer)
+    public override void OrderStop(IWorldServices world, bool fromPlayer)
     {
         if (TakeoffOrLandingInProgress || _phase == JetPhase.ReloadAmmo)
         {
