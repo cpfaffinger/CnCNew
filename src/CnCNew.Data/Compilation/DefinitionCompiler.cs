@@ -313,7 +313,9 @@ public static class DefinitionCompiler
             repeat = RepeatableKeys.Lookup(state.DeclarationType, key);
             value = state.Kind == DefinitionKind.CommandSet && int.TryParse(key, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _)
                 ? new DefinitionValue(DefinitionValueKind.Reference, new DefinitionReference(DefinitionKind.CommandButton, property.Value.Trim()), property.Value)
-                : DefinitionValueParser.Parse(key, property.Value, property.Location);
+                : state.Kind == DefinitionKind.CommandButton && key.Equals("Science", StringComparison.OrdinalIgnoreCase)
+                    ? DefinitionValueParser.ParseScienceVector(property.Value)
+                    : DefinitionValueParser.Parse(key, property.Value, property.Location);
             if (value.Kind == DefinitionValueKind.ColorKeyframe && ValueGrammar.ColorKeyframeIgnoredTokens(property.Value) is > 0 and var ignoredKeyframeTokens)
                 c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-ignored-tokens",
                     $"'{key}' = '{property.Value.Trim()}' has {ignoredKeyframeTokens} token(s) after the frame that the reference parser never reads.", property.Location));

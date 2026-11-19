@@ -383,6 +383,19 @@ public static class DefinitionValueParser
         return false;
     }
 
+    /// <summary>
+    /// <c>INI::parseScienceVector</c> (a command button's <c>Science</c>): every token is a science, and a <c>None</c> anywhere clears the list and ends it - an empty
+    /// list is the <c>NONE</c> sentinel.
+    /// </summary>
+    public static DefinitionValue ParseScienceVector(string text)
+    {
+        var trimmed = text.Trim();
+        var tokens = Tokenize(trimmed);
+        if (tokens.Length == 0 || tokens.Any(token => token.Equals("NONE", StringComparison.OrdinalIgnoreCase)))
+            return new(DefinitionValueKind.Sentinel, new DefinitionReference(DefinitionKind.Science, "NONE", true), trimmed);
+        return new(DefinitionValueKind.Reference, tokens.Select(token => new DefinitionReference(DefinitionKind.Science, token)).ToImmutableArray(), trimmed);
+    }
+
     /// <summary>The tokens of a <c>Prerequisites</c> field the reference parser never reads: those after the first of a <c>Science</c> line.</summary>
     public static int PrerequisiteIgnoredTokenCount(string key, string text)
         => key.Equals("Science", StringComparison.OrdinalIgnoreCase) ? Math.Max(0, Tokenize(text.Trim()).Length - 1) : 0;

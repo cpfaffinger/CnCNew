@@ -235,7 +235,13 @@ public sealed class CommandButtonCatalog
             if (OptionNames.TryGetValue(token, out var option)) options |= option;
             else issues.Add(new CommandButtonIssue(definition.OriginalName, $"unknown option '{token}'"));
         }
-        ImmutableArray<string> sciences = [..Text("Science").Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Where(value => !value.Equals("NONE", StringComparison.OrdinalIgnoreCase))];
+        // INI::parseScienceVector: the compiler typed the list, and a None anywhere in it cleared it (#469).
+        ImmutableArray<string> sciences = definition.Fields.LastOrDefault(field => field.Name.Equals("Science", StringComparison.OrdinalIgnoreCase))?.Value.Value switch
+        {
+            ImmutableArray<DefinitionReference> many => [..many.Select(value => value.Name)],
+            DefinitionReference { IsNone: false } single => [single.Name],
+            _ => [],
+        };
         return new CommandButtonInfo(definition.OriginalName, kind, options, Text("Object"), Text("Upgrade"), Text("SpecialPower"), sciences,
             Text("WeaponSlot") is { Length: > 0 } slot ? slot : "PRIMARY", Text("TextLabel"), Text("DescriptLabel"), Text("ConflictingLabel"), Text("ButtonImage"),
             Text("ButtonBorderType") is { Length: > 0 } border ? border : "NONE", Text("CursorName"), Text("InvalidCursorName"), Text("RadiusCursorType"))

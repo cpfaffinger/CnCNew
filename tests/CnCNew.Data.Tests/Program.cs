@@ -45,6 +45,7 @@ BridgeBlocksAreStrictlyTyped();
 FieldsWithoutAnEqualsSignAreFields();
 AnEqualsSignInAValueIsASeparator();
 PrerequisiteObjectLinesNameAlternatives();
+CommandButtonScienceIsAList();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -123,6 +124,34 @@ static void PrerequisiteObjectLinesNameAlternatives()
     Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One(unknown), options: DefinitionCompilerOptions.Audit with { StrictReferences = true }), "Hangar");
     Assert(DefinitionValueParser.Parse("Object", "Factory Airfield", default).Value is DefinitionReference { Name: "Airfield" }, "Outside Prerequisites an Object key keeps its generic reading.");
 }
+
+static void CommandButtonScienceIsAList()
+{
+    // INI::parseScienceVector: a command button's Science names every token as a science; a None anywhere clears the list and ends it.
+    const string text = """
+    Science SCIENCE_One
+    End
+    Science SCIENCE_Two
+    End
+    CommandButton Command_Both
+      Command = PURCHASE_SCIENCE
+      Science = SCIENCE_One SCIENCE_Two
+    End
+    CommandButton Command_Cleared
+      Command = PURCHASE_SCIENCE
+      Science = SCIENCE_One NONE SCIENCE_Two
+    End
+    """;
+    var graph = DefinitionCompiler.Compile(One(text), options: DefinitionCompilerOptions.Audit with { StrictReferences = true });
+    DefinitionValue ScienceOf(string button) => graph.Definitions.Single(value => value.OriginalName == button).Fields.Single(field => field.Name == "Science").Value;
+    Assert(ScienceOf("Command_Both").Value is ImmutableArray<DefinitionReference> both && both.Select(value => (value.Kind, value.Name)).SequenceEqual([(DefinitionKind.Science, "SCIENCE_One"), (DefinitionKind.Science, "SCIENCE_Two")]),
+        "A command button's Science keeps every science in file order.");
+    Assert(ScienceOf("Command_Cleared") is { Kind: DefinitionValueKind.Sentinel, Value: DefinitionReference { IsNone: true } }, "A None in the list clears it.");
+    Assert(graph.References.Count(value => value.Target.Kind == DefinitionKind.Science) == 2 && graph.References.All(value => value.Resolved), "Every science of the list is a checked reference.");
+    var unknown = text.Replace("Science = SCIENCE_One SCIENCE_Two", "Science = SCIENCE_Unknown SCIENCE_Two", StringComparison.Ordinal);
+    Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One(unknown), options: DefinitionCompilerOptions.Audit with { StrictReferences = true }), "SCIENCE_Unknown");
+}
+
 
 static void FieldsWithoutAnEqualsSignAreFields()
 {
