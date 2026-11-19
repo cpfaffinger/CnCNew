@@ -677,13 +677,19 @@ public sealed partial class ScriptEngine
         GuardBy([entity], x, y, EntityId.Invalid);
     }
 
+    /// <summary>
+    /// <c>doNamedStop</c> (<c>aiIdle</c>) and <c>doTeamStop</c> (<c>AIGroup::groupIdle</c>): the player's stop (<see cref="StopCommand"/>, #467) - the unit stands where the order finds it,
+    /// a jet answers it as <c>JetAIUpdate::aiDoCommand</c> answers <c>AICMD_IDLE</c>.
+    /// </summary>
     private void Stop(Entity entity)
     {
         _buttonHunts.Remove(entity.Id.Value);
         _followers.Remove(entity.Id.Value);
         if (AiOf(entity) is { SpeedCap.Raw: > 0 } capped) capped.SpeedCap = Fixed.Zero;
-        if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
-        MoveTo(entity, entity.X, entity.Y, busy: false);
+        if (entity.Template.Locomotor is null || entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
+        var owner = entity.Owner;
+        var id = entity.Id;
+        if (!_issue(owner, (sequence, tick) => new StopCommand(owner, sequence, tick, id)).Accepted) Diagnose("order rejected");
     }
 
     private void StartFollowing(Entity entity, string mode)
