@@ -75,7 +75,10 @@ foreach ($name in $plan.Keys) {
     $summary = $lines | Where-Object { $_ -like 'input-script summary:*' } | Select-Object -Last 1
     if (-not $summary) { $problems += 'no input-script summary in the output' }
     else {
-        $expect = @{ unresolved = 0; commandsRejected = 0; invalidOrders = 0; sitesCreated = 1; commandsAccepted = $entry.Units.Count + 1 }
+        # S is the Stop key on its way down and a unit's hotkey on its way up: a selected building with a contain (the GLA barracks' HealContain) takes the stop as well,
+        # since the original's groupIdle reaches the riders of an object without an AI (makeMemberStop, #470) - those stops are counted beside the expected commands.
+        $stops = @($lines | Where-Object { $_ -like '*command StopCommand accepted*' }).Count
+        $expect = @{ unresolved = 0; commandsRejected = 0; invalidOrders = 0; sitesCreated = 1; commandsAccepted = $entry.Units.Count + 1 + $stops }
         foreach ($key in $expect.Keys) {
             if ($summary -notmatch "\b$key=(\d+)") { $problems += "summary has no '$key'"; continue }
             if ([int]$Matches[1] -ne $expect[$key]) { $problems += "$key=$($Matches[1]), expected $($expect[$key])" }
