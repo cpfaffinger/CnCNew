@@ -90,6 +90,8 @@ static partial class Tests
             }
 
             Check.That(shots == 8 && SimulationWorld.ContinuousFireOf(tank) == ContinuousFireStage.Fast, $"{rate}: eight shots in a row spin the weapon up to the fast stage.");
+            // The attack lasts (#462): the tank is stopped, so its weapon falls silent.
+            OrderStop(feeder, tank);
             var changes = new List<(long After, ContinuousFireStage Stage)>();
             var stage = ContinuousFireStage.Fast;
             for (var i = 0; i < 120 * factor; i++)
@@ -550,37 +552,6 @@ static partial class Tests
             var frames = (closeAt / factor, outerAt / factor, goneAt / factor);
             reference ??= frames;
             Check.That(frames == reference, $"{rate}: the same frames as at 30 Hz: {frames} against {reference}.");
-        }
-    }
-
-    /// <summary>
-    /// An attack named by fire orders is over when no order came for 45 logic frames after the unit could fire again. That is noticed in the step after the grace, a logic frame
-    /// at every rate: a single order to a gun with a 9-frame shot delay names the victim for 9 + 45 + 1 frames.
-    /// </summary>
-    public static void RateInvarianceOrderedAttackEndsInTheSameFrame()
-    {
-        foreach (var (rate, factor) in WorldRates)
-        {
-            var (world, feeder, _) = RatedWorld(rate, TurretAttackFiles());
-            world.SelfAcquisition = false;
-            feeder.Spawn(1, "PlainTank", owner: 1, x: 0, y: 0);
-            feeder.Spawn(2, "TurretTarget", owner: 2, x: 100, y: 0);
-            for (var i = 0; i < factor; i++) world.Step();
-            var tank = Slotted(world, "PlainTank");
-            var victim = Slotted(world, "TurretTarget");
-            feeder.FireWeapon(1, tank.Id.Value, victim.Id.Value);
-            // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next: the weapon is ready again 1 + 9 frames after the order.
-            var orderTick = world.Tick;
-            var first = StepThroughShot(world, tank);
-            Check.That(first.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id) == 1 && world.AcquiredVictimOf(tank) == victim.Id, $"{rate}: the order fires and names the victim of the unit's attack.");
-            long over = -1;
-            for (var step = (int)(world.Tick - orderTick); step < 100 * factor && over < 0; step++)
-            {
-                world.Step();
-                if (!world.AcquiredVictimOf(tank).IsValid) over = step;
-            }
-
-            Check.That(over == 56 * factor, $"{rate}: without further orders the attack is over 56 logic frames after the order ({over} ticks, expected {56 * factor}).");
         }
     }
 }

@@ -221,7 +221,6 @@ public sealed partial class SimulationWorld : IWorldServices
         Configuration = configuration;
         Time = configuration.Rate.Time;
         // The world's own durations and rhythms are written in logic frames of the original; they become ticks of this world's rate here, once, so no step converts.
-        _orderedAttackGraceTicks = Time.OriginalFrames(OrderedAttackGraceFrames);
         _forceIdleTicks = Time.OriginalFrames(ForceIdleFrames);
         _chaseRefreshTicks = Time.OriginalFrames(ChaseRefreshFrames);
         _turretAimGraceTicks = Time.OriginalFrames(TurretAimGraceFrames);
@@ -536,7 +535,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ai.NotePursuit(container.Id);
         NoteContactApproach(unit, ai, container);
         BeginPursuit(unit, container);
-        NoteOrderedAttack(unit, container);
+        NoteOrderedAttack(unit, container, fromPlayer ? FireOrigin.Player : FireOrigin.Ai);
         return true;
     }
 
@@ -823,7 +822,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (AiOf(unit) is Modules.BuiltIn.JetAIUpdate jet && !jet.TakeAttackNow(this, victim.Id, fromPlayer: false)) return;
         AiOf(unit)?.OrderMove(this, victim.X, victim.Y, false);
         BeginPursuit(unit, victim);
-        NoteOrderedAttack(unit, victim);
+        NoteOrderedAttack(unit, victim, FireOrigin.Ai);
     }
 
     /// <inheritdoc cref="IWorldServices.ResumeAttack"/>
@@ -853,7 +852,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ai.NotePursuit(victim.Id);
         NoteContactApproach(unit, ai, victim);
         BeginPursuit(unit, victim);
-        NoteOrderedAttack(unit, victim);
+        NoteOrderedAttack(unit, victim, fromPlayer ? FireOrigin.Player : FireOrigin.Ai);
     }
 
     /// <inheritdoc cref="IWorldServices.GuardPlaceFor"/>

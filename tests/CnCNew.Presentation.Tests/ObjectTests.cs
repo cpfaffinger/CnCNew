@@ -508,7 +508,8 @@ static partial class ObjectTests
         world.Step();
         for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
         Check.That(entity.WeaponClip == 0 && Conditions() == ModelConditionSet.Parse("ATTACKING RELOADING_A USING_WEAPON_A"), $"An empty clip reloads ({Conditions()}).");
-        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 40); i++) world.Step();
+        // The attack lasts (#462) and fires again in the step after its weapon is ready: the state is read in the tick the reload ends.
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 80) && world.Tick < entity.WeaponReadyTick; i++) world.Step();
         // Object::adjustModelConditionForWeaponStatus: a ready weapon of a unit that aims or fires shows BETWEEN_FIRING_SHOTS, so a burst does not pop back to idle (#390).
         Check.That(world.IsAimingOrFiring(entity) && Conditions() == ModelConditionSet.Parse("ATTACKING BETWEEN_FIRING_SHOTS_A USING_WEAPON_A"),
             $"Ready again while the attack on the bunker aims: between shots ({Conditions()}).");

@@ -437,22 +437,28 @@ static partial class Tests
         var trio = Slotted(world, "Trio");
         var dummy = IdOf(world, "Dummy");
         // Explicit slots: the gun twice (empties its clip of 2), the machine gun in between. F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): every order's shot comes on the attack
-        // machine's frame (an order in the frame of the shot before waits a frame more), so each one is stepped to its shot and the timers are counted from the shots.
+        // machine's frame (an order in the frame of the shot before waits a frame more), so each one is stepped to its shot and the timers are counted from the shots. Each order's attack
+        // lasts and would choose its own weapon for the next shot (#462): the trio is stopped after every shot.
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "Gun, first round.");
         Check.That(StepToShot(world, trio).Tick >= 0 && trio.ClipOf(0) == 1, "The gun fired its first round.");
+        OrderStop(feeder, trio);
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Secondary).Accepted, "Machine gun, while the gun waits.");
         var machineGunShot = StepToShot(world, trio).Tick;
+        OrderStop(feeder, trio);
         while (world.Tick < trio.ReadyTickOf(0)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "Gun, second round.");
         var gunShot = StepToShot(world, trio).Tick;
+        OrderStop(feeder, trio);
         Check.That(gunShot >= 0 && trio.ClipOf(0) == 0 && trio.ReadyTickOf(0) == gunShot + world.Frames(60), $"The emptied gun reloads for ClipReloadTime (60 ticks): ready at {trio.ReadyTickOf(0)}.");
         Check.That(machineGunShot >= 0 && trio.ClipOf(1) == int.MaxValue && trio.ReadyTickOf(1) == machineGunShot + world.Frames(3) && trio.ClipOf(2) == 4 && trio.ReadyTickOf(2) == 0, "The other slots keep their own clip and timer.");
         // The machine gun keeps firing during the gun's reload; the rocket pods have their own clip of 4.
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Secondary).Accepted && !feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted,
             "The machine gun is available while the gun reloads.");
         StepToShot(world, trio);
+        OrderStop(feeder, trio);
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Tertiary).Accepted, "The rocket pods fire independently.");
         var podShot = StepToShot(world, trio).Tick;
+        OrderStop(feeder, trio);
         Check.That(trio.ClipOf(2) == 3 && trio.ReadyTickOf(2) == podShot + world.Frames(6), "Rocket pods: one of 4 used, 200 ms (6 ticks) delay.");
         while (world.Tick < trio.ReadyTickOf(0)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "After 60 ticks the gun's clip is full again and it fires.");

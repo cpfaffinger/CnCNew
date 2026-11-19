@@ -304,9 +304,12 @@ static partial class Tests
         var hunter = Slotted(pursuer, "ChaseTank");
         var prey = Slotted(pursuer, "RunnerTarget");
         pursuerFeeder.Pursue(1, hunter.Id.Value, prey.Id.Value, 0, 0);
-        for (var i = 0; i < pursuer.Frames(300); i++) pursuer.Step();
-        Check.That(pursuer.AttackTargetOf(hunter) == prey.Id && DistanceBetween(hunter, prey) > 150m, "A pursuit stands while the victim is far away, even when the unit waits.");
+        for (var i = 0; i < pursuer.Frames(30); i++) pursuer.Step();
+        Check.That(pursuer.AttackTargetOf(hunter) == prey.Id && DistanceBetween(hunter, prey) > 150m, "A pursuit stands while the victim is far away.");
         Check.That(Encoding.UTF8.GetString(WorldSnapshot.Write(pursuer)).Contains("\"pursuing\""), "The pursuit is part of the snapshot.");
+        // The attack approaches by itself (#462: AIAttackApproachTargetState), also when its order named no walk.
+        for (var i = 0; i < pursuer.Frames(300); i++) pursuer.Step();
+        Check.That(pursuer.AttackTargetOf(hunter) == prey.Id && DistanceBetween(hunter, prey) <= 160m, $"The unit walked into reach of its victim ({DistanceBetween(hunter, prey)}).");
 
         // The attacker dies: nothing is left behind and the world goes on.
         var (dying, dyingFeeder, fixture) = AttackWorld(1, ("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
@@ -397,10 +400,11 @@ static partial class Tests
     /// <summary><c>SpecialAbilityUpdate::initiateIntentToDoSpecialPower</c> idles the unit: its move and its attack end when it starts a unit ability.</summary>
     public static void TurretAttackEndsWhenTheUnitStartsAnAbility()
     {
-        var (world, feeder, _) = AttackWorld(1, ("AbilityTank", 1, 0, 0, 0m), ("RunnerTarget", 2, 0, 100, 0m));
+        // The victim out of reach: the tank walks at it (an attack on a victim in reach does not move, #462).
+        var (world, feeder, _) = AttackWorld(1, ("AbilityTank", 1, 0, 0, 0m), ("RunnerTarget", 2, 0, 400, 0m));
         var tank = Slotted(world, "AbilityTank");
         var target = IdOf(world, "RunnerTarget");
-        feeder.Pursue(1, tank.Id.Value, target, 300, 0);
+        feeder.Pursue(1, tank.Id.Value, target, 0, 400);
         world.Step();
         world.Step();
         Check.That(world.AttackTargetOf(tank).Value == target && tank.HasMoveTarget, "The tank pursues its victim.");

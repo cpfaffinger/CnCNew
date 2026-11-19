@@ -21,6 +21,13 @@ static partial class Tests
 
     internal static List<SimEvent> StepThroughShot(SimulationWorld world, uint shooter) => StepThroughShot(world, world.FindEntity(new EntityId(shooter))!);
 
+    /// <summary>
+    /// The unit's command giver orders it to stand where it is (a move to its own place): another order, which ends its attack (#462: an attack ordered once lasts until the victim is
+    /// gone, the attack fails or another order comes).
+    /// </summary>
+    internal static void OrderStop(Feeder feeder, Entity unit)
+        => Check.That(feeder.SetMoveTarget(unit.Owner.Value, unit.Id.Value, (int)unit.X.Floor(), (int)unit.Y.Floor()).Accepted, $"The stop order to {unit.Template.Name} is accepted.");
+
     /// <summary>The tick of <paramref name="shooter"/>'s first shot among <paramref name="events"/>, -1 for none.</summary>
     internal static long FiredTick(List<SimEvent> events, Entity shooter)
         => events.Where(value => value.Kind == SimEventKind.WeaponFired && value.Entity == shooter.Id).Select(value => value.Tick).DefaultIfEmpty(-1).First();

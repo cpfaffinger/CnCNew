@@ -78,12 +78,15 @@ static partial class Tests
             // The Ranger's view of the victim: the order of a script needs none, but the order is checked against what the Ranger can hit.
             BeginAtFrameOf(world, ranger);
             var start = world.Tick;
-            Check.That(world.Submit(new FireWeaponCommand(new PlayerId(1), ++sequence, world.Tick, ranger.Id, victim.Id, WeaponSlot.Best, FireOrigin.Script)).Accepted, $"{rate}: the script's order is accepted.");
+            // A one-off button: aiAttackObject with a shot limit of one (an attack without one lasts, #462).
+            Check.That(world.Submit(new FireWeaponCommand(new PlayerId(1), ++sequence, world.Tick, ranger.Id, victim.Id, WeaponSlot.Best, FireOrigin.Script, MaxShots: 1)).Accepted, $"{rate}: the script's order is accepted.");
             var events = new List<SimEvent>();
             for (var tick = 0; tick < world.Frames(8); tick++) events.AddRange(world.Step().Events);
             var frames = ShotFrames(world, start, events, null, ranger.Id);
             System.Console.WriteLine($"       {rate}: the script's shot at frame {string.Join(",", frames)}");
-            Check.That(frames.Count == 1, $"{rate}: a script's one-off button fires one shot ({frames.Count}).");
+            // The unit's own look may take the victim again after the button's attack is over: the button's shot is the first.
+            Check.That(frames.Count >= 1, $"{rate}: a script's one-off button fires its shot ({frames.Count}).");
+            frames = frames.Take(1).ToList();
             Check.That(frames[0] >= 1, $"{rate}: the shot is the attack machine's - at the earliest in the frame after the order's (frame {frames[0]}).");
             first ??= frames;
             Check.That(frames.SequenceEqual(first), $"{rate}: the same frame as at 30 Hz ({string.Join(",", frames)} against {string.Join(",", first)}).");
@@ -146,9 +149,18 @@ static partial class Tests
             var events = new List<SimEvent>();
             BeginAtFrameOf(world, one);
             var start = world.Tick;
+            var stopped = false;
+            // Neither battery looks for the victim by itself once the order is over.
+            world.SelfAcquisition = false;
             for (var tick = 0; tick < world.Frames(120); tick++)
             {
                 if (tick < world.Frames(2)) Check.That(world.Submit(new FireWeaponCommand(new PlayerId(1), ++sequence, world.Tick, one.Id, victim.Id)).Accepted, $"{rate}: the fire order is accepted.");
+                // The requester's attack lasts (#462) and every shot of it asks again: one request is measured, so the battery is told to stop after its first shot.
+                if (!stopped && events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == one.Id))
+                {
+                    Check.That(world.Submit(new SetMoveTargetCommand(new PlayerId(1), ++sequence, world.Tick, one.Id, one.X, one.Y)).Accepted, $"{rate}: the stop order is accepted.");
+                    stopped = true;
+                }
                 events.AddRange(world.Step().Events);
             }
             var assists = ShotFrames(world, start, events, "PatriotMissileAssistWeapon", one.Id, two.Id);

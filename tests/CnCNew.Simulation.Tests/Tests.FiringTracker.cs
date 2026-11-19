@@ -164,6 +164,9 @@ static partial class Tests
         var fork = feeder.ForkTo(restored);
         Fire(world, feeder, east, 10, null);
         Fire(restored, fork, east, 10, null);
+        // The attack lasts (#462): the tank is stopped in both worlds.
+        OrderStop(feeder, tank);
+        OrderStop(fork, restored.FindEntity(tank.Id)!);
 
         // No more shots: the stage holds for the coast time after the next possible shot, drops to slow for a second and then ends.
         var stages = new List<ContinuousFireStage>();

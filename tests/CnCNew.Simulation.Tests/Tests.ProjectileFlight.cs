@@ -494,7 +494,8 @@ static partial class Tests
         for (var tick = 0; tick < world.Frames(120); tick++)
         {
             feeder.FireWeapon(1, source.Id.Value, victim.Id.Value);
-            if (world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired)) return world.InFrames(world.Tick - 1 - start);
+            // The source's own shot: an attack another unit was ordered to before lasts (#462).
+            if (world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == source.Id)) return world.InFrames(world.Tick - 1 - start);
         }
         return -1;
     }

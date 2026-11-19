@@ -687,10 +687,12 @@ static partial class Tests
 
         Check.That(Hurt(near) == Fixed.Zero && Hurt(far) == Fixed.FromInt(10 * shots) && shots is >= 9 and <= 10, $"While its player orders the attack the unit shoots only the ordered victim, once per reload ({shots} shots in 90 ticks).");
         Check.That(world.AcquiredVictimOf(soldier) == far.Id, "The ordered victim is the unit's victim.");
-        for (var step = 0; step < world.Frames(30); step++) world.Step();
-        Check.That(Hurt(near) == Fixed.Zero, "A gap of 30 ticks in the orders does not end the ordered attack.");
+        var farHurt = Hurt(far);
+        for (var step = 0; step < world.Frames(90); step++) world.Step();
+        Check.That(Hurt(near) == Fixed.Zero && Hurt(far) > farHurt && world.AcquiredVictimOf(soldier) == far.Id, "Without further orders the ordered attack goes on (#462).");
+        OrderStop(feeder, soldier);
         for (var step = 0; step < world.Frames(60); step++) world.Step();
-        Check.That(Hurt(near) > Fixed.Zero && world.AcquiredVictimOf(soldier) == near.Id, "Once the orders have stopped for good the unit picks its victims itself again (the closest).");
+        Check.That(Hurt(near) > Fixed.Zero && world.AcquiredVictimOf(soldier) == near.Id, "Once another order ended it the unit picks its victims itself again (the closest).");
 
         // A move order ends the unit's own attack; on the march a unit without a turret does not shoot, a turret takes targets of opportunity.
         feeder.SetMoveTarget(1, soldier.Id.Value, 0, -30);

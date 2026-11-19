@@ -697,6 +697,8 @@ static partial class Tests
             granted = Spotting();
         }
         Check.That(granted, "The drone flew to the victim and granted the master its spotting bonus.");
+        // An attack lasts until another order (#462): the master is stopped.
+        OrderStop(feeder, master);
         StepN(world, 150);
         Check.That(!Spotting(), "Once the attack is over the bonus is gone again.");
     }

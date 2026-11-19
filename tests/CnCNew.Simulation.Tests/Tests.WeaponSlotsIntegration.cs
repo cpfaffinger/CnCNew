@@ -303,6 +303,8 @@ static partial class Tests
         Check.That(feeder.FireWeapon(1, first.Id.Value, victim.Id.Value).Accepted, "The first turret opens fire.");
         // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
         StepThroughShot(world, first);
+        // The requester's attack lasts (#462), and every shot of it asks again: one request is what is measured here.
+        OrderStop(feeder, first);
         Check.That(neighbour.WeaponLock == WeaponLockKind.Temporary && neighbour.CurrentWeaponSlot == WeaponSlot.Secondary, "The request pinned the assisting slot temporarily.");
         var shots = new List<long>();
         for (var tick = 0; tick < world.Frames(60); tick++)

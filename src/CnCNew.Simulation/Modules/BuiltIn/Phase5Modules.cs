@@ -2158,6 +2158,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (Entity.HasMoveTarget) _pursued = victim;
     }
 
+    /// <summary>The move under way is the approach of an attack on <paramref name="victim"/> (<see cref="NotePursuit"/>).</summary>
+    internal bool IsPursuing(EntityId victim) => Entity.HasMoveTarget && _pursued.IsValid && _pursued == victim;
+
     /// <summary>
     /// The move just given is the approach of an attack with a contact weapon on <paramref name="victim"/> (<c>AIAttackApproachTargetState::computePath</c>: "Weapon is basically a
     /// contact weapon, so let the attacker pathfind into the target" - <c>ignoreObstacle(victim)</c>, <c>setAdjustsDestination(false)</c>): the victim is no obstacle of the walk, so the

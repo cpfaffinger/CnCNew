@@ -345,7 +345,7 @@ static partial class Tests
         var (world2, feeder2, _, tank2, north2, _) = FireCycleWorld("CycleNineTank");
         var client = CycleShotTicks(world2, feeder2, tank2, north2, 50,
             w => w.Time.IsOriginalFrameBoundary(w.Tick) && w.ChooseWeapon(tank2, north2, FireOrigin.Player).CanFire);
-        // One order only: one shot, in the frame the attack's machine fires it.
+        // One order only: the attack lasts (#462) and fires on the same frames as the streams.
         var (world3, feeder3, _, tank3, north3, _) = FireCycleWorld("CycleNineTank");
         var once = CycleShotTicks(world3, feeder3, tank3, north3, 50, w => w.Tick == firstOrder);
 
@@ -358,7 +358,7 @@ static partial class Tests
                 $"The ordered attack ({name}) fires on the frames of the unit's own: {string.Join(",", gaps)} against {string.Join(",", reference)}.");
         }
         Check.That(stream.SequenceEqual(client), $"The orders between the shots change nothing: {string.Join(",", stream)} / {string.Join(",", client)}.");
-        Check.That(once.Count == 1 && once[0] == stream[0], $"One order is one shot, on the machine's frame: {string.Join(",", once)}.");
+        Check.That(once.SequenceEqual(stream), $"One order fires on the machine's frames as the streams do: {string.Join(",", once)} / {string.Join(",", stream)}.");
 
         // A giver that orders in every tick the weapon could fire, and one that waits while its order's shot is pending (IsShotPending): the same shots, fewer orders.
         var (world4, feeder4, _, tank4, north4, _) = FireCycleWorld("CycleNineTank");

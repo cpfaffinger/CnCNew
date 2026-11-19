@@ -217,6 +217,8 @@ static partial class Tests
             var launched = shotEvents.Where(value => value.Kind == SimEventKind.ProjectileLaunched && value.Other == tank.Id).ToArray();
             Check.That(launched.Length == 1 && launched[0].Value - shotTick == 50 * factor, $"{rate}: 100 units at 2 per logic frame land {50 * factor} ticks later (measured {(launched.Length == 1 ? launched[0].Value - shotTick : -1)}).");
 
+            // The attack on the far victim lasts (#462): the tank is stopped, so its gun is ready for the near one.
+            OrderStop(feeder, tank);
             for (var i = 0; i < 31 * factor; i++) world.Step();
             var before = near.Body!.Health;
             feeder.FireWeapon(1, tank.Id.Value, near.Id.Value);

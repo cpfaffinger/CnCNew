@@ -474,6 +474,13 @@ internal static partial class UnitConditionTests
                 rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, gun, target));
                 rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, plain, target));
             }
+            // The attack lasts (#462): when the window of orders ends, both are told to stand.
+            if (tick == CnCNew.Tests.TestTime.Frames(rig.World, 24))
+                foreach (var unit in new[] { gun, plain })
+                {
+                    var standing = rig.Get(unit);
+                    rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, unit, standing.X, standing.Y));
+                }
             rig.Step();
             AddIfNew(stages, Stage(rig.Bits(gun)));
             AddIfNew(plainStages, Stage(rig.Bits(plain)));
@@ -874,6 +881,12 @@ internal static partial class UnitConditionTests
         for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 400); tick++)
         {
             if (tick < CnCNew.Tests.TestTime.Frames(rig.World, 90) && rig.World.Tick >= rig.Get(tank).ReadyTickOf(0)) rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, tank, target));
+            // The attack lasts (#462): when the window of orders ends, the tank is told to stand.
+            if (tick == CnCNew.Tests.TestTime.Frames(rig.World, 90))
+            {
+                var standing = rig.Get(tank);
+                rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, tank, standing.X, standing.Y));
+            }
             rig.Step();
             var bits = rig.Bits(tank);
             AddIfNew(stages, Stage(bits));

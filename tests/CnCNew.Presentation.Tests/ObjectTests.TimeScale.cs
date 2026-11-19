@@ -147,8 +147,15 @@ static partial class ObjectTests
             Submit(rig.World, sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, rover, patient));
             var health = entity.Body!.Health;
             long healedAt = -1, lastShown = -1;
+            var stopped = false;
             for (var tick = 0; tick < rig.Ticks(8); tick++)
             {
+                // One hit: the attack lasts (#462), so the rover is told to stand once the patient is hurt.
+                if (!stopped && entity.Body.Health < entity.Body.MaxHealth && rig.World.FindEntity(rover) is { } shooter)
+                {
+                    Submit(rig.World, sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, rover, shooter.X, shooter.Y));
+                    stopped = true;
+                }
                 var drawable = rig.Step().Drawables.First(value => value.Entity == patient);
                 // The one heal after the shot; the next is twenty seconds away.
                 if (entity.Body.Health > health && healedAt < 0) healedAt = rig.World.Tick;

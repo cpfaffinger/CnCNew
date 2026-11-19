@@ -256,7 +256,7 @@ public sealed partial class SimulationWorld
     private void OrderFireAttack(Entity source, Entity victim, WeaponChoice choice, FireOrigin origin, int lockSlot, PlayerId emitter, int shots = 0, bool approach = false)
     {
         var begins = source.Acquisition is not { Ordered: true } running || running.Victim != victim.Id;
-        NoteOrderedAttack(source, victim, origin);
+        NoteOrderedAttack(source, victim, origin, fire: true);
         if (begins) RestartAttackCycles(source);
         if (lockSlot >= 0) SetWeaponLock(source, lockSlot, WeaponLockKind.Temporary);
         var attack = source.Acquisition!;
@@ -425,6 +425,7 @@ public sealed partial class SimulationWorld
                 state.ChaseTick = 0;
             }
         }
+        else if (ApproachOrderedAttack(entity, state, victim)) return;
         var choice = ChooseWeaponInView(entity, victim, state.OrderOrigin);
         // AIAttackState::update: "if we entered with a locked weapon (ie, a special weapon), then we will only keep attacking as long as that weapon remains the cur weapon" - checked in every
         // frame, before the machine runs. A temporary lock is released by the shot that empties its clip, and the chooser may then pick another slot.
@@ -436,6 +437,17 @@ public sealed partial class SimulationWorld
         }
         if (choice.Slot < 0 || choice.Rejection == CommandRejection.OutOfRange)
         {
+            // AIAttackState::update: "Something can happen to make none of our weapons work" - no weapon of the unit can hit the victim (a gun for the ground against an aircraft in the air), and
+            // the attack fails. (A weapon the order named but the unit's own choice passes by - a module's slot - still works.)
+            // AIAttackApproachTargetState::computePath: "if we're immobile we can't possibly approach the target" - out of reach, the attack of such a unit fails as well.
+            // A container whose riders may fire keeps its attack: it names their victim, also to riders that board later (F-60, the Chinook's re-issue).
+            if ((choice.Rejection is not (CommandRejection.OutOfRange or CommandRejection.WeaponNotReady) && !AnyWeaponCanTarget(entity, victim) && entity.Container?.IsPassengerAllowedToFire(this, null) != true)
+                || (choice.Rejection == CommandRejection.OutOfRange && CannotApproach(entity)))
+            {
+                AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
+                EndOrderedAttack(entity, state);
+                return;
+            }
             if (choice.Rejection is CommandRejection.OutOfRange or CommandRejection.WeaponNotReady) AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
             if (choice.Rejection == CommandRejection.OutOfRange) ApproachInFlight(entity, state, victim);
             return;
@@ -447,8 +459,71 @@ public sealed partial class SimulationWorld
             MarkDirty(entity);
         }
         if (choice.Rejection is not (0 or CommandRejection.WeaponNotReady) || !GateAllowsFire(entity, victim)) return;
-        if (!AttackCycleFires(entity, ref state.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: false) || !state.ShotPending) return;
+        // The attack fires its own shots (#462): an order of a command giver's stream only begins it, or fires it in the order's tick.
+        if (!AttackCycleFires(entity, ref state.Cycle, choice.Slot, victim, Fixed.Zero, Fixed.Zero, Fixed.Zero, ordered: false)) return;
         state.ShotPending = false;
         FireCycleShot(entity, ref state.Cycle, choice.Slot, victim, entity.Owner);
+    }
+
+    /// <summary>
+    /// <c>AIAttackApproachTargetState</c> of an attack without a shot limit (#462): the walk the order gave (<see cref="AttackObject"/>) goes on while the victim is out of reach; a unit that stands
+    /// out of reach approaches by itself (<see cref="ApproachLimitedAttack"/>, also when the victim moved away from it), and a walk that reached the victim's reach ends where it is
+    /// (<c>m_stopIfInRange</c>). A helicopter in the air flies on to its approach target first (#451) and does not fire on the way. True while the unit approaches (the caller fires nothing).
+    /// </summary>
+    private bool ApproachOrderedAttack(Entity entity, AcquisitionState state, Entity victim)
+    {
+        if (AiOf(entity) is not { } ai) return false;
+        if (LimitedAttackApproaches(entity, victim))
+        {
+            if (entity.HasMoveTarget && !state.Chasing)
+            {
+                AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
+                return true;
+            }
+            return ApproachLimitedAttack(entity, state, victim, _tick);
+        }
+        if (!entity.HasMoveTarget || !(state.Chasing || ai.IsPursuing(victim.Id))) return false;
+        // Not in the reach of the weapon the attack would fire (a weapon the unit's own choice passes by, a blocked view): the walk goes on.
+        if (ChooseWeaponInView(entity, victim, state.OrderOrigin).Rejection is not (0 or CommandRejection.WeaponNotReady)) return false;
+        if (entity.Template.IsKindOf("AIRCRAFT"))
+        {
+            // An attack path's approach does not stop in range (m_stopIfInRange, #451); a fixed-wing aircraft cannot stop and fires on its run.
+            return entity.Template.Locomotor is { IsHover: true } && ApproachesInFlight(entity);
+        }
+        ai.StopInternalMoveAtFrameEnd(this);
+        state.Chasing = false;
+        state.ChaseTick = 0;
+        MarkDirty(entity);
+        return false;
+    }
+
+    /// <summary>
+    /// <c>Object::isMobile</c> is false, or the unit rides inside a container: it can never walk into reach of a victim. (An object without a locomotor that is not <c>IMMOBILE</c> - only the
+    /// synthetic fixtures have one - is mobile to the original and waits; its turret gives the victim up by itself.)
+    /// </summary>
+    private static bool CannotApproach(Entity entity) => entity.Template.IsKindOf("IMMOBILE") || entity.ContainedBy.IsValid;
+
+    /// <summary>Some weapon of the unit's active set can hit <paramref name="victim"/> at all (its anti-mask and the victim's kind), whatever its range or reload.</summary>
+    private bool AnyWeaponCanTarget(Entity entity, Entity victim)
+    {
+        if (ActiveWeaponSet(entity) is not { } set) return false;
+        var mask = VictimAntiMask(victim);
+        for (var slot = 0; slot < WeaponSlot.Count; slot++)
+            if (set.HasWeapon(slot) && CanTarget(entity, _templates.Weapons[set.Weapons[slot]], victim, mask)) return true;
+        return false;
+    }
+
+    /// <summary>The ordered attack fails (<c>AIAttackState</c> exits with failure): the unit is idle again and looks for victims by itself.</summary>
+    private void EndOrderedAttack(Entity entity, AcquisitionState state)
+    {
+        if (AiOf(entity) is { } ai)
+        {
+            // The approach is part of the attack (AIAttackApproachTargetState inside AIAttackState): the walk the order gave ends with it, where the unit's frame ends.
+            if (!state.Chasing && ai.IsPursuing(state.Victim)) ai.StopInternalMoveAtFrameEnd(this);
+            EndEngagement(entity, ai, state);
+        }
+        else state.ClearVictim();
+        if (state.Mode != 0) (state.NextCheck, state.Offset) = (_tick + _forceIdleTicks, true);
+        MarkDirty(entity);
     }
 }

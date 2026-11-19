@@ -891,7 +891,11 @@ static partial class Tests
             var riders = world.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).ToArray();
             foreach (var rider in riders) Check.That(world.TryEnterContainer(rider, bunker), $"{rate}: setup - a rifleman enters the bunker.");
             Check.That(feeder.FireWeapon(1, rocketeer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the rocket is fired at the garrisoned bunker.");
-            for (var step = 0; step < world.Frames(60); step++) world.Step();
+            // One rocket is measured: the attack lasts (#462), so the rocketeer is stopped after its shot.
+            var fired = world.Tick;
+            StepThroughShot(world, rocketeer);
+            OrderStop(feeder, rocketeer);
+            for (var step = 0; step < world.Frames(60) - (world.Tick - fired); step++) world.Step();
             Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the missile kills the first two riders, the third lives.");
             Check.That(bunker.Body!.Health == bunker.Body.MaxHealth && !world.Entities.Any(value => value.Template.Name == "FcToxinMissile"),
                 $"{rate}: the bunker is whole and the missile gone ({bunker.Body.Health}).");

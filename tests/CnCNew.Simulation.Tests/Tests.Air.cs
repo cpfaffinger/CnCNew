@@ -384,9 +384,11 @@ static partial class Tests
         for (var i = 0; i < world.Frames(5); i++) world.Step();
         Check.That(second.EffectivelyDead, "The parked jet died with its airfield.");
         Check.That(!first.EffectivelyDead, "The jet in flight survived the airfield.");
-        Check.That(feeder.FireWeapon(1, first.Id.Value, dummy.Id.Value).Accepted, "It fires its first missile.");
-        for (var i = 0; i < world.Frames(5); i++) world.Step();
-        Check.That(feeder.FireWeapon(1, first.Id.Value, dummy.Id.Value).Accepted, "It fires its second missile.");
+        Check.That(feeder.FireWeapon(1, first.Id.Value, dummy.Id.Value).Accepted, "It is ordered to attack.");
+        // The attack lasts (#462): it fires both missiles without another order.
+        var missiles = 0;
+        for (var i = 0; i < world.Frames(60) && missiles < 2; i++) missiles += world.Step().Events.Count(value => value.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired && value.Entity == first.Id);
+        Check.That(missiles == 2, $"It fires its two missiles ({missiles}).");
         StepUntil(world, () => JetOf(first).Phase == JetAIUpdate.JetPhase.CirclingDeadAirfield, 600, "Out of ammunition without an airfield the jet circles over where the airfield was: " + JetOf(first).Phase);
         var health = first.Body!.Health;
         for (var i = 0; i < world.Frames(30); i++) world.Step();

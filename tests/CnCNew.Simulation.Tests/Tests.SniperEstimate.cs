@@ -64,6 +64,9 @@ static partial class Tests
         var empty = feeder.FireWeapon(1, sniper.Id.Value, bunker.Id.Value);
         Check.That(!empty.Accepted, $"A sniper cannot aim at an empty structure with a contain module ({empty.Reason}).");
         Check.That(feeder.FireWeapon(1, sniper.Id.Value, hut.Id.Value).Accepted, "A structure without a contain module is no such case.");
+        // The attack on the hut lasts (#462): the sniper is stopped after its shot.
+        StepThroughShot(world, sniper);
+        OrderStop(feeder, sniper);
         world.Step();
 
         Check.That(feeder.EnterContainer(2, rebel.Id.Value, bunker.Id.Value).Accepted, "The rebel is ordered into the bunker.");

@@ -148,7 +148,8 @@ run.Test("Rate invariance, observers: a fight of two groups is the 30 Hz fight a
 run.Test("Rate invariance, random draws: a repair drone on its way draws once per logic frame", Tests.RateInvarianceRepairDroneDrawsOncePerFrame);
 run.Test("Rate invariance, random draws: an idle wanderer draws once per logic frame", Tests.RateInvarianceIdleWandererDrawsOncePerFrame);
 run.Test("Rate invariance, modules: the stealth grant scans once per logic frame of its marker", Tests.RateInvarianceGrantStealthScansOncePerFrame);
-run.Test("Rate invariance, acquisition: an attack named by orders ends in the same logic frame", Tests.RateInvarianceOrderedAttackEndsInTheSameFrame);
+run.Test("Ordered attack (#462): one fire order fires on until the victim is gone", Tests.OrderedAttack462OneFireOrderLasts);
+run.Test("Ordered attack (#462): one attack order approaches and fires on", Tests.OrderedAttack462OnePursueOrderApproachesAndFires);
 // Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
 run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);

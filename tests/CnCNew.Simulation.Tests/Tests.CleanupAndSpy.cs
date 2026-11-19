@@ -409,6 +409,8 @@ static partial class Tests
         Check.That(feeder.FireWeapon(1, first.Id.Value, victim.Id.Value).Accepted, "The first turret opens fire.");
         // F-140 (AIAttackAimAtTargetState / AIAttackFireWeaponState): the order aims in its frame and fires in the next.
         StepThroughShot(world, first);
+        // The requester's attack lasts (#462), and every shot of it asks again: one shot is what is measured here.
+        OrderStop(feeder, first);
         Check.That(module.ShotsLeft == 3, "The neighbour within RequestAssistRange was asked for AssistingClipSize shots.");
         Check.That(distant.Modules.OfType<AssistedTargetingUpdate>().Single().ShotsLeft == 0, "A turret beyond the range was not asked.");
         Check.That(enemyTurret.Modules.OfType<AssistedTargetingUpdate>().Single().ShotsLeft == 0, "An enemy turret is never asked.");
@@ -425,7 +427,9 @@ static partial class Tests
         CsSpawn(again, againFeeder, "NetTurret", 1, 60, 0);
         var target = CsSpawn(again, againFeeder, "NetVictim", 2, 50, 80);
         againFeeder.FireWeapon(1, a.Id.Value, target.Id.Value);
-        CsRun(again, 6);
+        StepThroughShot(again, a);
+        OrderStop(againFeeder, a);
+        CsRun(again, 4);
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(again), new SyntheticFixture(TestRate.Default, files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CleanupAndSpyFiles()).Fingerprint);
         for (var tick = 0; tick < again.Frames(80); tick++) Check.That(again.Step().StateHash == restored.Step().StateHash, $"An assist continues identically after a restore (tick {tick}).");
         Check.That(target.Body!.Health == Fixed.FromInt(970), "The restored run ends with the same damage.");

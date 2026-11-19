@@ -36,12 +36,6 @@ public sealed partial class SimulationWorld
     private static readonly Fixed AttackPriorityDistanceStep = Fixed.FromInt(100);
 
     /// <summary>
-    /// An attack named by fire or pursue orders is over when no such order arrived for this long (logic frames of the original, 1.5 s) after the unit could fire again (a command
-    /// giver only orders a shot the weapon can take). An own value of this simulation.
-    /// </summary>
-    private const long OrderedAttackGraceFrames = 45;
-
-    /// <summary>
     /// <c>ForceIdleMSEC</c> (AIData.ini 67 ms, "2 frames"; <c>AI.cpp</c> field table → <c>m_forceIdleFramesCount</c>, used by <c>AIUpdateInterface::resetNextMoodCheckTime</c>):
     /// how long a unit has been in a state that looks for victims before its first look, in logic frames of the original.
     /// </summary>
@@ -50,8 +44,7 @@ public sealed partial class SimulationWorld
     /// <summary>A chase is pointed at the victim's current position this often (logic frames of the original, 0.5 s). An own rhythm of this simulation.</summary>
     private const long ChaseRefreshFrames = 15;
 
-    // The three above in ticks of this world, resolved once when the world is created.
-    private readonly long _orderedAttackGraceTicks;
+    // The two above in ticks of this world, resolved once when the world is created.
     private readonly long _forceIdleTicks;
     private readonly long _chaseRefreshTicks;
 
@@ -269,14 +262,18 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private void NoteOrderedAttack(Entity unit, Entity victim, FireOrigin? fire = null)
+    /// <summary>
+    /// <c>aiAttackObject</c>: the unit attacks <paramref name="victim"/> by order (<see cref="AcquisitionState.Ordered"/>) until the victim is gone, the attack fails or another order
+    /// replaces it (#462). <paramref name="origin"/> is the order's command source; <paramref name="fire"/> marks a fire order of a command giver's stream (one shot it asks for).
+    /// </summary>
+    private void NoteOrderedAttack(Entity unit, Entity victim, FireOrigin origin, bool fire = false)
     {
         if (AiOf(unit) is not { } ai) return;
         EndGuard(unit);
         var state = unit.Acquisition ??= new AcquisitionState();
         if (state.Chasing) ai.StopInternalMove();
-        if (state.Victim != victim.Id) (state.FireOrdered, state.ShotPending) = (false, false);
-        if (fire is { } origin) (state.FireOrdered, state.OrderOrigin, state.ShotPending) = (true, origin, true);
+        if (state.Victim != victim.Id || !state.Ordered) (state.FireOrdered, state.ShotPending, state.OrderOrigin) = (false, false, origin);
+        if (fire) (state.FireOrdered, state.OrderOrigin, state.ShotPending) = (true, origin, true);
         state.Victim = victim.Id;
         state.Ordered = true;
         state.OrderedTick = _tick;
@@ -341,10 +338,11 @@ public sealed partial class SimulationWorld
     private void StepAcquirer(Entity entity, AIUpdateInterface ai, long tick)
     {
         var state = entity.Acquisition;
-        // Object::isAbleToAttack: weapons on a switched-off turret acquire nobody, and an attack the unit runs itself ends (cannotPossiblyAttackObject).
+        // Object::isAbleToAttack: weapons on a switched-off turret acquire nobody, and an attack ends (cannotPossiblyAttackObject; an ordered one too, F-57). An ordered attack of a unit
+        // that may not act now (disabled, its AI held) waits for it, as the original's attack state waits while the AI does not run.
         if (!MayAct(entity, tick) || !TurretsLetAttack(entity))
         {
-            if (state is { Victim.IsValid: true, Ordered: false }) EndEngagement(entity, ai, state);
+            if (state is { Victim.IsValid: true } && (!state.Ordered || !TurretsLetAttack(entity))) EndEngagement(entity, ai, state);
             return;
         }
 
@@ -358,13 +356,13 @@ public sealed partial class SimulationWorld
             var attackable = victim is not null && IsAttackable(entity, victim);
             if (state.Ordered)
             {
-                // The command giver names the attack; its machine fires in the unit's frames (F-140), and the world notices when the attack is over.
-                // "No order for longer than the grace" is noticed in the step after the grace: a logic frame of the original at every rate, not a tick.
+                // aiAttackObject: the order names the attack, and its state approaches, aims and fires in the unit's frames (F-140) until the victim is gone, the attack fails or another
+                // order replaces it (#462) - an order is given once, a command giver that orders on adds nothing to it.
                 // A fire order may name a victim that is no enemy (the force-fire of a player): its attack goes on as long as any other attack would.
                 var ordered = attackable || (state.FireOrdered && victim is not null && IsAttackable(entity, victim, enemiesOnly: false, forced: state.OrderOrigin == FireOrigin.Player));
-                if (ordered && tick - Math.Max(state.OrderedTick, OrderedAttackReadyTick(entity, state, tick)) < _orderedAttackGraceTicks + _turretFrameTicks)
+                if (ordered)
                 {
-                    if (state.FireOrdered) StepOrderedFire(entity, state, victim!);
+                    StepOrderedFire(entity, state, victim!);
                     return;
                 }
                 state.ClearVictim();
@@ -795,26 +793,6 @@ public sealed partial class SimulationWorld
         }
 
         return vision;
-    }
-
-    /// <summary>The first tick from <paramref name="tick"/> on at which some weapon of the active set is ready, not looking further than the turrets' reload cap (an aircraft out of ammunition waits for its airfield).</summary>
-    /// <summary>
-    /// The ready tick an ordered attack's grace counts from: the earliest of the unit's weapons for an attack whose command giver orders every shot; for one that orders its own shots
-    /// (<see cref="AcquisitionState.ShotsLeft"/>, #277) the weapon it fires, so a clip's reload does not end it while another weapon of the unit would be ready.
-    /// </summary>
-    private long OrderedAttackReadyTick(Entity entity, AcquisitionState state, long tick)
-    {
-        if (state.ShotsLeft == 0 || ActiveWeaponSet(entity) is not { } set || !set.HasWeapon(entity.CurrentWeaponSlot)) return EarliestReadyTick(entity, tick);
-        return Math.Clamp(EffectiveReadyTick(entity, entity.CurrentWeaponSlot, set), tick - _orderedAttackGraceTicks - _turretFrameTicks, tick + _turretReloadHoldCapTicks);
-    }
-
-    private long EarliestReadyTick(Entity entity, long tick)
-    {
-        if (ActiveWeaponSet(entity) is not { } set) return tick;
-        var earliest = long.MaxValue;
-        for (var slot = 0; slot < WeaponSlot.Count; slot++)
-            if (set.HasWeapon(slot)) earliest = Math.Min(earliest, EffectiveReadyTick(entity, slot, set));
-        return Math.Clamp(earliest, tick - _orderedAttackGraceTicks - _turretFrameTicks, tick + _turretReloadHoldCapTicks);
     }
 
     // ------------------------------------------------------------------------------------------------------ choosing the victim
