@@ -396,6 +396,9 @@ internal sealed class SupplyMachine
         switch (_state)
         {
             case SupplyState.Wanting:
+                // supply-truck-keeps-player-order (Reforged, R-36): the machine runs this update before its transitions, so an order of the player or a script that arrived in the frame
+                // after it entered "wanting" is already running; the original docks over it. With the fix the carrier goes busy - where the same order lands a frame earlier.
+                if (!ai.IsIdle && ai.LastCommandFromPlayer && world.Templates.Rules.Has(Rules.GameFix.SupplyTruckKeepsPlayerOrder)) return DockStatus.Success;
                 var dock = ai.Boxes > 0 ? SupplyNetwork.FindBestCenter(world, ai) : SupplyNetwork.FindBestWarehouse(world, ai);
                 if (dock is null && ai.GathersForGood(world))
                 {

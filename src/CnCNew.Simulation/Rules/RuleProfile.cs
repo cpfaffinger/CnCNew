@@ -99,6 +99,9 @@ public enum GameFix
 
     /// <summary>A helicopter shot down does not play the same crash as the one before: its spiral turns left or right, and the turn rate, the forward speed and the delay before the blade flies off are each scaled by a factor from 0.75 to 1.25, all drawn from the logic random stream when the slow death begins. The original draws only the slow death's own values and always spirals the same way; the owner's decision (14 November 2026), not the community source's.</summary>
     HelicopterCrashVariance = 30,
+
+    /// <summary>A supply carrier (a supply truck, a worker acting as one, a Chinook) that has just decided to dock keeps an order its player or a script gave it in that frame: the machine's "wanting" state, which runs before its transitions, no longer orders the dock over a busy carrier whose last command was not the AI's. The original orders the dock without a check (<c>SupplyTruckWantsToPickUpOrDeliverBoxesState::update</c>), so a truck sent away as it leaves the dock drives back to the supplies; Zero Hour Reforged's fix (R-36), not the community source's.</summary>
+    SupplyTruckKeepsPlayerOrder = 31,
 }
 
 /// <summary>
@@ -246,6 +249,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.HelicopterCrashVariance, "helicopter-crash-variance",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/HelicopterSlowDeathUpdate.cpp, HelicopterSlowDeathBehavior::beginSlowDeath (the project owner's decision, not a community fix)",
             "a shot-down helicopter spirals left or right, with a turn rate, a forward speed and a blade delay of 0.75 to 1.25 times the data's, drawn per crash from the logic stream, instead of every crash being the same"),
+        new(GameFix.SupplyTruckKeepsPlayerOrder, "supply-truck-keeps-player-order",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/SupplyTruckAIUpdate.cpp, SupplyTruckWantsToPickUpOrDeliverBoxesState::update (Zero Hour Reforged's fix, not a community fix)",
+            "a supply truck, worker or Chinook sent somewhere else in the moment it leaves a dock goes there, instead of turning back to the supplies or the supply center it had just decided on"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

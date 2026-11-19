@@ -728,6 +728,7 @@ run.Test("Rate invariance, flight: the uplink beam drives its waypoint path the 
 run.Test("Rate invariance, flight: a shot-down helicopter spins, spirals, loses its blade and falls the same at 30, 60 and 120 Hz", Tests.RateFlightHelicopterSlowDeathIsTheSame);
 run.Test("Comanche crash spiral: the motive force over the mass and the lateral friction move the wreck as the physics step does, at 30, 60 and 120 Hz", Tests.HelicopterSpiralRadiusFollowsThePhysics);
 run.Test("Rule fix helicopter-crash-variance: crashes differ under the fix, repeat at the same seed and across a save, and stay one crash in the original profile, at 30, 60 and 120 Hz", Tests.HelicopterCrashesVaryUnderTheFix);
+run.Test("Rule fix supply-truck-keeps-player-order: a player's order given as a supply truck or worker wants to dock is overwritten in the original and kept under the fix and the product, at 30, 60 and 120 Hz", Tests.SupplyCarrierKeepsAPlayerOrderGivenAsItWantsToDock);
 run.Test("Rate invariance, flight: a tunnel heals its rider in the same frames at 30, 60 and 120 Hz", Tests.RateFlightTunnelHealingIsTheSame);
 run.Test("Rate invariance, flight: a Chinook climbs, lands to unload and climbs again the same at 30, 60 and 120 Hz", Tests.RateFlightChinookClimbIsTheSame);
 run.Test("Rate invariance, flight: the Spectre gunship inserts, orbits, fires and departs the same at 30, 60 and 120 Hz", Tests.RateFlightSpectreGunshipIsTheSame);
