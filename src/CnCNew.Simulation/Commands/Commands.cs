@@ -12,11 +12,11 @@ namespace CnCNew.Simulation.Commands;
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
 /// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
 /// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277; version 29: the debug money command;
-/// version 30: the exit command names the container the rider leaves through, #435).
+/// version 30: the exit command names the container the rider leaves through, #435; version 31: the stop order, #463).
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 30;
+    public const int Version = 31;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -143,7 +143,11 @@ public static class CommandTypes
     /// <summary>The debug option "money buttons" (#336): the player who gives it, or every player, gets <see cref="DebugGiveMoneyCommand.Amount"/>. A player order; the world refuses it unless the match option is on.</summary>
     public const ushort DebugGiveMoney = 47;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= DebugGiveMoney;
+    // ------------------------------------------------------------------------------------------------------------ the stop (v31)
+    /// <summary><c>MSG_DO_STOP</c> to one unit (<c>AIGroup::groupIdle</c>, <c>aiIdle</c>, <c>AICMD_IDLE</c>): a jet answers it as <c>JetAIUpdate::aiDoCommand</c> does (#463).</summary>
+    public const ushort Stop = 48;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Stop;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -203,6 +207,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Text("template")),
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), checked((int)reader.Int("slot"))),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.Stop => new StopCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target"))),
                 reader.Has("slot") ? checked((int)reader.Int("slot")) : WeaponSlot.Best, reader.Has("origin") ? (FireOrigin)checked((byte)reader.Int("origin")) : FireOrigin.Player,
                 reader.Has("maxShots") ? checked((int)reader.Int("maxShots")) : 0),
@@ -338,6 +343,23 @@ public sealed record CancelProductionCommand(PlayerId Player, ulong Sequence, lo
 public sealed record SetMoveTargetCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.SetMoveTarget;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("target", Target.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
+/// <summary>
+/// <c>MSG_DO_STOP</c> to one unit (<c>AIGroup::groupIdle</c> -> <c>aiIdle</c>, #463). An aircraft with a <c>JetAIUpdate</c> answers it as <c>JetAIUpdate::aiDoCommand</c> answers
+/// <c>AICMD_IDLE</c>: stored while a take-off or landing runs or while it reloads, sent home to land while it flies (a fixed-wing jet), nothing while it is parked. Every other unit moves
+/// to (<see cref="X"/>, <see cref="Y"/>), the place the player saw it stand, exactly as a <see cref="SetMoveTargetCommand"/> there (this simulation's stop of a ground unit).
+/// </summary>
+public sealed record StopCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Stop;
 
     protected override void DescribeBody(IStateWriter writer)
     {

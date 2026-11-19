@@ -30,6 +30,7 @@ internal static partial class Tests
 
         // Every kind of order that names a point.
         Check.That(!world.Check(new AttackMoveCommand(player, 0, 0, grunt.Id, beyond, Fixed.Zero)).Accepted, "an attack-move beyond the limit");
+        Check.That(!world.Check(new StopCommand(player, 0, 0, grunt.Id, beyond, Fixed.Zero)).Accepted, "a stop beyond the limit");
         Check.That(!world.Check(new GroupMoveCommand(player, 0, 0, [grunt.Id], Fixed.Zero, beyond, false)).Accepted, "a group move beyond the limit");
         Check.That(!world.Check(new GuardCommand(player, 0, 0, [grunt.Id], beyond, Fixed.Zero, EntityId.Invalid, GuardMode.Normal)).Accepted, "a guard beyond the limit");
         Check.That(!world.Check(new PursueCommand(player, 0, 0, grunt.Id, grunt.Id, beyond, beyond)).Accepted, "a pursuit beyond the limit");
@@ -57,6 +58,6 @@ internal static partial class Tests
             CommandTypes.GiveSciencePoints, CommandTypes.SetRelationship, CommandTypes.PlayerLeave, 0, 999];
         Check.That(not.All(code => !CommandTypes.IsPlayerOrder(code)), "spawning, the instant entry, damage, timers, gifts, relations and the leave are not");
         var orders = Enumerable.Range(0, 100).Count(code => CommandTypes.IsPlayerOrder((ushort)code));
-        Check.That(orders == 34 && CommandTypes.IsPlayerOrder(CommandTypes.SetRetaliation) && CommandTypes.IsPlayerOrder(CommandTypes.Guard) && CommandTypes.IsPlayerOrder(CommandTypes.AttackPosition) && CommandTypes.IsPlayerOrder(CommandTypes.SetMineClearing), $"34 of the 48 command types are orders of a player, the guard, the attack on a place and the mine-clearing flag among them ({orders})");
+        Check.That(orders == 35 && CommandTypes.IsPlayerOrder(CommandTypes.Stop) && CommandTypes.IsPlayerOrder(CommandTypes.SetRetaliation) && CommandTypes.IsPlayerOrder(CommandTypes.Guard) && CommandTypes.IsPlayerOrder(CommandTypes.AttackPosition) && CommandTypes.IsPlayerOrder(CommandTypes.SetMineClearing), $"35 of the 48 command types are orders of a player, the stop, the guard, the attack on a place and the mine-clearing flag among them ({orders})");
     }
 }

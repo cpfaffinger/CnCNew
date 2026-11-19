@@ -819,7 +819,7 @@ static class InputTests
         var before = arena.Sink.Issued.Count;
         input.Process(new KeyEvent(20, KeyCode.S, true), arena.World, view);
         input.Process(new KeyEvent(21, KeyCode.S, false), arena.World, view);
-        Assert(arena.Sink.Issued.Count == before + 1 && arena.Sink.Issued[^1] is SetMoveTargetCommand, "S stops once: the meta fires, the Stop button hotkey is suppressed");
+        Assert(arena.Sink.Issued.Count == before + 1 && arena.Sink.Issued[^1] is StopCommand, "S stops once: the meta fires, the Stop button hotkey is suppressed");
         input.Process(new KeyEvent(30, KeyCode.LeftControl, true), arena.World, view);
         input.Process(new KeyEvent(31, KeyCode.A, true), arena.World, view);
         input.Process(new KeyEvent(32, KeyCode.A, false), arena.World, view);
@@ -1202,7 +1202,7 @@ static class InputTests
 
         selection.Replace([tank.Id]);
         controller.OnMeta(world, MetaAction.Stop);
-        Assert(arena.Sink.Issued[^1] is SetMoveTargetCommand halt && halt.Target == tank.Id && halt.X == tank.X && halt.Y == tank.Y, "stop halts the unit where it stands");
+        Assert(arena.Sink.Issued[^1] is StopCommand halt && halt.Target == tank.Id && halt.X == tank.X && halt.Y == tank.Y, "stop is the simulation's StopCommand, at the place the unit stands (#463)");
         controller.OnMeta(world, MetaAction.Guard);
         Assert(controller.Mode == CommandModeKind.Guard && controller.CompleteTarget(world, view, Screen(60, 100)) && controller.Mode == CommandModeKind.None, "the click completes the guard");
         Assert(arena.Sink.Issued[^1] is GuardCommand { Mode: GuardMode.Normal, Object.IsValid: false } guardOrder && guardOrder.Units.SequenceEqual([tank.Id]) && !controller.Orders.TryGet(tank.Id, out _),

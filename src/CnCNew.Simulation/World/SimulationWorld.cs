@@ -826,6 +826,16 @@ public sealed partial class SimulationWorld : IWorldServices
         NoteOrderedAttack(unit, victim);
     }
 
+    /// <summary>A player's move of one unit (<c>doMoveTo</c>).</summary>
+    private void PlayerMove(Entity target, Fixed x, Fixed y)
+    {
+        // GameLogicDispatch doMoveTo: a move order releases any temporary weapon lock.
+        ReleaseWeaponLock(target, WeaponLockKind.Temporary);
+        var (moveX, moveY) = IndividualDestination(target, x, y);
+        // AIMoveToState::update, MAA_Action_To_AttackMove: the plain move of a computer player's alert or aggressive unit is an attack-move.
+        AiOf(target)!.OrderMove(this, moveX, moveY, true, attackMove: IsComputerPlayer(target.Owner) && AttitudeOf(target) >= Attitude.Alert);
+    }
+
     /// <inheritdoc cref="IWorldServices.ResumeAttack"/>
     public void ResumeAttack(Entity entity, EntityId victimId, bool fromPlayer)
     {
@@ -950,6 +960,7 @@ public sealed partial class SimulationWorld : IWorldServices
         return command switch
         {
             SetMoveTargetCommand move => InReach(move.X, limit) && InReach(move.Y, limit),
+            StopCommand stop => InReach(stop.X, limit) && InReach(stop.Y, limit),
             AttackMoveCommand march => InReach(march.X, limit) && InReach(march.Y, limit),
             GroupMoveCommand group => InReach(group.X, limit) && InReach(group.Y, limit),
             GuardCommand guard => InReach(guard.X, limit) && InReach(guard.Y, limit),
@@ -1047,6 +1058,13 @@ public sealed partial class SimulationWorld : IWorldServices
             case SetMoveTargetCommand move:
             {
                 if (!_entities.TryGetValue(move.Target.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (target.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (!CanMove(target)) return CommandRejection.CannotMove;
+                break;
+            }
+            case StopCommand stop:
+            {
+                if (!_entities.TryGetValue(stop.Target.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (target.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!CanMove(target)) return CommandRejection.CannotMove;
                 break;
@@ -1327,6 +1345,7 @@ public sealed partial class SimulationWorld : IWorldServices
         switch (command)
         {
             case SetMoveTargetCommand order: return Sleeps(order.Target);
+            case StopCommand order: return Sleeps(order.Target);
             case AttackMoveCommand order: return Sleeps(order.Unit);
             case PursueCommand order: return Sleeps(order.Unit);
             case FireWeaponCommand order: return Sleeps(order.Source);
@@ -1505,11 +1524,18 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (target is null || target.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (target.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
-                // GameLogicDispatch doMoveTo: a move order releases any temporary weapon lock.
-                ReleaseWeaponLock(target, WeaponLockKind.Temporary);
-                var (moveX, moveY) = IndividualDestination(target, move.X, move.Y);
-                // AIMoveToState::update, MAA_Action_To_AttackMove: the plain move of a computer player's alert or aggressive unit is an attack-move.
-                AiOf(target)!.OrderMove(this, moveX, moveY, true, attackMove: IsComputerPlayer(target.Owner) && AttitudeOf(target) >= Attitude.Alert);
+                PlayerMove(target, move.X, move.Y);
+                break;
+            }
+            case StopCommand stop:
+            {
+                var target = FindEntity(stop.Target);
+                if (target is null || target.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (target.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                // groupIdle -> aiIdle -> JetAIUpdate::aiDoCommand(AICMD_IDLE) (#463); every other unit keeps this simulation's stop, a move to where the player saw it stand.
+                if (AiOf(target) is Modules.BuiltIn.JetAIUpdate jet) jet.OrderStop(this, fromPlayer: true);
+                else PlayerMove(target, stop.X, stop.Y);
                 break;
             }
             case SetRelationshipCommand relationOrder:

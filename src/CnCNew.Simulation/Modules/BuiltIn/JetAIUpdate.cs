@@ -80,8 +80,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         ReturnToDeadAirfield, CirclingDeadAirfield,
     }
 
-    // Attack: an attack on the object _pendingTarget; AttackPlace: an attack on the place (_pendingX, _pendingY) for _pendingShots shots (#458).
-    private enum PendingKind : byte { None, Move, Land, Guard, Attack, AttackPlace }
+    // Attack: an attack on the object _pendingTarget; AttackPlace: an attack on the place (_pendingX, _pendingY) for _pendingShots shots (#458); Stop: a player's stop (AICMD_IDLE, #463).
+    private enum PendingKind : byte { None, Move, Land, Guard, Attack, AttackPlace, Stop }
 
     private static readonly Fixed ParkedOrientationTolerance = Fixed.FromDecimal(0.001m);
     private static readonly Fixed Misaligned = FixedTrig.PiFraction(1, 6); // as the ground movement of AIUpdateInterface
@@ -492,6 +492,33 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         return false;
     }
 
+    /// <summary>
+    /// <c>aiDoCommand</c> for <c>AICMD_IDLE</c>, a player's stop (#463): while a take-off or landing runs, or while the aircraft reloads, the stop is stored and replaces the stored order
+    /// ("have to wait for takeoff or landing to complete, just store the sucker"); a fixed-wing aircraft in the air (<c>isAirborneTarget</c>, not <c>PRODUCED_AT_HELIPAD</c>) returns to
+    /// land (<c>RETURNING_FOR_LANDING</c>); a parked aircraft does not take off for it and forgets what it had stored; anything else idles where it is.
+    /// </summary>
+    public void OrderStop(IWorldServices world, bool fromPlayer)
+    {
+        if (TakeoffOrLandingInProgress || _phase == JetPhase.ReloadAmmo)
+        {
+            world.EndGuard(Entity);
+            Store(PendingKind.Stop, Fixed.Zero, Fixed.Zero, fromPlayer, EntityId.Invalid);
+            return;
+        }
+        _pending = PendingKind.None;
+        _pendingAttackMove = false;
+        _pendingShots = 0;
+        _returnTick = 0;
+        // getStateMachine()->clear(): whatever the aircraft did ends.
+        OrderIdle(world, fromPlayer);
+        if (_allowAir && world.IsAirborneTargetAtFrameEnd(Entity) && !HelipadKind)
+        {
+            BeginReturnForLanding(world);
+            return;
+        }
+        _phase = JetPhase.None;
+    }
+
     private void Store(PendingKind kind, Fixed x, Fixed y, bool fromPlayer, EntityId target, bool attackMove = false)
     {
         _pending = kind;
@@ -755,6 +782,12 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     private void ExecutePending(IWorldServices world)
     {
+        // A stored stop is given again as it was given (m_mostRecentCommand.reconstitute): a parked aircraft does not take off for it.
+        if (_pending == PendingKind.Stop)
+        {
+            OrderStop(world, _pendingFromPlayer);
+            return;
+        }
         if (!_allowAir)
         {
             BeginTakeoff();
@@ -1395,7 +1428,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _homeX = reader.Fixed("homeX");
         _homeY = reader.Fixed("homeY");
         var pending = reader.Int("pending");
-        if (pending < 0 || pending > (int)PendingKind.AttackPlace) throw new InvalidDataException("Jet pending order out of range.");
+        if (pending < 0 || pending > (int)PendingKind.Stop) throw new InvalidDataException("Jet pending order out of range.");
         _pending = (PendingKind)pending;
         if (_pending != PendingKind.None)
         {
