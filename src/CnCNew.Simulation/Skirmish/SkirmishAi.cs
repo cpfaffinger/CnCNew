@@ -795,7 +795,7 @@ public sealed partial class SkirmishAi
         if (CountAlive(Role.SupplyCenter, true) < 2 && army >= _plan.SecondCenterArmy && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
         else if (CountAlive(Role.SupplyCenter, true) < 3 && army >= _plan.ThirdCenterArmy && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
         if (CountAlive(Role.Power, true) < 2 && producers >= 3) goals.Add(Role.Power);
-        // The second barracks and factory are bought with money to spare. What is held back for the Palace is not to spare: counted as such, the savings themselves raised a
+        // The second barracks and factory are bought with money to spare. What is held back for the advanced technology building is not to spare: counted as such, the savings themselves raised a
         // second Arms Dealer first (it comes earlier in this list), whose price was held back in turn - the army bought nothing while the player saved twice, and the Palace came
         // minutes later (measured on Alpine Assault against America: begun by ten game minutes in 3 of 36 seeds, 11 of 36 without the detour).
         var advancedTech = AdvancedTechPrice(army);
@@ -811,18 +811,20 @@ public sealed partial class SkirmishAi
     private const long AdvancedTechAfterFrames = 9000;
 
     /// <summary>
-    /// The GLA Palace (#454). The original's skirmish scripts raise it (<c>GLA Palace - N</c>, <c>- H</c>: <c>SKIRMISH_BUILD_BUILDING</c> of the side's Palace) once the player's Arms
-    /// Dealer stands and the <c>_ESCALATION</c> counter has reached 30 - five game minutes at one step every ten seconds; the build list names it with <c>AutomaticallyBuild = No</c>, so only
-    /// that script builds it. Without it the Battle Bus, the Scud launcher, the bomb truck, the rocket buggy and the side's upgrades of the Palace stay locked. One is planned (a site
+    /// The advanced technology building of the side (<c>FS_ADVANCED_TECH</c>): the GLA Palace (#454), the American Strategy Center and the Chinese Propaganda Center (#459). The
+    /// original's skirmish scripts raise it (<c>GLA Palace - N</c>, <c>USA Strategy Center - N</c>, <c>China Prop Center - N</c> and their <c>- H</c>: <c>SKIRMISH_BUILD_BUILDING</c> of
+    /// the side's building) once the player's war factory (the GLA Arms Dealer) stands and the <c>_ESCALATION</c> counter has reached 30 - five game minutes at one step every ten
+    /// seconds; the build lists name these buildings with <c>AutomaticallyBuild = No</c>, so only those scripts build them. Without one the GLA's Battle Bus, Scud launcher, bomb truck,
+    /// rocket buggy, America's Tomahawk, Aurora and battle plans, China's Overlord and the propaganda upgrades stay locked. One is planned (a site
     /// counts) once a war factory stands and the time has passed, as the last goal of the base. While it cannot be paid the army keeps its price back (the reserve of
     /// <see cref="BuildStructures"/>), as the original's player saves for a structure its script has ordered - but only while the army is as strong as an attack wave
     /// (<c>_threshold</c>): a player whose army has melted away rebuilds it first, or saving for the Palace leaves the base without defenders (measured: China against GLA on
-    /// Alpine Assault, the GLA army fell from 14 units to 1 while it saved). A lost Palace is planned again. The advanced technology buildings of the other sides (Strategy Center,
-    /// Propaganda Center) are left out: this AI does not plan them. Returns the price of the Palace while it is planned, zero otherwise.
+    /// Alpine Assault, the GLA army fell from 14 units to 1 while it saved). A lost one is planned again. The Hard scripts' gift of 3000 or 4000 credits is not ported. Returns the
+    /// price of the building while it is planned, zero otherwise.
     /// </summary>
     private Fixed AdvancedTechPrice(int army)
     {
-        if (!_side.StartsWith("GLA", StringComparison.OrdinalIgnoreCase) || _tick < _time.OriginalFrames(AdvancedTechAfterFrames)) return Fixed.Zero;
+        if (_tick < _time.OriginalFrames(AdvancedTechAfterFrames)) return Fixed.Zero;
         if (CountAlive(Role.AdvancedTech, true) > 0 || CountAlive(Role.Factory, false) == 0) return Fixed.Zero;
         var candidates = StructureCandidates(Role.AdvancedTech);
         if (candidates.Length == 0) return Fixed.Zero;
