@@ -489,6 +489,7 @@ run.Test("Vision: the kept hash mixes only the rows that changed", Tests.VisionH
 run.Test("Vision: a random world matches the original computation in every tick", Tests.VisionWorldMatchesTheReferenceComputation);
 run.Test("Construction: a dozer builds a structure over BuildTime ticks", Tests.ConstructionBuildsAStructure);
 run.Test("Construction: cancelling a site refunds it in full", Tests.ConstructionCancelRefunds);
+run.Test("Construction (#468): a prerequisite is met by an object equivalent to the one it names (a reskin, a build variation), the same rule for world, command bar and AI", Tests.PrerequisiteIsMetByAnEquivalentObject);
 run.Test("Upgrades: an object made after its player's upgrade has it, a site only when its construction completes (#314)", Tests.AnObjectMadeAfterItsPlayersUpgradeHasIt);
 run.Test("Construction: sale takes 179 ticks and pays SellPercentage", Tests.ConstructionSellTimingAndPayout);
 run.Test("Construction: selling a producer refunds its queue", Tests.ConstructionSellCancelsProduction);

@@ -531,18 +531,7 @@ public sealed partial class SkirmishAi
     private bool PrerequisitesMet(ObjectTemplate template)
     {
         if (_world.BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase)) return true;
-        foreach (var line in template.Prerequisites)
-        {
-            if (line.IsScience)
-            {
-                var owned = _world.PlayerSciences(_player);
-                foreach (var name in line.Alternatives)
-                    if (!_catalog.Sciences.TryGet(name, out var science) || !owned.Has(science.Index)) return false;
-                continue;
-            }
-            if (!line.Alternatives.Any(name => _structures.Any(value => value.Template.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))) return false;
-        }
-        return true;
+        return _world.PrerequisitesSatisfied(_player, template);
     }
 
     private static Fixed DistanceSquared(Fixed ax, Fixed ay, Fixed bx, Fixed by)
@@ -869,14 +858,9 @@ public sealed partial class SkirmishAi
         if (depth >= 4) return PlanState.Impossible;
         foreach (var line in target.Prerequisites)
         {
-            if (line.IsScience)
-            {
-                var owned = _world.PlayerSciences(_player);
-                if (line.Alternatives.All(name => _catalog.Sciences.TryGet(name, out var science) && owned.Has(science.Index))) continue;
-                return PlanState.Impossible;
-            }
-            if (line.Alternatives.Any(name => _structures.Any(value => value.Template.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))) continue;
-            if (line.Alternatives.Any(name => _sites.Any(value => value.Template.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))) return PlanState.Waiting;
+            if (_world.PrerequisiteLineSatisfied(_player, line)) continue;
+            if (line.IsScience) return PlanState.Impossible;
+            if (_sites.Any(value => _world.PrerequisiteNamesTemplate(line, value.Template))) return PlanState.Waiting;
             var alternatives = line.Alternatives.Select(name => _catalog.TryGet(name, out var found) ? found : null).OfType<ObjectTemplate>()
                 .Where(value => value.IsKindOf("STRUCTURE") && Available(value) && SameSide(value)).OrderBy(value => InFamily(value) ? 0 : 1).ThenBy(value => value.Name, StringComparer.Ordinal);
             foreach (var alternative in alternatives)

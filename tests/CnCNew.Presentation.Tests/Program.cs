@@ -38,6 +38,7 @@ Func<string[], int>[] suites =
     ShockConditionTests.Run,
     CaptureFlashTests.Run,
     AnimationPauseTests.Run,
+    PrerequisiteEquivalentTests.Run,
     JetOrderTests.Run,
     PlacementPreviewTests.Run,
     SentinelRangeTests.Run,

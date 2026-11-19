@@ -122,43 +122,25 @@ public static class SimulationQueries
         return template.Side.Length == 0 || builder.Template.Side.Length == 0 || template.Side.Equals(builder.Template.Side, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary><c>SimulationWorld.PrerequisitesSatisfied</c> (<c>ProductionPrerequisite::isSatisfied</c>), including the <c>Ignore_Prerequisites</c> exemption.</summary>
+    /// <summary>
+    /// <see cref="SimulationWorld.PrerequisitesSatisfied(PlayerId, ObjectTemplate)"/> (<c>ProductionPrerequisite::isSatisfied</c>), the world's own rule, including the
+    /// <c>Ignore_Prerequisites</c> exemption of the template's buildable status as the world sees it (<see cref="SimulationWorld.BuildableOf"/>, after script overrides).
+    /// </summary>
     public static bool PrerequisitesSatisfied(SimulationWorld world, PlayerId player, ObjectTemplate template)
     {
-        if (template.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase)) return true;
-        var sciences = world.PlayerSciences(player);
-        foreach (var line in template.Prerequisites)
-        {
-            if (line.IsScience)
-            {
-                foreach (var name in line.Alternatives)
-                    if (!world.Sciences.TryGet(name, out var science) || !sciences.Has(science.Index)) return false;
-                continue;
-            }
-            var satisfied = world.Entities.Any(entity => entity.Owner == player && !entity.HasStatus(ObjectStatusBits.UnderConstruction)
-                                                          && line.Alternatives.Contains(entity.Template.Name, StringComparer.OrdinalIgnoreCase));
-            if (!satisfied) return false;
-        }
-        return true;
+        ArgumentNullException.ThrowIfNull(world);
+        if (world.BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase)) return true;
+        return world.PrerequisitesSatisfied(player, template);
     }
 
     /// <summary>
-    /// The lines of a template's <c>Prerequisites</c> block the player does not meet, in file order, by the same test as <see cref="PrerequisitesSatisfied"/> but without the
+    /// The lines of a template's <c>Prerequisites</c> block the player does not meet, in file order (<see cref="SimulationWorld.MissingPrerequisites"/>), without the
     /// <c>Ignore_Prerequisites</c> exemption (<c>ProductionPrerequisite::getRequiresList</c> does not look at it): what a description lists under "Requires".
     /// </summary>
     public static ImmutableArray<PrerequisiteLine> MissingPrerequisites(SimulationWorld world, PlayerId player, ObjectTemplate template)
     {
-        var missing = ImmutableArray.CreateBuilder<PrerequisiteLine>();
-        var sciences = world.PlayerSciences(player);
-        foreach (var line in template.Prerequisites)
-        {
-            var satisfied = line.IsScience
-                ? line.Alternatives.All(name => world.Sciences.TryGet(name, out var science) && sciences.Has(science.Index))
-                : world.Entities.Any(entity => entity.Owner == player && !entity.HasStatus(ObjectStatusBits.UnderConstruction)
-                                               && line.Alternatives.Contains(entity.Template.Name, StringComparer.OrdinalIgnoreCase));
-            if (!satisfied) missing.Add(line);
-        }
-        return missing.ToImmutable();
+        ArgumentNullException.ThrowIfNull(world);
+        return world.MissingPrerequisites(player, template);
     }
 
     /// <summary>

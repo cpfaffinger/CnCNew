@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -83,31 +84,64 @@ public sealed partial class SimulationWorld
         return template.Side.Length == 0 || builder.Template.Side.Length == 0 || template.Side.Equals(builder.Template.Side, StringComparison.OrdinalIgnoreCase);
     }
 
+    private bool PrerequisitesSatisfied(PlayerState owner, ObjectTemplate template) => PrerequisitesSatisfied(owner.Id, template);
+
     /// <summary>
-    /// <c>ProductionPrerequisite::isSatisfied</c>: every science line needs all its sciences; every object line is satisfied by any of its
-    /// alternatives among the owner's completed (not under construction) objects, matched by template name.
+    /// <c>ProductionPrerequisite::isSatisfied</c> without the <c>Ignore_Prerequisites</c> exemption: every line of the template's <c>Prerequisites</c> is met
+    /// (<see cref="PrerequisiteLineSatisfied"/>). The one rule the world, the command bar and the built-in AI ask (#468).
     /// </summary>
-    private bool PrerequisitesSatisfied(PlayerState owner, ObjectTemplate template)
+    public bool PrerequisitesSatisfied(PlayerId player, ObjectTemplate template)
     {
+        ArgumentNullException.ThrowIfNull(template);
         foreach (var line in template.Prerequisites)
-        {
-            if (line.IsScience)
-            {
-                foreach (var name in line.Alternatives)
-                    if (!_templates.Sciences.TryGet(name, out var science) || !owner.CompletedSciences.Has(science.Index)) return false;
-                continue;
-            }
-            var satisfied = false;
-            foreach (var entity in _entities.Values)
-            {
-                if (entity.Owner != owner.Id || entity.HasStatus(ObjectStatusBits.UnderConstruction)) continue;
-                foreach (var name in line.Alternatives)
-                    if (_templates.AreEquivalent(name, entity.Template.Name)) { satisfied = true; break; }
-                if (satisfied) break;
-            }
-            if (!satisfied) return false;
-        }
+            if (!PrerequisiteLineSatisfied(player, line)) return false;
         return true;
+    }
+
+    /// <summary>
+    /// The lines of a template's <c>Prerequisites</c> the player does not meet, in file order (<c>ProductionPrerequisite::getRequiresList</c>, which does not look at
+    /// <c>Ignore_Prerequisites</c>): what a description lists under "Requires".
+    /// </summary>
+    public ImmutableArray<PrerequisiteLine> MissingPrerequisites(PlayerId player, ObjectTemplate template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        var missing = ImmutableArray.CreateBuilder<PrerequisiteLine>();
+        foreach (var line in template.Prerequisites)
+            if (!PrerequisiteLineSatisfied(player, line)) missing.Add(line);
+        return missing.ToImmutable();
+    }
+
+    /// <summary>
+    /// One line of <c>ProductionPrerequisite::isSatisfied</c>: a science line needs its science; an object line is met by one object of the player of any of its
+    /// alternatives that is not under construction - <c>Player::countObjectsByThingTemplate</c> with its default <c>ignoreUnderConstruction</c>, which counts an object
+    /// whose template <c>isEquivalentTo</c> the named one (a reskin, a build variation), and counts the dead and the sold alike.
+    /// </summary>
+    public bool PrerequisiteLineSatisfied(PlayerId player, PrerequisiteLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        if (line.IsScience)
+        {
+            var owned = PlayerSciences(player);
+            foreach (var name in line.Alternatives)
+                if (!_templates.Sciences.TryGet(name, out var science) || !owned.Has(science.Index)) return false;
+            return true;
+        }
+        foreach (var entity in EntitiesOwnedBy(player).AsSpan())
+        {
+            if (entity.HasStatus(ObjectStatusBits.UnderConstruction)) continue;
+            if (PrerequisiteNamesTemplate(line, entity.Template)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether an object of <paramref name="template"/> counts for the object line: it is, or is equivalent to, one of the line's alternatives.</summary>
+    public bool PrerequisiteNamesTemplate(PrerequisiteLine line, ObjectTemplate template)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(template);
+        foreach (var name in line.Alternatives)
+            if (_templates.AreEquivalent(name, template.Name)) return true;
+        return false;
     }
 
     /// <summary>
