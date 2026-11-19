@@ -2008,14 +2008,15 @@ internal static class HudTests
         // Every Prerequisites line of the retail data, as the player of a fresh base sees it: alternatives are 'A or B', a science is the General's Promotion.
         var alternatives = world.Templates.Templates.FirstOrDefault(candidate => candidate.Prerequisites.Any(line => !line.IsScience && line.Alternatives.Length >= 2
             && SimulationQueries.MissingPrerequisites(world, human, candidate).Contains(line)));
-        if (alternatives is not null)
-        {
-            var line = SimulationQueries.MissingPrerequisites(world, human, alternatives).First(candidate => !candidate.IsScience && candidate.Alternatives.Length >= 2);
-            var expected = $"{descriptions.DisplayName(line.Alternatives[^2])} or {descriptions.DisplayName(line.Alternatives[^1])}";
-            TestHarness.Assert(descriptions.Requirements(world, human, alternatives.Name).Split(", ").Contains(expected), $"alternatives read 'A or B' (CONTROLBAR:OrRequirement): {descriptions.Requirements(world, human, alternatives.Name)} should hold '{expected}'");
-            Console.WriteLine($"       {alternatives.Name}: Requires: {descriptions.Requirements(world, human, alternatives.Name)}");
-        }
-        else Console.WriteLine("       (no template with an unmet line of alternatives in this data set)");
+        // #465: an Object line keeps every alternative (parsePrerequisiteUnit) - the Strategy Center's war factory or airfield.
+        TestHarness.Assert(alternatives is not null, "the retail data has a template with an unmet line of alternatives (the Strategy Center's war factory or airfield)");
+        var orLine = SimulationQueries.MissingPrerequisites(world, human, alternatives!).First(candidate => !candidate.IsScience && candidate.Alternatives.Length >= 2);
+        var either = $"{descriptions.DisplayName(orLine.Alternatives[^2])} or {descriptions.DisplayName(orLine.Alternatives[^1])}";
+        TestHarness.Assert(descriptions.Requirements(world, human, alternatives!.Name).Split(", ").Contains(either), $"alternatives read 'A or B' (CONTROLBAR:OrRequirement): {descriptions.Requirements(world, human, alternatives.Name)} should hold '{either}'");
+        Console.WriteLine($"       {alternatives.Name}: Requires: {descriptions.Requirements(world, human, alternatives.Name)}");
+        var strategyCenter = $"{descriptions.DisplayName("AmericaWarFactory")} or {descriptions.DisplayName("AmericaAirfield")}";
+        TestHarness.Assert(descriptions.Requirements(world, human, "AmericaStrategyCenter") == strategyCenter,
+            $"the Strategy Center requires '{strategyCenter}' ({descriptions.Requirements(world, human, "AmericaStrategyCenter")})");
         var science = world.Templates.Templates.FirstOrDefault(candidate => SimulationQueries.MissingPrerequisites(world, human, candidate).Any(line => line.IsScience));
         TestHarness.Assert(science is not null, "the retail data has a template behind a science the fresh player lacks");
         TestHarness.Assert(descriptions.Requirements(world, human, science!.Name).Split(", ").Contains("General's Promotion"), $"a missing science reads CONTROLBAR:GeneralsPromotion: {descriptions.Requirements(world, human, science.Name)}");

@@ -44,6 +44,7 @@ FingerprintEncodingIsPinned();
 BridgeBlocksAreStrictlyTyped();
 FieldsWithoutAnEqualsSignAreFields();
 AnEqualsSignInAValueIsASeparator();
+PrerequisiteObjectLinesNameAlternatives();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -85,6 +86,42 @@ static void BridgeBlocksAreStrictlyTyped()
     Assert(!graph.Audit.Compatibility.Any(entry => entry.Name == "Bridge" || entry.Name.StartsWith("Bridge/", StringComparison.Ordinal)), "A Bridge block leaves no compatibility case behind.");
     Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One("Bridge Sample\n  BridgeWidth = 3\nEnd\n")), "Unknown Bridge key 'BridgeWidth'");
     Throws<Exception>(() => DefinitionCompiler.Compile(One("Bridge Sample\n  NumFXPerType = many\nEnd\n")), "many");
+}
+
+static void PrerequisiteObjectLinesNameAlternatives()
+{
+    // ThingTemplate::parsePrerequisites: parsePrerequisiteUnit adds every token of an Object line, each or'ed with the one before (the Strategy Center's
+    // "Object = AmericaWarFactory AmericaAirfield"); parsePrerequisiteScience reads only the first token of a Science line.
+    const string text = """
+    Object Factory
+    End
+    Object Airfield
+    End
+    Science SCIENCE_Rank1
+    End
+    Object Center
+      Prerequisites
+        Object = Factory Airfield
+        Object = Factory
+        Science = SCIENCE_Rank1 SCIENCE_Other
+      End
+    End
+    """;
+    var graph = DefinitionCompiler.Compile(One(text), options: DefinitionCompilerOptions.Audit with { StrictReferences = true });
+    var center = graph.Definitions.OfType<ObjectDefinition>().Single(value => value.OriginalName == "Center");
+    var section = center.Sections.Single();
+    var lines = section.Fields.Select(field => field.Value.Value).ToArray();
+    Assert(lines[0] is ImmutableArray<DefinitionReference> both && both.Select(value => (value.Kind, value.Name)).SequenceEqual([(DefinitionKind.Object, "Factory"), (DefinitionKind.Object, "Airfield")]),
+        "An Object line of Prerequisites keeps every alternative in file order.");
+    Assert(lines[1] is ImmutableArray<DefinitionReference> { Length: 1 } one && one[0].Name == "Factory", "A single name is a list of one alternative.");
+    Assert(lines[2] is DefinitionReference { Kind: DefinitionKind.Science, Name: "SCIENCE_Rank1" }, "A Science line names its first token.");
+    Assert(graph.Diagnostics.Any(value => value.Code == "compatibility-ignored-tokens" && value.Message.Contains("SCIENCE_Other", StringComparison.Ordinal)),
+        "The tokens after a Science line's first are counted as ignored.");
+    var edges = graph.References.Where(value => value.Source == center.Id).ToArray();
+    Assert(edges.Length == 4 && edges.All(value => value.Resolved), "Every alternative is a resolved reference.");
+    var unknown = text.Replace("Object = Factory Airfield", "Object = Factory Hangar", StringComparison.Ordinal);
+    Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One(unknown), options: DefinitionCompilerOptions.Audit with { StrictReferences = true }), "Hangar");
+    Assert(DefinitionValueParser.Parse("Object", "Factory Airfield", default).Value is DefinitionReference { Name: "Airfield" }, "Outside Prerequisites an Object key keeps its generic reading.");
 }
 
 static void FieldsWithoutAnEqualsSignAreFields()

@@ -359,6 +359,34 @@ public static class DefinitionValueParser
         return new(DefinitionValueKind.Text, value, value);
     }
 
+    /// <summary>
+    /// A field of an object's <c>Prerequisites</c> block (<c>ThingTemplate::parsePrerequisites</c>). An <c>Object</c> line is a list of alternatives:
+    /// <c>parsePrerequisiteUnit</c> adds every token, each after the first or'ed with the one before, so any one of them satisfies the line. A <c>Science</c>
+    /// line names one science: <c>parsePrerequisiteScience</c> reads the first token only. Any other key, or a bare <c>NONE</c>, is left to <see cref="Parse"/>.
+    /// </summary>
+    public static bool TryParsePrerequisite(string key, string text, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DefinitionValue? value)
+    {
+        value = null;
+        var trimmed = text.Trim();
+        var tokens = Tokenize(trimmed);
+        if (tokens.Length == 0 || trimmed.Equals("NONE", StringComparison.OrdinalIgnoreCase)) return false;
+        if (key.Equals("Object", StringComparison.OrdinalIgnoreCase))
+        {
+            value = new(DefinitionValueKind.Reference, tokens.Select(token => new DefinitionReference(DefinitionKind.Object, token)).ToImmutableArray(), trimmed);
+            return true;
+        }
+        if (key.Equals("Science", StringComparison.OrdinalIgnoreCase))
+        {
+            value = new(DefinitionValueKind.Reference, new DefinitionReference(DefinitionKind.Science, tokens[0]), trimmed);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>The tokens of a <c>Prerequisites</c> field the reference parser never reads: those after the first of a <c>Science</c> line.</summary>
+    public static int PrerequisiteIgnoredTokenCount(string key, string text)
+        => key.Equals("Science", StringComparison.OrdinalIgnoreCase) ? Math.Max(0, Tokenize(text.Trim()).Length - 1) : 0;
+
     public static bool TryReferenceKind(string key, out DefinitionKind kind)
     {
         var normalized = key.Replace("_", string.Empty, StringComparison.Ordinal).ToLowerInvariant();

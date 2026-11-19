@@ -497,10 +497,17 @@ public static class DefinitionCompiler
     {
         var active = SelectActive(block.Children, c.Options.Conditions, doc.Document.Source).ToArray();
         var fields = ImmutableArray.CreateBuilder<DefinitionField>();
+        var prerequisites = block.Declaration.Trim().Equals("Prerequisites", StringComparison.OrdinalIgnoreCase);
         foreach (var property in Properties(active))
         {
             c.Keys++;
-            fields.Add(new DefinitionField(property.Name, DefinitionValueParser.Parse(property.Name, property.Value, property.Location), property.Location));
+            var value = prerequisites && DefinitionValueParser.TryParsePrerequisite(property.Name, property.Value, out var prerequisite)
+                ? prerequisite
+                : DefinitionValueParser.Parse(property.Name, property.Value, property.Location);
+            if (prerequisites && DefinitionValueParser.PrerequisiteIgnoredTokenCount(property.Name, property.Value) is > 0 and var ignored)
+                c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-ignored-tokens",
+                    $"'{property.Name}' = '{property.Value.Trim()}' has {ignored} trailing token(s) that the reference parser reads past and ignores.", property.Location));
+            fields.Add(new DefinitionField(property.Name, value, property.Location));
         }
         var children = ImmutableArray.CreateBuilder<DefinitionSection>();
         foreach (var nested in active.OfType<IniBlock>()) children.Add(CompileSection(c, nested, doc));
