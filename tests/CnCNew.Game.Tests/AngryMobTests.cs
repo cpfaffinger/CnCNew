@@ -261,7 +261,7 @@ internal static class AngryMobTests
         var before = rig.Issued.Count;
         rig.ClickButton(rig.SlotOf("Command_Stop"));
         rig.Seconds(0.2);
-        var stopped = rig.Issued.Skip(before).OfType<SetMoveTargetCommand>().Select(stop => stop.Target.Value).Distinct();
+        var stopped = rig.Issued.Skip(before).OfType<StopCommand>().Select(stop => stop.Target.Value).Distinct();
         TestHarness.Assert(Ids(stopped) == Ids(rig.Mob()), $"Stop reaches the whole mob ({Ids(stopped)})");
         var (stopX, stopY) = ((float)rig.Nexus.X.ToDecimal(), (float)rig.Nexus.Y.ToDecimal());
         rig.Seconds(3);
