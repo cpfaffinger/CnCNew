@@ -5682,8 +5682,12 @@ An ordered attack (a pursue or fire order of the client, a module's, a script's)
 
 ### 91.21 A script's attack on a named object (#461)
 
-`NAMED_ATTACK_NAMED` and `TEAM_ATTACK_NAMED` give each attacker one attack order instead of a standing order of the VM that attack-moved toward the victim. A computer player's unit out of reach of an aircraft in the air drops an ordered attack unless it hunts (#460). Not covered: the force of `aiForceAttackObject` (an ordinary attack ends at once against a non-enemy); the team-attack actions (`NAMED_ATTACK_TEAM`, `TEAM_ATTACK_TEAM`) keep the VM's standing order. Test "Real data (#461)...".
+`NAMED_ATTACK_NAMED` and `TEAM_ATTACK_NAMED` give each attacker one attack order instead of a standing order of the VM that attack-moved toward the victim. A computer player's unit out of reach of an aircraft in the air drops an ordered attack unless it hunts (#460). Test "Real data (#461)...".
 
-### 91.22 Elsewhere
+### 91.22 A script's attack keeps its source (#471, #472)
+
+`NAMED_ATTACK_TEAM` and `TEAM_ATTACK_TEAM` are the original's squad attack (`aiAttackTeam`, `AIAttackSquadState`): once per frame the VM sees whether the attack on the member it chose still runs, and if not chooses a member (`chooseVictim`) and gives the ordinary attack; an attack that would fail at once (no weapon fits; a computer player's unit against an aircraft in the air, #460) is not ordered, and with nobody left the unit is idle. An attack order (`PursueCommand`) carries its command source (one byte; command table 31, replay 30). The script engine's attacks are the script's (`CMD_FROM_SCRIPT`): they go on at a victim of any relationship (`NAMED_ATTACK_NAMED` is `aiForceAttackObject`; "If scripts or AI order attacks, they don't care about relationships", `WeaponSet::getAbleToAttackSpecificObject`) and into the fog ("Fog no longer prevents attacking at all"), and a script's fire order is not refused in the fog either. The wire carries a player's order only: a bundle command that claims a script's source is skipped by every client (`CommandWire.DecodeIntent`). Not covered: a parked jet gives a stored script attack again as a player's; the riders of a garrison get no script source; the squad state's checks of a passive or sleeping computer unit; a unit of the squad attack still picks targets by itself. Tests `Tests.ScriptAttackSource472.cs` and the team-attack tests at 30, 60 and 120 Hz; `Net.Tests` `CommandStamp`.
+
+### 91.23 Elsewhere
 
 - A power bought at a higher rank shows that rank's picture (#446); the recharge clock on the side bar (#447, not reproduced): `docs/GAME-HUD.md`.
