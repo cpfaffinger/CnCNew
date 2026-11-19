@@ -16,7 +16,6 @@ public sealed partial class ScriptEngine
     private const string PathMode = "path:";
     private const string WanderMode = "wander:";
     private const string PanicMode = "panic:";
-    private const string NamedMode = "named:";
     private const string TeamMode = "team:";
     private const string AreaMode = "area:";
     private const string PositionMode = "position:";
@@ -329,10 +328,11 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } guarded)
                     foreach (var team in TeamNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), guarded.X, guarded.Y, guarded.Id);
                 break;
+            // doTeamAttackNamed: groupAttackObject - every member attacks the named object (#461).
             case "TEAM_ATTACK_NAMED":
-                if (Has(type, p, 2))
+                if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } teamVictim)
                     foreach (var team in TeamNamed(Str(p, 0)))
-                        foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, NamedMode + Str(p, 1));
+                        AttackObjectBy(LiveMembers(team).ToArray(), teamVictim);
                 break;
             // doTeamGuardArea: the team guards the trigger area (F-58, step 3).
             case "TEAM_GUARD_AREA":
@@ -353,8 +353,9 @@ public sealed partial class ScriptEngine
                     foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, TeamMode + InvariantText.Format($"{victims.Id}"));
                 break;
+            // doNamedAttack: aiForceAttackObject on the named object (#461).
             case "NAMED_ATTACK_NAMED":
-                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attacker) StartFollowing(attacker, NamedMode + Str(p, 1));
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attacker && NamedEntity(Str(p, 1)) is { } namedVictim) AttackObjectBy([attacker], namedVictim);
                 break;
             case "NAMED_ATTACK_TEAM":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } teamAttacker && FindTeam(Str(p, 1)) is { } victimTeam) StartFollowing(teamAttacker, TeamMode + InvariantText.Format($"{victimTeam.Id}"));
@@ -704,6 +705,31 @@ public sealed partial class ScriptEngine
         MoveTo(entity, entity.X, entity.Y, busy: false);
     }
 
+    /// <summary>
+    /// <c>aiAttackObject</c> (<c>CMD_FROM_SCRIPT</c>) of each attacker on <paramref name="victim"/>, the attack order a player gives (<see cref="PursueCommand"/>), by their owners: the attack
+    /// approaches, aims and fires until the victim is gone, the attack fails or another order comes (#462) - one order, not a standing one of the script (#461). A computer player's unit
+    /// does not approach an aircraft in the air (#460).
+    /// </summary>
+    private void AttackObjectBy(IReadOnlyList<Entity> attackers, Entity victim)
+    {
+        if (victim.EffectivelyDead || victim.DestroyRequested || victim.Body is null) return;
+        foreach (var attacker in attackers)
+        {
+            _buttonHunts.Remove(attacker.Id.Value);
+            _followers.Remove(attacker.Id.Value);
+            _completedPath.Remove(attacker.Id.Value);
+            if (attacker.Owner.IsSystem) { Diagnose("order for a neutral object"); continue; }
+            // An object without an AI takes no attack order, unless its riders fire for it (groupAttackObjectPrivate passes the order to them).
+            if (attacker.EffectivelyDead || _world.IsAsleep(attacker) || (AiOf(attacker) is null && !_world.PassesAttackToRiders(attacker))) continue;
+            // leaveGroup; chooseLocomotorSet(LOCOMOTORSET_NORMAL); and the speed a script capped is the unit's own again.
+            AiOf(attacker)?.ChooseLocomotorSet(_world, "SET_NORMAL");
+            if (AiOf(attacker) is { SpeedCap.Raw: > 0 } slowed) slowed.SpeedCap = Fixed.Zero;
+            var (owner, unit, target, x, y) = (attacker.Owner, attacker.Id, victim.Id, victim.X, victim.Y);
+            if (!_issue(owner, (sequence, tick) => new PursueCommand(owner, sequence, tick, unit, target, x, y)).Accepted) Diagnose("order rejected");
+            else _busyThisTick.Add(unit.Value);
+        }
+    }
+
     private void StartFollowing(Entity entity, string mode)
     {
         _buttonHunts.Remove(entity.Id.Value);
@@ -771,8 +797,6 @@ public sealed partial class ScriptEngine
                 }
                 continue;
             }
-            // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.
-            if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
             var squadVictim = mode.StartsWith(TeamMode, StringComparison.Ordinal) ? SquadVictim(follower, entity, int.Parse(ModeArgument(mode, TeamMode.Length), CultureInfo.InvariantCulture)) : null;
             if (squadVictim is not null && FireAtOrdered(entity, squadVictim)) continue;
             if (_tick % retargetInterval != follower.Entity % RetargetIntervalFrames * ticksPerFrame) continue;
@@ -788,7 +812,6 @@ public sealed partial class ScriptEngine
             }
             (Fixed X, Fixed Y)? target = null;
             if (mode == HuntMode) target = HuntVictim(entity) is { } enemy ? (enemy.X, enemy.Y) : null;
-            else if (mode.StartsWith(NamedMode, StringComparison.Ordinal)) target = NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } named ? (named.X, named.Y) : null;
             else if (squadVictim is not null) target = (squadVictim.X, squadVictim.Y);
             else if (mode.StartsWith(AreaMode, StringComparison.Ordinal)) target = AreaCentre(ModeArgument(mode, AreaMode.Length));
             if (target is not { } goal)

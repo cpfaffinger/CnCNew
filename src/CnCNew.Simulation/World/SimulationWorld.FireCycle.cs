@@ -406,6 +406,14 @@ public sealed partial class SimulationWorld
             return;
         }
         UpdateWeaponSet(entity);
+        // AIAttackApproachTargetState::onEnter and updateInternal: a computer player's unit that would have to approach an aircraft in the air gives the attack up unless it hunts
+        // ("Don't chase aircraft, unless we're hunting"; #460) - an ordered attack too, a script's among them (#461).
+        if (LetsAircraftGo(entity, victim) && !(CanAttack(entity, victim, false, out var reaches) && reaches))
+        {
+            AttackCycleOutOfRange(entity, ref state.Cycle, turrets: true);
+            EndOrderedAttack(entity, state);
+            return;
+        }
         if (state.ShotsLeft > 0)
         {
             // The approach comes before the weapon check: with the victim out of reach the chooser names no weapon, which is not a change of the locked one.
