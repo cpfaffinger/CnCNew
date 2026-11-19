@@ -537,7 +537,7 @@ public sealed partial class ScriptEngine
     private void Face(Entity entity, Fixed x, Fixed y)
     {
         if (entity.Owner.IsSystem || entity.Template.Locomotor is null || _world.IsAsleep(entity)) return;
-        Stop(entity);
+        MoveToItsPlace(entity);
         var dx = x - entity.X;
         var dy = y - entity.Y;
         if (dx == Fixed.Zero && dy == Fixed.Zero) return;

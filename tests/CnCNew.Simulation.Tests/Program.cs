@@ -469,6 +469,7 @@ run.Test("Phase 58: a carrier launches waves", Tests.ACarrierLaunchesWaves);
 run.Test("Phase 58: a carrier is saved", Tests.ACarrierIsSaved);
 run.Test("Phase 58: a carrier calls its jets home", Tests.ACarrierCallsItsJetsHome);
 run.Test("Scripting (#467): a script's stop is the player's stop - the soldiers stand where it finds them, at every rate", Tests.ScriptStopIsThePlayersStop);
+run.Test("Scripting (#467): IDLE_ALL_UNITS moves a unit to its own place - a jet in the air flies on, at every rate", Tests.ScriptIdleAllUnitsIsAMoveToItsPlace);
 run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSampling);
 run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
 run.Test("Terrain: world placement, snapshot v5 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);

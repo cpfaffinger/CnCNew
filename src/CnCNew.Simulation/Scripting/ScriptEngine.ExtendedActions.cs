@@ -190,9 +190,10 @@ public sealed partial class ScriptEngine
                 UseCommandButtonAbility(pathUser, Str(p, 1), SpecialPowerTargetKind.Location, EntityId.Invalid, closest.X, closest.Y);
                 return true;
             }
-            // ---- doIdleAllPlayerUnits (empty player name: the human players): every mobile non-structure object stops where it is
+            // ---- doIdleAllPlayerUnits (empty player name: the human players): Player::setUnitsShouldIdleOrResume - every non-structure object with an AI is moved to its own place
+            // ("force it to move to its position to make it stop", aiMoveToPosition), not idled
             case "IDLE_ALL_UNITS":
-                foreach (var entity in PlayerEntities(_options.LocalPlayer).Where(value => !value.Template.IsKindOf("STRUCTURE")).ToArray()) Stop(entity);
+                foreach (var entity in PlayerEntities(_options.LocalPlayer).Where(value => !value.Template.IsKindOf("STRUCTURE")).ToArray()) MoveToItsPlace(entity);
                 return true;
             default:
                 return TryExecuteSequentialAction(action);

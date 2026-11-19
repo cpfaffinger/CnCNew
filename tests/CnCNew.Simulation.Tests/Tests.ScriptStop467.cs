@@ -76,4 +76,40 @@ static partial class Tests
         foreach (var (rate, text) in results) System.Console.WriteLine($"       #467 {rate}: {text}");
         Check.That(results.Select(value => value.Line).Distinct().Count() == 1, "The soldiers stop on the same places at 30, 60 and 120 Hz.");
     }
+
+    /// <summary>
+    /// <c>IDLE_ALL_UNITS</c> (<c>ScriptActions::doIdleAllPlayerUnits</c> -> <c>Player::setUnitsShouldIdleOrResume</c>) is no stop: "force it to move to its position to make it stop"
+    /// (<c>aiMoveToPosition</c>). A jet in the air that it reaches flies on to its own place and circles there; it does not return to land at once as on a stop (#467 had made it one). At 30, 60
+    /// and 120 Hz.
+    /// </summary>
+    public static void ScriptIdleAllUnitsIsAMoveToItsPlace()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var airFiles = new Dictionary<string, string>
+            {
+                ["Data/INI/FXList.ini"] = AirFixtureFiles["Data/INI/FXList.ini"],
+                ["Data/INI/Upgrade.ini"] = AirFixtureFiles["Data/INI/Upgrade.ini"],
+                ["Data/INI/Object/AirFixture.ini"] = AirFixtureFiles["Data/INI/Object/AirFixture.ini"],
+            };
+            var flying = new MapObject("AirTestJet", 100m, 300m, 60m, 0m, 0, new MapProperties([Scr.Text("originalOwner", "teamPlayerA"), Scr.Text("objectName", "Jet")]));
+            var (map, fixture, terrain) = MissionMap([
+                Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("MOVE_NAMED_UNIT_TO", Scr.Unit("Jet"), Scr.Waypoint("Far"))], oneShot: true),
+                Scr.Script("Halt", [Scr.And(Scr.If("FLAG", Scr.Flag("halt"), Scr.Bool(true)))], [Scr.Do("IDLE_ALL_UNITS")], oneShot: true),
+            ], objects: [Placed("AirTestAirfield", 300m, 100m, "teamA"), flying], extraFiles: airFiles, rate: rate);
+            var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+            Run(session, session.Frames(60));
+            var jet = NamedIn(session, "Jet")!;
+            var ai = JetOf(jet);
+            Check.That(ai.AllowAirLoco && ai.Phase == JetAIUpdate.JetPhase.None, $"{rate}: the jet flies its script's move ({ai.Phase}).");
+            session.Engine.SignalUiInteraction("halt");
+            // A second: shorter than its ReturnToBaseIdleTime (1.5 s), after which an idle jet returns by itself.
+            for (var tick = 0; tick < session.Frames(30); tick++)
+            {
+                session.Step();
+                Check.That(ai.AllowAirLoco && ai.Phase == JetAIUpdate.JetPhase.None, $"{rate}: the jet does not return to land ({ai.Phase}).");
+            }
+            Check.That(session.Engine.MissingActionHits.Count == 0, $"{rate}: no action counted as missing.");
+        }
+    }
 }

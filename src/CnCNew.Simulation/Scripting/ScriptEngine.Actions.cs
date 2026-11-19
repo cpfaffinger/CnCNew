@@ -694,6 +694,19 @@ public sealed partial class ScriptEngine
         if (!_issue(owner, (sequence, tick) => new StopCommand(owner, sequence, tick, id)).Accepted) Diagnose("order rejected");
     }
 
+    /// <summary>
+    /// A move to the object's own place (<c>aiMoveToPosition(obj->getPosition())</c>): how <c>Player::setUnitsShouldIdleOrResume</c> makes a unit stop, and how this simulation stops an object
+    /// before it turns it to a place (<see cref="Face"/>). Not the stop of <see cref="Stop"/>: a jet circles there instead of returning to land.
+    /// </summary>
+    private void MoveToItsPlace(Entity entity)
+    {
+        _buttonHunts.Remove(entity.Id.Value);
+        _followers.Remove(entity.Id.Value);
+        if (AiOf(entity) is { SpeedCap.Raw: > 0 } capped) capped.SpeedCap = Fixed.Zero;
+        if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
+        MoveTo(entity, entity.X, entity.Y, busy: false);
+    }
+
     private void StartFollowing(Entity entity, string mode)
     {
         _buttonHunts.Remove(entity.Id.Value);
