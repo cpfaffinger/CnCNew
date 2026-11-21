@@ -449,6 +449,7 @@ static partial class NetTests
             encoded.Add(ReplayFormat.EncodeCommand(new StopCommand(move.Player, move.Sequence, move.Tick, move.Target)));
             encoded.Add(ReplayFormat.EncodeCommand(new PursueCommand(move.Player, move.Sequence, move.Tick, move.Target, move.Target, move.X, move.Y, (CnCNew.Simulation.Templates.FireOrigin)(move.X.Raw & 1))));
             encoded.Add(ReplayFormat.EncodeCommand(new PlaceMapObjectCommand(CnCNew.Simulation.Ids.PlayerId.System, move.Sequence, move.Tick, "Fuzz", CnCNew.Simulation.Ids.PlayerId.System, move.X, move.Y, move.X, move.Y, 100, MapObjectFlags.Indestructible, -2)));
+            encoded.Add(ReplayFormat.EncodeCommand(new PlaceStartingUnitCommand(CnCNew.Simulation.Ids.PlayerId.System, move.Sequence, move.Tick, "Fuzz", move.Player, move.X, move.Y, move.Y, move.X, move.X)));
         }
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(70).Take(10))
             encoded.Add(ReplayFormat.EncodeCommand(new ExecuteRailedTransportCommand(move.Player, move.Sequence, move.Tick, [move.Target])));

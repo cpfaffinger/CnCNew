@@ -151,7 +151,7 @@ public sealed class ScriptedSkirmishSession
         notes.AddRange(mission.Notes);
         foreach (var (template, count) in mission.SkippedObjects) notes.Add($"map object {template} x{count} skipped (unknown or not instantiable)");
         var session = new ScriptedSkirmishSession(options, slots, mission, notes.ToImmutable());
-        session.PlaceStarts(catalog, starts);
+        session.PlaceStarts(catalog, terrain);
         mission.Engine.StartAiPlayers(terrain.ExtentX, terrain.ExtentY);
         return session;
     }
@@ -190,9 +190,10 @@ public sealed class ScriptedSkirmishSession
         return attached;
     }
 
-    /// <summary>Start money, and every player's start units in a ring around its start position (the AI places its own command centre).</summary>
-    private void PlaceStarts(TemplateCatalog catalog, ImmutableArray<TerrainWaypoint> starts)
+    /// <summary>Start money, and every player's start units where <c>findPositionAround</c> finds room near its start (the AI places its own command centre).</summary>
+    private void PlaceStarts(TemplateCatalog catalog, TerrainMap terrain)
     {
+        var starts = terrain.StartPositions;
         // A session of this AI needs the holes of the GLA to rebuild: the AI waits for them (SimulationWorld.EnableHoleRebuilding).
         World.EnableHoleRebuilding();
         for (var index = 0; index < _slots.Length; index++)
@@ -215,13 +216,13 @@ public sealed class ScriptedSkirmishSession
                     SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable(), Tactics: _slots[index].Tactics, Strength: _slots[index].Strength), SubmitBuiltin));
             }
             else World.SetValidatesOwnSites(player);
-            var ring = (catalog.TryGet(participant.BaseBuilding, out var building) ? building.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
+            // placeNetworkBuildingsForPlayer: around the rally waypoint or the start moved half the building's bounding sphere, where findPositionAround finds room (#476).
+            var place = StartingPlacement.Of(terrain, index, catalog.TryGet(participant.BaseBuilding, out var building) ? building : null);
             var units = participant.Faction.StartingUnits;
             for (var unit = 0; unit < units.Length; unit++)
             {
                 if (!catalog.TryGet(units[unit], out var template) || !template.IsInstantiable) continue;
-                var angle = FixedTrig.TwoPi * unit / Fixed.FromInt(Math.Max(1, units.Length));
-                var id = World.RequestSpawn(template.Index, player, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, template.PlacementViewAngle);
+                var id = World.RequestSpawnAround(template.Index, player, place.X, place.Y, place.MinRadius, place.MaxRadius, template.PlacementViewAngle);
                 Engine.AssignToTeam("team" + SkirmishScriptAttachment.PlayerName(index), id);
             }
         }

@@ -188,7 +188,7 @@ public sealed partial class SimulationWorld : IWorldServices
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
         SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default, EntityId Spawner = default, MapObjectFlags MapFlags = MapObjectFlags.None,
-        int Attitude = 0, bool Held = false, (Fixed X, Fixed Y)? Motive = null);
+        int Attitude = 0, bool Held = false, (Fixed X, Fixed Y)? Motive = null, (Fixed Min, Fixed Max)? Around = null);
 
     /// <summary>
     /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
@@ -766,6 +766,19 @@ public sealed partial class SimulationWorld : IWorldServices
         return id;
     }
 
+    /// <summary>
+    /// <c>placeNetworkBuildingsForPlayer</c>: a starting unit made where <c>findPositionAround</c> finds room between <paramref name="minRadius"/> and <paramref name="maxRadius"/>
+    /// around (<paramref name="centerX"/>, <paramref name="centerY"/>) when the queue makes it (<see cref="PlaceStartingUnitCommand"/>, #476). The id stays unused when there is no room.
+    /// </summary>
+    public EntityId RequestSpawnAround(int templateIndex, PlayerId owner, Fixed centerX, Fixed centerY, Fixed minRadius, Fixed maxRadius, Fixed angle)
+    {
+        if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
+        if (minRadius < Fixed.Zero || maxRadius < minRadius || maxRadius > PlaceStartingUnitCommand.RadiusLimit) throw new ArgumentOutOfRangeException(nameof(maxRadius));
+        var id = Ids.AllocateEntity();
+        _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, centerX, centerY, Fixed.Zero, angle, default(SpawnSetup) with { Around = (minRadius, maxRadius) }));
+        return id;
+    }
+
     public bool IsSpawnPending(EntityId id)
     {
         foreach (var pending in _spawnQueue)
@@ -990,6 +1003,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_templates.TryGet(spawn.Template, out var template) || !template.IsInstantiable) return CommandRejection.UnknownTemplate;
                 if (spawn.Owner.Value != 0 && !_players.ContainsKey(spawn.Owner.Value)) return CommandRejection.UnknownPlayer;
                 if (spawn.Owner.Value != 0 && !command.Player.IsSystem && spawn.Owner != command.Player) return CommandRejection.NotPermitted;
+                break;
+            case PlaceStartingUnitCommand starting:
+                if (!_templates.TryGet(starting.Template, out var startingTemplate) || !startingTemplate.IsInstantiable) return CommandRejection.UnknownTemplate;
+                if (!_players.ContainsKey(starting.Owner.Value)) return CommandRejection.UnknownPlayer;
+                if (starting.MinRadius < Fixed.Zero || starting.MaxRadius < starting.MinRadius || starting.MaxRadius > PlaceStartingUnitCommand.RadiusLimit
+                    || !InReach(starting.X, CommandCoordinateLimit) || !InReach(starting.Y, CommandCoordinateLimit) || !InReach(starting.Angle, CommandAngleLimit))
+                    return CommandRejection.InvalidArguments;
                 break;
             case PlaceMapObjectCommand placed:
                 if (!_templates.TryGet(placed.Template, out var placedTemplate) || !placedTemplate.IsInstantiable) return CommandRejection.UnknownTemplate;
@@ -1396,6 +1416,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 var template = _templates.TryGet(spawn.Template, out var found) ? found : throw new InvalidOperationException("Validated template disappeared.");
                 var owner = spawn.Owner.Value == 0 ? command.Player : spawn.Owner;
                 _spawnQueue.Add(new PendingSpawn(Ids.AllocateEntity(), template.Index, owner, spawn.X, spawn.Y, spawn.Z, spawn.Angle));
+                break;
+            }
+            case PlaceStartingUnitCommand starting:
+            {
+                var template = _templates.TryGet(starting.Template, out var found) ? found : throw new InvalidOperationException("Validated template disappeared.");
+                _spawnQueue.Add(new PendingSpawn(Ids.AllocateEntity(), template.Index, starting.Owner, starting.X, starting.Y, Fixed.Zero, starting.Angle,
+                    default(SpawnSetup) with { Around = (starting.MinRadius, starting.MaxRadius) }));
                 break;
             }
             case PlaceMapObjectCommand placed:
@@ -2211,9 +2238,9 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var pending in batch)
         {
             if (pending.NotBefore > _tick) _spawnQueue.Insert(held++, pending);
-            else
+            else if (PlacedAround(pending) is { } placed)
             {
-                var created = SpawnEntity(pending);
+                var created = SpawnEntity(placed);
                 if (endOfTick) CollideWhenCreated(created);
             }
         }
@@ -2222,6 +2249,17 @@ public sealed partial class SimulationWorld : IWorldServices
         if (!endOfTick || _firstFrameTicks == TickOrder.Next) return;
         for (var index = held; index < _spawnQueue.Count; index++)
             if (_spawnQueue[index].NotBefore == 0) _spawnQueue[index] = _spawnQueue[index] with { NotBefore = _tick + _firstFrameTicks };
+    }
+
+    /// <summary>
+    /// <c>placeNetworkBuildingsForPlayer</c> (#476): a starting unit asks <c>findPositionAround</c> for its place when it is made - after the objects made before it, as the original
+    /// updates the partition manager before every search - and is not made when there is none. Anything else is made where it was asked for.
+    /// </summary>
+    private PendingSpawn? PlacedAround(in PendingSpawn pending)
+    {
+        if (pending.Setup.Around is not { } around) return pending;
+        if (!FindPositionAround(pending.X, pending.Y, around.Min, around.Max, null, null, out var x, out var y)) return null;
+        return pending with { X = x, Y = y, Z = Fixed.Zero, Setup = pending.Setup with { Around = null } };
     }
 
     /// <summary>
@@ -2986,6 +3024,11 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 writer.Fixed("motiveX", motive.X);
                 writer.Fixed("motiveY", motive.Y);
+            }
+            if (setup.Around is { } around)
+            {
+                writer.Fixed("aroundMin", around.Min);
+                writer.Fixed("aroundMax", around.Max);
             }
             writer.EndObject();
         }

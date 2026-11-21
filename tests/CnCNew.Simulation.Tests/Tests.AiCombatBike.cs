@@ -24,7 +24,9 @@ static partial class Tests
     /// planned from minute five; saving for it changes every later draw, and the first bike of seed 1 came at 12.6 minutes. Over 36 seeds (30 Hz, the first ten minutes) the
     /// AI queued 53 bikes of 392 vehicles without the Palace goal and 43 of 375 with it, a bike in 26 and 20 of the 36 matches: the Palace's price is paid mostly by infantry
     /// (2,494 against 2,218), the share of bikes among the vehicles stays within chance. <see cref="BikeSeed"/> 10 queues its first bike at 2.5 minutes at every rate, before
-    /// the Palace is planned, so the test asks what it is about - a bike is an army unit and is built - and not the timing of one draw.
+    /// the Palace is planned, so the test asks what it is about - a bike is an army unit and is built - and not the timing of one draw. Since the starting units stand where
+    /// <c>findPositionAround</c> puts them (#476) seed 10 builds no bike within 30 minutes; of seeds 1 to 13 (without 10) seven own one within ten minutes at 30 Hz, and
+    /// <see cref="BikeSeed"/> 1 owns its first at 6.55 minutes at every rate.
     /// </para>
     /// </summary>
     public static void RealSkirmishAiBuildsCombatBikes(string directory)
@@ -64,7 +66,7 @@ static partial class Tests
     }
 
     private const string BikeMap = "Maps/Alpine Assault/Alpine Assault.map";
-    private const uint BikeSeed = 10;
+    private const uint BikeSeed = 1;
 
     /// <summary>The game minutes within which the GLA player of <see cref="RealSkirmishAiBuildsCombatBikes"/> must own a combat bike.</summary>
     private const int BikeMinutes = 10;

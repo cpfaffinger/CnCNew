@@ -459,8 +459,9 @@ public sealed class SkirmishMatchSession
             var baseAngle = hasBase ? baseTemplate!.PlacementViewAngle : Fixed.Zero;
             System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, participant.BaseBuilding, player, bx, by, Fixed.Zero, baseAngle));
             var units = participant.Faction.StartingUnits;
-            // Units start just outside the base building's footprint; inside it they would be walled in by the navigation grid.
-            var ring = (hasBase ? baseTemplate!.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
+            // placeNetworkBuildingsForPlayer: every starting unit where findPositionAround finds room around the rally waypoint, or the start moved half the building's bounding
+            // sphere, 0.7 to 1.3 times that sphere away - searched by the world when it makes the unit, after the building and the units before it (#476).
+            var place = StartingPlacement.Of(terrain, slot.StartPosition, hasBase ? baseTemplate : null);
             for (var unit = 0; unit < units.Length; unit++)
             {
                 if (!catalog.TryGet(units[unit], out var template) || !template.IsInstantiable)
@@ -468,12 +469,9 @@ public sealed class SkirmishMatchSession
                     notes.Add($"{participant.Faction.Name}: start unit {units[unit]} skipped (unknown or not instantiable)");
                     continue;
                 }
-                var angle = FixedTrig.TwoPi * unit / Fixed.FromInt(Math.Max(1, units.Length));
-                var x = bx + FixedTrig.Cos(angle) * ring;
-                var y = by + FixedTrig.Sin(angle) * ring;
                 var name = units[unit];
                 var facing = template.PlacementViewAngle;
-                System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, name, player, x, y, Fixed.Zero, facing));
+                System(sequence => new PlaceStartingUnitCommand(PlayerId.System, sequence, 0, name, player, place.X, place.Y, place.MinRadius, place.MaxRadius, facing));
             }
         }
     }

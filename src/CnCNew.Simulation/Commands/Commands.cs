@@ -12,11 +12,11 @@ namespace CnCNew.Simulation.Commands;
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
 /// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
 /// amounts are raw values with 24 fraction bits instead of 16; version 28: the fire command carries the shot limit of its attack, #277; version 29: the debug money command;
-/// version 30: the exit command names the container the rider leaves through, #435; version 31: the stop order, #463, and the source of an attack order, #472).
+/// version 30: the exit command names the container the rider leaves through, #435; version 31: the stop order, #463, and the source of an attack order, #472; version 32: a starting unit placed around its start, #476).
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 31;
+    public const int Version = 32;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -147,7 +147,11 @@ public static class CommandTypes
     /// <summary><c>MSG_DO_STOP</c> to one unit (<c>AIGroup::groupIdle</c>, <c>aiIdle</c>, <c>AICMD_IDLE</c>): a jet answers it as <c>JetAIUpdate::aiDoCommand</c> does (#463).</summary>
     public const ushort Stop = 48;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Stop;
+    // ------------------------------------------------------------------------------------------------------ a starting unit (v32)
+    /// <summary><c>placeNetworkBuildingsForPlayer</c>: a starting unit placed where <c>PartitionManager::findPositionAround</c> finds room around its start (#476). Only the system gives it.</summary>
+    public const ushort PlaceStartingUnit = 49;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= PlaceStartingUnit;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -155,7 +159,7 @@ public static class CommandTypes
     /// (<see cref="Spawn"/>, <see cref="Destroy"/>): a session accepts those from a player for its own objects, which is fine in a test and a free army over a wire.
     /// </summary>
     public static bool IsPlayerOrder(ushort code)
-        => IsKnown(code) && code is not (Spawn or Destroy or EnterContainer or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap or PlaceMapObject);
+        => IsKnown(code) && code is not (Spawn or Destroy or EnterContainer or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave or ExploreMap or PlaceMapObject or PlaceStartingUnit);
 }
 
 /// <summary>
@@ -243,6 +247,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
             CommandTypes.SetRetaliation => new SetRetaliationCommand(player, sequence, tick, reader.Bool("enabled")),
+            CommandTypes.PlaceStartingUnit => new PlaceStartingUnitCommand(player, sequence, tick, reader.Text("template"), new PlayerId(checked((int)reader.Int("owner"))), reader.Fixed("x"),
+                reader.Fixed("y"), reader.Fixed("minRadius"), reader.Fixed("maxRadius"), reader.Fixed("angle")),
             CommandTypes.PlaceMapObject => new PlaceMapObjectCommand(player, sequence, tick, reader.Text("template"), new PlayerId(checked((int)reader.Int("owner"))), reader.Fixed("x"), reader.Fixed("y"),
                 reader.Fixed("z"), reader.Fixed("angle"), checked((int)reader.Int("health")), (MapObjectFlags)reader.Int("flags"), checked((int)reader.Int("attitude"))),
             CommandTypes.CombatDrop => new CombatDropCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))],
@@ -979,6 +985,34 @@ public sealed record PlaceMapObjectCommand(PlayerId Player, ulong Sequence, long
         writer.Int("health", HealthPercent);
         writer.Int("flags", (long)Flags);
         writer.Int("attitude", Attitude);
+    }
+}
+
+/// <summary>
+/// <c>GameLogic.cpp placeNetworkBuildingsForPlayer</c>: a starting unit of <paramref name="Owner"/>, placed with <c>placeObjectAtPosition</c> where
+/// <c>PartitionManager::findPositionAround</c> finds room around (<paramref name="X"/>, <paramref name="Y"/>) - the player's <c>Player_N_Rally</c> waypoint, or its start moved
+/// half the starting building's bounding sphere to the south - between <paramref name="MinRadius"/> and <paramref name="MaxRadius"/> (0.7 and 1.3 times that sphere), turned to
+/// <paramref name="Angle"/> (its <c>PlacementViewAngle</c>). The search runs where the world makes the object, after the objects made before it (#476); when it finds no room the
+/// unit is not made, as in the original. Only the system gives it, in tick 0 of a match.
+/// </summary>
+public sealed record PlaceStartingUnitCommand(PlayerId Player, ulong Sequence, long Tick, string Template, PlayerId Owner, Fixed X, Fixed Y, Fixed MinRadius, Fixed MaxRadius, Fixed Angle)
+    : SimCommand(Player, Sequence, Tick)
+{
+    /// <summary>Own limit on <see cref="MaxRadius"/>: the search tries every five units out to it, and a command read from a file must not make it run for minutes.</summary>
+    public static readonly Fixed RadiusLimit = Fixed.FromInt(1024);
+
+    public override ushort TypeCode => CommandTypes.PlaceStartingUnit;
+    public override bool RequiresSystem => true;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Text("template", Template);
+        writer.Int("owner", Owner.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+        writer.Fixed("minRadius", MinRadius);
+        writer.Fixed("maxRadius", MaxRadius);
+        writer.Fixed("angle", Angle);
     }
 }
 

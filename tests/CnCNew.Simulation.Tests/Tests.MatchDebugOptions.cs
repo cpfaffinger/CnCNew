@@ -173,7 +173,7 @@ static partial class Tests
             world.Step();
             Check.That(world.MoneyOf(new PlayerId(1)) == start + Fixed.FromInt(20_000) && world.MoneyOf(new PlayerId(2)) == start + Fixed.FromInt(10_000), $"{rate}: every player is paid, the computer too.");
             Check.That(!world.Submit(new DebugGiveMoneyCommand(PlayerId.System, 1, world.Tick, true)).Accepted, $"{rate}: the system is no giver.");
-            Check.That(CommandTypes.IsPlayerOrder(CommandTypes.DebugGiveMoney) && CommandTypes.Version == 31 && ReplayFormat.CurrentVersion == 30, $"{rate}: a player order; command table 29, replay 28.");
+            Check.That(CommandTypes.IsPlayerOrder(CommandTypes.DebugGiveMoney) && CommandTypes.Version == 32 && ReplayFormat.CurrentVersion == 31, $"{rate}: a player order; command table 29, replay 28.");
             var decoded = ReplayFormat.DecodeCommand(ReplayFormat.EncodeCommand(new DebugGiveMoneyCommand(new PlayerId(1), 3, 9, true)));
             Check.That(decoded is DebugGiveMoneyCommand { All: true, Sequence: 3, Tick: 9 }, $"{rate}: the command survives the replay codec.");
         }
@@ -499,7 +499,7 @@ static partial class Tests
             [..participants.Select(participant => new SkirmishSlot(participant))], "Maps/Synthetic/Synthetic.map");
         var human = plain with { Slots = plain.Slots.SetItem(0, plain.Slots[0] with { Kind = MatchSlotKind.Human }) };
         var debug = human with { Debug = new MatchDebugOptions(MatchDebugOptions.QuickBuildPercent, 5, 800) };
-        ImmutableArray<MapObject> objects = [new MapObject("MapHut", 20m, 200m, 0m, 0m, 0, new MapProperties([new MapProperty("objectInitialHealth", MapPropertyType.Int, 5, 0m, "")]))];
+        ImmutableArray<MapObject> objects = [new MapObject("MapHut", 50m, 200m, 0m, 0m, 0, new MapProperties([new MapProperty("objectInitialHealth", MapPropertyType.Int, 5, 0m, "")]))];
 
         SkirmishMatchSession Start(MatchDescription description) => SkirmishMatchSession.Start(description, fixture.Templates, terrain, objects, definitionFingerprint: fixture.Fingerprint);
         var control = Start(human);
@@ -538,7 +538,8 @@ static partial class Tests
         var quickFrames = SoldierFrames(session, humanSequence++);
         Check.That(normalFrames is >= 29 and <= 33 && quickFrames is >= 2 and <= 5, $"A soldier takes 30 frames, at 10 % about 3 ({normalFrames}, {quickFrames}).");
 
-        // The human's soldier shoots the weak hut of the map (5 % of its health); it is back 5 seconds later (the match ends in a win of the computer after about 15 s).
+        // The human's soldier shoots the weak hut of the map (5 % of its health); it is back 5 seconds later (the match ends in a win of the computer after about 15 s). The hut stands 50
+        // west of the start, in reach of a starting soldier wherever findPositionAround puts it (#476).
         var hut = session.World.Entities.Single(entity => entity.Template.Name == "MapHut");
         var hutId = hut.Id;
         var soldier = session.World.Entities.First(entity => entity.Owner == one && entity.Template.IsKindOf("INFANTRY"));

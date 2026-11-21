@@ -1125,6 +1125,7 @@ if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a player starts with one builder at every rate", () => Tests.RealPlayersStartWithOneBuilder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (#473): the starting building and units stand at their template's placement angle", () => Tests.RealStartingBuildingStandsAtItsPlacementAngle(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (#476): the starting units stand where findPositionAround finds room around the rally point or the moved start", () => Tests.RealStartingUnitsStandAroundTheRallyPoint(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (playtest): a skirmish starts with the map explored", () => Tests.RealSkirmishStartsWithTheMapExplored(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-129): a skirmish of the built-in AI holds the objects of its map, the train runs", () => Tests.RealSkirmishPlacesItsMap(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (train): a train under a hill leaves what stands on the hill alone", () => Tests.ATrainUnderAHillLeavesWhatStandsOnItAlone(contentDirectory));

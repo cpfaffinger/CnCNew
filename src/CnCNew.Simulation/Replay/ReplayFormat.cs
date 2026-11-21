@@ -48,12 +48,13 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 27: command table 28, the fire command's shot limit (the origin byte's top bit says an i32 follows; #277); version 26 is rejected.
 /// Version 29: command table 30, the exit command's container after the rider (u32, 0 = the one it is in; #435); version 28 is rejected.
 /// Version 30: command table 31 with the stop order (u32 unit; #463, #466) and the source of an attack order (a byte after the pursuit's point; #472); version 29 is rejected.
+/// Version 31: command table 32 with the starting unit placed around its start (template, owner, point, two radii, angle; #476); version 30 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 30;
+    public const int CurrentVersion = 31;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -414,6 +415,15 @@ public static class ReplayFormat
             case SetRetaliationCommand retaliation:
                 writer.Write(retaliation.Enabled);
                 break;
+            case PlaceStartingUnitCommand starting:
+                WriteString(writer, starting.Template);
+                writer.Write(starting.Owner.Value);
+                writer.Write(starting.X.Raw);
+                writer.Write(starting.Y.Raw);
+                writer.Write(starting.MinRadius.Raw);
+                writer.Write(starting.MaxRadius.Raw);
+                writer.Write(starting.Angle.Raw);
+                break;
             case PlaceMapObjectCommand placed:
                 WriteString(writer, placed.Template);
                 writer.Write(placed.Owner.Value);
@@ -540,6 +550,8 @@ public static class ReplayFormat
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean(), reader.ReadBoolean()),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.ReadBoolean()),
             CommandTypes.SetRetaliation => new SetRetaliationCommand(player, sequence, tick, reader.ReadBoolean()),
+            CommandTypes.PlaceStartingUnit => new PlaceStartingUnitCommand(player, sequence, tick, ReadString(reader), new PlayerId(reader.ReadInt32()), Fixed.FromRaw(reader.ReadInt64()),
+                Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.PlaceMapObject => new PlaceMapObjectCommand(player, sequence, tick, ReadString(reader), new PlayerId(reader.ReadInt32()), Fixed.FromRaw(reader.ReadInt64()),
                 Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadInt32(), (MapObjectFlags)reader.ReadByte(), reader.ReadInt32()),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()),

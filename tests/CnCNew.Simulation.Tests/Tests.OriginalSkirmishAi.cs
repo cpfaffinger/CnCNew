@@ -842,14 +842,18 @@ static partial class Tests
     {
         foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
         {
-            // The dozer starts at (151, 200): cell (15, 20) is left free inside a ring of cliffs, too small for any structure.
+            // The dozer starts where findPositionAround puts it (#476): its cell is left free inside a ring of cliffs, too small for any structure. The search's first try lies
+            // on the innermost ring at an angle of the logic stream, and the cliffs around that cell do not move it.
+            var (plain, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, AiLibrary(), AiSkirmishMapWithCliffs([]), rate);
+            var start = plain.World.Entities.Single(entity => entity.Owner == new PlayerId(1) && entity.Template.Name == "AlphaDozer");
+            var (cellX, cellY) = (TerrainMap.CellOf(start.X), TerrainMap.CellOf(start.Y));
             var ring = new List<(int X, int Y)>();
-            for (var x = 14; x <= 16; x++)
-                for (var y = 19; y <= 21; y++)
-                    if (x != 15 || y != 20) ring.Add((x, y));
+            for (var x = cellX - 1; x <= cellX + 1; x++)
+                for (var y = cellY - 1; y <= cellY + 1; y++)
+                    if (x != cellX || y != cellY) ring.Add((x, y));
             var (session, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, AiLibrary(), AiSkirmishMapWithCliffs(ring), rate);
             var dozer = session.World.Entities.Single(entity => entity.Owner == new PlayerId(1) && entity.Template.Name == "AlphaDozer");
-            Check.That(TerrainMap.CellOf(dozer.X) == 15 && TerrainMap.CellOf(dozer.Y) == 20, $"{rate}: the dozer starts inside the ring ({dozer.X}, {dozer.Y}).");
+            Check.That(TerrainMap.CellOf(dozer.X) == cellX && TerrainMap.CellOf(dozer.Y) == cellY, $"{rate}: the dozer starts inside the ring ({dozer.X}, {dozer.Y}).");
             var plant = session.Engine.AiBuildListOf(new PlayerId(1)).First(entry => entry.Template == "AlphaPlant");
             StepFrames(session, 300);
             Check.That(CountOwned(session, 1, "AlphaPlant") >= 1, $"{rate}: the plant stands (pending: {string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");

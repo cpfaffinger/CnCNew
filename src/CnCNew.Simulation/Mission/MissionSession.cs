@@ -284,7 +284,7 @@ public sealed class MissionSession
 
     /// <summary>
     /// A human side that owns nothing on the map but has a playable faction and a start position (the Generals' Challenge maps) starts like a skirmish player:
-    /// the faction's base building on its <c>Player_N_Start</c> waypoint and the faction's start units in a ring around it. Sides that own placed objects
+    /// the faction's base building on its <c>Player_N_Start</c> waypoint and the faction's start units where <c>findPositionAround</c> finds room near it (#476). Sides that own placed objects
     /// (campaign maps) keep exactly what the map gives them. In a skirmish of the original AI the side knows its slot, whichever humans there are.
     /// </summary>
     private void PlaceHumanStarts(TemplateCatalog catalog, TerrainMap terrain, SortedDictionary<string, int> skipped, bool bySlot)
@@ -305,7 +305,9 @@ public sealed class MissionSession
             var (bx, by) = (starts[startIndex].X, starts[startIndex].Y);
             var center = World.RequestSpawn(building.Index, player.Id, bx, by, Fixed.Zero, building.PlacementViewAngle);
             if (Program.FindTeam("team" + player.Name) is { } startTeam) Engine.AssignToTeam(startTeam.Name, center);
-            var ring = building.BoundingCircleRadius + Fixed.FromInt(30);
+            // placeNetworkBuildingsForPlayer, which the challenge's game info runs too: around the rally waypoint or the start moved half the building's bounding sphere, where
+            // findPositionAround finds room (#476).
+            var place = Skirmish.StartingPlacement.Of(terrain, startIndex, building);
             for (var index = 0; index < faction.StartingUnits.Length; index++)
             {
                 if (!catalog.TryGet(faction.StartingUnits[index], out var unit) || !unit.IsInstantiable)
@@ -313,8 +315,7 @@ public sealed class MissionSession
                     skipped[faction.StartingUnits[index]] = skipped.GetValueOrDefault(faction.StartingUnits[index]) + 1;
                     continue;
                 }
-                var angle = FixedTrig.TwoPi * index / Fixed.FromInt(Math.Max(1, faction.StartingUnits.Length));
-                World.RequestSpawn(unit.Index, player.Id, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, unit.PlacementViewAngle);
+                World.RequestSpawnAround(unit.Index, player.Id, place.X, place.Y, place.MinRadius, place.MaxRadius, unit.PlacementViewAngle);
             }
         }
     }
