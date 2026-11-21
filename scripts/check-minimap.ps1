@@ -71,7 +71,8 @@ $ratio = $onScreen / $composed
 $failed = $false
 if ([Math]::Abs($ratio - 1.0) -gt $Tolerance) { Write-Host "FAIL: the radar is not shown as composed (colour space)." -ForegroundColor Red; $failed = $true }
 
-# Part two: an object in the fog. The command centre of the 240th frame stands at these pixels; they are lit parts of its roof and walls.
+# Part two: an object in the fog. The command centre of the 240th frame stands at these pixels; they are lit parts of its walls and its pad (it stands at its placement angle
+# since #473, the pad's corner points replaced two that now fall on the ground).
 $foggedCapture = Join-Path $work 'fogged.png'
 try {
     $env:CNCNEW_OBJECT_FOG = '1'; $env:CNCNEW_TERRAIN_REVEAL = '1'
@@ -80,7 +81,7 @@ try {
     if (-not $process.WaitForExit($TimeoutSeconds * 1000)) { Stop-Process -Id $process.Id -Force; throw "The client did not finish within $TimeoutSeconds s." }
     if ($process.ExitCode -ne 0) { throw "The client ended with exit code $($process.ExitCode)." }
 } finally { Remove-Item Env:CNCNEW_OBJECT_FOG, Env:CNCNEW_TERRAIN_REVEAL -ErrorAction SilentlyContinue }
-$points = @(@(600, 330), @(520, 470), @(590, 340), @(530, 480))
+$points = @(@(600, 330), @(650, 450), @(590, 340), @(680, 470))
 $plain = [System.Drawing.Bitmap]::FromFile($capture); $fogged = [System.Drawing.Bitmap]::FromFile($foggedCapture)
 $lit = 0.0; $dim = 0.0
 foreach ($point in $points) {
