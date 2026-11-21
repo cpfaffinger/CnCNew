@@ -303,7 +303,8 @@ A right click on the ground sets a rally point only for objects of kind `AUTO_RA
 
 ## 7. Placement
 
-`DOZER_CONSTRUCT` chooses the first selected builder that is not busy and opens the placement mode. The ghost follows the cursor;
+`DOZER_CONSTRUCT` chooses the first selected builder that is not busy and opens the placement mode (with the switch of #475 on, every idle builder
+the button stands for is armed and the nearest takes the order, §7a). The ghost follows the cursor;
 a left press anchors (outside the terrain: cancel), dragging by at least 5 px (`PLACEMENT_DRAG_THRESHOLD_DIST`) rotates to the
 direction anchor → cursor (`InGameUI.cpp`), releasing places: valid → `ConstructCommand(builder, template, x, y, angle)`, invalid →
 `InvalidOrder` with a reason, anchor released, mode stays (`PlaceEventTranslator.cpp`). Cursor `Build`/`InvalidBuild` (engine cursors without a
@@ -328,6 +329,35 @@ template known → instantiable → buildable (`STRUCTURE`, `Buildable`, side) �
 Not checked, because the simulation does not check them either: ground unevenness (`AllowedHeightVariationForBuilding`), units in the way,
 distance to supply depots (`SupplyBuildBorder`), distance to the map edge, line building (walls).
 
+## 7a. Several builders (#475, a change beyond the original)
+
+**The original:** a construct button (`DOZER_CONSTRUCT`) is never marked `OK_FOR_MULTI_SELECT` in the shipped `CommandButton.ini`, so `ControlBar::populateMultiSelect`
+(`addCommonCommands`) shows no build menu for two dozers or workers; and `MSG_DOZER_CONSTRUCT` is executed for the one object of the selection
+(`GameLogicDispatch.cpp`, `getSingleObjectFromSelection`, which asserts a selection of one). The dozer that builds stays selected (`PlaceEventTranslator.cpp` only
+leaves the placement mode, `placeBuildAvailable( NULL, NULL )`). There is no line build of walls in the port (`MSG_DOZER_CONSTRUCT_LINE`), and no Shift that keeps the
+placement open, in the original or here.
+
+**The owner's wish (on by default, the setting `controls.builderDispatch`, "Several builders" in More options, `docs/UI-TEXT-AND-SETTINGS.md` schema 10):**
+
+* A selection of builders and nothing else (`SimulationQueries.IsBuilder`: the AI can build, the object is not a site - USA and China dozers, GLA workers; several
+  kinds too) shows the bar of the first builder's command set with its build menu (`CommandBarModel.Build`, `SelectionGroupKind.Builders`, made by `BuildGroup` like a
+  structure group); a construct button's `Sources` are the builders that can use it, and its tag over the portrait reads "Name xN". A builder with anything else
+  selected keeps the original's multi-select bar (Tab to the builders' kind gives its full set, as before).
+* A construct button - clicked or by its hotkey, which goes the same way (`CommandBarModel.ActivateHotkey` → `Activate`) - arms every idle builder among its sources
+  (`CommandModeController.Activate`). The ghost is judged with the armed builder nearest to the place under the pointer (`PlacementBuilder`; on the ground, the first armed
+  one on a tie), and the release sends **one** `ConstructCommand` naming that builder - the simulation receives exactly what one builder's order always was.
+* An order the pre-check accepts takes its builder out of the selection (`Selection.Replace`, which also ends the placement, as any deselection does). The bar then shows
+  the menu of the builders left, so the next building is the next press of a construct button; with one builder left it is that builder's own bar, and after the last
+  the selection is empty and the bar shows nothing. The same holds for a single selected builder, and for the builders' kind of a mixed selection after Tab.
+* A refused place (shroud, footprint, terrain, money: the ghost is invalid) gives no order and leaves the selection and the placement as they are; an order the pre-check
+  refuses gives no order and removes nobody. An order refused only later at its execution (a match through a server, §13) has already taken its builder out of the
+  selection: the player selects it again.
+* Off: exactly the former behaviour - the multi-select bar of the original, the first idle builder builds, nobody leaves the selection.
+
+Tests: `Presentation.Tests` "Input (#475)" (three dozers of the fixture at three places: which builder each `ConstructCommand` names, the selection after each, a refused
+place, a button that cannot be paid, a mixed selection, the switch off) and `Game.Tests` `HudTests` "Several builders (#475)" (three American dozers on Alpine
+Assault through the `MatchController` with the switch on and off).
+
 ## 8. Command bar (`CommandBarModel`)
 
 * **Context** (`evaluateContextUI`): nothing selected → `Empty`; something foreign → `Foreign`; everything sold/`IGNORED_IN_GUI` → `BeingSold`; one
@@ -337,7 +367,8 @@ distance to supply depots (`SupplyBuildBorder`), distance to the map edge, line 
   is read through `SimModule.Describe`.
 * **Grid:** 14 slots (`ButtonCommand01..14`); set entries 15–18 are never shown by the retail bar (`SlotsBeyondGrid`).
 * **Multiple selection** (`ControlBarMultiSelect.cpp`): only `OK_FOR_MULTI_SELECT` buttons of the first object; a slot is dropped if a further
-  object has a different button there (except `ATTACK_MOVE`); active if at least one object can execute it; `Sources` names these objects.
+  object has a different button there (except `ATTACK_MOVE`); active if at least one object can execute it; `Sources` names these objects. A selection of builders and
+  nothing else shows the first builder's whole set instead while the switch of #475 is on (§7a).
 * **Availability** (`getCommandAvailability`, order as there): `SCRIPT_ONLY` → hidden; `NEED_SPECIAL_POWER_SCIENCE` without the science
   → hidden; `POWERED` with a negative energy balance without `IGNORES_UNDERPOWERED` → `Underpowered` (excepted are sell, evacuate, exit,
   delete beacon, rally point, stop, weapon switch; `Player.cpp doPowerDisable`); `NEED_UPGRADE` → `MissingUpgrade`; `NOT_QUEUEABLE` with

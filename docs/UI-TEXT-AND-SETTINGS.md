@@ -112,7 +112,7 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 
 ## Settings
 
-`GameSettings` (schema 4 since Phase 59: `controls.retaliation`; schema 3 since Phase 53: `general.tickRate`, 60 or 120 Hz, D-22, and the modern skin as the default of a first start, D-21; schemas 1 to 3 migrate, and a file that names a skin keeps it) with sub-records and value ranges:
+`GameSettings` (schema 10 since #475: `controls.builderDispatch`; schema 4 since Phase 59: `controls.retaliation`; schema 3 since Phase 53: `general.tickRate`, 60 or 120 Hz, D-22, and the modern skin as the default of a first start, D-21; schemas 1 to 3 migrate, and a file that names a skin keeps it) with sub-records and value ranges:
 
 | JSON path | Type, range | Default |
 |---|---|---|
@@ -127,6 +127,7 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 | `controls.scrollSpeed`/`cameraRotateSpeed` | 0..1 | 0.5 / 0.5 |
 | `controls.edgeScrolling` | bool | `true` |
 | `controls.alternateMouse` | bool: the right button orders | `true` |
+| `controls.builderDispatch` | bool (schema 10, #475): several selected builders show the build menu, each building order goes to the builder nearest to its place, which leaves the selection; `false` is the original's way (`docs/PRESENTATION-INPUT.md` §7a; More options, "Several builders"; a running match follows a change at once) | `true` |
 | `controls.retaliation` | bool: the player's idle units answer an attack on a friend nearby (`OptionsMenu.wnd:Retaliation`, `MSG_ENABLE_RETALIATION_MODE`; the match follows the option within a second, `SimulationWorld.RetaliationEnabled`) | `true` |
 | `accessibility.highContrastUi` | bool | `false` |
 | `accessibility.uiTextScalePercent` | 100, 125, 150 (snapped to the nearest value) | 100 |
@@ -217,6 +218,15 @@ of any; below 800 × 600 it is raised, a smaller desktop gives 800 × 600 with a
 ## Phase 65: schema 8
 
 **Schema 8** (the owner's playtest of 9 November 2026): the migration step 7 to 8 adds `display.barOpacity` (20 to 100, default 80; the modern control bar's band and the wells behind its buttons), `display.markerStyle` (`original`, `extended`, `modern`; default `extended`, the look before the setting), `display.healthBarMode` (`selectedOnly` the default, `belowFull`, `always`: a bar for every selectable object in view, or only the damaged ones) and `display.healthBarHeight` (`narrow`, `normal`, `wide`: 3, 5 or 8 pixels of fill, modern 3, 4 or 6). They are set on More options; buttons, cameos, the radar and text stay opaque at any opacity.
+
+## Schema 10: several builders (#475)
+
+**Schema 10** (the owner's wish, issue #475, a change beyond the original): `controls.builderDispatch`, on by default. With it, a selection of several builders and nothing
+else shows the build menu, each building order goes to the selected builder nearest to the place of the building, and a builder that takes a building order leaves the
+selection (a single builder too); off, the original's way (`docs/PRESENTATION-INPUT.md` §7a). The migration step 9 to 10 adds `builderDispatch = true` to the controls
+of an older file and keeps everything else. More options has an eleventh row, "Several builders" ("Nearest takes the order" / "As the original"); its rows stand 26
+instead of 28 units apart at 800 x 600, so the hotkey list keeps its height. The pictures of More options in `tests/CnCNew.Game.Tests/baselines/skin-screens.txt` (both
+skins, six resolutions) were rewritten for it. Pinned by `Ui.Tests` `BuilderDispatchOfSchema10`.
 
 ## Schema 9: the skirmish setup keeps its slots
 
