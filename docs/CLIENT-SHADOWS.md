@@ -22,13 +22,19 @@ A tree with `DoShadow` has `shadow.tga` as wide as the mean of its box (`W3DTree
 
 - Geometry per rigid mesh, built when the model loads: duplicate vertices merged, an edge between two polygons that run along it in opposite directions. A mesh that blends or tests alpha casts nothing unless
   its `CAST_SHADOW` flag is set; a skinned mesh never casts (`initFromHLOD`).
-- A silhouette is every edge between a polygon that faces the light and one that does not, and the open edges of one that does (`buildSilhouette`). It is kept per part and found again when the light turns
-  more than about 1.4 degrees against the part. A thing that stands still keeps its corners and only copies them.
-- The light is `ShadowSun.Direction`, the first light of the objects: the original puts the sun 10,000 units off, so a direction is enough. `ShadowSizeX` of a volume is **not a size**: it is the lowest
-  elevation of the sun in degrees (`W3DVolumetricShadowManager::addShadow`), which keeps the shadows of tall things short.
-- The sides go down along the light to a floor: a mobile thing 0.1 under its base, one in the air (2 units over the ground) to the lowest point of the map, an immobile one where
+- A silhouette is every edge between a polygon that faces the light and one that does not, and the open edges of one that does (`buildSilhouette`); a polygon faces the light when the ray from the sun
+  to its first vertex meets its front. It is kept per part and found again when the light turns more than about 1.4 degrees against the part. A thing that stands still keeps its corners and only copies them.
+- The light is a point, `ShadowSun.Position`: the original puts the sun 10,000 units from the origin of the world against the first light of the objects (`W3DShadowManager::setTimeOfDay`), and every
+  silhouette and volume runs from that point, so the light meets each object from a slightly different side. It was a direction here until #474: with the shipped light, whose `LightPos` has no Y, a wall
+  of a building at the default angle lay exactly along it, counted as turned away, and the side of the volume from its top lay in the wall, drawn as a dark band with a straight edge across the
+  wall (the GLA command centre's front). With the point the wall faces the sun on every map position north of the origin, as in the original.
+  `ShadowSizeX` of a volume is **not a size**: it is the lowest elevation of the sun in degrees (`W3DVolumetricShadowManager::addShadow`), which keeps the shadows of tall things short; the original
+  raises the point of the sun over the origin to that elevation (`updateMeshVolume`, `ShadowSun.LimitedPosition`).
+- The sides go away from the sun to a floor: a mobile thing 0.1 under its base, one in the air (2 units over the ground) to the lowest point of the map, an immobile one where
   `updateOptimalExtrusionPadding` says. That walk runs once per object: terrain up to 5 units lower takes the floor with it, a drop beyond that makes the light steeper, because terrain casts no shadow and a shadow
-  below a cliff would hang in the air (`ShadowSun.OptimalExtrusion`).
+  below a cliff would hang in the air (`ShadowSun.OptimalExtrusion`). Every corner of a mesh's volume is carried by the same factor of its distance from the sun, the one the top of the mesh's box needs to
+  reach the floor (`vectorScaleMax`, `ShadowVolumeWriter.ExtrusionScale`): corners low on the mesh end that much deeper. The volume has no bottom cap, and before #474 each corner stopped at the floor,
+  which left the open bottom just under the base.
 - Stencil (`ShadowStencilPipelineProcessor`): sides without colour or depth, front faces that pass the depth test count up, back faces down, with wrapping counters in one draw. Then a rectangle over the screen,
   `DestinationColor / Zero`, where the count is not zero. The colour is the map's shadow colour from its lighting, or 160/255 (`m_shadowColor` 0x7fa0a0a0, alpha unused) by default, and the product is taken on display values, as
   `W3DVolumetricShadowManager::renderStencilShadows` does with `D3DBLEND_DESTCOLOR`/`ZERO`: the fill is drawn in the display-value pass (`docs/CLIENT-FX.md`), and the material constant is

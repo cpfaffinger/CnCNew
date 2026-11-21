@@ -4,12 +4,16 @@ using CnCNew.Presentation.Terrain;
 namespace CnCNew.Presentation.Shadows;
 
 /// <summary>
-/// The sun of the shadows: <c>W3DShadowManager::setTimeOfDay</c> puts it 10,000 units away against the first light of the objects, and the volumes of <c>W3DVolumetricShadow</c> run from
-/// there. At that distance the rays of one object are parallel, so here the sun is a direction. <c>ShadowSizeX</c> of a volume is not a size but the lowest elevation of the light in degrees
-/// (<c>W3DVolumetricShadowManager::addShadow</c>), which limits the length of the shadows of tall things.
+/// The sun of the shadows: <c>W3DShadowManager::setTimeOfDay</c> puts it at a point 10,000 units from the origin of the world, against the first light of the objects, and the volumes of
+/// <c>W3DVolumetricShadow</c> run from that point. It is a point, not a direction: the light meets every object from the point, so it falls a little differently across the map, and a wall that
+/// runs along the light's direction still faces it or turns away from it (an exact direction would leave such a wall parallel to the light and its volume's side in the wall, issue 474).
+/// <c>ShadowSizeX</c> of a volume is not a size but the lowest elevation of the light in degrees (<c>W3DVolumetricShadowManager::addShadow</c>), which limits the length of the shadows of tall things.
 /// </summary>
 public static class ShadowSun
 {
+    /// <summary><c>SUN_DISTANCE_FROM_GROUND</c>.</summary>
+    public const float Distance = 10000f;
+
     /// <summary><c>SHADOW_EXTRUSION_BUFFER</c>: how far a volume reaches under what it should reach.</summary>
     public const float ExtrusionBuffer = 0.1f;
 
@@ -57,6 +61,23 @@ public static class ShadowSun
         return position == Vector3.Zero ? -Vector3.UnitZ : Vector3.Normalize(position);
     }
 
+    /// <summary><c>W3DShadowManager::setTimeOfDay</c>: the sun, <see cref="Distance"/> from the origin of the world against the direction its light travels.</summary>
+    public static Vector3 Position(TerrainLighting lighting) => -Direction(lighting) * Distance;
+
+    /// <summary>
+    /// <c>updateMeshVolume</c> and <c>updateOptimalExtrusionPadding</c>: a volume with a limit on the sun's elevation (<paramref name="scale"/>, the tangent; 0 = no limit) raises the sun to at least
+    /// that elevation over the origin of the world.
+    /// </summary>
+    public static Vector3 LimitedPosition(Vector3 sun, float scale)
+    {
+        if (scale <= 0f) return sun;
+        var height = MathF.Sqrt(sun.X * sun.X + sun.Y * sun.Y) * scale;
+        return height > sun.Z ? new Vector3(sun.X, sun.Y, height) : sun;
+    }
+
+    /// <summary>The direction the light of the sun at <paramref name="sun"/> travels at <paramref name="point"/>.</summary>
+    public static Vector3 Toward(Vector3 sun, Vector3 point) => Vector3.Normalize(point - sun);
+
     /// <summary>
     /// <c>updateOptimalExtrusionPadding</c>: lifts the light so it stands at least at <paramref name="scale"/> (the tangent of an elevation, 0 = no limit), by raising the position of the
     /// sun above the ground in the same way.
@@ -77,9 +98,9 @@ public static class ShadowSun
     /// <see cref="MaximumDrop"/> takes the floor of the volume down with it; where it drops further the object stands at a cliff, and the light is made steeper so that the shadow ends at
     /// the last good point (the terrain casts no shadow, so a shadow below a cliff would hang in the air).
     /// </summary>
-    public static (float Padding, float LengthScale) OptimalExtrusion(TerrainHeightSampler heights, Vector3 position, Vector3 boxMin, Vector3 boxMax, Vector3 direction, float lengthScale)
+    public static (float Padding, float LengthScale) OptimalExtrusion(TerrainHeightSampler heights, Vector3 position, Vector3 boxMin, Vector3 boxMax, Vector3 sun, float lengthScale)
     {
-        var light = Limited(direction, lengthScale);
+        var limited = LimitedPosition(sun, lengthScale);
         var baseHeight = position.Z;
         var lastValid = position;
         var scale = lengthScale;
@@ -87,10 +108,11 @@ public static class ShadowSun
         [
             new(boxMax.X, boxMax.Y, boxMax.Z), new(boxMin.X, boxMax.Y, boxMax.Z), new(boxMin.X, boxMin.Y, boxMax.Z), new(boxMax.X, boxMin.Y, boxMax.Z),
         ];
-        var rise = light.Z < -1e-4f ? -1f / light.Z : 0f;
         foreach (var corner in corners)
         {
-            // The ray meets the terrain about where it reaches the height of the base; the walk below is what looks at the ground.
+            // The ray from the sun through the corner meets the terrain about where it reaches the height of the base; the walk below is what looks at the ground.
+            var light = Toward(limited, corner);
+            var rise = light.Z < -1e-4f ? -1f / light.Z : 0f;
             var reach = light * (MathF.Max(0f, corner.Z - position.Z) * rise);
             var along = new Vector2(reach.X, reach.Y);
             var length = along.Length();
@@ -131,11 +153,12 @@ public static class ShadowSun
     }
 
     /// <summary>
-    /// Where the shadow of the top of an object ends: the point on the floor plane its volume reaches (<c>updateMeshVolume</c> extrudes the top corners of the mesh's box down to <paramref name="floorZ"/>).
+    /// Where the shadow of the top of an object ends under the sun at <paramref name="sun"/>: the point on the floor plane its volume reaches (<c>updateMeshVolume</c> extrudes the top corners of the mesh's box down to <paramref name="floorZ"/>).
     /// A thing in the air reaches down to the lowest point of the map, so its shadow lies far below it, not just its own height: the box that decides whether it is seen has to take that in.
     /// </summary>
-    public static Vector3 Tip(Vector3 position, Vector3 direction, float height, float floorZ)
+    public static Vector3 Tip(Vector3 position, Vector3 sun, float height, float floorZ)
     {
+        var direction = Toward(sun, position + new Vector3(0f, 0f, height));
         var slope = direction.Z < -1e-4f ? 1f / -direction.Z : 0f;
         var drop = MathF.Max(0f, position.Z + height - floorZ);
         return new Vector3(position.X + direction.X * drop * slope, position.Y + direction.Y * drop * slope, floorZ);

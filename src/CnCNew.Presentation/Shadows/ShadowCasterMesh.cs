@@ -10,13 +10,23 @@ namespace CnCNew.Presentation.Shadows;
 public sealed class ShadowCasterMesh
 {
     private readonly Vector3[] _normals;
+    private readonly int[] _firstVertices;
     private readonly int[] _edgeVertices;
     private readonly int[] _edgeFaces;
     private readonly bool[] _lit;
 
-    private ShadowCasterMesh(Vector3[] vertices, Vector3[] normals, int[] edgeVertices, int[] edgeFaces)
+    private ShadowCasterMesh(Vector3[] vertices, Vector3[] normals, int[] firstVertices, int[] edgeVertices, int[] edgeFaces)
     {
         Vertices = vertices;
+        _firstVertices = firstVertices;
+        BoundsMinimum = new Vector3(float.MaxValue);
+        BoundsMaximum = new Vector3(float.MinValue);
+        foreach (var vertex in vertices)
+        {
+            BoundsMinimum = Vector3.Min(BoundsMinimum, vertex);
+            BoundsMaximum = Vector3.Max(BoundsMaximum, vertex);
+        }
+
         _normals = normals;
         _edgeVertices = edgeVertices;
         _edgeFaces = edgeFaces;
@@ -25,6 +35,11 @@ public sealed class ShadowCasterMesh
 
     /// <summary>The merged vertices in the mesh's own space.</summary>
     public Vector3[] Vertices { get; }
+
+    /// <summary>The box of the mesh in its own space, whose top decides how far the volume reaches (<c>updateMeshVolume</c> takes the mesh's bounding box).</summary>
+    public Vector3 BoundsMinimum { get; }
+
+    public Vector3 BoundsMaximum { get; }
 
     public int EdgeCount => _edgeFaces.Length / 2;
 
@@ -52,6 +67,7 @@ public sealed class ShadowCasterMesh
         }
 
         var normals = new List<Vector3>(triangles.Count);
+        var firstVertices = new List<int>(triangles.Count);
         var open = new Dictionary<(int From, int To), int>();
         var edgeVertices = new List<int>(triangles.Count * 3);
         var edgeFaces = new List<int>(triangles.Count * 3);
@@ -63,6 +79,7 @@ public sealed class ShadowCasterMesh
             if (normal.LengthSquared() == 0f) continue;
             var face = normals.Count;
             normals.Add(Vector3.Normalize(normal));
+            firstVertices.Add(first);
             AddEdge(first, second, face);
             AddEdge(second, third, face);
             AddEdge(third, first, face);
@@ -76,7 +93,7 @@ public sealed class ShadowCasterMesh
             edgeFaces.Add(-1);
         }
 
-        return normals.Count == 0 ? null : new ShadowCasterMesh([.. vertices], [.. normals], [.. edgeVertices], [.. edgeFaces]);
+        return normals.Count == 0 ? null : new ShadowCasterMesh([.. vertices], [.. normals], [.. firstVertices], [.. edgeVertices], [.. edgeFaces]);
 
         void AddEdge(int from, int to, int face)
         {
@@ -92,15 +109,17 @@ public sealed class ShadowCasterMesh
     }
 
     /// <summary>
-    /// The silhouette for a light that travels along <paramref name="lightDirection"/> (in the mesh's own space): pairs of vertex indices, each edge running as it does in the polygon that
-    /// faces the light, so that <see cref="ShadowVolumeWriter"/> gives every side of the volume the same outward direction. Returns the number of edges; <paramref name="pairs"/> needs
-    /// twice <see cref="EdgeCount"/> entries.
+    /// The silhouette for the sun at <paramref name="lightPosition"/> (in the mesh's own space): pairs of vertex indices, each edge running as it does in the polygon that faces the light, so
+    /// that <see cref="ShadowVolumeWriter"/> gives every side of the volume the same outward direction. A polygon faces the light when the ray from the sun to its first vertex meets its front
+    /// (<c>buildSilhouette</c>). Returns the number of edges; <paramref name="pairs"/> needs twice <see cref="EdgeCount"/> entries.
     /// </summary>
-    public int Silhouette(Vector3 lightDirection, int[] pairs)
+    public int Silhouette(Vector3 lightPosition, int[] pairs)
     {
         var lit = _lit;
         var normals = _normals;
-        for (var face = 0; face < normals.Length; face++) lit[face] = Vector3.Dot(lightDirection, normals[face]) < 0f;
+        var firsts = _firstVertices;
+        var vertices = Vertices;
+        for (var face = 0; face < normals.Length; face++) lit[face] = Vector3.Dot(vertices[firsts[face]] - lightPosition, normals[face]) < 0f;
 
         var count = 0;
         var faces = _edgeFaces;
@@ -134,13 +153,40 @@ public sealed class ShadowCasterMesh
 public static class ShadowVolumeWriter
 {
     /// <summary>
-    /// Four corners per silhouette edge: the edge in the world and the same edge carried along the light down to the plane <c>z = floorZ</c>. The corners are in the order
-    /// <c>from, to, extruded to, extruded from</c>, which seen from outside the volume is clockwise, Direct3D's front face (W3D's polygons run the other way).
-    /// A corner already below the floor stays where it is. Returns the number of quads written; <paramref name="corners"/> holds four per edge.
+    /// How far the corners of a mesh's volume are carried away from the sun (<c>W3DVolumetricShadow::updateMeshVolume</c>, <c>vectorScaleMax</c>): a factor of each corner's distance from the
+    /// sun, the largest the four top corners of the mesh's box in the world need to reach the plane <c>z = floorZ</c>. The volume has no cap, so one factor for all corners is what keeps its
+    /// bottom under the ground: corners lower on the mesh end that much deeper (<c>constructVolume</c> extrudes each by <c>shadowExtrudeDistance</c>).
     /// </summary>
-    public static int Write(Vector3[] vertices, int[] pairs, int edgeCount, in Matrix4x4 world, Vector3 lightDirection, float floorZ, Span<Vector3> corners)
+    public static float ExtrusionScale(Vector3 boundsMinimum, Vector3 boundsMaximum, in Matrix4x4 world, Vector3 lightPosition, float floorZ)
     {
-        var slope = lightDirection.Z < -1e-4f ? 1f / -lightDirection.Z : 0f;
+        // MeshClass::Get_Bounding_Box: the box of the mesh carried into the world and boxed again.
+        var minimum = new Vector3(float.MaxValue);
+        var maximum = new Vector3(float.MinValue);
+        for (var corner = 0; corner < 8; corner++)
+        {
+            var point = Vector3.Transform(new Vector3((corner & 1) == 0 ? boundsMinimum.X : boundsMaximum.X, (corner & 2) == 0 ? boundsMinimum.Y : boundsMaximum.Y, (corner & 4) == 0 ? boundsMinimum.Z : boundsMaximum.Z), world);
+            minimum = Vector3.Min(minimum, point);
+            maximum = Vector3.Max(maximum, point);
+        }
+
+        var scale = 0f;
+        for (var corner = 0; corner < 4; corner++)
+        {
+            var ray = new Vector3((corner & 1) == 0 ? minimum.X : maximum.X, (corner & 2) == 0 ? minimum.Y : maximum.Y, maximum.Z) - lightPosition;
+            if (ray.Z > -1e-4f && ray.Z < 1e-4f) continue;
+            scale = MathF.Max(scale, MathF.Abs((maximum.Z - floorZ) / ray.Z));
+        }
+
+        return scale;
+    }
+
+    /// <summary>
+    /// Four corners per silhouette edge: the edge in the world and the same edge carried away from the sun at <paramref name="lightPosition"/> by <paramref name="scale"/> times its distance
+    /// from it (<see cref="ExtrusionScale"/>). The corners are in the order <c>from, to, extruded to, extruded from</c>, which seen from outside the volume is clockwise, Direct3D's front face
+    /// (W3D's polygons run the other way). Returns the number of quads written; <paramref name="corners"/> holds four per edge.
+    /// </summary>
+    public static int Write(Vector3[] vertices, int[] pairs, int edgeCount, in Matrix4x4 world, Vector3 lightPosition, float scale, Span<Vector3> corners)
+    {
         var quads = 0;
         for (var edge = 0; edge < edgeCount; edge++)
         {
@@ -149,8 +195,8 @@ public static class ShadowVolumeWriter
             var offset = quads * 4;
             corners[offset] = from;
             corners[offset + 1] = to;
-            corners[offset + 2] = to + lightDirection * (MathF.Max(0f, to.Z - floorZ) * slope);
-            corners[offset + 3] = from + lightDirection * (MathF.Max(0f, from.Z - floorZ) * slope);
+            corners[offset + 2] = to + (to - lightPosition) * scale;
+            corners[offset + 3] = from + (from - lightPosition) * scale;
             quads++;
         }
 

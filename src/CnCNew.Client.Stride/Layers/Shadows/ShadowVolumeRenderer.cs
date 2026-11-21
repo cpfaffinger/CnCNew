@@ -19,6 +19,7 @@ namespace CnCNew.Client.Stride.Layers.Shadows;
 /// <summary>What one rigid part of a live drawable remembers of its shadow: the silhouette for the light it last had, and for a thing that stands still the corners of the volume.</summary>
 internal sealed class ShadowPartState
 {
+    /// <summary>The direction from the part to the sun, in the part's space, when its silhouette was found.</summary>
     public Vector3 LocalLight;
     public int[] Pairs = [];
     public int EdgeCount = -1;
@@ -119,19 +120,21 @@ internal sealed class ShadowVolumeRenderer : IDisposable
 
     public void Begin() => _quads = 0;
 
-    /// <summary>Adds the volume of one part. <paramref name="keepCorners"/>: the thing stands still, its corners are kept and copied until its transform changes.</summary>
+    /// <summary>
+    /// Adds the volume of one part under the sun at <paramref name="light"/> (a point in the world, <see cref="ShadowSun.Position"/>). <paramref name="keepCorners"/>: the thing stands still,
+    /// its corners are kept and copied until its transform changes.
+    /// </summary>
     public void Add(ShadowCasterMesh caster, ShadowPartState state, in Matrix4x4 world, Vector3 light, float floorZ, bool keepCorners)
     {
-        // The rows of the world matrix are the part's axes in the world, so these products are the light in the part's space; the matrices turn and scale evenly, and only the direction counts.
-        var local = Vector3.Normalize(new Vector3(
-            light.X * world.M11 + light.Y * world.M12 + light.Z * world.M13,
-            light.X * world.M21 + light.Y * world.M22 + light.Z * world.M23,
-            light.X * world.M31 + light.Y * world.M32 + light.Z * world.M33));
-        if (state.EdgeCount < 0 || Vector3.Dot(local, state.LocalLight) < SilhouetteTolerance)
+        // The sun in the part's own space: the silhouette is found there, and found again when the light has turned against the part (toLight against toPrevLight in updateMeshVolume).
+        if (!Matrix4x4.Invert(world, out var inverse)) return;
+        var local = Vector3.Transform(light, inverse);
+        var toward = Vector3.Normalize(-local);
+        if (state.EdgeCount < 0 || Vector3.Dot(toward, state.LocalLight) < SilhouetteTolerance)
         {
             if (state.Pairs.Length == 0) state.Pairs = new int[caster.EdgeCount * 2];
             state.EdgeCount = caster.Silhouette(local, state.Pairs);
-            state.LocalLight = local;
+            state.LocalLight = toward;
             state.Quads = -1;
         }
 
@@ -150,7 +153,7 @@ internal sealed class ShadowVolumeRenderer : IDisposable
         }
         else
         {
-            ShadowVolumeWriter.Write(caster.Vertices, state.Pairs, edges, world, light, floorZ, target);
+            ShadowVolumeWriter.Write(caster.Vertices, state.Pairs, edges, world, light, ShadowVolumeWriter.ExtrusionScale(caster.BoundsMinimum, caster.BoundsMaximum, world, light, floorZ), target);
             if (keepCorners)
             {
                 if (state.Corners.Length < edges * 4) state.Corners = new Vector3[edges * 4];

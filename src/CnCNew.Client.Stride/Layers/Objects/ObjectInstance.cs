@@ -98,7 +98,7 @@ internal sealed class DrawPartState
     /// <summary>The shadow of each rigid part of <see cref="Asset"/>, by its place in <see cref="ModelAsset.RigidParts"/>.</summary>
     public CnCNew.Client.Stride.Layers.Shadows.ShadowPartState?[]? ShadowParts;
 
-    /// <summary>The light of this object and how far its volume reaches under its base; an immobile thing finds them once (<c>updateOptimalExtrusionPadding</c>).</summary>
+    /// <summary>The sun of this object (a point, raised to its lowest elevation) and how far its volume reaches under its base; an immobile thing finds them once (<c>updateOptimalExtrusionPadding</c>).</summary>
     public System.Numerics.Vector3 ShadowLight;
     public float ShadowPadding = -1f;
 

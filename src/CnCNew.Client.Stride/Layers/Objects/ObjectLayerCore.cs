@@ -46,6 +46,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
     private readonly List<long> _toRemove = [];
     private readonly Stopwatch _stopwatch = new();
     private ShadowVolumeRenderer? _shadows;
+    /// <summary>The sun of the shadows, a point in the world (<c>W3DShadowManager::setTimeOfDay</c>).</summary>
     private Vector3 _sun;
     private readonly Dictionary<string, bool> _shadowTextures = new(StringComparer.OrdinalIgnoreCase);
     private long _shadowTicks;
@@ -61,7 +62,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         _assets = new ModelAssetCache(services);
         _pool = new EntityPool();
         _placeholderModel = PlaceholderBox.Build(services.GraphicsDevice, _assets.Indices, new Color4(1f, 0.15f, 0.85f, 1f));
-        _sun = ShadowSun.Direction(TerrainLighting.ObjectsForMap(services.Data.Graph, match.Map));
+        _sun = ShadowSun.Position(TerrainLighting.ObjectsForMap(services.Data.Graph, match.Map));
         if (!ShadowsOff) _shadows = new ShadowVolumeRenderer(services, ShadowSun.StencilColor(match.Map));
 
         var args = Environment.GetCommandLineArgs();
@@ -461,7 +462,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
             (part.ShadowPadding, scale) = ShadowSun.OptimalExtrusion(match.Heights, drawable.Position, minimum, maximum, _sun, scale);
         }
 
-        part.ShadowLight = ShadowSun.Limited(_sun, scale);
+        part.ShadowLight = ShadowSun.LimitedPosition(_sun, scale);
     }
 
     /// <summary><c>W3DVolumetricShadow::Update</c>: a thing in the air reaches down to the lowest point of the map, everything else to its padding under its base.</summary>

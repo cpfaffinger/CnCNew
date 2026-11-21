@@ -19,8 +19,9 @@ internal static class ShadowTests
         harness.Run("An open polygon casts when it faces the light, and nothing when it faces away", OpenPolygon);
         harness.Run("Degenerate polygons are no geometry", Degenerate);
         harness.Run("The sides of a volume: down to the floor along the light, front side out", VolumeSides);
-        harness.Run("A corner under the floor stays where it is", CornerBelowFloor);
-        harness.Run("The sun: the first light of the objects, or straight down", SunDirection);
+        harness.Run("Every corner is carried by the same factor: lower corners end deeper, so the open bottom lies under the ground", OneFactorForAllCorners);
+        harness.Run("The sun is a point: a wall along the light's direction faces it or turns away, and no side of a volume lies in the wall (issue 474)", WallAlongTheLight);
+        harness.Run("The sun: the first light of the objects, or straight down, 10,000 units from the origin of the world", SunDirection);
         harness.Run("ShadowSizeX of a volume is the lowest elevation of the sun", ElevationLimit);
         harness.Run("A thing in the air: its shadow reaches the lowest point of the map, and the visibility box holds that tip", AirborneTip);
         harness.Run("Extrusion: flat ground needs the buffer, a dip takes the floor down", ExtrusionOnTheFlat);
@@ -84,6 +85,9 @@ internal static class ShadowTests
         return ShadowCasterMesh.Build(positions, triangles)!;
     }
 
+    /// <summary>The sun of <c>W3DShadowManager::setTimeOfDay</c> for a light that travels along <paramref name="direction"/>.</summary>
+    private static Vector3 Sun(Vector3 direction) => -Vector3.Normalize(direction) * ShadowSun.Distance;
+
     private static void Welding()
     {
         var cube = Cube();
@@ -97,7 +101,7 @@ internal static class ShadowTests
     {
         var cube = Cube();
         var pairs = new int[cube.EdgeCount * 2];
-        var edges = cube.Silhouette(-Vector3.UnitZ, pairs);
+        var edges = cube.Silhouette(Sun(-Vector3.UnitZ), pairs);
         TestHarness.Assert(edges == 4, $"the rim of the top face, got {edges} edges");
         for (var edge = 0; edge < edges; edge++)
         {
@@ -115,7 +119,7 @@ internal static class ShadowTests
     {
         var cube = Cube();
         var pairs = new int[cube.EdgeCount * 2];
-        var edges = cube.Silhouette(Vector3.Normalize(new Vector3(-1, -1, -1)), pairs);
+        var edges = cube.Silhouette(Sun(new Vector3(-1, -1, -1)), pairs);
         TestHarness.Assert(edges == 6, $"six edges, got {edges}");
         // A closed outline: every vertex of it is left as often as it is reached.
         var balance = new int[8];
@@ -132,8 +136,8 @@ internal static class ShadowTests
     {
         var plate = ShadowCasterMesh.Build([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [(0, 1, 2)])!;
         var pairs = new int[plate.EdgeCount * 2];
-        TestHarness.Assert(plate.Silhouette(-Vector3.UnitZ, pairs) == 3, "a polygon that faces the light casts from its three open edges");
-        TestHarness.Assert(plate.Silhouette(Vector3.UnitZ, pairs) == 0, "one that faces away casts nothing (buildSilhouette looks at visible polygons only)");
+        TestHarness.Assert(plate.Silhouette(Sun(-Vector3.UnitZ), pairs) == 3, "a polygon that faces the light casts from its three open edges");
+        TestHarness.Assert(plate.Silhouette(Sun(Vector3.UnitZ), pairs) == 0, "one that faces away casts nothing (buildSilhouette looks at visible polygons only)");
     }
 
     private static void Degenerate()
@@ -145,17 +149,20 @@ internal static class ShadowTests
     private static void VolumeSides()
     {
         var cube = Cube();
+        var world = Matrix4x4.CreateTranslation(10, 0, 5);
+        // The sun straight above the cube.
+        var sun = new Vector3(10.5f, 0.5f, ShadowSun.Distance);
         var pairs = new int[cube.EdgeCount * 2];
-        var edges = cube.Silhouette(-Vector3.UnitZ, pairs);
+        var edges = cube.Silhouette(Vector3.Transform(sun, Matrix4x4.CreateTranslation(-10, 0, -5)), pairs);
         var corners = new Vector3[edges * 4];
-        var quads = ShadowVolumeWriter.Write(cube.Vertices, pairs, edges, Matrix4x4.CreateTranslation(10, 0, 5), -Vector3.UnitZ, 2f, corners);
+        var quads = ShadowVolumeWriter.Write(cube.Vertices, pairs, edges, world, sun, ShadowVolumeWriter.ExtrusionScale(cube.BoundsMinimum, cube.BoundsMaximum, world, sun, 2f), corners);
         TestHarness.Assert(quads == 4, "one side per edge");
         for (var quad = 0; quad < quads; quad++)
         {
             var (from, to, lowTo, lowFrom) = (corners[quad * 4], corners[quad * 4 + 1], corners[quad * 4 + 2], corners[quad * 4 + 3]);
             TestHarness.Near(6f, from.Z, 1e-5, "the edge in the world");
-            TestHarness.Near(2f, lowTo.Z, 1e-5, "down to the floor");
-            TestHarness.Near(from.X, lowFrom.X, 1e-5, "straight down, as the light runs");
+            TestHarness.Near(2f, lowTo.Z, 1e-3, "down to the floor");
+            TestHarness.Near(from.X, lowFrom.X, 1e-3, "straight down, as the light runs");
             // Seen from outside the corners run clockwise, the opposite of the normal of the first triangle: Direct3D's front face.
             var normal = Vector3.Cross(to - from, lowTo - from);
             var outward = (from + lowTo) * 0.5f - new Vector3(10.5f, 0.5f, 4f);
@@ -163,14 +170,69 @@ internal static class ShadowTests
         }
     }
 
-    private static void CornerBelowFloor()
+    /// <summary>
+    /// <c>updateMeshVolume</c> finds one factor, the one the top of the mesh's box needs to reach the floor, and <c>constructVolume</c> carries every corner by it. The volume has no cap: a
+    /// corner low on the mesh that stopped at the floor would leave the bottom of the volume open just under the base, and terrain lower than that showed through it.
+    /// </summary>
+    private static void OneFactorForAllCorners()
     {
         var cube = Cube();
+        var sun = Sun(new Vector3(1, 0.3f, -0.5f));
         var pairs = new int[cube.EdgeCount * 2];
-        var edges = cube.Silhouette(-Vector3.UnitZ, pairs);
+        var edges = cube.Silhouette(sun, pairs);
         var corners = new Vector3[edges * 4];
-        ShadowVolumeWriter.Write(cube.Vertices, pairs, edges, Matrix4x4.Identity, -Vector3.UnitZ, 5f, corners);
-        TestHarness.Near(1f, corners[2].Z, 1e-5, "above the floor there is nothing to extrude");
+        var floor = -ShadowSun.ExtrusionBuffer;
+        ShadowVolumeWriter.Write(cube.Vertices, pairs, edges, Matrix4x4.Identity, sun, ShadowVolumeWriter.ExtrusionScale(cube.BoundsMinimum, cube.BoundsMaximum, Matrix4x4.Identity, sun, floor), corners);
+        var bottom = 0;
+        for (var corner = 0; corner < edges * 4; corner += 4)
+        {
+            foreach (var (edge, carried) in new[] { (corners[corner], corners[corner + 3]), (corners[corner + 1], corners[corner + 2]) })
+            {
+                if (edge.Z == 1f) TestHarness.Near(floor, carried.Z, 1e-3, "the top reaches the floor");
+                else
+                {
+                    bottom++;
+                    TestHarness.Assert(carried.Z < floor - 0.9f, $"a corner at the base ends as much deeper as it is lower, got {carried.Z}");
+                }
+
+                var along = Vector3.Normalize(carried - edge);
+                TestHarness.Assert(Vector3.Dot(along, ShadowSun.Toward(sun, edge)) > 0.9999f, "away from the sun");
+            }
+        }
+
+        TestHarness.Assert(bottom > 0, "a slanted light puts corners of the base into the silhouette");
+    }
+
+    /// <summary>
+    /// A light along the x axis (the shipped GlobalLighting has LightPos Y 0) and a building at the default angle: as a direction it is parallel to the south wall, which counts as turned
+    /// away, so the side of the volume from the wall's top lay in the wall and a dark band with a straight edge crossed it (issue 474). The original's sun is a point at the origin's
+    /// side of the map: a wall north of it faces it.
+    /// </summary>
+    private static void WallAlongTheLight()
+    {
+        var cube = Cube();
+        var world = Matrix4x4.CreateScale(40f) * Matrix4x4.CreateTranslation(1500f, 800f, 0f);
+        var sun = Sun(new Vector3(0.94f, 0f, -0.34f));
+        Matrix4x4.Invert(world, out var inverse);
+        var pairs = new int[cube.EdgeCount * 2];
+        var edges = cube.Silhouette(Vector3.Transform(sun, inverse), pairs);
+        var corners = new Vector3[edges * 4];
+        ShadowVolumeWriter.Write(cube.Vertices, pairs, edges, world, sun, ShadowVolumeWriter.ExtrusionScale(cube.BoundsMinimum, cube.BoundsMaximum, world, sun, -ShadowSun.ExtrusionBuffer), corners);
+        for (var corner = 0; corner < edges * 4; corner += 4)
+        {
+            var inSouthWall = true;
+            for (var index = 0; index < 4; index++) inSouthWall &= MathF.Abs(corners[corner + index].Y - 800f) < 1e-3f;
+            TestHarness.Assert(!inSouthWall, "no side of the volume lies in the south wall");
+        }
+
+        var south = cube.Vertices.Select(vertex => Vector3.Transform(vertex, world)).Where(vertex => vertex.Y == 800f && vertex.Z == 40f).ToArray();
+        TestHarness.Assert(south.Length == 2, "the top edge of the south wall");
+        for (var edge = 0; edge < edges; edge++)
+        {
+            var from = Vector3.Transform(cube.Vertices[pairs[edge * 2]], world);
+            var to = Vector3.Transform(cube.Vertices[pairs[edge * 2 + 1]], world);
+            TestHarness.Assert(!(south.Contains(from) && south.Contains(to)), "the south wall faces the sun, so its top edge is no silhouette edge");
+        }
     }
 
     private static void SunDirection()
@@ -180,6 +242,10 @@ internal static class ShadowTests
         TestHarness.Near(1f, sun.Length(), 1e-5, "unit length");
         TestHarness.Assert(sun.X < 0f && sun.Y > 0f && sun.Z < 0f, "the light travels along LightPos");
         TestHarness.Assert(ShadowSun.Direction(new TerrainLighting("AFTERNOON", [])) == -Vector3.UnitZ, "no light: straight down");
+        var position = ShadowSun.Position(lighting);
+        TestHarness.Near(ShadowSun.Distance, position.Length(), 1e-1, "10,000 units from the origin of the world");
+        TestHarness.Near(-1f, Vector3.Dot(Vector3.Normalize(position), sun), 1e-5, "against the direction the light travels");
+        TestHarness.Near(1f, Vector3.Dot(ShadowSun.Toward(position, new Vector3(2000f, 2000f, 0f)), sun), 0.05, "a point of the map gets the light from the sun's point, close to its direction");
     }
 
     private static void ElevationLimit()
@@ -190,6 +256,10 @@ internal static class ShadowTests
         TestHarness.Assert(ShadowSun.Limited(low, 0f) == low, "no limit");
         var steep = Vector3.Normalize(new Vector3(0.2f, 0, -1f));
         TestHarness.Assert(ShadowSun.Limited(steep, ShadowSun.LengthScale(45f)) == steep, "a sun above the limit stays");
+        // updateMeshVolume raises the point of the sun over the origin of the world in the same way.
+        var raised = ShadowSun.LimitedPosition(Sun(low), ShadowSun.LengthScale(45f));
+        TestHarness.Near(MathF.Sqrt(raised.X * raised.X + raised.Y * raised.Y), raised.Z, 1e-1, "45 degrees over the origin");
+        TestHarness.Assert(ShadowSun.LimitedPosition(Sun(steep), ShadowSun.LengthScale(45f)) == Sun(steep), "a sun above the limit stays where it is");
     }
 
     /// <summary>
@@ -198,20 +268,22 @@ internal static class ShadowTests
     /// </summary>
     private static void AirborneTip()
     {
-        var light = ShadowSun.Limited(Vector3.Normalize(new Vector3(0.6f, 0, -0.8f)), ShadowSun.LengthScale(89f));
+        var sun = ShadowSun.LimitedPosition(Sun(new Vector3(0.6f, 0, -0.8f)), ShadowSun.LengthScale(89f));
         var position = new Vector3(100f, 50f, 100f);
         var floor = -40f - ShadowSun.ExtrusionBuffer;
-        var tip = ShadowSun.Tip(position, light, 27f, floor);
+        var tip = ShadowSun.Tip(position, sun, 27f, floor);
+        var light = ShadowSun.Toward(sun, position + new Vector3(0f, 0f, 27f));
         TestHarness.Near(floor, tip.Z, 1e-5, "the tip lies on the floor, 140 units under the plane");
         TestHarness.Near(position.X + light.X * (position.Z + 27f - floor) / -light.Z, tip.X, 1e-3, "along the light");
         TestHarness.Assert(MathF.Abs(tip.X - position.X) < 5f && MathF.Abs(tip.Y - position.Y) < 5f, "a sun limited to 89 degrees puts the shadow straight under the plane");
 
         // The sides of its volume really end there: an edge at the plane's height reaches the floor.
         var mesh = ShadowCasterMesh.Build([new(-50, -5, 0), new(50, -5, 0), new(0, 5, 0)], [(0, 1, 2)])!;
+        var world = Matrix4x4.CreateTranslation(position);
         var pairs = new int[mesh.EdgeCount * 2];
-        var edges = mesh.Silhouette(light, pairs);
+        var edges = mesh.Silhouette(sun - position, pairs);
         var corners = new Vector3[edges * 4];
-        ShadowVolumeWriter.Write(mesh.Vertices, pairs, edges, Matrix4x4.CreateTranslation(position), light, floor, corners);
+        ShadowVolumeWriter.Write(mesh.Vertices, pairs, edges, world, sun, ShadowVolumeWriter.ExtrusionScale(mesh.BoundsMinimum, mesh.BoundsMaximum, world, sun, floor), corners);
         TestHarness.Assert(edges == 3, $"a plate that faces the light casts from its three edges, got {edges}");
         for (var edge = 0; edge < edges; edge++)
         {
@@ -221,9 +293,9 @@ internal static class ShadowTests
         }
 
         // A thing on the ground keeps its short reach: its own height plus the buffer.
-        var ground = ShadowSun.Tip(new Vector3(0, 0, 10f), Vector3.Normalize(new Vector3(1, 0, -1)), 20f, 10f - ShadowSun.ExtrusionBuffer);
+        var ground = ShadowSun.Tip(new Vector3(0, 0, 10f), Sun(new Vector3(1, 0, -1)), 20f, 10f - ShadowSun.ExtrusionBuffer);
         TestHarness.Near(10f - ShadowSun.ExtrusionBuffer, ground.Z, 1e-5, "on the floor");
-        TestHarness.Near(20.1f, ground.X, 1e-3, "height plus buffer along a 45 degree light");
+        TestHarness.Near(20.1f, ground.X, 0.15, "height plus buffer along a light of about 45 degrees");
     }
 
     private static TerrainHeightSampler Field(Func<int, int, byte> heights)
@@ -233,7 +305,7 @@ internal static class ShadowTests
     {
         var flat = Field((_, _) => 16);
         var height = flat.HeightAt(100f, 100f);
-        var light = Vector3.Normalize(new Vector3(1, 0, -1));
+        var light = Sun(new Vector3(1, 0, -1));
         var position = new Vector3(100f, 100f, height);
         var (padding, scale) = ShadowSun.OptimalExtrusion(flat, position, position + new Vector3(-10, -10, 0), position + new Vector3(10, 10, 40), light, 0f);
         TestHarness.Near(ShadowSun.ExtrusionBuffer, padding, 1e-4, "only the buffer");
@@ -249,7 +321,7 @@ internal static class ShadowTests
     {
         var cliff = Field((x, _) => (byte)(x > 15 ? 2 : 32));
         var height = cliff.HeightAt(100f, 100f);
-        var light = Vector3.Normalize(new Vector3(1, 0, -1));
+        var light = Sun(new Vector3(1, 0, -1));
         var position = new Vector3(100f, 100f, height);
         var (_, scale) = ShadowSun.OptimalExtrusion(cliff, position, position + new Vector3(-10, -10, 0), position + new Vector3(10, 10, 40), light, 0f);
         TestHarness.Assert(scale > 1f, $"the sun has to stand above 45 degrees for the shadow to end before the cliff, got {scale}");
