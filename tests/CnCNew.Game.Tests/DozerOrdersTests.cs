@@ -232,7 +232,19 @@ internal static class DozerOrdersTests
         var (cx, cy) = ((double)center.X.ToDecimal() - here.X, (double)center.Y.ToDecimal() - here.Y);
         var length = Math.Sqrt(cx * cx + cy * cy);
         Console.WriteLine($"       dozer to center: {length:F1}");
-        Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(here.X + (float)(-cy / length * 40), here.Y + (float)(cx / length * 40), 0f)));
+        // The camera starts on the command centre and the dozer repairs it from wherever it came (#476): look at the dozer, and take the side where the click meets open ground,
+        // not the command centre or the control bar.
+        match.Camera.CenterOn(here);
+        Vector2? target = null;
+        foreach (var side in new[] { 1f, -1f })
+        {
+            var point = new Vector3(here.X + (float)(-cy / length * 40) * side, here.Y + (float)(cx / length * 40) * side, 0f);
+            if (!match.Camera.TryWorldToScreen(point, out var screen) || new EntityPicker().Pick(world, match.Human, match.Camera, screen) is not null) continue;
+            controller.Process(new MouseMoveEvent(time += 16, screen));
+            if (!controller.PointerOverWindow) { target = screen; break; }
+        }
+        TestHarness.Assert(target is not null, "open ground lies 40 units to one side of the repairing dozer");
+        Click(controller, ref time, MouseButton.Right, target!.Value);
         Advance(match, controller, 2);
         TestHarness.Assert(!ai.HasBuilderTask && dozer.HasMoveTarget, "the move order ends the repair and the dozer walks");
         var limit = (int)world.Time.OriginalFrames(300);

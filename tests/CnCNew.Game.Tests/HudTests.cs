@@ -386,6 +386,7 @@ internal static class HudTests
         long time = 10_000;
         Advance(match, controller, 30);
         var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        LookAt(match, dozer, new Vector2(-85, -45)); // the middle of the waypoint path below
         Vector2 Ground(float dx, float dy)
         {
             var (x, y) = ((float)dozer.X.ToDecimal() + dx, (float)dozer.Y.ToDecimal() + dy);
@@ -527,8 +528,9 @@ internal static class HudTests
             long time = 10_000;
             Advance(match, controller, 1);
             var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+            LookAt(match, dozer);
             var start = SimulationQueries.GroundOf(dozer);
-            var target = Screen(match, new Vector3(start.X + 80, start.Y, 0f));
+            var target = OpenGround(match, controller, ref time, new Vector3(start.X + 80, start.Y, 0f), $"alternate {alternate}: the ground 80 units beside the dozer");
             var (order, other) = alternate ? (MouseButton.Right, MouseButton.Left) : (MouseButton.Left, MouseButton.Right);
             var moves = 0;
             match.CommandIssued += (command, _) => { if (command is Simulation.Commands.SetMoveTargetCommand) moves++; };
@@ -1197,6 +1199,24 @@ internal static class HudTests
         return screen;
     }
 
+    /// <summary>
+    /// The camera looks at <paramref name="entity"/>. A match's camera starts on the command centre, and the starting units stand wherever <c>findPositionAround</c> finds room
+    /// around the start moved south (#476) - often at the bottom of the view, behind the control bar - so a test that clicks around a unit looks at it first.
+    /// </summary>
+    private static void LookAt(LiveMatch match, Entity entity, Vector2 offset = default) => match.Camera.CenterOn(SimulationQueries.GroundOf(entity) + offset);
+
+    /// <summary>The screen point of <paramref name="world"/>, asserted to be open ground a click reaches: inside the view, over no window of the HUD and over no pickable object.</summary>
+    private static Vector2 OpenGround(LiveMatch match, MatchController controller, ref long time, Vector3 world, string what)
+    {
+        var screen = Screen(match, world);
+        var size = match.Camera.ViewportSize;
+        TestHarness.Assert(screen.X >= 0 && screen.Y >= 0 && screen.X < size.X && screen.Y < size.Y, $"{what} lies in the view ({screen})");
+        TestHarness.Assert(new EntityPicker().Pick(match.World, match.Human, match.Camera, screen) is null, $"{what} is open ground: no object under it");
+        controller.Process(new MouseMoveEvent(time += 16, screen));
+        TestHarness.Assert(!controller.PointerOverWindow, $"{what} is open ground: no window of the HUD over it");
+        return screen;
+    }
+
     private static void Advance(LiveMatch match, MatchController controller, int frames, double dt = CnCNew.Tests.TestTime.FrameSeconds)
     {
         for (var i = 0; i < frames; i++)
@@ -1252,6 +1272,7 @@ internal static class HudTests
             Advance(match, controller, 1);
 
             var dozer = match.World.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+            LookAt(match, dozer);
             Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
             Advance(match, controller, 1);
             Refresh(controller);
@@ -1282,6 +1303,7 @@ internal static class HudTests
 
             // The dozer is ordered about and destroyed while its order is on its way.
             var victim = dozer;
+            LookAt(match, victim);
             Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(victim)));
             Advance(match, controller, 1);
             TestHarness.Assert(controller.Input.Selection.Contains(victim.Id), "the dozer is selected");
@@ -1416,8 +1438,9 @@ internal static class HudTests
             long time = 10_000;
             Advance(match, controller, 30);
             var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+            LookAt(match, dozer, new Vector2(-85, -45)); // the middle of the waypoint path
             var origin = SimulationQueries.GroundOf(dozer);
-            Vector2 Ground(float dx, float dy) => Screen(match, new Vector3(origin.X + dx, origin.Y + dy, match.Heights.HeightAt(origin.X + dx, origin.Y + dy)));
+            Vector2 Ground(float dx, float dy) => OpenGround(match, controller, ref time, new Vector3(origin.X + dx, origin.Y + dy, match.Heights.HeightAt(origin.X + dx, origin.Y + dy)), $"the station {dx},{dy} from the dozer");
             var orders = 0;
             var refused = 0;
             match.CommandIssued += (command, result) =>
@@ -1535,20 +1558,25 @@ internal static class HudTests
             Refresh(controller);
             var unitSlot = FindSlot(controller.CommandBar, button => ReferenceEquals(button, unitButton));
             var unitRect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{unitSlot:00}")!.Value;
+            var existing = match.World.Entities.Where(entity => entity.Owner == human).Select(entity => entity.Id).ToHashSet();
             Click(controller, ref time, MouseButton.Left, new Vector2(unitRect.CenterX, unitRect.CenterY));
             Advance(match, controller, 1);
             TestHarness.Assert(!controller.CommandBar.Queue.IsEmpty, "the unit is queued");
 
-            // Wait for it to complete, then move and attack-move it.
+            // Wait for it to complete - a new object, not one of the player's that has the same name (the starting dozer, when the command centre makes dozers) - and to have driven
+            // out of its factory, then move and attack-move it.
             var unitName = unitButton!.Object;
             Simulation.World.Entity? unit = null;
             for (var i = 0; i < 4000 && unit is null; i++)
             {
                 Advance(match, controller, 1);
-                unit = match.World.Entities.FirstOrDefault(entity => entity.Owner == human && entity.Template.Name == unitName && SimulationQueries.CanMove(entity));
+                unit = match.World.Entities.FirstOrDefault(entity => entity.Owner == human && entity.Template.Name == unitName && !existing.Contains(entity.Id) && SimulationQueries.CanMove(entity));
             }
+            for (var i = 0; unit is not null && i < (int)match.World.Time.OriginalFrames(300) && unit.HasMoveTarget; i++) Advance(match, controller, 1);
             if (unit is not null)
             {
+                TestHarness.Assert(!unit.HasMoveTarget, "the produced unit has driven out of its factory and stands");
+                LookAt(match, unit);
                 Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(unit)));
                 Advance(match, controller, 1);
                 TestHarness.Assert(controller.Input.Selection.Contains(unit.Id), "the produced unit is selected");
@@ -1556,7 +1584,7 @@ internal static class HudTests
 
                 var startGround = SimulationQueries.GroundOf(unit);
                 var moveTarget = startGround + new Vector2(150, 0);
-                Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(moveTarget.X, moveTarget.Y, 0f)));
+                Click(controller, ref time, MouseButton.Right, OpenGround(match, controller, ref time, new Vector3(moveTarget.X, moveTarget.Y, 0f), "the ground 150 units beside the produced unit"));
                 Advance(match, controller, 30);
                 Advance(match, controller, 30); // the path comes from the queue of the budgeted movement, and a dozer turns before it drives
                 TestHarness.Assert(Vector2.Distance(SimulationQueries.GroundOf(unit), startGround) > 1f, "the right-click move order actually moved the unit");
@@ -1623,11 +1651,13 @@ internal static class HudTests
         long time = 10_000;
         Advance(match, controller, 1);
         var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        LookAt(match, dozer);
         var startGround = SimulationQueries.GroundOf(dozer);
+        var target = OpenGround(match, controller, ref time, new Vector3(startGround.X + 80, startGround.Y, 0f), "the ground 80 units beside the dozer");
         // The default mouse setup is the alternate one: the left button selects, a right click on open, reachable ground orders a move.
         Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
         Advance(match, controller, 1);
-        Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(startGround.X + 80, startGround.Y, 0f)));
+        Click(controller, ref time, MouseButton.Right, target);
         Advance(match, controller, 90);
         TestHarness.Assert(Vector2.Distance(SimulationQueries.GroundOf(dozer), startGround) > 1f, "the human player's move order was actually carried out");
 
