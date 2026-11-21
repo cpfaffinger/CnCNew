@@ -155,6 +155,8 @@ public sealed class ObjectTemplate
         GeometryHeight = Real(definition, "GeometryHeight");
         FactoryExitWidth = Real(definition, "FactoryExitWidth");
         FactoryExtraBibWidth = Real(definition, "FactoryExtraBibWidth");
+        PlacementViewAngle = definition.Fields.LastOrDefault(field => field.Name.Equals("PlacementViewAngle", StringComparison.OrdinalIgnoreCase))?.Value.Value is Angle placement
+            ? SimulationTiming.DegreesToRadians(placement.Degrees) : Fixed.Zero;
         GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         IsBridge = definition.Fields.LastOrDefault(field => field.Name.Equals("IsBridge", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         RefundValue = definition.Fields.LastOrDefault(field => field.Name.Equals("RefundValue", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money refund ? Fixed.FromInt(refund.Value) : Fixed.Zero;
@@ -234,6 +236,12 @@ public sealed class ObjectTemplate
 
     /// <summary><c>FactoryExtraBibWidth</c>: how much room a building keeps free around it (F-18).</summary>
     public Fixed FactoryExtraBibWidth { get; }
+
+    /// <summary>
+    /// <c>ThingTemplate::getPlacementViewAngle</c> in radians (the INI's <c>PlacementViewAngle</c> in degrees, 0 without one): the heading a structure is placed with when the player does
+    /// not drag a direction, and the orientation <c>placeObjectAtPosition</c> gives a player's starting building and starting units (#473).
+    /// </summary>
+    public Fixed PlacementViewAngle { get; }
 
     public bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
 

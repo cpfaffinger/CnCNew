@@ -234,7 +234,9 @@ public sealed class ReferenceMatchScenario
         {
             var player = Players[index].Id;
             var (bx, by) = BasePosition(index, factions.Length);
-            Add(world, new SpawnCommand(player, Next(player), 0, factions[index].BaseBuilding, player, bx, by, Fixed.Zero, Fixed.Zero));
+            // GameLogic.cpp placeObjectAtPosition: the starting building and every starting unit stand at their template's PlacementViewAngle (#473).
+            var baseAngle = catalog.TryGet(factions[index].BaseBuilding, out var baseTemplate) ? baseTemplate.PlacementViewAngle : Fixed.Zero;
+            Add(world, new SpawnCommand(player, Next(player), 0, factions[index].BaseBuilding, player, bx, by, Fixed.Zero, baseAngle));
             var units = factions[index].Faction.StartingUnits;
             for (var unit = 0; unit < units.Length; unit++)
             {
@@ -246,7 +248,7 @@ public sealed class ReferenceMatchScenario
                 var angle = FixedTrig.TwoPi * unit / Fixed.FromInt(Math.Max(1, units.Length));
                 var x = bx + FixedTrig.Cos(angle) * Fixed.FromInt(45);
                 var y = by + FixedTrig.Sin(angle) * Fixed.FromInt(45);
-                Add(world, new SpawnCommand(player, Next(player), 0, units[unit], player, x, y, Fixed.Zero, angle));
+                Add(world, new SpawnCommand(player, Next(player), 0, units[unit], player, x, y, Fixed.Zero, template.PlacementViewAngle));
             }
         }
         SkippedStartObjects = skipped.ToImmutable();

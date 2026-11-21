@@ -454,10 +454,13 @@ public sealed class SkirmishMatchSession
             // GameLogic::startNewGame: "remove shroud for the player in MP games" unless Multiplayer.ini says UseShroud.
             if (!catalog.ShroudInMultiplayer) System(sequence => new ExploreMapCommand(PlayerId.System, sequence, 0, player));
             if (participant.Substitution is { } substitution) notes.Add($"{participant.Faction.Name}: {substitution}; starts with {participant.BaseBuilding}");
-            System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, participant.BaseBuilding, player, bx, by, Fixed.Zero, Fixed.Zero));
+            // GameLogic.cpp placeObjectAtPosition: the starting building and every starting unit stand at their template's PlacementViewAngle (#473).
+            var hasBase = catalog.TryGet(participant.BaseBuilding, out var baseTemplate);
+            var baseAngle = hasBase ? baseTemplate!.PlacementViewAngle : Fixed.Zero;
+            System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, participant.BaseBuilding, player, bx, by, Fixed.Zero, baseAngle));
             var units = participant.Faction.StartingUnits;
             // Units start just outside the base building's footprint; inside it they would be walled in by the navigation grid.
-            var ring = (catalog.TryGet(participant.BaseBuilding, out var baseTemplate) ? baseTemplate.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
+            var ring = (hasBase ? baseTemplate!.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
             for (var unit = 0; unit < units.Length; unit++)
             {
                 if (!catalog.TryGet(units[unit], out var template) || !template.IsInstantiable)
@@ -469,7 +472,8 @@ public sealed class SkirmishMatchSession
                 var x = bx + FixedTrig.Cos(angle) * ring;
                 var y = by + FixedTrig.Sin(angle) * ring;
                 var name = units[unit];
-                System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, name, player, x, y, Fixed.Zero, angle));
+                var facing = template.PlacementViewAngle;
+                System(sequence => new SpawnCommand(PlayerId.System, sequence, 0, name, player, x, y, Fixed.Zero, facing));
             }
         }
     }

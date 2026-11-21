@@ -4,6 +4,7 @@ using CnCNew.Data.Registry;
 using CnCNew.Data.World;
 using CnCNew.Formats;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Rules;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Templates;
@@ -94,6 +95,45 @@ static partial class Tests
             var dummies = world.Entities.Count(entity => entity.Template.Name == "CashBountyDummy");
             var things = world.Entities.Count(entity => entity.Template.Name.EndsWith("StartingThings", StringComparison.Ordinal));
             Check.That(string.Join(", ", builders) == "AmericaVehicleDozer x1, GLAInfantryWorker x1" && dummies == 1 && things == 0, $"{rate}: {string.Join(", ", builders)}, {dummies} dummies, {things} starting objects left.");
+        }
+    }
+    /// <summary>
+    /// #473 (the owner's playtest): the command centre a player starts a skirmish with stood at 0 degrees. <c>GameLogic.cpp placeObjectAtPosition</c> turns the starting building and every
+    /// starting unit to its template's <c>PlacementViewAngle</c> (the shipped command centres say -135 degrees), the heading a building placed by a click without a drag has too.
+    /// America against GLA on Alpine Assault at every rate, right after the first step (the patch's starting object lives two frames).
+    /// </summary>
+    public static void RealStartingBuildingStandsAtItsPlacementAngle(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";
+        MapData map;
+        using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
+        foreach (var (rate, _) in WorldRates)
+        {
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: RuleProfile.Product);
+            var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+            var participants = new[] { everyone.Single(value => value.Faction.Name == "FactionAmerica"), everyone.Single(value => value.Faction.Name == "FactionGLA") };
+            var session = SkirmishMatchSession.Start(SkirmishMatchOptions.StandardAt(catalog.Rate), catalog, fingerprint, TerrainMap.Build(map, MapPath), map.Objects,
+                [..participants.Select(participant => new SkirmishSlot(participant))]);
+            session.Step();
+            var world = session.World;
+            foreach (var participant in participants)
+            {
+                Check.That(catalog.TryGet(participant.BaseBuilding, out var template), $"{rate}: no template {participant.BaseBuilding}.");
+                Check.That(template.PlacementViewAngle != Fixed.Zero, $"{rate}: {template.Name} names a PlacementViewAngle ({template.PlacementViewAngle}).");
+                var centres = world.Entities.Where(entity => entity.Template.Name == participant.BaseBuilding).ToList();
+                Check.That(centres.Count == 1, $"{rate}: {centres.Count} {participant.BaseBuilding}.");
+                Check.That(FixedTrig.AngleDifference(centres[0].Angle, template.PlacementViewAngle) == Fixed.Zero,
+                    $"{rate}: {participant.BaseBuilding} stands at {centres[0].Angle}, its PlacementViewAngle is {template.PlacementViewAngle}.");
+                var units = world.Entities.Where(entity => participant.Faction.StartingUnits.Contains(entity.Template.Name)).ToList();
+                Check.That(units.Count == participant.Faction.StartingUnits.Length, $"{rate}: {units.Count} of {participant.Faction.StartingUnits.Length} starting units of {participant.Faction.Name}.");
+                foreach (var unit in units)
+                    Check.That(FixedTrig.AngleDifference(unit.Angle, unit.Template.PlacementViewAngle) == Fixed.Zero,
+                        $"{rate}: starting unit {unit.Template.Name} stands at {unit.Angle}, its PlacementViewAngle is {unit.Template.PlacementViewAngle}.");
+            }
         }
     }
 }

@@ -303,7 +303,7 @@ public sealed class MissionSession
                 continue;
             }
             var (bx, by) = (starts[startIndex].X, starts[startIndex].Y);
-            var center = World.RequestSpawn(building.Index, player.Id, bx, by, Fixed.Zero, Fixed.Zero);
+            var center = World.RequestSpawn(building.Index, player.Id, bx, by, Fixed.Zero, building.PlacementViewAngle);
             if (Program.FindTeam("team" + player.Name) is { } startTeam) Engine.AssignToTeam(startTeam.Name, center);
             var ring = building.BoundingCircleRadius + Fixed.FromInt(30);
             for (var index = 0; index < faction.StartingUnits.Length; index++)
@@ -314,7 +314,7 @@ public sealed class MissionSession
                     continue;
                 }
                 var angle = FixedTrig.TwoPi * index / Fixed.FromInt(Math.Max(1, faction.StartingUnits.Length));
-                World.RequestSpawn(unit.Index, player.Id, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, angle);
+                World.RequestSpawn(unit.Index, player.Id, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, unit.PlacementViewAngle);
             }
         }
     }

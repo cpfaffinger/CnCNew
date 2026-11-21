@@ -207,7 +207,7 @@ public sealed class ScriptedSkirmishSession
             if (_slots[index].Kind == SkirmishAiKind.Builtin)
             {
                 // The simulation's own AI starts as in SkirmishMatchSession: with the base building standing, and it sees only what its units see.
-                if (catalog.TryGet(participant.BaseBuilding, out var own) && own.IsInstantiable) World.RequestSpawn(own.Index, player, bx, by, Fixed.Zero, Fixed.Zero);
+                if (catalog.TryGet(participant.BaseBuilding, out var own) && own.IsInstantiable) World.RequestSpawn(own.Index, player, bx, by, Fixed.Zero, own.PlacementViewAngle);
                 var hints = ImmutableArray.CreateBuilder<(Fixed X, Fixed Y)>();
                 for (var other = 0; other < _slots.Length; other++)
                     if (other != index) hints.Add((starts[other].X, starts[other].Y));
@@ -221,7 +221,7 @@ public sealed class ScriptedSkirmishSession
             {
                 if (!catalog.TryGet(units[unit], out var template) || !template.IsInstantiable) continue;
                 var angle = FixedTrig.TwoPi * unit / Fixed.FromInt(Math.Max(1, units.Length));
-                var id = World.RequestSpawn(template.Index, player, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, angle);
+                var id = World.RequestSpawn(template.Index, player, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, template.PlacementViewAngle);
                 Engine.AssignToTeam("team" + SkirmishScriptAttachment.PlayerName(index), id);
             }
         }
