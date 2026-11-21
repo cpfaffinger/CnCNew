@@ -209,6 +209,9 @@ internal static class DozerOrdersTests
         TestHarness.Assert(site is not null && world.MoneyOf(human) < moneyBefore, "the build order was taken: the site stands and is paid");
         TestHarness.Assert(ai.IsConstructing, "the dozer builds instead of repairing");
 
+        // #475 (on by default): the builder that took the order left the selection; select it again to see its bar.
+        TestHarness.Assert(!controller.Input.Selection.Contains(dozer.Id), "the dozer that took the build order left the selection (#475)");
+        controller.Input.Selection.Replace([dozer.Id]);
         // A dozer with a building in hand is the one whose buttons the original greys (isTaskPending(DOZER_TASK_BUILD)).
         Advance(match, controller, 1);
         controller.BuildDrawList(1280, 720);

@@ -101,6 +101,11 @@ public sealed class SettingsStore
             }
             return root;
         }),
+        new SettingsMigration(9, "controls.builderDispatch added (on: the owner's wish of #475, the nearest selected builder takes a building order and leaves the selection)", root =>
+        {
+            if (root["controls"] is JsonObject controls && !controls.ContainsKey("builderDispatch")) controls["builderDispatch"] = true;
+            return root;
+        }),
     ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
@@ -227,6 +232,7 @@ public static class SettingsJson
             writer.WriteBoolean("edgeScrolling", settings.Controls.EdgeScrolling);
             writer.WriteBoolean("alternateMouse", settings.Controls.AlternateMouse);
             writer.WriteBoolean("retaliation", settings.Controls.Retaliation);
+            writer.WriteBoolean("builderDispatch", settings.Controls.BuilderDispatch);
             writer.WriteStartObject("hotkeys");
             foreach (var pair in settings.Controls.Hotkeys.OrderBy(pair => pair.Key, StringComparer.Ordinal)) writer.WriteString(pair.Key, pair.Value);
             writer.WriteEndObject();
@@ -286,7 +292,7 @@ public static class SettingsJson
 
         var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect", "skin", "barOpacity", "markerStyle", "healthBarMode", "healthBarHeight"]);
         var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient", "device"]);
-        var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation", "hotkeys"]);
+        var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse", "retaliation", "builderDispatch", "hotkeys"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
         var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty", "tickRate"]);
         var skirmish = reader.Section(root, "skirmish", ["lastMap", "slots", "lastStartMoney", "gameSpeed", "playerName"]);
@@ -317,7 +323,8 @@ public static class SettingsJson
                 reader.Bool(controls, "controls.edgeScrolling", d.Controls.EdgeScrolling),
                 reader.Bool(controls, "controls.alternateMouse", d.Controls.AlternateMouse),
                 reader.Bool(controls, "controls.retaliation", d.Controls.Retaliation),
-                reader.StringMap(controls, "controls.hotkeys", d.Controls.Hotkeys)),
+                reader.StringMap(controls, "controls.hotkeys", d.Controls.Hotkeys),
+                reader.Bool(controls, "controls.builderDispatch", d.Controls.BuilderDispatch)),
             new AccessibilitySettings(
                 reader.Bool(accessibility, "accessibility.highContrastUi", d.Accessibility.HighContrastUi),
                 reader.Int(accessibility, "accessibility.uiTextScalePercent", d.Accessibility.UiTextScalePercent),

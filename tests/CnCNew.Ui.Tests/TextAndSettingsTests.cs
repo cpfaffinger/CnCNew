@@ -45,6 +45,7 @@ public static class TextAndSettingsTests
             ("HotkeyBindingsAreSavedAndMigrated", HotkeyBindingsAreSavedAndMigrated),
             ("DisplayOptionsOfSchema8", DisplayOptionsOfSchema8),
             ("ModernSkinIsTheDefaultForEveryFile", ModernSkinIsTheDefaultForEveryFile),
+            ("BuilderDispatchOfSchema10", BuilderDispatchOfSchema10),
             ("ResolutionsClassifyAndFit", ResolutionsClassifyAndFit),
         };
 
@@ -471,7 +472,7 @@ public static class TextAndSettingsTests
             var found = result.Issues.Select(issue => $"{issue.Path}:{issue.Code}").ToArray();
             string[] wanted =
             [
-                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
+                "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
                 "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.slots:invalid-type",
                 "audio.ambient:clamped",
             ];
@@ -506,6 +507,9 @@ public static class TextAndSettingsTests
     /// <summary>What schema 8 added to the display section (the bar opacity, the marker style, the health bar mode and height): a file of an older schema does not have these lines.</summary>
     private const string Schema8DisplayLines = ",\n    \"barOpacity\": 80,\n    \"markerStyle\": \"extended\",\n    \"healthBarMode\": \"selectedOnly\",\n    \"healthBarHeight\": \"normal\"";
 
+    /// <summary>What schema 10 added to the controls section (#475): a file of an older schema does not have this line.</summary>
+    private const string Schema10ControlsLine = ",\n    \"builderDispatch\": true";
+
     private static void HotkeyBindingsAreSavedAndMigrated()
     {
         var directory = Scratch();
@@ -531,11 +535,12 @@ public static class TextAndSettingsTests
             var six = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default))
                 .Replace($"\"version\": {GameSettings.CurrentVersion}", "\"version\": 6", StringComparison.Ordinal)
                 .Replace(Schema8DisplayLines, "", StringComparison.Ordinal)
+                .Replace(Schema10ControlsLine, "", StringComparison.Ordinal)
                 .Replace(",\n    \"hotkeys\": {}", "", StringComparison.Ordinal);
-            Assert(!six.Contains("hotkeys", StringComparison.Ordinal), "the schema 6 file was written as schema 6 had it");
+            Assert(!six.Contains("hotkeys", StringComparison.Ordinal) && !six.Contains("builderDispatch", StringComparison.Ordinal), "the schema 6 file was written as schema 6 had it");
             File.WriteAllText(store.FilePath, six);
             var migrated = new SettingsStore(directory).Load();
-            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 6 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 3
+            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 6 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 4
                 && migrated.Issues.All(issue => issue.Code == "migrated"), "a schema 6 file migrates to the shipped keys and keeps everything else");
 
             var damagedText = six.Replace("\"retaliation\": true", "\"retaliation\": true, \"hotkeys\": {\"STOP\": 5}", StringComparison.Ordinal)
@@ -568,10 +573,10 @@ public static class TextAndSettingsTests
             Assert(damaged.Settings.Display.BarOpacityPercent == 20 && damaged.Issues.Any(issue => issue.Path == "display.barOpacity" && issue.Code == "clamped"), "an opacity below 20 % is raised to 20 % and said");
             Assert(damaged.Settings.Display.MarkerStyle == SelectionMarkerStyle.Extended && damaged.Issues.Any(issue => issue.Path == "display.markerStyle"), "an unknown marker style is replaced by the default and said");
 
-            var seven = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default)).Replace($"\"version\": {GameSettings.CurrentVersion}", "\"version\": 7", StringComparison.Ordinal).Replace(Schema8DisplayLines, "", StringComparison.Ordinal);
+            var seven = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default)).Replace($"\"version\": {GameSettings.CurrentVersion}", "\"version\": 7", StringComparison.Ordinal).Replace(Schema8DisplayLines, "", StringComparison.Ordinal).Replace(Schema10ControlsLine, "", StringComparison.Ordinal);
             File.WriteAllText(store.FilePath, seven);
             var migrated = new SettingsStore(directory).Load();
-            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 7 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 2 && migrated.Issues.All(issue => issue.Code == "migrated"), "a schema 7 file migrates to the defaults and keeps everything else");
+            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 7 && migrated.Settings == GameSettings.Default && migrated.Issues.Count(issue => issue.Code == "migrated") == 3 && migrated.Issues.All(issue => issue.Code == "migrated"), "a schema 7 file migrates to the defaults and keeps everything else");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -612,13 +617,14 @@ public static class TextAndSettingsTests
             Assert(result.Issues.Length == GameSettings.CurrentVersion && result.Issues.All(issue => issue.Code == "migrated"), "Every migration step is reported.");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration, migration]), "same schema version");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration with { FromVersion = GameSettings.CurrentVersion }]), "must start below");
-            Assert(SettingsStore.Migrations.Length == 8 && SettingsStore.Migrations[7].FromVersion == 8, "Schema version 9 ships the steps from versions 1 to 8.");
+            Assert(SettingsStore.Migrations.Length == 9 && SettingsStore.Migrations[8].FromVersion == 9, "Schema version 10 ships the steps from versions 1 to 9.");
 
             // Version 1 to 2 (Phase 38): the skin and the device come in at what version 1 meant, the aspect the client never applied becomes the one it drew.
             var version1 = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default))
                 .Replace($"\"version\": {GameSettings.CurrentVersion}", "\"version\": 1", StringComparison.Ordinal)
                 .Replace("\"aspect\": \"keepHorizontal\"", "\"aspect\": \"stretch\"", StringComparison.Ordinal)
                 .Replace(Schema8DisplayLines, "", StringComparison.Ordinal)
+                .Replace(Schema10ControlsLine, "", StringComparison.Ordinal)
                 .Replace(",\n    \"skin\": \"modern\"", "", StringComparison.Ordinal)
                 .Replace(",\n    \"tickRate\": 60", "", StringComparison.Ordinal)
                 .Replace(",\n    \"hotkeys\": {}", "", StringComparison.Ordinal)
@@ -630,7 +636,7 @@ public static class TextAndSettingsTests
             File.WriteAllText(Path.Combine(directory, SettingsStore.FileName), version1);
             var upgraded = new SettingsStore(directory).Load();
             // The modern skin is the default for every file (schema 6, 7 November 2026): the original skin a version 1 file meant is replaced like any other.
-            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == GameSettings.Default && upgraded.Issues.Length == 8 && upgraded.Issues.All(issue => issue.Code == "migrated"),
+            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == GameSettings.Default && upgraded.Issues.Length == 9 && upgraded.Issues.All(issue => issue.Code == "migrated"),
                 $"A version 1 file of the defaults loads in the modern skin: {string.Join(", ", upgraded.Issues.Select(issue => issue.Path + ":" + issue.Code))}.");
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -640,7 +646,8 @@ public static class TextAndSettingsTests
     {
         string FileOf(int version, UiSkinName skin) => Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default with { Display = GameSettings.Default.Display with { Skin = skin } }))
             .Replace($"\"version\": {GameSettings.CurrentVersion}", $"\"version\": {version}", StringComparison.Ordinal)
-            .Replace(Schema8DisplayLines, "", StringComparison.Ordinal);
+            .Replace(Schema8DisplayLines, "", StringComparison.Ordinal)
+            .Replace(Schema10ControlsLine, "", StringComparison.Ordinal);
         UiSkinName SkinLoaded(string text, out SettingsLoadResult result)
         {
             var directory = Scratch();
@@ -663,7 +670,7 @@ public static class TextAndSettingsTests
             .Replace("\"lastStartMoney\": 10000", "\"lastStartMoney\": 30000", StringComparison.Ordinal);
         Assert(five.Contains("\"skin\": \"original\"", StringComparison.Ordinal) && five.Contains("\"version\": 5", StringComparison.Ordinal), "the schema 5 file holds the original skin");
         Assert(SkinLoaded(five, out var migrated) == UiSkinName.Modern && migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 5
-            && migrated.Issues.Count(issue => issue.Code == "migrated") == 4
+            && migrated.Issues.Count(issue => issue.Code == "migrated") == 5
             && migrated.Settings.Display.Mode == DisplayMode.Borderless && migrated.Settings.Skirmish.LastStartMoney == 30000,
             "a schema 5 file with the original skin loads in the modern skin and keeps its other settings");
         Assert(SkinLoaded(FileOf(5, UiSkinName.Modern), out _) == UiSkinName.Modern, "a schema 5 file with the modern skin stays modern");
@@ -682,6 +689,40 @@ public static class TextAndSettingsTests
                 && saved.Settings.Display.Mode == DisplayMode.Borderless, "the original skin chosen after the migration is kept and the file is current");
             store.Save(saved.Settings);
             Assert(store.Load().Settings.Display.Skin == UiSkinName.Original, "and it sticks across saves");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    /// <summary>
+    /// Schema 10 (#475): <c>controls.builderDispatch</c> - several selected builders share the build menu and the nearest takes a building order. On by default (the owner's wish),
+    /// stored by name, round-trips; a schema 9 file migrates to on and keeps everything else; a value that is no boolean is reported and replaced by the default.
+    /// </summary>
+    private static void BuilderDispatchOfSchema10()
+    {
+        Assert(GameSettings.CurrentVersion == 10 && GameSettings.Default.Controls.BuilderDispatch, "schema 10, the switch on by default");
+        var directory = Scratch();
+        try
+        {
+            var store = new SettingsStore(directory);
+            var off = GameSettings.Default with { Controls = GameSettings.Default.Controls with { BuilderDispatch = false } };
+            Assert(off != GameSettings.Default, "the switch makes the settings differ");
+            Assert(store.Save(off).IsEmpty, "the original's way saves without issues");
+            var text = File.ReadAllText(store.FilePath);
+            Assert(text.Contains("\"builderDispatch\": false", StringComparison.Ordinal), "stored by its name");
+            var loaded = store.Load();
+            Assert(loaded.Status == SettingsLoadStatus.Loaded && loaded.Issues.IsEmpty && loaded.Settings == off, "it round-trips");
+
+            File.WriteAllText(store.FilePath, text.Replace("\"builderDispatch\": false", "\"builderDispatch\": \"yes\"", StringComparison.Ordinal));
+            var damaged = store.Load();
+            Assert(damaged.Settings.Controls.BuilderDispatch && damaged.Issues.Any(issue => issue.Path == "controls.builderDispatch" && issue.Code == "invalid-type"), "a damaged value is said and the default used");
+
+            var nine = Encoding.UTF8.GetString(SettingsJson.Write(off)).Replace($"\"version\": {GameSettings.CurrentVersion}", "\"version\": 9", StringComparison.Ordinal)
+                .Replace(",\n    \"builderDispatch\": false", "", StringComparison.Ordinal);
+            Assert(!nine.Contains("builderDispatch", StringComparison.Ordinal), "the schema 9 file was written as schema 9 had it");
+            File.WriteAllText(store.FilePath, nine);
+            var migrated = new SettingsStore(directory).Load();
+            Assert(migrated.Status == SettingsLoadStatus.Migrated && migrated.FileVersion == 9 && migrated.Settings == GameSettings.Default
+                   && migrated.Issues.Length == 1 && migrated.Issues[0].Code == "migrated", "a schema 9 file migrates to the switch on and keeps everything else");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

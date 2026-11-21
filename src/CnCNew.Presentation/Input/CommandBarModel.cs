@@ -104,6 +104,11 @@ public enum SelectionGroupKind
     Structures,
     /// <summary>The active kind of a selection of several kinds of unit (Tab): the bar is that kind's, its orders go to the units of the kind.</summary>
     Subgroup,
+    /// <summary>
+    /// #475 (<see cref="CommandBarModel.BuilderDispatch"/>): a selection of builders and nothing else. The bar is the first builder's whole set, the build menu included; a
+    /// building order goes to the builder nearest to its place (<see cref="CommandModeController.BuilderDispatch"/>).
+    /// </summary>
+    Builders,
 }
 
 /// <summary>
@@ -171,6 +176,12 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     public const int GeneralsRank1Buttons = 4, GeneralsRank3Buttons = 15, GeneralsRank8Buttons = 4;
 
     public CommandButtonCatalog Catalog { get; } = catalog;
+
+    /// <summary>
+    /// #475, a change beyond the original (off here, on in a match by default): several selected builders and nothing else show the first builder's set, build menu included
+    /// (<see cref="SelectionGroupKind.Builders"/>), where <c>populateMultiSelect</c> shows only the buttons marked <c>OK_FOR_MULTI_SELECT</c> - no construct button is.
+    /// </summary>
+    public bool BuilderDispatch { get; set; }
 
     private (ButtonAvailability, ButtonReason) EvaluateScience(SimulationWorld world, PlayerId player, CommandButtonInfo button)
     {
@@ -326,6 +337,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             var kinds = selection.Subgroups(world);
             if (members.Count > 0) return BuildGroup(world, player, members, new SelectionGroup(SelectionGroupKind.Subgroup, active, members.Count, kinds.IndexOf(active, StringComparer.Ordinal) + 1, kinds.Length));
         }
+        if (BuilderDispatch && units.All(SimulationQueries.IsBuilder))
+            return BuildGroup(world, player, units, new SelectionGroup(SelectionGroupKind.Builders, units[0].Template.Name, units.Count, 0, 0));
         return BuildMulti(world, player, units);
     }
 

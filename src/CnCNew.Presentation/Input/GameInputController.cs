@@ -60,6 +60,17 @@ public sealed class GameInputController
     public CameraInputController Camera { get; }
     public CommandBarModel? CommandBar { get; }
 
+    /// <summary>#475: several builders share the build menu and the nearest takes a building order and leaves the selection (<see cref="CommandModeController.BuilderDispatch"/>, <see cref="CommandBarModel.BuilderDispatch"/>).</summary>
+    public bool BuilderDispatch
+    {
+        get => Commands.BuilderDispatch;
+        set
+        {
+            Commands.BuilderDispatch = value;
+            if (CommandBar is not null) CommandBar.BuilderDispatch = value;
+        }
+    }
+
     /// <summary>A key pressed a button of the command bar, or found it disabled (<c>HotKeyManager::executeHotKey</c>: <c>GUIClick</c> or <c>GUIClickDisabled</c>).</summary>
     public event Action<bool>? CommandHotkeyPressed;
 

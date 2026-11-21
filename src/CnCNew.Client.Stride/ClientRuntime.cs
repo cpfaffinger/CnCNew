@@ -989,6 +989,7 @@ internal sealed class ClientRuntime : IDisposable
                 if (_running is { } running)
                 {
                     running.Hud.Retaliation = changed.Settings.Controls.Retaliation;
+                    running.Hud.Input.BuilderDispatch = changed.Settings.Controls.BuilderDispatch;
                     running.Hud.ApplyHotkeys(changed.Settings);
                     running.Hud.ApplyDisplayOptions(changed.Settings);
                 }

@@ -48,6 +48,13 @@ public sealed class CommandModeController
     public PlayerId Player { get; }
     public SelectionModel Selection { get; }
     public CommandSettings Settings { get; }
+
+    /// <summary>
+    /// #475, a change beyond the original (the setting <c>controls.builderDispatch</c>, off here, on in a match by default): a construct button arms every builder it was pressed for,
+    /// each placement goes to the one of them nearest to the place of the building (<see cref="PlacementBuilder"/>), and the builder that takes the order leaves the selection.
+    /// Off: the first idle builder builds and stays selected, as <c>MSG_DOZER_CONSTRUCT</c> does with the one selected dozer.
+    /// </summary>
+    public bool BuilderDispatch { get; set; }
     public StandingOrders Orders { get; } = new();
 
     public CommandModeKind Mode { get; private set; }
@@ -533,13 +540,13 @@ public sealed class CommandModeController
             }
             case GuiCommandKind.DozerConstruct:
             {
-                var builder = sources.FirstOrDefault(entity => SimulationQueries.IsBuilder(entity) && SimulationQueries.AiOf(entity) is { IsConstructing: false });
-                if (builder is null) return ActivationResult.NoSource;
+                var builders = sources.Where(entity => SimulationQueries.IsBuilder(entity) && SimulationQueries.AiOf(entity) is { IsConstructing: false }).ToImmutableArray();
+                if (builders.IsEmpty) return ActivationResult.NoSource;
                 Cancel();
                 Mode = CommandModeKind.Placement;
                 _button = button;
-                _builder = builder.Id;
-                _sources = [builder.Id];
+                _builder = builders[0].Id;
+                _sources = BuilderDispatch ? [..builders.Select(entity => entity.Id)] : [builders[0].Id];
                 _placementAngle = Settings.PlacementViewAngle?.Invoke(button.Object) ?? 0f;
                 return ActivationResult.EnteredMode;
             }
@@ -982,15 +989,42 @@ public sealed class CommandModeController
         var (x, y, angle) = (SimulationQueries.ToFixed(position.X), SimulationQueries.ToFixed(position.Y), SimulationQueries.ToFixed(_placementAngle));
         var issue = _button!.Kind is GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut
             ? SimulationQueries.CheckPowerPlacement(world, world.FindEntity(_builder), _button.Object, x, y, angle)
-            : SimulationQueries.CheckPlacement(world, Player, world.FindEntity(_builder), _button.Object, x, y, angle);
+            : SimulationQueries.CheckPlacement(world, Player, PlacementBuilder(world, position), _button.Object, x, y, angle);
         return new PlacementGhost(_button.Object, position, _placementAngle, issue == PlacementIssue.None, issue, anchored);
     }
+
+    /// <summary>
+    /// The builder a building order at <paramref name="place"/> goes to. With <see cref="BuilderDispatch"/> the armed builder nearest to the place (on the ground, the first of the
+    /// armed ones on a tie) among those still alive and idle - the ghost is judged with the same one, so its path and its view are that builder's; otherwise the one armed builder.
+    /// </summary>
+    private Entity? PlacementBuilder(SimulationWorld world, Vector3 place)
+    {
+        if (!BuilderDispatch || _button?.Kind != GuiCommandKind.DozerConstruct) return world.FindEntity(_builder);
+        Entity? nearest = null;
+        var nearestDistance = 0f;
+        var target = new Vector2(place.X, place.Y);
+        foreach (var id in _sources)
+        {
+            if (world.FindEntity(id) is not { } candidate || !SimulationQueries.IsAlive(candidate) || !SimulationQueries.IsBuilder(candidate)
+                || SimulationQueries.AiOf(candidate) is { IsConstructing: true }) continue;
+            var distance = Vector2.DistanceSquared(SimulationQueries.GroundOf(candidate), target);
+            if (nearest is not null && distance >= nearestDistance) continue;
+            (nearest, nearestDistance) = (candidate, distance);
+        }
+        return nearest;
+    }
+
+    /// <summary>Nobody is left to build the armed placement: the one builder, or with <see cref="BuilderDispatch"/> every armed builder, is gone.</summary>
+    private bool PlacementSourceGone(SimulationWorld world)
+        => BuilderDispatch && _button?.Kind == GuiCommandKind.DozerConstruct
+            ? !_sources.Any(id => world.FindEntity(id) is { } candidate && SimulationQueries.IsAlive(candidate))
+            : world.FindEntity(_builder) is not { } builder || !SimulationQueries.IsAlive(builder);
 
     /// <summary>Left button down in placement mode: anchors the ghost (<c>setPlacementStart</c>); off the terrain cancels the placement.</summary>
     public void PlacementPress(SimulationWorld world, IViewProjection view, Vector2 screen)
     {
         if (Mode != CommandModeKind.Placement) return;
-        if (!view.TryScreenToGround(screen, out var point) || world.FindEntity(_builder) is null)
+        if (!view.TryScreenToGround(screen, out var point) || PlacementSourceGone(world))
         {
             Cancel();
             return;
@@ -1001,7 +1035,10 @@ public sealed class CommandModeController
         Ghost = MakeGhost(world, point, anchored: true);
     }
 
-    /// <summary>Left button up: places the structure when legal (<c>MSG_DOZER_CONSTRUCT</c>), otherwise reports why and lets the player retry.</summary>
+    /// <summary>
+    /// Left button up: places the structure when legal (<c>MSG_DOZER_CONSTRUCT</c>), otherwise reports why and lets the player retry. With <see cref="BuilderDispatch"/> the order names
+    /// the builder nearest to the place, and an order the pre-check accepts takes that builder out of the selection; a refused place or order changes neither.
+    /// </summary>
     public bool PlacementRelease(SimulationWorld world, IViewProjection view, Vector2 screen)
     {
         if (Mode != CommandModeKind.Placement || _anchor is not { } anchor) return false;
@@ -1016,6 +1053,8 @@ public sealed class CommandModeController
         }
         var (builder, template) = (_builder, _button!.Object);
         var (x, y, angle) = (SimulationQueries.ToFixed(anchor.X), SimulationQueries.ToFixed(anchor.Y), SimulationQueries.ToFixed(_placementAngle));
+        var dispatched = BuilderDispatch && _button.Kind == GuiCommandKind.DozerConstruct;
+        if (dispatched && PlacementBuilder(world, anchor) is { } nearest) builder = nearest.Id;
         if (_button.Kind is GuiCommandKind.SpecialPowerConstruct or GuiCommandKind.SpecialPowerConstructFromShortcut)
         {
             var power = _button.SpecialPower;
@@ -1026,6 +1065,7 @@ public sealed class CommandModeController
         Orders.Clear(builder);
         var result = Issue((sequence, tick) => new ConstructCommand(Player, sequence, tick, builder, template, x, y, angle));
         Cancel();
+        if (dispatched && result.Accepted && Selection.Contains(builder)) Selection.Replace(Selection.Selected.Where(id => id != builder));
         return result.Accepted;
     }
 
@@ -1052,8 +1092,7 @@ public sealed class CommandModeController
     public void Update(SimulationWorld world)
     {
         Orders.Update(world, Player, Issue, _sink.DelayTicks);
-        if (Mode == CommandModeKind.Placement && world.FindEntity(_builder) is not { } builder || Mode == CommandModeKind.Placement && !SimulationQueries.IsAlive(world.FindEntity(_builder)!))
-            Cancel();
+        if (Mode == CommandModeKind.Placement && PlacementSourceGone(world)) Cancel();
     }
 
     /// <summary>Orders that were refused only when they were executed (their pre-check had passed), and orders that passed although their pre-check had refused them.</summary>

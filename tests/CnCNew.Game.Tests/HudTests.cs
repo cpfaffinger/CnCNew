@@ -83,6 +83,7 @@ internal static class HudTests
         harness.Run("E tells the player what it selected: nothing selected, across the map, and no line for a structure that has no fellows", () => SelectionMessages(data));
         harness.Run("#431: E on one Technical chassis selects the other two, its reskins (similarUnitSelection: isEquivalentTo)", () => MatchingSelectsReskins(data));
         harness.Run("The sneak attack: a press puts the tunnel at the cursor and the power is used where it is put down", () => SneakAttack(data));
+        harness.Run("Several builders (#475): the build menu shows, each building goes to the nearest dozer, which leaves the selection; off, the original's bar", () => BuilderDispatch(data));
         harness.Run("The radar's frame is drawn in every frame, over the radar's window", () => TheRadarFrameFollowsTheCamera(data));
 
         return harness.Failures;
@@ -543,6 +544,67 @@ internal static class HudTests
             Click(controller, ref time, order, target);
             Advance(match, controller, 60);
             TestHarness.Assert(moves == 1 && Vector2.Distance(SimulationQueries.GroundOf(dozer), start) > 1f, $"alternate {alternate}: the {order} button on open ground moves the dozer ({moves} moves)");
+        }
+    }
+
+    private static void BuilderDispatch(GameData data)
+    {
+        foreach (var dispatch in new[] { true, false })
+        {
+            var setup = new MatchSetup(data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase)), "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard);
+            var match = LiveMatch.Create(data, setup, new Vector2(1280, 720));
+            var settings = SkinPins.Settings with { Controls = SkinPins.Settings.Controls with { BuilderDispatch = dispatch } };
+            var controller = new MatchController(match, settings) { StarBlinks = false };
+            var world = match.World;
+            TestHarness.Assert(controller.Input.BuilderDispatch == dispatch, $"the setting reaches the input ({dispatch})");
+            Advance(match, controller, (int)world.Time.OriginalFrames(4));
+            var center = world.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("COMMANDCENTER"));
+            ulong sequence = 1_200_000;
+            foreach (var dx in new[] { -160, 160 })
+                TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.SpawnCommand(CnCNew.Simulation.Ids.PlayerId.System, sequence++, world.Tick, "AmericaVehicleDozer", match.Human,
+                    center.X + CnCNew.Simulation.Numerics.Fixed.FromInt(dx), center.Y - CnCNew.Simulation.Numerics.Fixed.FromInt(120), CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)).Accepted, "a dozer is spawned");
+            Advance(match, controller, (int)world.Time.OriginalFrames(4));
+            var dozers = world.Entities.Where(entity => entity.Owner == match.Human && entity.Template.Name == "AmericaVehicleDozer").Select(entity => entity.Id).ToList();
+            TestHarness.Assert(dozers.Count == 3, $"three dozers ({dozers.Count})");
+            controller.Input.Selection.Replace(dozers);
+            Advance(match, controller, 1);
+            var slot = controller.CommandBar.Slots.FirstOrDefault(button => button?.Button.Object == "AmericaPowerPlant");
+            if (!dispatch)
+            {
+                TestHarness.Assert(controller.CommandBar.Context == CommandBarContext.MultiSelect && slot is null, "off: several dozers show the original's multi-select bar, no build menu");
+                continue;
+            }
+            TestHarness.Assert(controller.CommandBar.Group is { Kind: SelectionGroupKind.Builders, Count: 3 } && slot is { IsEnabled: true },
+                $"on: the build menu of the three ({controller.CommandBar.Context}, {slot?.Availability}:{slot?.Reason})");
+            var constructs = new List<CnCNew.Simulation.Commands.ConstructCommand>();
+            match.CommandIssued += (command, result) => { if (command is CnCNew.Simulation.Commands.ConstructCommand construct && result.Accepted) constructs.Add(construct); };
+            var places = new List<Vector2>();
+            for (var order = 0; order < 2; order++)
+            {
+                Advance(match, controller, 1);
+                var plant = controller.CommandBar.Slots.First(button => button?.Button.Object == "AmericaPowerPlant")!;
+                TestHarness.Assert(controller.Input.CommandBar!.Activate(world, controller.CommandBar, plant.Slot, controller.Input.Commands) == ActivationResult.EnteredMode, $"order {order + 1}: the plant's button arms the placement");
+                var commands = controller.Input.Commands;
+                var before = controller.Input.Selection.Selected;
+                var positions = before.Select(world.FindEntity).OfType<Entity>().Select(entity => (entity.Id, Ground: SimulationQueries.GroundOf(entity))).ToList();
+                for (var attempt = 0; attempt < 24 && commands.Mode == CommandModeKind.Placement; attempt++)
+                {
+                    var (x, y) = ((float)center.X.ToDecimal() + (order == 0 ? -1 : 1) * (200f + attempt % 4 * 40f), (float)center.Y.ToDecimal() - 120f + (attempt / 4 - 2) * 50f);
+                    if (!match.Camera.TryWorldToScreen(new Vector3(x, y, match.Heights.HeightAt(x, y)), out var screen)) continue;
+                    commands.Hover(world, match.Camera, screen);
+                    commands.PlacementPress(world, match.Camera, screen);
+                    if (commands.PlacementRelease(world, match.Camera, screen)) places.Add(new Vector2(x, y));
+                }
+                TestHarness.Assert(places.Count == order + 1, $"order {order + 1}: the plant is put down");
+                Advance(match, controller, 2);
+                TestHarness.Assert(constructs.Count == order + 1, $"order {order + 1}: one construct order ({constructs.Count})");
+                var builder = constructs[order].Builder;
+                var place = places[order];
+                var nearest = positions.OrderBy(entry => Vector2.DistanceSquared(entry.Ground, place)).First().Id;
+                TestHarness.Assert(builder == nearest, $"order {order + 1}: the dozer nearest to the place builds ({builder.Value} against {nearest.Value})");
+                TestHarness.Assert(!controller.Input.Selection.Contains(builder) && controller.Input.Selection.Selected.Length == before.Length - 1, $"order {order + 1}: the builder left the selection");
+            }
+            TestHarness.Assert(constructs[0].Builder != constructs[1].Builder, "two dozers build the two plants");
         }
     }
 

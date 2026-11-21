@@ -134,6 +134,7 @@ public sealed partial class MatchController
         Input = new GameInputController(match.Human, match.Commands, hotkeys, buttons,
             label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
             new GameInputSettings(MapMouseScheme(settings), Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
+        Input.BuilderDispatch = settings.Controls.BuilderDispatch;
         Input.UiRequest += OnInputUiRequest;
         Input.OtherHotkeys = ActivateOtherHotkey;
         // InGameUI::selectMatchingAcrossScreen and friends tell the player what a selection of many units did, in the message list.
@@ -1729,7 +1730,7 @@ public sealed partial class MatchController
     {
         if (_tree.FindByName("ControlBar.wnd:RightHUD") is not { } anchor) return [];
         var name = _descriptions.DisplayName(group.Template);
-        var text = group.Kind == SelectionGroupKind.Structures
+        var text = group.Kind != SelectionGroupKind.Subgroup
             ? string.Create(CultureInfo.InvariantCulture, $"{name} x{group.Count}")
             : string.Create(CultureInfo.InvariantCulture, $"{name} x{group.Count} [{group.Index}/{group.Total}]");
         var font = TextStyle.Font(InGameUiFontRole.Message, _tree.Viewport, _scaleOptions);

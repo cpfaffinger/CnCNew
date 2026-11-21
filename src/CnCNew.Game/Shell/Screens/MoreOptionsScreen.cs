@@ -30,6 +30,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     [
         ("Skin", "Interface skin"), ("BarOpacity", "Control bar opacity"), ("DisplayMode", "Display mode"), ("Aspect", "Wide-screen view"), ("TextScale", "Text size"),
         ("MarkerStyle", "Selection markers"), ("HealthBarMode", "Health bars"), ("HealthBarHeight", "Health bar height"), ("AudioDevice", "Sound device"), ("TickRate", "Simulation rate"),
+        ("BuilderDispatch", "Several builders"),
     ];
 
     /// <summary>The rows whose control is a slider instead of a combo box (<c>Slider</c> + row name), with the value written beside it (<c>Value</c> + row name).</summary>
@@ -58,6 +59,12 @@ public sealed class MoreOptionsScreen : ShellScreen
 
     /// <summary>D-22: 60 Hz is the product's, 120 Hz is offered; the game loads its data for one rate, so a change counts from the next start.</summary>
     public static readonly ImmutableArray<(int Value, string Text)> TickRateChoices = [(60, "60 Hz"), (120, "120 Hz (from the next start)")];
+
+    /// <summary>
+    /// #475 (<c>controls.builderDispatch</c>): with several builders selected the build menu shows and each building order goes to the nearest of them, which leaves the selection;
+    /// or the original's way.
+    /// </summary>
+    public static readonly ImmutableArray<(bool Value, string Text)> BuilderDispatchChoices = [(true, "Nearest takes the order"), (false, "As the original")];
 
     public const string DefaultDevice = "System default";
 
@@ -103,6 +110,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         Fill("MarkerStyle", MarkerStyleChoices.Select(choice => choice.Text));
         Fill("HealthBarMode", HealthBarModeChoices.Select(choice => choice.Text));
         Fill("HealthBarHeight", HealthBarHeightChoices.Select(choice => choice.Text));
+        Fill("BuilderDispatch", BuilderDispatchChoices.Select(choice => choice.Text));
         FillHotkeys();
         Refresh();
     }
@@ -334,6 +342,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         W("ComboMarkerStyle").SetComboSelection(MarkerStyleChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Display.MarkerStyle));
         W("ComboHealthBarMode").SetComboSelection(HealthBarModeChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Display.HealthBars));
         W("ComboHealthBarHeight").SetComboSelection(HealthBarHeightChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Display.HealthBarThickness));
+        W("ComboBuilderDispatch").SetComboSelection(BuilderDispatchChoices.Select(choice => choice.Value).ToList().IndexOf(_working.Controls.BuilderDispatch));
         W("SliderBarOpacity").SetSliderValue(_working.Display.BarOpacityPercent);
         ShowOpacity();
     }
@@ -379,6 +388,8 @@ public sealed class MoreOptionsScreen : ShellScreen
         else if (source == Name("ComboHealthBarMode") && index < HealthBarModeChoices.Length) _working = _working with { Display = _working.Display with { HealthBars = HealthBarModeChoices[index].Value } };
         else if (source == Name("ComboHealthBarHeight") && index < HealthBarHeightChoices.Length) _working = _working with { Display = _working.Display with { HealthBarThickness = HealthBarHeightChoices[index].Value } };
         else if (source == Name("ComboTickRate") && index < TickRateChoices.Length) _working = _working with { General = _working.General with { TickRate = TickRateChoices[index].Value } };
+        else if (source == Name("ComboBuilderDispatch") && index < BuilderDispatchChoices.Length)
+            _working = _working with { Controls = _working.Controls with { BuilderDispatch = BuilderDispatchChoices[index].Value } };
         else if (source == Name("ComboAudioDevice") && index < _devices.Length) _working = _working with { Audio = _working.Audio with { Device = index == 0 ? "" : _devices[index] } };
     }
 
@@ -438,7 +449,8 @@ public sealed class MoreOptionsScreen : ShellScreen
         var children = ImmutableArray.CreateBuilder<WndWindow>();
         children.Add(Copy(title, "Title", title.Rect));
         children.Add(Copy(line, "Line", line.Rect));
-        const int first = 70, step = 28, height = 22;
+        // Eleven rows (#475 added the builders' row) at 26 instead of 28 keep the hotkey list as tall as it was.
+        const int first = 70, step = 26, height = 22;
         for (var index = 0; index < Rows.Length; index++)
         {
             var top = first + index * step;

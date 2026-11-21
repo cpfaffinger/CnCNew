@@ -76,14 +76,17 @@ public sealed record AudioSettings(float Master, float Music, float Effects, flo
 /// <param name="Retaliation">The original's option "Retaliation" (<c>GlobalData::m_clientRetaliationModeEnabled</c>, on by default): the player's idle units answer an attack on a friend nearby.</param>
 /// <param name="Hotkeys">The player's own key bindings over the shipped <c>CommandMap.ini</c> (schema 7): action name (<c>SELECT_ALL</c>) to the binding in the map's spelling
 /// (<c>CTRL KEY_A DOWN</c>) or <c>UNBOUND</c>. Only what differs from the shipped map is stored; empty means the shipped keys.</param>
+/// <param name="BuilderDispatch">Schema 10 (#475, a change beyond the original, on by default): a selection of several builders shows the build menu, each building order goes to the
+/// builder of the selection nearest to the place, and a builder that takes a building order leaves the selection. Off: the original's way (one builder builds and stays selected,
+/// several builders show only the buttons marked for a multiple selection).</param>
 public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling, bool AlternateMouse = true, bool Retaliation = true,
-    ImmutableSortedDictionary<string, string>? Hotkeys = null)
+    ImmutableSortedDictionary<string, string>? Hotkeys = null, bool BuilderDispatch = true)
 {
     public ImmutableSortedDictionary<string, string> Hotkeys { get; init; } = Hotkeys ?? ImmutableSortedDictionary<string, string>.Empty.WithComparers(StringComparer.Ordinal);
 
     public bool Equals(ControlSettings? other)
         => other is not null && ScrollSpeed.Equals(other.ScrollSpeed) && CameraRotateSpeed.Equals(other.CameraRotateSpeed) && EdgeScrolling == other.EdgeScrolling
-            && AlternateMouse == other.AlternateMouse && Retaliation == other.Retaliation
+            && AlternateMouse == other.AlternateMouse && Retaliation == other.Retaliation && BuilderDispatch == other.BuilderDispatch
             && Hotkeys.Count == other.Hotkeys.Count && Hotkeys.All(pair => other.Hotkeys.TryGetValue(pair.Key, out var value) && value == pair.Value);
 
     public override int GetHashCode()
@@ -94,6 +97,7 @@ public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed,
         hash.Add(EdgeScrolling);
         hash.Add(AlternateMouse);
         hash.Add(Retaliation);
+        hash.Add(BuilderDispatch);
         foreach (var pair in Hotkeys) { hash.Add(pair.Key, StringComparer.Ordinal); hash.Add(pair.Value, StringComparer.Ordinal); }
         return hash.ToHashCode();
     }
@@ -170,7 +174,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 10;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

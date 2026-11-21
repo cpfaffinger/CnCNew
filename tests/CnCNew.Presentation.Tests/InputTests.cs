@@ -40,6 +40,8 @@ static class InputTests
         run.Test("Input (#420): a held unit takes no move, scatter or attack on an object of its group; an attack-move takes it along", HeldUnitsTakeNoGroupOrders);
         run.Test("Input: placement validity, ghost rotation and the construct command", PlacementRules);
         run.Test("Input: a placement starts at the template's PlacementViewAngle and a click without a drag keeps it", PlacementViewAngle);
+        run.Test("Input (#475): several builders share the build menu, the nearest takes each building order and leaves the selection", BuilderDispatch);
+        run.Test("Input (#475): with the switch off the original's way - no build menu for several builders, the builder stays selected", BuilderDispatchOff);
         run.Test("Input: command bar slots, availability reasons, queue and multi-select", CommandBarStates);
         run.Test("Input: a script-disabled or script-unpowered object shows no buttons", CommandBarHidesScriptDisabled);
         run.Test("Input: camera intent from keys, edges, drag, wheel and metas", CameraIntents);
@@ -1368,6 +1370,117 @@ static class InputTests
         var before = arena.Sink.Issued.Count;
         Assert(controller.PlacementRelease(world, view, Screen(40, 80)), "release places");
         Assert(arena.Sink.Issued.Skip(before).Single() is ConstructCommand command && command.Angle == SimulationQueries.ToFixed(angle), "a click without a drag places the building with that angle");
+    }
+
+    /// <summary>Three dozers of the player at three places, a bar and a controller with the switch of #475 as given.</summary>
+    private static (Arena Arena, CommandModeController Controller, TopDownView View, CommandBarModel Bar, Entity A, Entity B, Entity C) DispatchSetup(bool dispatch, int money = 1000)
+    {
+        var (arena, controller, view) = OrderSetup(arena =>
+        {
+            arena.Spawn("Dozer", Me, 30, 40);
+            arena.Spawn("Dozer", Me, 120, 40);
+            arena.Spawn("Dozer", Me, 30, 110);
+            arena.Spawn("Ranger", Me, 70, 20);
+        }, money);
+        var bar = new CommandBarModel(CommandButtonCatalog.Build(Fixture.Graph)) { BuilderDispatch = dispatch };
+        controller.BuilderDispatch = dispatch;
+        return (arena, controller, view, bar, arena.Find("Dozer", Me, 30, 40), arena.Find("Dozer", Me, 120, 40), arena.Find("Dozer", Me, 30, 110));
+    }
+
+    private static void BuilderDispatch()
+    {
+        var (arena, controller, view, bar, a, b, c) = DispatchSetup(dispatch: true);
+        var world = arena.World;
+        var selection = controller.Selection;
+        List<SimCommand> Issued(Action act)
+        {
+            var before = arena.Sink.Issued.Count;
+            act();
+            return arena.Sink.Issued.Skip(before).ToList();
+        }
+        bool Place(float x, float y)
+        {
+            Assert(bar.Build(world, selection)[1] is { Button.Name: "Command_ConstructPlant", IsEnabled: true }, $"the build menu offers the plant before ({x}, {y})");
+            Assert(bar.Activate(world, bar.Build(world, selection), 1, controller) == ActivationResult.EnteredMode && controller.Mode == CommandModeKind.Placement, "the construct button arms the placement");
+            controller.Hover(world, view, Screen(x, y));
+            controller.PlacementPress(world, view, Screen(x, y));
+            return controller.PlacementRelease(world, view, Screen(x, y));
+        }
+
+        selection.Replace([a.Id, b.Id, c.Id]);
+        var threeBar = bar.Build(world, selection);
+        Assert(threeBar.Context == CommandBarContext.Command && threeBar.Group is { Kind: SelectionGroupKind.Builders, Count: 3, Template: "Dozer" }
+               && threeBar[1] is { Button.Kind: GuiCommandKind.DozerConstruct } plant && plant.Sources.ToHashSet().SetEquals([a.Id, b.Id, c.Id]),
+            "three dozers and nothing else show the dozer's build menu, its construct buttons for all three");
+
+        // A refused place gives no order and takes nobody out of the selection.
+        var refused = Issued(() => Assert(!Place(180, 180), "a place never explored is refused"));
+        Assert(refused.Count == 0 && selection.Selected.Length == 3 && controller.Mode == CommandModeKind.Placement, "no order, the three stay selected, the placement waits for another place");
+        controller.Cancel();
+
+        var first = Issued(() => Assert(Place(110, 80), "the first building is placed"));
+        Assert(first is [ConstructCommand { Template: "Plant" } toB] && toB.Builder == b.Id, "it goes to the dozer nearest to its place (B)");
+        Assert(selection.Selected.ToHashSet().SetEquals([a.Id, c.Id]) && controller.Mode == CommandModeKind.None, "B leaves the selection, A and C stay");
+        Assert(bar.Build(world, selection).Group is { Kind: SelectionGroupKind.Builders, Count: 2 }, "the bar of the two left is the build menu again");
+
+        var second = Issued(() => Assert(Place(60, 90), "the second building is placed"));
+        Assert(second is [ConstructCommand toC] && toC.Builder == c.Id, "it goes to the nearer of the two left (C)");
+        Assert(selection.Selected.SequenceEqual([a.Id]), "C leaves the selection");
+        Assert(bar.Build(world, selection) is { Context: CommandBarContext.Command, Group: null, CommandSet: "DozerCommandSet" }, "one dozer left: its own bar");
+
+        var third = Issued(() => Assert(Place(20, 70), "the third building is placed"));
+        Assert(third is [ConstructCommand toA] && toA.Builder == a.Id, "the last dozer takes the third");
+        Assert(selection.Selected.IsEmpty && bar.Build(world, selection).Context == CommandBarContext.Empty, "no builder is left: the selection is empty and the bar shows nothing");
+        arena.Step();
+        Assert(world.Entities.Count(entity => entity.Template.Name == "Plant" && entity.HasStatus(ObjectStatusBits.UnderConstruction)) == 3, "the simulation accepted the three sites");
+
+        // A builder with something else is no group of builders: the original's buttons for several kinds.
+        var (arena2, controller2, _, bar2, a2, _, _) = DispatchSetup(dispatch: true);
+        var ranger = arena2.Find("Ranger", Me, 70, 20);
+        controller2.Selection.Replace([a2.Id, ranger.Id]);
+        Assert(bar2.Build(arena2.World, controller2.Selection) is { Context: CommandBarContext.MultiSelect } mixed && mixed.Slots.All(slot => slot?.Button.Kind != GuiCommandKind.DozerConstruct),
+            "a dozer with a ranger shows no build menu");
+
+        // The ghost is judged with the builder nearest to it; an order the pre-check refuses (no money for a second) takes nobody out either.
+        var (arena3, controller3, view3, bar3, a3, b3, c3) = DispatchSetup(dispatch: true, money: 100);
+        var world3 = arena3.World;
+        controller3.Selection.Replace([a3.Id, b3.Id, c3.Id]);
+        Assert(bar3.Activate(world3, bar3.Build(world3, controller3.Selection), 1, controller3) == ActivationResult.EnteredMode, "100 buys one plant");
+        controller3.PlacementPress(world3, view3, Screen(110, 80));
+        Assert(controller3.PlacementRelease(world3, view3, Screen(110, 80)) && controller3.Selection.Selected.Length == 2, "the first is ordered and B leaves");
+        arena3.Step();
+        Assert(bar3.Build(world3, controller3.Selection)[1] is { IsEnabled: false, Reason: ButtonReason.InsufficientFunds }, "nothing left to pay a second: the button says so");
+        Assert(controller3.Selection.Selected.ToHashSet().SetEquals([a3.Id, c3.Id]), "and nobody else left the selection");
+    }
+
+    private static void BuilderDispatchOff()
+    {
+        var (arena, controller, view, bar, a, b, c) = DispatchSetup(dispatch: false);
+        var world = arena.World;
+        var selection = controller.Selection;
+        selection.Replace([a.Id, b.Id, c.Id]);
+        var multi = bar.Build(world, selection);
+        Assert(multi.Context == CommandBarContext.MultiSelect && multi.Slots.All(slot => slot?.Button.Kind != GuiCommandKind.DozerConstruct),
+            "populateMultiSelect: no construct button is OK_FOR_MULTI_SELECT, so several dozers show no build menu");
+
+        // The original's path for one dozer (MSG_DOZER_CONSTRUCT takes the one selected object): it builds and stays selected.
+        selection.Replace([c.Id]);
+        Assert(CommandButtonCatalog.Build(Fixture.Graph).TryGetButton("Command_ConstructPlant", out var construct), "construct button");
+        Assert(controller.Activate(world, construct, selection.OwnSelected(world)) == ActivationResult.EnteredMode, "construct enters placement");
+        controller.PlacementPress(world, view, Screen(110, 80));
+        var before = arena.Sink.Issued.Count;
+        Assert(controller.PlacementRelease(world, view, Screen(110, 80)), "the plant is placed");
+        Assert(arena.Sink.Issued.Skip(before).Single() is ConstructCommand command && command.Builder == c.Id, "far from the place, the one armed dozer builds it");
+        Assert(selection.Selected.SequenceEqual([c.Id]), "and stays selected");
+
+        // Armed for several (a subgroup's bar hands over all its builders): the first builds, wherever the place is.
+        selection.Replace([a.Id, b.Id]);
+        Assert(controller.Activate(world, construct, selection.OwnSelected(world)) == ActivationResult.EnteredMode, "construct enters placement");
+        controller.PlacementPress(world, view, Screen(60, 90));
+        before = arena.Sink.Issued.Count;
+        Assert(controller.PlacementRelease(world, view, Screen(60, 90)), "the plant is placed");
+        Assert(arena.Sink.Issued.Skip(before).Single() is ConstructCommand first && first.Builder == selection.OwnSelected(world)[0].Id && selection.Selected.Length == 2,
+            "the first of the armed builders builds it and both stay selected");
     }
 
     // ============================================================================================ command bar
